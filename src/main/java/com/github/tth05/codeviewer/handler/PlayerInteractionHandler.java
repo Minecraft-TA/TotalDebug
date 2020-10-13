@@ -19,13 +19,14 @@ public class PlayerInteractionHandler {
             return;
         }
 
+        if (!CodeViewer.INSTANCE.decompilationManager.isSetupComplete())
+            return;
+
         Class<?> clazz = event.getWorld().getBlockState(event.getPos()).getBlock().getClass();
 
-        //TODO: submit as task on new thread
-        CodeViewer.INSTANCE.network.sendTo(
-                new DecompilationResultMessage(clazz.getName(),
-                        CodeViewer.INSTANCE.decompilationManager.getDecompiledFile(clazz)),
-                (EntityPlayerMP) event.getEntityPlayer()
+        CodeViewer.INSTANCE.decompilationManager.getDecompiledFile(clazz).thenAccept((lines) ->
+                CodeViewer.INSTANCE.network.sendTo(new DecompilationResultMessage(clazz.getName(), lines),
+                        (EntityPlayerMP) event.getEntityPlayer())
         );
     }
 }

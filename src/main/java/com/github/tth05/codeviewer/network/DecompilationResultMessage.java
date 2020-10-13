@@ -50,7 +50,6 @@ public class DecompilationResultMessage implements IMessage, IMessageHandler<Dec
         GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
         if (currentScreen instanceof CodeViewScreen) {
            ((CodeViewScreen) currentScreen).setLines(message.lines);
-           ((CodeViewScreen) currentScreen).setFilename(message.filename);
         }
         return null;
     }
