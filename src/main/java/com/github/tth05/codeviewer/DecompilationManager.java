@@ -1,5 +1,6 @@
 package com.github.tth05.codeviewer;
 
+import com.google.common.base.Charsets;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
@@ -9,9 +10,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -22,23 +21,24 @@ public class DecompilationManager {
 
     private boolean setupComplete;
 
+    //TODO: load cache from files
     private final Set<String> decompiledFiles = new HashSet<>();
 
-    public CompletableFuture<List<String>> getDecompiledFile(Class<?> clazz) {
+    public CompletableFuture<String> getDecompiledFileContent(Class<?> clazz) {
         return CompletableFuture.supplyAsync(() -> {
             Path decompiledFilePath = dataDir.resolve(clazz.getName() + ".java");
 
             //if not yet decompiled or cache is out of sync -> decompile again
             if (!decompiledFiles.contains(clazz.getName()) || !Files.exists(decompiledFilePath)) {
                 if (!decompileClass(clazz))
-                    return Collections.emptyList();
+                    return "";
             }
 
             try {
-                return Files.readAllLines(decompiledFilePath);
+                return new String(Files.readAllBytes(decompiledFilePath), Charsets.UTF_8);
             } catch (IOException e) {
                 CodeViewer.LOGGER.error("Error while reading decompiled file!", e);
-                return Collections.emptyList();
+                return "";
             }
         });
     }

@@ -2,7 +2,7 @@ package com.github.tth05.codeviewer.gui;
 
 public class Scrollbar {
 
-    public static final float DEFAULT_STEP_SIZE = 0.06f;
+    public static final float DEFAULT_STEP_SIZE = 3f;
 
     private int min;
     private int max;
@@ -28,9 +28,9 @@ public class Scrollbar {
 
     public void mouseWheel(int delta) {
         if (delta < 0) {
-            this.currentOffset = Math.min(max, this.currentOffset + (max - min) * stepSize);
+            this.currentOffset = Math.min(max, this.currentOffset + stepSize);
         } else if (delta > 0) {
-            this.currentOffset = Math.max(min, this.currentOffset - (max - min) * stepSize);
+            this.currentOffset = Math.max(min, this.currentOffset - stepSize);
         }
     }
 

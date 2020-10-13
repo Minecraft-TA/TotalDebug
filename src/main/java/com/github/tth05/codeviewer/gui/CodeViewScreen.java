@@ -65,7 +65,6 @@ public class CodeViewScreen extends GuiScreen {
 
     private void updateScrollbarParameters() {
         scrollbar.setMax(Math.max(0, this.codeTextField.getLines().size() - this.codeTextField.getVisibleRows(scale)));
-        scrollbar.setStepSize(Scrollbar.DEFAULT_STEP_SIZE / scale);
     }
 
     @Override
@@ -73,9 +72,8 @@ public class CodeViewScreen extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
-    public void setLines(List<String> lines) {
-        CodeHighlighter.highlightJavaCode(lines);
-        this.codeTextField.setLines(lines);
+    public void setJavaCode(String str) {
+        this.codeTextField.setLines(CodeHighlighter.getHighlightedJavaCode(str));
 
         updateScrollbarParameters();
     }

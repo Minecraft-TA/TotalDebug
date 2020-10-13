@@ -24,7 +24,7 @@ public class PlayerInteractionHandler {
 
         Class<?> clazz = event.getWorld().getBlockState(event.getPos()).getBlock().getClass();
 
-        CodeViewer.INSTANCE.decompilationManager.getDecompiledFile(clazz).thenAccept((lines) ->
+        CodeViewer.INSTANCE.decompilationManager.getDecompiledFileContent(clazz).thenAccept((lines) ->
                 CodeViewer.INSTANCE.network.sendTo(new DecompilationResultMessage(clazz.getName(), lines),
                         (EntityPlayerMP) event.getEntityPlayer())
         );

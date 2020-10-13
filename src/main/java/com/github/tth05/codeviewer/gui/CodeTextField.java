@@ -35,7 +35,7 @@ public class CodeTextField extends Gui {
         int visibleRows = getVisibleRows(scale);
 
         if (visibleRows > lines.size())
-            visibleRows = lines.size() - 1;
+            visibleRows = lines.size();
 
         float lineY = y + PADDING;
         float lineX = x + PADDING;

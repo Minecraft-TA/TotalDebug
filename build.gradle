@@ -10,6 +10,7 @@ buildscript {
 }
 
 apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'antlr'
 
 group = 'com.github.tth05'
 version = '1.0'
@@ -76,6 +77,9 @@ dependencies {
     // compile "some.group:artifact:version"
 
     compile "io.github.classgraph:classgraph:4.8.90"
+
+    implementation 'org.antlr:antlr4-runtime:4.7.2'
+    antlr 'org.antlr:antlr4:4.7.2'
 
     // Real examples
     // compile 'com.mod-buildcraft:buildcraft:6.0.8:dev'  // adds buildcraft to the dev env
