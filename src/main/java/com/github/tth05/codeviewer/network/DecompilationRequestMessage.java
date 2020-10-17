@@ -12,40 +12,40 @@ import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 public class DecompilationRequestMessage implements IMessage, IMessageHandler<DecompilationRequestMessage, IMessage> {
 
-    public enum HIT_TYPE {
+    public enum HitType {
         BLOCK_ENTITY,
         TILE_ENTITY,
         LIVING_ENTITY
     }
 
-    private HIT_TYPE typeofhit;
+    private HitType typeOfHit;
     private BlockPos pos;
-    private int entityID;
+    private int entityId;
 
 
     public DecompilationRequestMessage() {
     }
 
-    public DecompilationRequestMessage(HIT_TYPE typeofhit, BlockPos pos, int entityID) {
-        this.typeofhit = typeofhit;
+    public DecompilationRequestMessage(HitType typeofhit, BlockPos pos, int entityID) {
+        this.typeOfHit = typeofhit;
         this.pos = pos;
-        this.entityID = entityID;
+        this.entityId = entityID;
     }
 
     @Override
     public void fromBytes(ByteBuf buf) {
-        this.typeofhit = HIT_TYPE.valueOf(ByteBufHelper.readUTF8String(buf));
+        this.typeOfHit = HitType.valueOf(ByteBufHelper.readUTF8String(buf));
         this.pos = new BlockPos(buf.readInt(), buf.readInt(), buf.readInt());
-        this.entityID = buf.readInt();
+        this.entityId = buf.readInt();
     }
 
     @Override
     public void toBytes(ByteBuf buf) {
-        ByteBufHelper.writeUTF8String(buf, this.typeofhit.name());
+        ByteBufHelper.writeUTF8String(buf, this.typeOfHit.name());
         buf.writeInt(this.pos.getX());
         buf.writeInt(this.pos.getY());
         buf.writeInt(this.pos.getZ());
-        buf.writeInt(this.entityID);
+        buf.writeInt(this.entityId);
     }
 
     @Override
@@ -53,7 +53,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
         EntityPlayerMP player = ctx.getServerHandler().player;
         World world = player.world;
 
-        switch (typeofhit) {
+        switch (typeOfHit) {
             case BLOCK_ENTITY:
                 sendToClient(world.getBlockState(message.pos).getBlock().getClass(), player);
                 break;
@@ -61,7 +61,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
                 sendToClient(world.getTileEntity(message.pos).getClass(), player);
                 break;
             case LIVING_ENTITY:
-                sendToClient(world.getEntityByID(message.entityID).getClass(), player);
+                sendToClient(world.getEntityByID(message.entityId).getClass(), player);
                 break;
         }
         return null;
@@ -71,5 +71,4 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
         CodeViewer.INSTANCE.decompilationManager.getDecompiledFileContent(clazz).thenAccept(lines ->
                 CodeViewer.INSTANCE.network.sendTo(new DecompilationResultMessage(clazz.getName(), lines), player));
     }
-
 }

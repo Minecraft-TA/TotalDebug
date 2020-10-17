@@ -11,7 +11,6 @@ public class KeyInputHandler {
 
     @SubscribeEvent
     public void onKeyPress(InputEvent.KeyInputEvent event) {
-
         if (KeyBindings.CODE_GUI.isKeyDown()) {
             rayTraceEyes();
         } else if (KeyBindings.LOADED_GUI.isKeyDown()) {
@@ -20,9 +19,7 @@ public class KeyInputHandler {
     }
 
     //TODO Raytrace code
-    public void rayTraceEyes(){
+    public void rayTraceEyes() {
 
     }
-
-
 }
