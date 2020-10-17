@@ -7,10 +7,14 @@ import org.lwjgl.input.Keyboard;
 
 public class KeyBindings {
 
-    public static final KeyBinding OPEN_GUI =
-            new KeyBinding("key.code_debug.openGui", KeyConflictContext.IN_GAME, Keyboard.KEY_L, "Code Debug");
+    public static final KeyBinding CODE_GUI =
+            new KeyBinding("key.code_debug.openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, "Code Debug");
+    public static final KeyBinding LOADED_GUI =
+            new KeyBinding("key.code_debug.openEntityGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F7, "Code Debug");
+
 
     public static void init() {
-        ClientRegistry.registerKeyBinding(OPEN_GUI);
+        ClientRegistry.registerKeyBinding(CODE_GUI);
+        ClientRegistry.registerKeyBinding(LOADED_GUI);
     }
 }

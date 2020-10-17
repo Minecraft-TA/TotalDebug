@@ -5,6 +5,8 @@ import com.github.tth05.codeviewer.util.ByteBufHelper;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraftforge.fml.client.FMLClientHandler;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
@@ -15,7 +17,8 @@ public class DecompilationResultMessage implements IMessage, IMessageHandler<Dec
     private String filename;
     private String text;
 
-    public DecompilationResultMessage() {}
+    public DecompilationResultMessage() {
+    }
 
     public DecompilationResultMessage(String filename, String text) {
         this.filename = filename;
@@ -38,10 +41,9 @@ public class DecompilationResultMessage implements IMessage, IMessageHandler<Dec
 
     @Override
     public IMessage onMessage(DecompilationResultMessage message, MessageContext ctx) {
-        GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
-        if (currentScreen instanceof CodeViewScreen) {
-           ((CodeViewScreen) currentScreen).setJavaCode(message.text);
-        }
+        CodeViewScreen codeViewScreen = new CodeViewScreen();
+        FMLClientHandler.instance().showGuiScreen(codeViewScreen);
+        codeViewScreen.setJavaCode(message.text);
         return null;
     }
 }
