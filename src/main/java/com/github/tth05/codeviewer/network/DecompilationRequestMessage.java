@@ -57,8 +57,6 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
         EntityPlayerMP player = ctx.getServerHandler().player;
         World world = player.world;
 
-        ForgeChunkManager.getPersistentChunksFor(world);
-
         switch (typeOfHit) {
             case BLOCK_ENTITY:
                 sendToClient(world.getBlockState(message.pos).getBlock().getClass(), player);

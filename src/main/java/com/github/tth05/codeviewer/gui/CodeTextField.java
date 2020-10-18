@@ -59,7 +59,7 @@ public class CodeTextField extends Gui {
     }
 
     public int getVisibleRows(float scale) {
-        return (int)Math.ceil((this.height - PADDING * 2) / (10f * scale));
+        return (int) Math.ceil((this.height - PADDING * 2) / (10f * scale));
     }
 
     public void setLines(List<String> lines) {

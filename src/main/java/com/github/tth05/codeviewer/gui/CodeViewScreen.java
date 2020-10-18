@@ -36,7 +36,6 @@ public class CodeViewScreen extends GuiScreen {
         super.drawScreen(mouseX, mouseY, partialTicks);
 
         drawRect(0, 0, this.width, this.height, 0xFF282C34);
-
         boolean prev = this.fontRenderer.getUnicodeFlag();
         this.fontRenderer.setUnicodeFlag(false);
 
