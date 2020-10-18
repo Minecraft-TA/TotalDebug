@@ -14,11 +14,9 @@ import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 public class DecompilationRequestMessage implements IMessage, IMessageHandler<DecompilationRequestMessage, IMessage> {
 
-
     private HitType typeOfHit;
     private BlockPos pos;
     private int entityId;
-
 
     public DecompilationRequestMessage() {
     }

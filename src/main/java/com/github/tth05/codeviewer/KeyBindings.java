@@ -8,7 +8,7 @@ import org.lwjgl.input.Keyboard;
 public class KeyBindings {
 
     public static final KeyBinding CODE_GUI =
-            new KeyBinding("key." + CodeViewer.MOD_ID + ".openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, CodeViewer.MOD_NAME);
+            new KeyBinding("key." + CodeViewer.MOD_ID + ".openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, CodeViewer.MOD_ID);
     public static final KeyBinding LOADED_GUI =
             new KeyBinding("key." + CodeViewer.MOD_ID + ".openEntityGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F7, CodeViewer.MOD_NAME);
 
