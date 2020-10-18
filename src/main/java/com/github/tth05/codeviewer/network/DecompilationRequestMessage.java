@@ -2,14 +2,12 @@ package com.github.tth05.codeviewer.network;
 
 import com.github.tth05.codeviewer.CodeViewer;
 import com.github.tth05.codeviewer.HitType;
-import com.github.tth05.codeviewer.util.ByteBufHelper;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import net.minecraftforge.common.ForgeChunkManager;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
