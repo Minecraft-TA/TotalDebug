@@ -30,6 +30,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
     public DecompilationRequestMessage(HitType typeOfHit, int entityId) {
         this.typeOfHit = typeOfHit;
         this.entityId = entityId;
+        this.pos = new BlockPos(0, 0, 0);
     }
 
     @Override
@@ -53,7 +54,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
         EntityPlayerMP player = ctx.getServerHandler().player;
         World world = player.world;
 
-        switch (typeOfHit) {
+        switch (message.typeOfHit) {
             case BLOCK_ENTITY:
                 sendToClient(world.getBlockState(message.pos).getBlock().getClass(), player);
                 break;
