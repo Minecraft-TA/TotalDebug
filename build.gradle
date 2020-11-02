@@ -97,3 +97,7 @@ dependencies {
 }
 
 jar.finalizedBy('reobfJar')
+
+sourceSets {
+    main { output.resourcesDir = output.classesDir }
+}

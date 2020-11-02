@@ -1,7 +1,6 @@
 package com.github.tth05.codeviewer;
 
 import com.github.tth05.codeviewer.proxy.CommonProxy;
-import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -16,7 +15,7 @@ import org.apache.logging.log4j.Logger;
         name = CodeViewer.MOD_NAME,
         version = CodeViewer.VERSION
 )
-public class    CodeViewer {
+public class CodeViewer {
 
     public static final String MOD_ID = "code_viewer";
     public static final String MOD_NAME = "Code Viewer";
