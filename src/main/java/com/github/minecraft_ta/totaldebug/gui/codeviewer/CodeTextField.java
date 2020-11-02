@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer.gui;
+package com.github.minecraft_ta.totaldebug.gui.;
 
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
@@ -46,8 +46,9 @@ public class CodeTextField extends Gui {
         GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
         for (int i = startLine; i < Math.min(lines.size(), startLine + visibleRows); i++) {
+            //TODO: horizontal scrolling
             fontRenderer.drawString(
-                    lines.get(i),
+                    fontRenderer.trimStringToWidth(lines.get(i), (int) ((this.width - 2 * PADDING) / scale)),
                     lineX / scale,
                     lineY / scale,
                     0xFFFFFFFF, false);

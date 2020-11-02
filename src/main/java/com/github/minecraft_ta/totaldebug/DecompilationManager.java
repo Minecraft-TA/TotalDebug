@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer;
+package com.github.minecraft_ta.totaldebug;
 
 import com.google.common.base.Charsets;
 import net.minecraftforge.fml.common.FMLCommonHandler;
@@ -37,7 +37,7 @@ public class DecompilationManager {
             try {
                 return new String(Files.readAllBytes(decompiledFilePath), Charsets.UTF_8);
             } catch (IOException e) {
-                CodeViewer.LOGGER.error("Error while reading decompiled file!", e);
+                TotalDebug.LOGGER.error("Error while reading decompiled file!", e);
                 return "";
             }
         });
@@ -47,10 +47,9 @@ public class DecompilationManager {
         String name = clazz.getName();
         Path target = this.dataDir.resolve(name + ".class");
         try (InputStream inputStream = Object.class.getResourceAsStream("/" + name.replace(".", "/") + ".class")) {
-            System.out.println(Files.exists(target));
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            CodeViewer.LOGGER.error("Unable to copy class to file!", e);
+            TotalDebug.LOGGER.error("Unable to copy class to file!", e);
             return false;
         }
 
@@ -62,7 +61,7 @@ public class DecompilationManager {
 
             p.waitFor();
         } catch (IOException | InterruptedException e) {
-            CodeViewer.LOGGER.error("Error while running fernflower!", e);
+            TotalDebug.LOGGER.error("Error while running fernflower!", e);
             return false;
         }
 
@@ -82,7 +81,7 @@ public class DecompilationManager {
                 if (Files.notExists(dataDir))
                     Files.createDirectory(dataDir);
             } catch (IOException e) {
-                CodeViewer.LOGGER.error("Unable to create cache directory!", e);
+                TotalDebug.LOGGER.error("Unable to create cache directory!", e);
                 return;
             }
 
@@ -98,7 +97,7 @@ public class DecompilationManager {
             } catch (IOException ignored) {
             }
 
-            CodeViewer.LOGGER.info("Downloading and building fernflower...");
+            TotalDebug.LOGGER.info("Downloading and building fernflower...");
 
             try {
                 ProcessBuilder pb;
@@ -111,15 +110,15 @@ public class DecompilationManager {
 
                 pb.inheritIO().start().waitFor();
             } catch (InterruptedException | IOException e) {
-                CodeViewer.LOGGER.error("Error while downloading and building fernflower", e);
+                TotalDebug.LOGGER.error("Error while downloading and building fernflower", e);
                 return;
             }
 
             if (Files.exists(fernflowerPath)) {
-                CodeViewer.LOGGER.info("Successfully built fernflower!");
+                TotalDebug.LOGGER.info("Successfully built fernflower!");
                 this.setupComplete = true;
             } else {
-                CodeViewer.LOGGER.warn("Fernflower jar not found! Please restart to try again.");
+                TotalDebug.LOGGER.warn("Fernflower jar not found! Please restart to try again.");
             }
         });
     }

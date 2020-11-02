@@ -1,6 +1,6 @@
-package com.github.tth05.codeviewer.proxy;
+package com.github.minecraft_ta.totaldebug.proxy;
 
-import com.github.tth05.codeviewer.KeyBindings;
+import com.github.minecraft_ta.totaldebug.KeyBindings;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 
 public class ClientProxy extends CommonProxy {

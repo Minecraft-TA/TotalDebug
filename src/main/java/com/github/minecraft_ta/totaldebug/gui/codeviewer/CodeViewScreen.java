@@ -1,6 +1,7 @@
-package com.github.tth05.codeviewer.gui;
+package com.github.minecraft_ta.totaldebug.gui.codeviewer;
 
-import com.github.tth05.codeviewer.util.CodeHighlighter;
+import com.github.minecraft_ta.totaldebug.gui.Scrollbar;
+import com.github.minecraft_ta.totaldebug.util.CodeHighlighter;
 import net.minecraft.client.gui.GuiScreen;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -13,7 +14,7 @@ public class CodeViewScreen extends GuiScreen {
     private CodeTextField codeTextField;
     private Scrollbar scrollbar;
 
-    private float scale = 1f;
+    private float scale = 0.7f;
 
     @Override
     public void initGui() {

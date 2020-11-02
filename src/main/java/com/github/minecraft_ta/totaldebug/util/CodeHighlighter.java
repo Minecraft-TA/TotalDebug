@@ -1,7 +1,7 @@
-package com.github.tth05.codeviewer.util;
+package com.github.minecraft_ta.totaldebug.util;
 
-import com.github.tth05.codeviewer.lexer.java.Java9Lexer;
-import com.github.tth05.codeviewer.lexer.java.Java9Parser;
+import com.github.minecraft_ta.totaldebug.lexer.java.Java9Lexer;
+import com.github.minecraft_ta.totaldebug.lexer.java.Java9Parser;
 import org.antlr.v4.runtime.*;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;

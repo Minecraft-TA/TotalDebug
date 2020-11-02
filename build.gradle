@@ -12,9 +12,9 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'antlr'
 
-group = 'com.github.tth05'
+group = 'com.github.minecraft_ta'
 version = '1.0'
-archivesBaseName = 'code-viewer'
+archivesBaseName = 'TotalDebug'
 
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 

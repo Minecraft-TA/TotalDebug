@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer.gui;
+package com.github.minecraft_ta.totaldebug.gui;
 
 public class Scrollbar {
 

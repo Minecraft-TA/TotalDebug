@@ -64,7 +64,7 @@ Total lexer+parser time 2497ms.
 grammar Java9;
 
 @header {
-package com.github.tth05.codeviewer.lexer.java;
+package com.github.minecraft_ta.totaldebug.lexer.java;
 }
 
 /*

@@ -1,13 +1,13 @@
 [
   {
-    "modid": "code-viewer",
-    "name": "Code Viewer",
+    "modid": "total_debug",
+    "name": "Total Debug",
     "description": "",
     "version": "${version}",
     "mcversion": "${mcversion}",
     "url": "",
     "updateUrl": "",
-    "authorList": [],
+    "authorList": ["tth05", "Pelotrio"],
     "credits": "",
     "logoFile": "",
     "screenshots": [],

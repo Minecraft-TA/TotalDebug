@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer.util;
+package com.github.minecraft_ta.totaldebug.util;
 
 import io.netty.buffer.ByteBuf;
 

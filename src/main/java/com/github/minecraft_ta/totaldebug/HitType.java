@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer;
+package com.github.minecraft_ta.totaldebug;
 
 public enum HitType {
     BLOCK_ENTITY,

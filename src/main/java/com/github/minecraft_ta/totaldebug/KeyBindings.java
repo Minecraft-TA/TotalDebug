@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer;
+package com.github.minecraft_ta.totaldebug;
 
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.client.settings.KeyConflictContext;
@@ -8,9 +8,9 @@ import org.lwjgl.input.Keyboard;
 public class KeyBindings {
 
     public static final KeyBinding CODE_GUI =
-            new KeyBinding("key." + CodeViewer.MOD_ID + ".openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, CodeViewer.MOD_NAME);
+            new KeyBinding("key." + TotalDebug.MOD_ID + ".openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, TotalDebug.MOD_NAME);
     public static final KeyBinding LOADED_GUI =
-            new KeyBinding("key." + CodeViewer.MOD_ID + ".openEntityGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F7, CodeViewer.MOD_NAME);
+            new KeyBinding("key." + TotalDebug.MOD_ID + ".openEntityGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F7, TotalDebug.MOD_NAME);
 
     public static void init() {
         ClientRegistry.registerKeyBinding(CODE_GUI);

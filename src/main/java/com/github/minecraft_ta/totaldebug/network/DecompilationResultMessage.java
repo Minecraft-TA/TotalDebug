@@ -1,7 +1,7 @@
-package com.github.tth05.codeviewer.network;
+package com.github.minecraft_ta.totaldebug.network;
 
-import com.github.tth05.codeviewer.gui.CodeViewScreen;
-import com.github.tth05.codeviewer.util.ByteBufHelper;
+import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
+import com.github.minecraft_ta.totaldebug.util.ByteBufHelper;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;

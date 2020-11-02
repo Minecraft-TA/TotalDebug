@@ -1,6 +1,6 @@
-package com.github.tth05.codeviewer;
+package com.github.minecraft_ta.totaldebug;
 
-import com.github.tth05.codeviewer.proxy.CommonProxy;
+import com.github.minecraft_ta.totaldebug.proxy.CommonProxy;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -11,20 +11,20 @@ import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import org.apache.logging.log4j.Logger;
 
 @Mod(
-        modid = CodeViewer.MOD_ID,
-        name = CodeViewer.MOD_NAME,
-        version = CodeViewer.VERSION
+        modid = TotalDebug.MOD_ID,
+        name = TotalDebug.MOD_NAME,
+        version = TotalDebug.VERSION
 )
-public class CodeViewer {
+public class TotalDebug {
 
-    public static final String MOD_ID = "code_viewer";
-    public static final String MOD_NAME = "Code Viewer";
+    public static final String MOD_ID = "total_debug";
+    public static final String MOD_NAME = "Total Debug";
     public static final String VERSION = "1.0";
 
     @Mod.Instance(MOD_ID)
-    public static CodeViewer INSTANCE;
+    public static TotalDebug INSTANCE;
 
-    @SidedProxy(clientSide = "com.github.tth05.codeviewer.proxy.ClientProxy", serverSide = "com.github.tth05.codeviewer.proxy.ServerProxy")
+    @SidedProxy(clientSide = "com.github.minecraft_ta.totaldebug.proxy.ClientProxy", serverSide = "com.github.minecraft_ta.totaldebug.proxy.ServerProxy")
     public static CommonProxy PROXY;
 
     public static Logger LOGGER;
