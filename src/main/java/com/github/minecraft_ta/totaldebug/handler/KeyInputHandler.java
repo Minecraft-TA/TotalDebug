@@ -1,22 +1,19 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
-
 import com.github.minecraft_ta.totaldebug.HitType;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.DecompilationRequestMessage;
 import com.github.minecraft_ta.totaldebug.network.LoadedRequestMessage;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.gui.inventory.GuiInventory;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.inventory.Container;
 import net.minecraft.inventory.Slot;
-import net.minecraft.inventory.SlotShulkerBox;
 import net.minecraft.item.Item;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
+import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 
@@ -37,6 +34,13 @@ public class KeyInputHandler {
             }
         } else if (KeyBindings.LOADED_GUI.isKeyDown()) {
             TotalDebug.INSTANCE.network.sendToServer(new LoadedRequestMessage());
+        }
+    }
+
+    @SubscribeEvent
+    public void onGuiKeyPress(GuiScreenEvent.KeyboardInputEvent.Pre event) {
+        if (KeyBindings.CODE_GUI.isKeyDown()) {
+            TotalDebug.LOGGER.debug("PRessed");
         }
     }
 
