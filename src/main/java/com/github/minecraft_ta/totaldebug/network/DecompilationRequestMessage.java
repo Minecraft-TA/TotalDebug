@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.item.Item;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -16,7 +17,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
 
     private HitType typeOfHit;
     private BlockPos pos;
-    private int entityId;
+    private int entityOrItemId;
 
     public DecompilationRequestMessage() {
     }
@@ -24,12 +25,12 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
     public DecompilationRequestMessage(HitType typeofhit, BlockPos pos) {
         this.typeOfHit = typeofhit;
         this.pos = pos;
-        this.entityId = -1;
+        this.entityOrItemId = -1;
     }
 
     public DecompilationRequestMessage(HitType typeOfHit, int entityId) {
         this.typeOfHit = typeOfHit;
-        this.entityId = entityId;
+        this.entityOrItemId = entityId;
         this.pos = new BlockPos(0, 0, 0);
     }
 
@@ -37,7 +38,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
     public void fromBytes(ByteBuf buf) {
         this.typeOfHit = HitType.values()[buf.readInt()];
         this.pos = new BlockPos(buf.readInt(), buf.readInt(), buf.readInt());
-        this.entityId = buf.readInt();
+        this.entityOrItemId = buf.readInt();
     }
 
     @Override
@@ -46,7 +47,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
         buf.writeInt(this.pos.getX());
         buf.writeInt(this.pos.getY());
         buf.writeInt(this.pos.getZ());
-        buf.writeInt(this.entityId);
+        buf.writeInt(this.entityOrItemId);
     }
 
     @Override
@@ -67,13 +68,20 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
                 }
                 break;
             case LIVING_ENTITY:
-                Entity entity = world.getEntityByID(message.entityId);
+                Entity entity = world.getEntityByID(message.entityOrItemId);
                 if (entity != null) {
                     sendToClient(entity.getClass(), player);
                 } else {
                     TotalDebug.LOGGER.error("Entity is null");
                 }
                 break;
+            case ITEM:
+                Item item = Item.REGISTRY.getObjectById(message.entityOrItemId);
+                if (item != null) {
+                    sendToClient(item.getClass(), player);
+                } else {
+                    TotalDebug.LOGGER.error("Item is null");
+                }
         }
         return null;
     }
