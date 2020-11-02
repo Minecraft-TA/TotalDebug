@@ -6,7 +6,9 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.DecompilationRequestMessage;
 import com.github.minecraft_ta.totaldebug.network.LoadedRequestMessage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
+import net.minecraft.client.gui.inventory.GuiContainerCreative;
 import net.minecraft.client.gui.inventory.GuiInventory;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.inventory.Slot;
@@ -16,22 +18,14 @@ import net.minecraft.util.math.RayTraceResult;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
+import org.lwjgl.input.Keyboard;
 
 public class KeyInputHandler {
 
     @SubscribeEvent
     public void onKeyPress(InputEvent.KeyInputEvent event) {
         if (KeyBindings.CODE_GUI.isKeyDown()) {
-            GuiContainer currentScreen = (GuiContainer) Minecraft.getMinecraft().currentScreen;
-            if (currentScreen instanceof GuiInventory) {
-                Slot slot = currentScreen.getSlotUnderMouse();
-                if (slot != null && slot.getHasStack()) {
-                    Item item = currentScreen.getSlotUnderMouse().getStack().getItem();
-                    TotalDebug.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.ITEM, Item.REGISTRY.getIDForObject(item)));
-                }
-            } else {
-                rayTraceEyes();
-            }
+            rayTraceEyes();
         } else if (KeyBindings.LOADED_GUI.isKeyDown()) {
             TotalDebug.INSTANCE.network.sendToServer(new LoadedRequestMessage());
         }
@@ -39,8 +33,18 @@ public class KeyInputHandler {
 
     @SubscribeEvent
     public void onGuiKeyPress(GuiScreenEvent.KeyboardInputEvent.Pre event) {
-        if (KeyBindings.CODE_GUI.isKeyDown()) {
-            TotalDebug.LOGGER.debug("PRessed");
+        if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode()))
+            return;
+
+        GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
+        if (!(currentScreen instanceof GuiInventory) && !(currentScreen instanceof GuiContainerCreative))
+            return;
+
+        GuiContainer guiContainer = (GuiContainer) currentScreen;
+        Slot slot = guiContainer.getSlotUnderMouse();
+        if (slot != null && slot.getHasStack()) {
+            Item item = guiContainer.getSlotUnderMouse().getStack().getItem();
+            TotalDebug.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.ITEM, Item.REGISTRY.getIDForObject(item)));
         }
     }
 
