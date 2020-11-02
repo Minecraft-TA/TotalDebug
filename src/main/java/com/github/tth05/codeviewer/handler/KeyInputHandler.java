@@ -29,7 +29,6 @@ public class KeyInputHandler {
         RayTraceResult rayTraceResult = Minecraft.getMinecraft().objectMouseOver;
         WorldClient world = Minecraft.getMinecraft().world;
 
-
         switch (rayTraceResult.typeOfHit) {
             case BLOCK:
                 BlockPos blockPos = rayTraceResult.getBlockPos();
@@ -45,6 +44,5 @@ public class KeyInputHandler {
                 CodeViewer.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.LIVING_ENTITY, rayTraceResult.entityHit.getEntityId()));
                 break;
         }
-
     }
 }
