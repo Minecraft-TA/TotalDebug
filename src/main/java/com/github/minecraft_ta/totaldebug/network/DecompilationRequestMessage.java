@@ -1,7 +1,7 @@
-package com.github.tth05.codeviewer.network;
+package com.github.minecraft_ta.totaldebug.network;
 
-import com.github.tth05.codeviewer.CodeViewer;
-import com.github.tth05.codeviewer.HitType;
+import com.github.minecraft_ta.totaldebug.HitType;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -63,7 +63,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
                 if (tileEntity != null) {
                     sendToClient(tileEntity.getClass(), player);
                 } else {
-                    CodeViewer.LOGGER.error("TileEntity is null");
+                    TotalDebug.LOGGER.error("TileEntity is null");
                 }
                 break;
             case LIVING_ENTITY:
@@ -71,7 +71,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
                 if (entity != null) {
                     sendToClient(entity.getClass(), player);
                 } else {
-                    CodeViewer.LOGGER.error("Entity is null");
+                    TotalDebug.LOGGER.error("Entity is null");
                 }
                 break;
         }
@@ -79,7 +79,7 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
     }
 
     public void sendToClient(Class<?> clazz, EntityPlayerMP player) {
-        CodeViewer.INSTANCE.decompilationManager.getDecompiledFileContent(clazz).thenAccept(lines ->
-                CodeViewer.INSTANCE.network.sendTo(new DecompilationResultMessage(clazz.getName(), lines), player));
+        TotalDebug.INSTANCE.decompilationManager.getDecompiledFileContent(clazz).thenAccept(lines ->
+                TotalDebug.INSTANCE.network.sendTo(new DecompilationResultMessage(clazz.getName(), lines), player));
     }
 }

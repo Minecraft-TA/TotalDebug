@@ -1,2 +1,7 @@
+#keybindings
 key.code_viewer.openCodeGui=Code Gui
 key.code_viewer.openEntityGui=Loaded Entities
+
+#blocks
+tile.tick_block.name=Tick Block
+item.tick_block.name=Tick Block

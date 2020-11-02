@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.gui.;
+package com.github.minecraft_ta.totaldebug.gui.codeviewer;
 
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;

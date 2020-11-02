@@ -1,11 +1,11 @@
-package com.github.tth05.codeviewer.handler;
+package com.github.minecraft_ta.totaldebug.handler;
 
 
-import com.github.tth05.codeviewer.CodeViewer;
-import com.github.tth05.codeviewer.HitType;
-import com.github.tth05.codeviewer.KeyBindings;
-import com.github.tth05.codeviewer.network.DecompilationRequestMessage;
-import com.github.tth05.codeviewer.network.LoadedRequestMessage;
+import com.github.minecraft_ta.totaldebug.HitType;
+import com.github.minecraft_ta.totaldebug.KeyBindings;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.network.DecompilationRequestMessage;
+import com.github.minecraft_ta.totaldebug.network.LoadedRequestMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.util.math.BlockPos;
@@ -20,11 +20,10 @@ public class KeyInputHandler {
         if (KeyBindings.CODE_GUI.isKeyDown()) {
             rayTraceEyes();
         } else if (KeyBindings.LOADED_GUI.isKeyDown()) {
-            CodeViewer.INSTANCE.network.sendToServer(new LoadedRequestMessage());
+            TotalDebug.INSTANCE.network.sendToServer(new LoadedRequestMessage());
         }
     }
 
-    //TODO Raytrace code
     public void rayTraceEyes() {
         RayTraceResult rayTraceResult = Minecraft.getMinecraft().objectMouseOver;
         WorldClient world = Minecraft.getMinecraft().world;
@@ -34,14 +33,14 @@ public class KeyInputHandler {
                 BlockPos blockPos = rayTraceResult.getBlockPos();
                 if (!world.isAirBlock(blockPos)) {
                     if (world.getTileEntity(blockPos) == null) {
-                        CodeViewer.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.BLOCK_ENTITY, blockPos));
+                        TotalDebug.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.BLOCK_ENTITY, blockPos));
                     } else {
-                        CodeViewer.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.TILE_ENTITY, blockPos));
+                        TotalDebug.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.TILE_ENTITY, blockPos));
                     }
                 }
                 break;
             case ENTITY:
-                CodeViewer.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.LIVING_ENTITY, rayTraceResult.entityHit.getEntityId()));
+                TotalDebug.INSTANCE.network.sendToServer(new DecompilationRequestMessage(HitType.LIVING_ENTITY, rayTraceResult.entityHit.getEntityId()));
                 break;
         }
     }

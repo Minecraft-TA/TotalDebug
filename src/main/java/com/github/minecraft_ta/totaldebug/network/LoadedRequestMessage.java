@@ -1,4 +1,4 @@
-package com.github.tth05.codeviewer.network;
+package com.github.minecraft_ta.totaldebug.network;
 
 import io.netty.buffer.ByteBuf;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;

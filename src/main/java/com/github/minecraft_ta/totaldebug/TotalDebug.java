@@ -1,13 +1,24 @@
 package com.github.minecraft_ta.totaldebug;
 
+import com.github.minecraft_ta.totaldebug.block.TickBlock;
 import com.github.minecraft_ta.totaldebug.proxy.CommonProxy;
+import net.minecraft.block.Block;
+import net.minecraft.client.renderer.block.model.ModelResourceLocation;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.client.event.ModelRegistryEvent;
+import net.minecraftforge.client.model.ModelLoader;
+import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerAboutToStartEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
+import net.minecraftforge.fml.common.registry.GameRegistry;
 import org.apache.logging.log4j.Logger;
 
 @Mod(
@@ -47,5 +58,38 @@ public class TotalDebug {
     public void aboutToStart(FMLServerAboutToStartEvent event) {
         //TODO: start in new thread
         decompilationManager.downloadFernflower();
+    }
+
+    @GameRegistry.ObjectHolder(MOD_ID)
+    public static class Blocks {
+        public static final TickBlock TICK_BLOCK = null;
+    }
+
+    @GameRegistry.ObjectHolder(MOD_ID)
+    public static class Items {
+        public static final ItemBlock TICK_BLOCK_ITEM = null;
+    }
+
+    @Mod.EventBusSubscriber
+    public static class ObjectRegistryHandler {
+
+        @SubscribeEvent
+        public static void addItems(RegistryEvent.Register<Item> event) {
+            event.getRegistry().register(new ItemBlock(Blocks.TICK_BLOCK).setRegistryName(Blocks.TICK_BLOCK.getRegistryName()));
+        }
+
+        @SubscribeEvent
+        public static void addBlocks(RegistryEvent.Register<Block> event) {
+            event.getRegistry().register(new TickBlock().setRegistryName(new ResourceLocation(MOD_ID, "tick_block")).setTranslationKey("tick_block"));
+        }
+
+        @SubscribeEvent
+        public static void registerRenders(ModelRegistryEvent event) {
+            registerRender(Item.getItemFromBlock(Blocks.TICK_BLOCK));
+        }
+
+        public static void registerRender(Item item) {
+            ModelLoader.setCustomModelResourceLocation(item, 0, new ModelResourceLocation(item.getRegistryName(), "inventory"));
+        }
     }
 }
