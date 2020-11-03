@@ -13,7 +13,13 @@ import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 public class DecompilationRequestMessage implements IMessage, IMessageHandler<DecompilationRequestMessage, IMessage> {
+
+    private static final Map<UUID, Long> COOLDOWN_MAP = new HashMap<>();
 
     private HitType typeOfHit;
     private BlockPos pos;
@@ -53,6 +59,11 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
     @Override
     public IMessage onMessage(DecompilationRequestMessage message, MessageContext ctx) {
         EntityPlayerMP player = ctx.getServerHandler().player;
+
+        if (System.currentTimeMillis() - COOLDOWN_MAP.getOrDefault(player.getUniqueID(), 0L) < 500)
+            return null;
+        COOLDOWN_MAP.put(player.getUniqueID(), System.currentTimeMillis());
+
         World world = player.world;
 
         switch (message.typeOfHit) {
