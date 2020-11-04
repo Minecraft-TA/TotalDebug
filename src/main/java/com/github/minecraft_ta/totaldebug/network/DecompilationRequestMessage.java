@@ -6,6 +6,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemBlock;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -89,7 +90,11 @@ public class DecompilationRequestMessage implements IMessage, IMessageHandler<De
             case ITEM:
                 Item item = Item.REGISTRY.getObjectById(message.entityOrItemId);
                 if (item != null) {
-                    sendToClient(item.getClass(), player);
+                    if (item instanceof ItemBlock) {
+                        sendToClient(((ItemBlock) item).getBlock().getClass(), player);
+                    } else {
+                        sendToClient(item.getClass(), player);
+                    }
                 } else {
                     TotalDebug.LOGGER.error("Item is null");
                 }
