@@ -37,7 +37,7 @@ public class KeyInputHandler {
             return;
 
         GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
-        if (currentScreen == null)
+        if (!currentScreen instanceof GuiContainer)
             return;
 
         GuiContainer guiContainer = (GuiContainer) currentScreen;
