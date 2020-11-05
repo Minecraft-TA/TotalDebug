@@ -9,6 +9,7 @@ buildscript {
     }
 }
 
+apply plugin: 'idea'
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'antlr'
 
@@ -98,6 +99,4 @@ dependencies {
 
 jar.finalizedBy('reobfJar')
 
-sourceSets {
-    main { output.resourcesDir = output.classesDir }
-}
+idea { module { inheritOutputDirs = true } }
