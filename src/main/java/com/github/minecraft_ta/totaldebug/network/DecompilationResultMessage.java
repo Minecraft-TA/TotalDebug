@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.network;
 import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.github.minecraft_ta.totaldebug.util.ByteBufHelper;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.client.FMLClientHandler;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
@@ -38,9 +39,11 @@ public class DecompilationResultMessage implements IMessage, IMessageHandler<Dec
 
     @Override
     public IMessage onMessage(DecompilationResultMessage message, MessageContext ctx) {
-        CodeViewScreen codeViewScreen = new CodeViewScreen();
-        FMLClientHandler.instance().showGuiScreen(codeViewScreen);
-        codeViewScreen.setJavaCode(message.text);
+        Minecraft.getMinecraft().addScheduledTask(() -> {
+            CodeViewScreen codeViewScreen = new CodeViewScreen();
+            FMLClientHandler.instance().showGuiScreen(codeViewScreen);
+            codeViewScreen.setJavaCode(message.text);
+        });
         return null;
     }
 }

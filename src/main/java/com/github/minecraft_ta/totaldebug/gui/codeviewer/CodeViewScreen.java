@@ -35,8 +35,6 @@ public class CodeViewScreen extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         super.drawScreen(mouseX, mouseY, partialTicks);
-        if (this.fontRenderer == null)
-            return;
 
         drawRect(0, 0, this.width, this.height, 0xFF282C34);
         boolean prev = this.fontRenderer.getUnicodeFlag();
@@ -67,11 +65,6 @@ public class CodeViewScreen extends GuiScreen {
 
     private void updateScrollbarParameters() {
         scrollbar.setMax(Math.max(0, this.codeTextField.getLines().size() - this.codeTextField.getVisibleRows(scale)));
-    }
-
-    @Override
-    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
-        super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
     public void setJavaCode(String str) {

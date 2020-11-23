@@ -25,6 +25,9 @@ public class DecompilationManager {
     private final Set<String> decompiledFiles = new HashSet<>();
 
     public CompletableFuture<String> getDecompiledFileContent(Class<?> clazz) {
+        if(!isSetupComplete())
+            return CompletableFuture.completedFuture("");
+
         return CompletableFuture.supplyAsync(() -> {
             Path decompiledFilePath = dataDir.resolve(clazz.getName() + ".java");
 

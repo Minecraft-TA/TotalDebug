@@ -45,14 +45,16 @@ public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPer
     public IMessage onMessage(TicksPerSecondMessage message, MessageContext ctx) {
         World world = Minecraft.getMinecraft().world;
 
-        if (!world.isBlockLoaded(message.pos))
-            return null;
+        Minecraft.getMinecraft().addScheduledTask(() -> {
+            if (!world.isBlockLoaded(message.pos))
+                return;
 
-        TileEntity te = world.getTileEntity(message.pos);
-        if (!(te instanceof TickBlockTile))
-            return null;
+            TileEntity te = world.getTileEntity(message.pos);
+            if (!(te instanceof TickBlockTile))
+                return;
 
-        ((TickBlockTile) te).updateData(message.average, message.tps);
+            ((TickBlockTile) te).updateData(message.average, message.tps);
+        });
 
         return null;
     }
