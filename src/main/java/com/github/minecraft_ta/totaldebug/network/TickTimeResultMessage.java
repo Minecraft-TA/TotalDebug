@@ -39,7 +39,6 @@ public class TickTimeResultMessage implements IMessage, IMessageHandler<TickTime
         GuiPlayerTabOverlay tabList = Minecraft.getMinecraft().ingameGUI.getTabList();
         tabList.setHeader(new TextComponentString(TextFormatting.DARK_PURPLE + "MSPT: " + TextFormatting.WHITE + message.mspt + TextFormatting.DARK_AQUA + " TPS: " + TextFormatting.WHITE + message.tps));
 
-
         return null;
     }
 }
