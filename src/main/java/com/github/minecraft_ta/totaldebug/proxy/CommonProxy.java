@@ -21,6 +21,8 @@ public class CommonProxy {
         TotalDebug.INSTANCE.network.registerMessage(DecompilationRequestMessage.class, DecompilationRequestMessage.class, id++, Side.SERVER);
         TotalDebug.INSTANCE.network.registerMessage(LoadedResultMessage.class, LoadedResultMessage.class, id++, Side.CLIENT);
         TotalDebug.INSTANCE.network.registerMessage(LoadedRequestMessage.class, LoadedRequestMessage.class, id++, Side.SERVER);
+        TotalDebug.INSTANCE.network.registerMessage(TickTimeResultMessage.class, TickTimeResultMessage.class, id++, Side.CLIENT);
+        TotalDebug.INSTANCE.network.registerMessage(TickTimeRequestMessage.class, TickTimeRequestMessage.class, id++, Side.SERVER);
     }
 
     public void init(FMLInitializationEvent e) {
