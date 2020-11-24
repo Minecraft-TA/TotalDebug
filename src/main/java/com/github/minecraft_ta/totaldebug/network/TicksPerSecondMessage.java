@@ -9,6 +9,8 @@ import net.minecraft.world.World;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPerSecondMessage, IMessage> {
 
@@ -41,6 +43,7 @@ public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPer
         buf.writeInt(this.average);
     }
 
+    @SideOnly(Side.CLIENT)
     @Override
     public IMessage onMessage(TicksPerSecondMessage message, MessageContext ctx) {
         World world = Minecraft.getMinecraft().world;

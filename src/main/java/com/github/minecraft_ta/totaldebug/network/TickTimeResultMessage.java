@@ -8,6 +8,8 @@ import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 public class TickTimeResultMessage implements IMessage, IMessageHandler<TickTimeResultMessage, IMessage> {
 
@@ -34,6 +36,7 @@ public class TickTimeResultMessage implements IMessage, IMessageHandler<TickTime
         buf.writeDouble(this.tps);
     }
 
+    @SideOnly(Side.CLIENT)
     @Override
     public IMessage onMessage(TickTimeResultMessage message, MessageContext ctx) {
         GuiPlayerTabOverlay tabList = Minecraft.getMinecraft().ingameGUI.getTabList();

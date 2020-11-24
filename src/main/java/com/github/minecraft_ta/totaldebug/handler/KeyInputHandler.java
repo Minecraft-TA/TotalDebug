@@ -4,12 +4,9 @@ import com.github.minecraft_ta.totaldebug.HitType;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.DecompilationRequestMessage;
-import com.github.minecraft_ta.totaldebug.network.LoadedRequestMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
-import net.minecraft.client.gui.inventory.GuiContainerCreative;
-import net.minecraft.client.gui.inventory.GuiInventory;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
@@ -26,8 +23,6 @@ public class KeyInputHandler {
     public void onKeyPress(InputEvent.KeyInputEvent event) {
         if (KeyBindings.CODE_GUI.isKeyDown()) {
             rayTraceEyes();
-        } else if (KeyBindings.LOADED_GUI.isKeyDown()) {
-            TotalDebug.INSTANCE.network.sendToServer(new LoadedRequestMessage());
         }
     }
 
