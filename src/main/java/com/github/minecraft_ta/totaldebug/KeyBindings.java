@@ -9,11 +9,8 @@ public class KeyBindings {
 
     public static final KeyBinding CODE_GUI =
             new KeyBinding("key." + TotalDebug.MOD_ID + ".openCodeGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F6, TotalDebug.MOD_NAME);
-    public static final KeyBinding LOADED_GUI =
-            new KeyBinding("key." + TotalDebug.MOD_ID + ".openEntityGui", KeyConflictContext.IN_GAME, Keyboard.KEY_F7, TotalDebug.MOD_NAME);
 
     public static void init() {
         ClientRegistry.registerKeyBinding(CODE_GUI);
-        ClientRegistry.registerKeyBinding(LOADED_GUI);
     }
 }
