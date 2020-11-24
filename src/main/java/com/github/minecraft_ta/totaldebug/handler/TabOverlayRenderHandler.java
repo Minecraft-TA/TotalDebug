@@ -18,7 +18,6 @@ public class TabOverlayRenderHandler {
         if ((System.currentTimeMillis() - timeStamp) >= 500) {
             TotalDebug.INSTANCE.network.sendToServer(new TickTimeRequestMessage());
             timeStamp = System.currentTimeMillis();
-            System.out.println("Send a packet");
         }
     }
 }
