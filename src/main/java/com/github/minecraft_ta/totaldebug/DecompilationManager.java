@@ -94,7 +94,7 @@ public class DecompilationManager {
             TotalDebug.LOGGER.info("Exporting fernflower...");
 
             try {
-                Files.copy(DecompilationManager.class.getResourceAsStream("/fernflower.jar"), this.fernflowerPath);
+                Files.copy(DecompilationManager.class.getResourceAsStream("/fernflower.ThanksShadowJar"), this.fernflowerPath);
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Error while exporting fernflower!", e);
             }
