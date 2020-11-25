@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
+import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
@@ -11,14 +12,23 @@ import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 
 public class ClientProxy extends CommonProxy {
 
+    private final DecompilationManager decompilationManager = new DecompilationManager();
+
     @Override
     public void init(FMLInitializationEvent e) {
         super.init(e);
+        decompilationManager.exportFernflower();
+
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
 
         ClientRegistry.bindTileEntitySpecialRenderer(TickBlockTile.class, new TickBlockTileRenderer());
 
         KeyBindings.init();
+    }
+
+    @Override
+    public DecompilationManager getDecompilationManager() {
+        return this.decompilationManager;
     }
 }

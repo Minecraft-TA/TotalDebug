@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
+import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.network.*;
@@ -17,13 +18,15 @@ public class CommonProxy {
         int id = 0;
         TotalDebug.INSTANCE.network.registerMessage(TicksPerSecondMessage.class, TicksPerSecondMessage.class, id++, Side.CLIENT);
 
-        TotalDebug.INSTANCE.network.registerMessage(DecompilationResultMessage.class, DecompilationResultMessage.class, id++, Side.CLIENT);
-        TotalDebug.INSTANCE.network.registerMessage(DecompilationRequestMessage.class, DecompilationRequestMessage.class, id++, Side.SERVER);
         TotalDebug.INSTANCE.network.registerMessage(TickTimeResultMessage.class, TickTimeResultMessage.class, id++, Side.CLIENT);
         TotalDebug.INSTANCE.network.registerMessage(TickTimeRequestMessage.class, TickTimeRequestMessage.class, id++, Side.SERVER);
     }
 
     public void init(FMLInitializationEvent e) {
 
+    }
+
+    public DecompilationManager getDecompilationManager() {
+        return null;
     }
 }

@@ -1,9 +1,7 @@
 package com.github.minecraft_ta.totaldebug;
 
 import com.google.common.base.Charsets;
-import net.minecraftforge.fml.common.FMLCommonHandler;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
+import net.minecraftforge.fml.client.FMLClientHandler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -73,11 +71,10 @@ public class DecompilationManager {
         return true;
     }
 
-    public void downloadFernflower() {
-        this.dataDir = FMLCommonHandler.instance().getMinecraftServerInstance().getDataDirectory().toPath()
-                .resolve("code-viewer");
+    public void exportFernflower() {
+        this.dataDir = FMLClientHandler.instance().getSavesDirectory().toPath().getParent().resolve("code-viewer");
 
-        this.fernflowerPath = dataDir.resolve("fernflower/build/libs/fernflower.jar");
+        this.fernflowerPath = dataDir.resolve("fernflower.jar");
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -94,34 +91,19 @@ public class DecompilationManager {
                 return;
             }
 
-            //delete old fernflower folder
-            try {
-                FileUtils.deleteDirectory(this.dataDir.resolve("fernflower").toFile());
-            } catch (IOException ignored) {
-            }
-
-            TotalDebug.LOGGER.info("Downloading and building fernflower...");
+            TotalDebug.LOGGER.info("Exporting fernflower...");
 
             try {
-                ProcessBuilder pb;
-                if (SystemUtils.IS_OS_WINDOWS)
-                    pb = new ProcessBuilder("cmd.exe", "/c",
-                            "cd code-viewer && git clone https://github.com/fesh0r/fernflower.git && cd fernflower && gradlew.bat build");
-                else
-                    pb = new ProcessBuilder("bash", "-c",
-                            "cd code-viewer && git clone https://github.com/fesh0r/fernflower.git && cd fernflower && ./gradlew build");
-
-                pb.inheritIO().start().waitFor();
-            } catch (InterruptedException | IOException e) {
-                TotalDebug.LOGGER.error("Error while downloading and building fernflower", e);
-                return;
+                Files.copy(DecompilationManager.class.getResourceAsStream("/fernflower.jar"), this.fernflowerPath);
+            } catch (IOException e) {
+                TotalDebug.LOGGER.error("Error while exporting fernflower!", e);
             }
 
             if (Files.exists(fernflowerPath)) {
-                TotalDebug.LOGGER.info("Successfully built fernflower!");
+                TotalDebug.LOGGER.info("Successfully exported fernflower!");
                 this.setupComplete = true;
             } else {
-                TotalDebug.LOGGER.warn("Fernflower jar not found! Please restart to try again.");
+                TotalDebug.LOGGER.warn("Fernflower jar not found! Please contact the mod authors.");
             }
         });
     }

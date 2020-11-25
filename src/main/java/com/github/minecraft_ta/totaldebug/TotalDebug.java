@@ -14,7 +14,6 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLServerAboutToStartEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
@@ -41,7 +40,6 @@ public class TotalDebug {
     public static Logger LOGGER;
 
     public final SimpleNetworkWrapper network = NetworkRegistry.INSTANCE.newSimpleChannel(MOD_ID);
-    public final DecompilationManager decompilationManager = new DecompilationManager();
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
@@ -52,12 +50,6 @@ public class TotalDebug {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         PROXY.init(event);
-    }
-
-    @Mod.EventHandler
-    public void aboutToStart(FMLServerAboutToStartEvent event) {
-        //TODO: start in new thread
-        decompilationManager.downloadFernflower();
     }
 
     @GameRegistry.ObjectHolder(MOD_ID)
