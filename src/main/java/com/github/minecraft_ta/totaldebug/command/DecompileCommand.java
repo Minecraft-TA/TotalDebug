@@ -1,8 +1,12 @@
 package com.github.minecraft_ta.totaldebug.command;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import io.github.classgraph.*;
 import net.minecraft.block.Block;
-import net.minecraft.command.*;
+import net.minecraft.command.CommandBase;
+import net.minecraft.command.CommandException;
+import net.minecraft.command.ICommandSender;
+import net.minecraft.command.WrongUsageException;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.item.Item;
@@ -11,9 +15,11 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 
 public class DecompileCommand extends CommandBase {
@@ -31,9 +37,40 @@ public class DecompileCommand extends CommandBase {
     @Override
     public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "item", "block", "entity", "path");
+            return getListOfStringsMatchingLastWord(args, "item", "block", "entity", "classpath");
         } else if (args.length == 2) {
             switch (args[0]) {
+                case "classpath":
+                    String path = args[1];
+                    if (path.isEmpty())
+                        return Collections.emptyList();
+
+                    int dotCount = StringUtils.countMatches(path, '.');
+
+                    //detect if last word is a class name
+                    int lastIndexOfDot = path.lastIndexOf('.');
+                    if (lastIndexOfDot != -1)
+                        path = path.substring(0, lastIndexOfDot);
+
+                    try (ScanResult result = new ClassGraph()
+                            .acceptPackages(path + "*")
+                            .enableClassInfo().scan()) {
+
+                        ClassInfoList classInfo = result.getAllClasses();
+                        PackageInfoList packageInfo = result.getPackageInfo();
+
+                        List<String> options = new LinkedList<>();
+                        for (ClassInfo info : classInfo) {
+                            if (StringUtils.countMatches(info.getName(), '.') <= dotCount)
+                                options.add(info.getName());
+                        }
+                        for (PackageInfo info : packageInfo) {
+                            if (StringUtils.countMatches(info.getName(), '.') <= dotCount)
+                                options.add(info.getName());
+                        }
+
+                        return getListOfStringsMatchingLastWord(args, options);
+                    }
                 case "item":
                     return getListOfStringsMatchingLastWord(args, Item.REGISTRY.getKeys());
                 case "block":
