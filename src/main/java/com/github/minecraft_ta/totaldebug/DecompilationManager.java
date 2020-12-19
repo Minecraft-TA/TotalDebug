@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totaldebug;
 
+import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.google.common.base.Charsets;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.client.FMLClientHandler;
 
 import java.io.IOException;
@@ -105,6 +107,16 @@ public class DecompilationManager {
             } else {
                 TotalDebug.LOGGER.warn("Fernflower jar not found! Please contact the mod authors.");
             }
+        });
+    }
+
+    public void openGui(Class<?> clazz) {
+        getDecompiledFileContent(clazz).thenAccept(s -> {
+            Minecraft.getMinecraft().addScheduledTask(() -> {
+                CodeViewScreen screen = new CodeViewScreen();
+                FMLClientHandler.instance().showGuiScreen(screen);
+                screen.setJavaCode(s);
+            });
         });
     }
 

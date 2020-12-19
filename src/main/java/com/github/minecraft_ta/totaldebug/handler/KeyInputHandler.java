@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -16,7 +15,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.fml.client.FMLClientHandler;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import org.lwjgl.input.Keyboard;
@@ -79,12 +77,12 @@ public class KeyInputHandler {
 
         switch (typeOfHit) {
             case BLOCK_ENTITY:
-                openGui(world.getBlockState(pos).getBlock().getClass());
+                TotalDebug.PROXY.getDecompilationManager().openGui(world.getBlockState(pos).getBlock().getClass());
                 break;
             case TILE_ENTITY:
                 TileEntity tileEntity = world.getTileEntity(pos);
                 if (tileEntity != null) {
-                    openGui(tileEntity.getClass());
+                    TotalDebug.PROXY.getDecompilationManager().openGui(tileEntity.getClass());
                 } else {
                     TotalDebug.LOGGER.error("TileEntity is null");
                 }
@@ -92,7 +90,7 @@ public class KeyInputHandler {
             case LIVING_ENTITY:
                 Entity entity = world.getEntityByID(entityOrItemId);
                 if (entity != null) {
-                    openGui(entity.getClass());
+                    TotalDebug.PROXY.getDecompilationManager().openGui(entity.getClass());
                 } else {
                     TotalDebug.LOGGER.error("Entity is null");
                 }
@@ -101,24 +99,14 @@ public class KeyInputHandler {
                 Item item = Item.REGISTRY.getObjectById(entityOrItemId);
                 if (item != null) {
                     if (item instanceof ItemBlock) {
-                        openGui(((ItemBlock) item).getBlock().getClass());
+                        TotalDebug.PROXY.getDecompilationManager().openGui(((ItemBlock) item).getBlock().getClass());
                     } else {
-                        openGui(item.getClass());
+                        TotalDebug.PROXY.getDecompilationManager().openGui(item.getClass());
                     }
                 } else {
                     TotalDebug.LOGGER.error("Item is null");
                 }
         }
-    }
-
-    public void openGui(Class<?> clazz) {
-        TotalDebug.PROXY.getDecompilationManager().getDecompiledFileContent(clazz).thenAccept(s -> {
-            Minecraft.getMinecraft().addScheduledTask(() -> {
-                CodeViewScreen screen = new CodeViewScreen();
-                FMLClientHandler.instance().showGuiScreen(screen);
-                screen.setJavaCode(s);
-            });
-        });
     }
 
     public enum HitType {

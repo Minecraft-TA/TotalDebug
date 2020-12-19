@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug;
 
 import com.github.minecraft_ta.totaldebug.block.TickBlock;
+import com.github.minecraft_ta.totaldebug.command.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.proxy.CommonProxy;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
@@ -14,6 +15,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
@@ -50,6 +52,11 @@ public class TotalDebug {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         PROXY.init(event);
+    }
+
+    @Mod.EventHandler
+    public void onServerStarting(FMLServerStartingEvent event) {
+        event.registerServerCommand(new DecompileCommand());
     }
 
     @GameRegistry.ObjectHolder(MOD_ID)

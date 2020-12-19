@@ -4,3 +4,8 @@ key.total_debug.openCodeGui=Code Gui
 #blocks
 tile.tick_block.name=Tick Block
 item.tick_block.name=Tick Block
+
+#commands
+commands.total_debug.decompile.usage=/decompile block <name> OR /decompile item <name> OR /decompile entity <name> OR /decompile path <name>
+commands.total_debug.decompile.entity.failed=There is no such entity with name %s
+commands.total_debug.decompile.path.failed=There is no such class
