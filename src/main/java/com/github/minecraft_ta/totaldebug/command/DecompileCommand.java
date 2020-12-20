@@ -47,7 +47,6 @@ public class DecompileCommand extends CommandBase {
 
                     int dotCount = StringUtils.countMatches(path, '.');
 
-                    //detect if last word is a class name
                     int lastIndexOfDot = path.lastIndexOf('.');
                     if (lastIndexOfDot != -1)
                         path = path.substring(0, lastIndexOfDot);
