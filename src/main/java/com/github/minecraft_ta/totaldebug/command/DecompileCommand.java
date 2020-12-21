@@ -96,7 +96,7 @@ public class DecompileCommand extends CommandBase {
                 case "entity":
                     TotalDebug.PROXY.getDecompilationManager().openGui(getEntityClassByText(sender, args[1]));
                     break;
-                case "path":
+                case "classpath":
                     try {
                         TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(args[1]));
                     } catch (ClassNotFoundException e) {
