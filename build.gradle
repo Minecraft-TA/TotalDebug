@@ -79,7 +79,7 @@ dependencies {
     // compile "some.group:artifact:version:classifier"
     // compile "some.group:artifact:version"
 
-    compile "io.github.classgraph:classgraph:4.8.90"
+    implementation "io.github.classgraph:classgraph:4.8.90"
 
     implementation 'org.antlr:antlr4-runtime:4.7.2'
     antlr 'org.antlr:antlr4:4.7.2'
@@ -102,11 +102,11 @@ dependencies {
 shadowJar {
     classifier ''
 
-    relocate "org.antlr", "com.github.minecraft_ta.totaldebug.shades"
+    relocate "org.antlr", "com.github.minecraft_ta.totaldebug.shades.antlr"
+    relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     dependencies {
         exclude(dependency {
-            //TODO: add classgraph once we use it
-            it.moduleGroup != 'org.antlr'
+            it.moduleGroup != 'io.github.classgraph' && it.moduleGroup != 'org.antlr'
         })
     }
 }
