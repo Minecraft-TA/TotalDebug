@@ -25,7 +25,7 @@ public class DecompilationManager {
     private final Set<String> decompiledFiles = new HashSet<>();
 
     public CompletableFuture<String> getDecompiledFileContent(Class<?> clazz) {
-        if(!isSetupComplete())
+        if (!isSetupComplete())
             return CompletableFuture.completedFuture("");
 
         return CompletableFuture.supplyAsync(() -> {
@@ -49,7 +49,13 @@ public class DecompilationManager {
     public boolean decompileClass(Class<?> clazz) {
         String name = clazz.getName();
         Path target = this.dataDir.resolve(name + ".class");
-        try (InputStream inputStream = Object.class.getResourceAsStream("/" + name.replace(".", "/") + ".class")) {
+        String codeSource = clazz.getProtectionDomain().getCodeSource().getLocation().toString();
+        if (codeSource.startsWith("jar"))
+            codeSource = codeSource.substring(codeSource.lastIndexOf('!') + 2);
+        else
+            codeSource = clazz.getName().replace(".", "/") + ".class";
+
+        try (InputStream inputStream = clazz.getClassLoader().getResourceAsStream(codeSource)) {
             Files.copy(inputStream, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to copy class to file!", e);
