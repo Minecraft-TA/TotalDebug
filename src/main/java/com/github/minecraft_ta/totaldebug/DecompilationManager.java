@@ -63,9 +63,9 @@ public class DecompilationManager {
         }
 
         try {
-            Process p = new ProcessBuilder("java -jar " + fernflowerPath.toString() +
-                    " \"" + target.toString() + "\"" +
-                    " " + this.dataDir.toString())
+            Process p = new ProcessBuilder("java -jar \"" + fernflowerPath.toString() +
+                    "\" \"" + target.toString() + "\"" +
+                    " \"" + this.dataDir.toString() + "\"")
                     .start();
 
             p.waitFor();
