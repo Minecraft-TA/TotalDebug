@@ -6,6 +6,6 @@ tile.tick_block.name=Tick Block
 item.tick_block.name=Tick Block
 
 #commands
-commands.total_debug.decompile.usage=/decompile block|item|entity|classpath <name>
+commands.total_debug.decompile.usage=/decompile block|item|entity|classpath|eventlistener <name> [eventlistener]
 commands.total_debug.decompile.entity.failed=There is no such entity with name %s
 commands.total_debug.decompile.path.failed=There is no such class
