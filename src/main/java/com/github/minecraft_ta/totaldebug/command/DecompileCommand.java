@@ -148,7 +148,7 @@ public class DecompileCommand extends CommandBase {
                     }
                     ArrayList<Class<?>> classes = eventsToListeners.get(args[1]);
                     if (classes != null) {
-                        if (args[2] != null) {
+                        if (args.length == 3) {
                             classes.forEach(c ->{
                                 if (c.getName().equals(args[2])) {
                                     TotalDebug.PROXY.getDecompilationManager().openGui(c);
