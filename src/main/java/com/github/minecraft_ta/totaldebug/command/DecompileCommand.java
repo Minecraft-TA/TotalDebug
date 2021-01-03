@@ -13,16 +13,24 @@ import net.minecraft.item.Item;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.common.eventhandler.IEventListener;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
-import java.util.Collections;
-import java.util.LinkedList;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class DecompileCommand extends CommandBase {
+
+    private final HashMap<String, ArrayList<Class<?>>> eventsToListeners = new HashMap<>();
 
     @Override
     public String getName() {
@@ -37,8 +45,8 @@ public class DecompileCommand extends CommandBase {
     @Override
     public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "item", "block", "entity", "classpath");
-        } else if (args.length == 2) {
+            return getListOfStringsMatchingLastWord(args, "item", "block", "entity", "classpath", "eventlistener");
+        } else if (args.length >= 2) {
             switch (args[0]) {
                 case "classpath":
                     String path = args[1];
@@ -70,6 +78,14 @@ public class DecompileCommand extends CommandBase {
 
                         return getListOfStringsMatchingLastWord(args, options);
                     }
+                case "eventlistener":
+                    if (eventsToListeners.isEmpty()) {
+                        loadEventCache();
+                    }
+                    if (args.length == 3) {
+                        return getListOfStringsMatchingLastWord(args, eventsToListeners.get(args[1]).stream().map(Class::getName).collect(Collectors.toList()));
+                    }
+                    return getListOfStringsMatchingLastWord(args, new ArrayList<>(eventsToListeners.keySet()));
                 case "item":
                     return getListOfStringsMatchingLastWord(args, Item.REGISTRY.getKeys());
                 case "block":
@@ -79,6 +95,29 @@ public class DecompileCommand extends CommandBase {
             }
         }
         return Collections.emptyList();
+    }
+
+    private void loadEventCache() {
+        try {
+            Field field = MinecraftForge.EVENT_BUS.getClass().getDeclaredField("listeners");
+            field.setAccessible(true);
+
+            @SuppressWarnings("unchecked")
+            ConcurrentHashMap<Object, ArrayList<IEventListener>> listeners = (ConcurrentHashMap<Object, ArrayList<IEventListener>>) field.get(MinecraftForge.EVENT_BUS);
+
+            listeners.keySet().forEach(e -> {
+                Method[] methods = e.getClass().getMethods();
+                for (Method m : methods) {
+                    if (m.isAnnotationPresent(SubscribeEvent.class)) {
+                        Class<?>[] parameter = m.getParameterTypes();
+                        Class<?> enclosingClass = parameter[0].getEnclosingClass();
+                        eventsToListeners.computeIfAbsent(enclosingClass != null ? enclosingClass.getSimpleName() + "$" + parameter[0].getSimpleName() : parameter[0].getSimpleName(), aClass -> new ArrayList<>()).add(e.getClass());
+                    }
+                }
+            });
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -103,6 +142,22 @@ public class DecompileCommand extends CommandBase {
                         throw new CommandException("commands.total_debug.decompile.path.failed");
                     }
                     break;
+                case "eventlistener":
+                    if (eventsToListeners.isEmpty()) {
+                        loadEventCache();
+                    }
+                    ArrayList<Class<?>> classes = eventsToListeners.get(args[1]);
+                    if (classes != null) {
+                        if (args[2] != null) {
+                            classes.forEach(c ->{
+                                if (c.getName().equals(args[2])) {
+                                    TotalDebug.PROXY.getDecompilationManager().openGui(c);
+                                }
+                            });
+                        }else {
+                            TotalDebug.PROXY.getDecompilationManager().openGui(classes.get(0));
+                        }
+                    }
             }
         }
     }
