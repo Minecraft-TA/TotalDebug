@@ -54,11 +54,6 @@ public class TotalDebug {
         PROXY.init(event);
     }
 
-    @Mod.EventHandler
-    public void onServerStarting(FMLServerStartingEvent event) {
-        event.registerServerCommand(new DecompileCommand());
-    }
-
     @GameRegistry.ObjectHolder(MOD_ID)
     public static class Blocks {
         public static final TickBlock TICK_BLOCK = null;

@@ -13,6 +13,7 @@ import net.minecraft.item.Item;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
+import net.minecraftforge.client.IClientCommand;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.IEventListener;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -28,7 +29,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class DecompileCommand extends CommandBase {
+public class DecompileCommand extends CommandBase implements IClientCommand {
 
     private final HashMap<String, ArrayList<Class<?>>> eventsToListeners = new HashMap<>();
 
@@ -169,5 +170,10 @@ public class DecompileCommand extends CommandBase {
             return entry.getEntityClass();
         }
         throw new CommandException("commands.total_debug.decompile.entity.failed", resourcelocation);
+    }
+
+    @Override
+    public boolean allowUsageWithoutPrefix(ICommandSender sender, String message) {
+        return false;
     }
 }
