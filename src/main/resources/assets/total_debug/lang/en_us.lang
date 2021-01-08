@@ -6,6 +6,14 @@ tile.tick_block.name=Tick Block
 item.tick_block.name=Tick Block
 
 #commands
-commands.total_debug.decompile.usage=/decompile block|item|entity|classpath|eventlistener <name> [eventlistener]
-commands.total_debug.decompile.entity.failed=There is no such entity with name %s
-commands.total_debug.decompile.path.failed=There is no such class
+commands.total_debug.decompile.usage=/decompile <subcommand> [args]
+commands.total_debug.decompile.entity.failed=An entity with the name %s does not exist
+commands.total_debug.decompile.entity.usage=/decompile entity <modid:entityid>
+commands.total_debug.decompile.item.failed=An item with the name %s does not exist
+commands.total_debug.decompile.item.usage=/decompile item <modid:itemid>
+commands.total_debug.decompile.block.failed=A block with the name %s does not exist
+commands.total_debug.decompile.block.usage=/decompile block <modid:blockid>
+commands.total_debug.decompile.class.failed=A class with the name %s does not exist
+commands.total_debug.decompile.class.usage=/decompile class <fullClassName>
+commands.total_debug.decompile.eventlistener.failed_event=The event %s does not exist or does not have any registered listeners.
+commands.total_debug.decompile.eventlistener.usage=/decompile eventlistener <event> <listenerClass>
