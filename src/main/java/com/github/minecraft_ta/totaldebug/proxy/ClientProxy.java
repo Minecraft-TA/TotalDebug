@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
+import com.github.minecraft_ta.totaldebug.util.ClassUtil;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
@@ -20,6 +21,7 @@ public class ClientProxy extends CommonProxy {
     public void init(FMLInitializationEvent e) {
         super.init(e);
         decompilationManager.setup();
+        ClassUtil.loadMappings();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
