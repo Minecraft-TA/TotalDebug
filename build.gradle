@@ -73,7 +73,7 @@ dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2854'
 
     implementation "io.github.classgraph:classgraph:4.8.90"
-    implementation "net.minecraftforge:fernflower:402"
+    implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
 
     implementation 'org.antlr:antlr4-runtime:4.7.2'
     antlr 'org.antlr:antlr4:4.7.2'
@@ -84,10 +84,13 @@ shadowJar {
 
     relocate "org.antlr", "com.github.minecraft_ta.totaldebug.shades.antlr"
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
-    relocate "org.jetbrains.java.decompiler", "com.github.minecraft_ta.totaldebug.shades.fernflower"
+    relocate "org.bitbucket.mstrobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
     dependencies {
         exclude(dependency {
-            it.moduleGroup != 'io.github.classgraph' && it.moduleGroup != 'org.antlr' && it.name != 'net.minecraftforge:fernflower:402'
+            it.moduleGroup != 'io.github.classgraph' &&
+                    it.moduleGroup != 'org.antlr' &&
+                    it.name != 'net.minecraftforge:fernflower:402' &&
+                    it.moduleGroup != 'org.bitbucket.mstrobel'
         })
     }
 }
