@@ -6,6 +6,7 @@ import com.strobel.decompiler.DecompilationOptions;
 import com.strobel.decompiler.DecompilerSettings;
 import com.strobel.decompiler.PlainTextOutput;
 import com.strobel.decompiler.languages.java.JavaFormattingOptions;
+import org.objectweb.asm.ClassWriter;
 
 import java.io.StringWriter;
 
@@ -13,12 +14,16 @@ public class ProcyonDecompiler {
 
     public static String decompile(String name) {
         ITypeLoader loader = (internalName, buffer) -> {
-            if(internalName.endsWith(".class"))
+            if (internalName.endsWith(".class"))
                 internalName = internalName.substring(0, internalName.length() - 6);
 
             try {
-                byte[] code = BytecodeUtil.getRemappedClass(Class.forName(internalName)).toByteArray();
-                if(code == null)
+                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName));
+                if (writer == null)
+                    return false;
+
+                byte[] code = writer.toByteArray();
+                if (code == null)
                     return false;
 
                 buffer.position(0);
