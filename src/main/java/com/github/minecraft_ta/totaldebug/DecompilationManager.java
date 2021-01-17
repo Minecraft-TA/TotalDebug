@@ -60,7 +60,10 @@ public class DecompilationManager {
     }
 
     public void openGui(Class<?> clazz) {
-        getDecompiledFileContent(clazz).thenAccept(s -> {
+        getDecompiledFileContent(clazz).exceptionally(throwable -> {
+            throwable.printStackTrace();
+            return "";
+        }).thenAccept(s -> {
             Minecraft.getMinecraft().addScheduledTask(() -> {
                 CodeViewScreen screen = new CodeViewScreen();
                 FMLClientHandler.instance().showGuiScreen(screen);
