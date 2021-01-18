@@ -15,7 +15,6 @@ import java.util.List;
 
 public class EntitySubCommand extends DecompileCommand.DecompileClassSubCommand {
 
-    @Nullable
     @Override
     public Class<?> getClassFromArg(@Nonnull String s) {
         EntityEntry entry = ForgeRegistries.ENTITIES.getValue(new ResourceLocation(s));

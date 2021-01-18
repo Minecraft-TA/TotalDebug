@@ -14,7 +14,6 @@ import java.util.List;
 
 public class ClassSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
-    @Nullable
     @Override
     public Class<?> getClassFromArg(@Nonnull String s) {
         try {

@@ -13,7 +13,6 @@ import java.util.List;
 
 public class BlockSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
-    @Nullable
     @Override
     public Class<?> getClassFromArg(@Nonnull String s) {
         ResourceLocation key = new ResourceLocation(s);
