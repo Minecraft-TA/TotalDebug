@@ -1,9 +1,10 @@
-package com.github.minecraft_ta.totaldebug.util;
+package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ScanResult;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.*;
@@ -15,8 +16,11 @@ public class MethodReferenceSearcher {
 
     private static boolean RUNNING = false;
 
+    /**
+     * @param searchMethod true if you want to search for methods; false otherwise
+     */
     @Nullable
-    public static CompletableFuture<Collection<String>> findMethodReferences(String methodSignature) {
+    public static CompletableFuture<Collection<String>> findMethodReferences(String signature, boolean searchMethod) {
         if (RUNNING)
             return null;
 
@@ -63,6 +67,7 @@ public class MethodReferenceSearcher {
                     int finalEndIndex = endIndex;
                     tasks.add(() -> {
                         List<String> subResults = new ArrayList<>();
+                        InternalRemappingContext context = new InternalRemappingContext(subResults, signature, searchMethod);
 
                         for (int j = startIndex; j <= finalEndIndex; j++) {
                             Class<?> clazz;
@@ -73,11 +78,8 @@ public class MethodReferenceSearcher {
                                 continue;
                             }
 
-                            RemappingUtil.getRemappedClass(clazz, (methodName, signature) -> {
-                                if (signature.endsWith(methodSignature))
-                                    subResults.add(RemappingUtil.tryFindClassWithMappings(clazz.getName())
-                                            .getName().replace('.', '/') + "#" + methodName);
-                            });
+                            context.currentClass = clazz;
+                            RemappingUtil.getRemappedClass(clazz, context);
                         }
 
                         return subResults;
@@ -104,5 +106,40 @@ public class MethodReferenceSearcher {
         EXECUTOR = Executors.newCachedThreadPool();
 
         RUNNING = false;
+    }
+
+    private static final class InternalRemappingContext extends RemappingUtil.RemappingContext {
+
+        private final List<String> results;
+        private final String signatureToMatch;
+
+        private Class<?> currentClass;
+
+        public InternalRemappingContext(List<String> results, String signatureToMatch, boolean method) {
+            this.results = results;
+            this.signatureToMatch = signatureToMatch;
+            write = false;
+            mapMethodInsn = method;
+            mapFieldInsn = !method;
+            mapTypeAndLdcInsn = false;
+            mapFields = false;
+            mapLocals = false;
+        }
+
+        @Override
+        public void onMethodInsnMapping(@Nonnull String containedMethodName, @Nonnull String newMethodSignature) {
+            if (newMethodSignature.endsWith(signatureToMatch)) {
+                results.add(RemappingUtil.tryFindClassWithMappings(currentClass.getName())
+                        .getName().replace('.', '/') + "#" + containedMethodName);
+            }
+        }
+
+        @Override
+        public void onFieldInsnMapping(@Nonnull String containedMethodName, @Nonnull String newFieldSignature) {
+            if (newFieldSignature.endsWith(signatureToMatch)) {
+                results.add(RemappingUtil.tryFindClassWithMappings(currentClass.getName())
+                        .getName().replace('.', '/') + "#" + containedMethodName);
+            }
+        }
     }
 }

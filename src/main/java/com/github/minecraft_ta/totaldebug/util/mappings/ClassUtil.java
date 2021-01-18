@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util;
+package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 

@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util;
+package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import org.apache.commons.io.IOUtils;
@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.function.BiConsumer;
 
 public class RemappingUtil {
 
@@ -31,15 +30,12 @@ public class RemappingUtil {
     /**
      * Remaps all function, field and class references that are obfuscated in this class to their non-obfuscated names.
      *
-     * @param clazz          the class to read and remap
-     * @param methodConsumer a consumer which is supplied with a each function call that is visited after it has been
-     *                       remapped. If this is not null, only methods will be remapped. First param is the method
-     *                       name the call is in and second is the signature of the method
+     * @param clazz the class to read and remap
      * @return a {@link ClassWriter} which has the new class written to it; will be null if {@code methodConsumer} is
      * not null or something went wrong
      */
     @Nullable
-    public static ClassWriter getRemappedClass(@Nonnull Class<?> clazz, BiConsumer<String, String> methodConsumer) {
+    public static ClassWriter getRemappedClass(@Nonnull Class<?> clazz, @Nonnull RemappingContext context) {
         if (clazz.isInterface())
             return null;
 
@@ -47,10 +43,8 @@ public class RemappingUtil {
         if (bytecode == null)
             return null;
 
-        boolean methodsOnly = methodConsumer != null;
-
         //read class into class node
-        ClassWriter writer = methodsOnly ? null : new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        ClassWriter writer = context.write ? new ClassWriter(ClassWriter.COMPUTE_MAXS) : null;
         ClassReader reader = new ClassReader(bytecode);
 
         ClassNode node = new ClassNode();
@@ -68,7 +62,7 @@ public class RemappingUtil {
         }
 
         //remap fields
-        List<FieldNode> classFields = methodsOnly ? null : node.fields;
+        List<FieldNode> classFields = context.mapFields ? node.fields : null;
         for (int i = 0; classFields != null && i < classFields.size(); i++) {
             FieldNode field = classFields.get(i);
             if (mappedPair != null)
@@ -104,7 +98,7 @@ public class RemappingUtil {
             method.desc = signature.substring(signature.indexOf('('));
 
             //remap local variables
-            List<LocalVariableNode> localVariables = methodsOnly ? null : method.localVariables;
+            List<LocalVariableNode> localVariables = context.mapLocals ? method.localVariables : null;
             for (int j = 0; localVariables != null && j < localVariables.size(); j++) {
                 LocalVariableNode localVariable = localVariables.get(j);
                 localVariable.desc = remapTypeString(localVariable.desc);
@@ -129,7 +123,7 @@ public class RemappingUtil {
             while (iterator.hasNext()) {
                 AbstractInsnNode insnNode = iterator.next();
 
-                if (insnNode instanceof MethodInsnNode) { //method calls
+                if (context.mapMethodInsn && insnNode instanceof MethodInsnNode) { //method calls
                     MethodInsnNode methodInsnNode = (MethodInsnNode) insnNode;
                     Pair<String, Map<String, String>> pair = mcpMappings.get(methodInsnNode.owner);
 
@@ -175,14 +169,16 @@ public class RemappingUtil {
 
                     methodInsnNode.desc = newDesc == null ? remapTypeString(methodInsnNode.desc) : newDesc;
 
-                    if (methodsOnly)
-                        methodConsumer.accept(method.name, actualOwnerClass + "." +
-                                methodInsnNode.name + methodInsnNode.desc);
-                } else if (!methodsOnly && insnNode instanceof InvokeDynamicInsnNode) {
+                    context.onMethodInsnMapping(method.name, actualOwnerClass + "." +
+                            methodInsnNode.name + methodInsnNode.desc);
+                } else if (context.mapMethodInsn && insnNode instanceof InvokeDynamicInsnNode) {
                     //TODO: maybe
-                } else if (!methodsOnly && insnNode instanceof FieldInsnNode) { //field access
+                } else if (context.mapFieldInsn && insnNode instanceof FieldInsnNode) { //field access
                     FieldInsnNode fieldInsnNode = (FieldInsnNode) insnNode;
                     Pair<String, Map<String, String>> pair = mcpMappings.get(fieldInsnNode.owner);
+
+                    String actualOwnerClass = fieldInsnNode.owner;
+
                     if (pair != null) {
                         fieldInsnNode.owner = pair.getLeft();
 
@@ -196,18 +192,22 @@ public class RemappingUtil {
                             return writer;
                         }
 
-                        fieldInsnNode.name = findMappedMemberName(fieldInsnNode.name, currentClass).getRight();
+                        Pair<Class<?>, String> mappedMemberPair = findMappedMemberName(fieldInsnNode.name, currentClass);
+                        fieldInsnNode.name = mappedMemberPair.getRight();
+                        actualOwnerClass = mappedMemberPair.getLeft().getName().replace('.', '/');
                     } else {
                         fieldInsnNode.name = forgeMappings.getOrDefault(fieldInsnNode.name, fieldInsnNode.name);
                     }
 
                     fieldInsnNode.desc = remapTypeString(fieldInsnNode.desc);
-                } else if (!methodsOnly && insnNode instanceof TypeInsnNode) { //type instruction
+
+                    context.onFieldInsnMapping(method.name, actualOwnerClass + "." + fieldInsnNode.name);
+                } else if (context.mapTypeAndLdcInsn && insnNode instanceof TypeInsnNode) { //type instruction
                     TypeInsnNode typeInsnNode = (TypeInsnNode) insnNode;
                     Pair<String, Map<String, String>> typePair = mcpMappings.get(typeInsnNode.desc);
                     if (typePair != null)
                         typeInsnNode.desc = typePair.getLeft();
-                } else if (!methodsOnly && insnNode instanceof LdcInsnNode) { //constant pool instruction
+                } else if (context.mapTypeAndLdcInsn && insnNode instanceof LdcInsnNode) { //constant pool instruction
                     LdcInsnNode ldcInsnNode = (LdcInsnNode) insnNode;
                     if (ldcInsnNode.cst instanceof Type) {
                         Type oldType = (Type) ldcInsnNode.cst;
@@ -216,6 +216,9 @@ public class RemappingUtil {
                 }
             }
         }
+
+        if (!context.write)
+            return null;
 
         if (mappedPair != null)
             node.name = mappedPair.getLeft();
@@ -226,10 +229,6 @@ public class RemappingUtil {
             String interfaceName = node.interfaces.get(i);
             node.interfaces.set(i, mcpMappings.getOrDefault(interfaceName, Pair.of(interfaceName, null)).getLeft());
         }
-
-
-        if (methodsOnly)
-            return null;
 
         node.accept(writer);
         return writer;
@@ -397,6 +396,25 @@ public class RemappingUtil {
             });
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Error while loading mappings", e);
+        }
+    }
+
+    public static class RemappingContext {
+        protected boolean mapFields = true;
+        protected boolean mapLocals = true;
+
+        protected boolean mapMethodInsn = true;
+        protected boolean mapFieldInsn = true;
+        protected boolean mapTypeAndLdcInsn = true;
+
+        protected boolean write = true;
+
+        public void onMethodInsnMapping(@Nonnull String containedMethodName, @Nonnull String newMethodSignature) {
+            //NO OP
+        }
+
+        public void onFieldInsnMapping(@Nonnull String containedMethodName, @Nonnull String newFieldSignature) {
+            //NO OP
         }
     }
 }

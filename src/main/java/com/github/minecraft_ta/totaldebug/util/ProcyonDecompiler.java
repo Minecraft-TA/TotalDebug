@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util;
 
+import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
 import com.strobel.assembler.metadata.ITypeLoader;
 import com.strobel.assembler.metadata.MetadataSystem;
 import com.strobel.decompiler.DecompilationOptions;
@@ -18,7 +19,7 @@ public class ProcyonDecompiler {
                 internalName = internalName.substring(0, internalName.length() - 6);
 
             try {
-                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName), null);
+                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName), new RemappingUtil.RemappingContext());
                 if (writer == null)
                     return false;
 

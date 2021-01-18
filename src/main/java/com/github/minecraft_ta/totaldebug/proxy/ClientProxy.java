@@ -8,7 +8,7 @@ import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenc
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.util.RemappingUtil;
+import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
