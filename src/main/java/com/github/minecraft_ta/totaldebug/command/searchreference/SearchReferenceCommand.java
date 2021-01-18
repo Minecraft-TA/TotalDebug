@@ -39,17 +39,15 @@ public class SearchReferenceCommand extends CommandBase {
 
     @Override
     public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
-        if (args.length < 2 || (!args[0].equalsIgnoreCase("field") &&
-                !args[0].equalsIgnoreCase("method") &&
-                !args[0].equalsIgnoreCase("cancel"))) {
-            throw new CommandException("commands.total_debug.searchreference.usage");
-        }
-
-        if (args[0].equalsIgnoreCase("cancel")) {
+        if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
             MethodReferenceSearcher.cancel();
             sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.cancel_success")
                     .setStyle(new Style().setColor(TextFormatting.GREEN)));
             return;
+        }
+
+        if (args.length < 2 || (!args[0].equalsIgnoreCase("field") && !args[0].equalsIgnoreCase("method"))) {
+            throw new CommandException("commands.total_debug.searchreference.usage");
         }
 
         long t = System.nanoTime() / 1_000_000;
