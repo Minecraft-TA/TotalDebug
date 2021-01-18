@@ -45,7 +45,7 @@ public class ClassUtil {
             return null;
 
         CodeSource codeSourceObj = protectionDomain.getCodeSource();
-        if (codeSourceObj == null)
+        if (codeSourceObj == null || codeSourceObj.getLocation() == null)
             return null;
 
         String codeSource = codeSourceObj.getLocation().toString();

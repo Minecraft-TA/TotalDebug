@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.util.mappings;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ScanResult;
+import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -20,7 +21,7 @@ public class MethodReferenceSearcher {
      * @param searchMethod true if you want to search for methods; false otherwise
      */
     @Nullable
-    public static CompletableFuture<Collection<String>> findMethodReferences(String signature, boolean searchMethod) {
+    public static CompletableFuture<Pair<Collection<String>, Integer>> findMethodReferences(String signature, boolean searchMethod) {
         if (RUNNING)
             return null;
 
@@ -47,7 +48,7 @@ public class MethodReferenceSearcher {
                 ClassInfoList allClasses = result.getAllClasses();
                 if (allClasses.isEmpty()) {
                     RUNNING = false;
-                    return Collections.emptyList();
+                    return Pair.of(Collections.emptyList(), 0);
                 }
 
                 int partSize = allClasses.size() / POOL_SIZE;
@@ -73,7 +74,7 @@ public class MethodReferenceSearcher {
                             Class<?> clazz;
                             try {
                                 clazz = allClasses.get(j).loadClass();
-                            } catch (IllegalArgumentException ignored) {
+                            } catch (Throwable ignored) {
                                 //class can't be loaded
                                 continue;
                             }
@@ -93,10 +94,10 @@ public class MethodReferenceSearcher {
 
                 RUNNING = false;
 
-                return results;
+                return Pair.of(results, allClasses.size());
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
-                return Collections.emptyList();
+                return Pair.of(Collections.emptyList(), 0);
             }
         });
     }
@@ -129,16 +130,22 @@ public class MethodReferenceSearcher {
         @Override
         public void onMethodInsnMapping(@Nonnull String containedMethodName, @Nonnull String newMethodSignature) {
             if (newMethodSignature.endsWith(signatureToMatch)) {
-                results.add(RemappingUtil.tryFindClassWithMappings(currentClass.getName())
-                        .getName().replace('.', '/') + "#" + containedMethodName);
+                Class<?> foundClass = RemappingUtil.tryFindClassWithMappings(currentClass.getName());
+                if (foundClass == null)
+                    return;
+
+                results.add(foundClass.getName().replace('.', '/') + "#" + containedMethodName);
             }
         }
 
         @Override
         public void onFieldInsnMapping(@Nonnull String containedMethodName, @Nonnull String newFieldSignature) {
             if (newFieldSignature.endsWith(signatureToMatch)) {
-                results.add(RemappingUtil.tryFindClassWithMappings(currentClass.getName())
-                        .getName().replace('.', '/') + "#" + containedMethodName);
+                Class<?> foundClass = RemappingUtil.tryFindClassWithMappings(currentClass.getName());
+                if (foundClass == null)
+                    return;
+
+                results.add(foundClass.getName().replace('.', '/') + "#" + containedMethodName);
             }
         }
     }

@@ -316,13 +316,13 @@ public class RemappingUtil {
         Class<?> superClazz;
         try {
             superClazz = Class.forName(superName.replace("/", "."));
-        } catch (ClassNotFoundException e) {
+        } catch (Throwable e) {
             try {
                 Pair<String, Map<String, String>> superClassPair = mcpMappings.get(superName);
                 if (superClassPair == null)
                     return null;
                 superClazz = Class.forName(superClassPair.getLeft().replace("/", "."));
-            } catch (ClassNotFoundException classNotFoundException) {
+            } catch (Throwable classNotFoundException) {
                 TotalDebug.LOGGER.error("Unable to find class " + superName + ", " + mcpMappings.getOrDefault(superName, Pair.of("null", null)).getLeft(), e);
                 return null;
             }

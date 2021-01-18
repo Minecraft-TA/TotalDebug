@@ -13,6 +13,7 @@ import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraft.util.text.event.ClickEvent;
 import net.minecraft.util.text.event.HoverEvent;
+import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -54,7 +55,7 @@ public class SearchReferenceCommand extends CommandBase {
         long t = System.nanoTime() / 1_000_000;
 
         boolean searchMethod = args[0].equalsIgnoreCase("method");
-        CompletableFuture<Collection<String>> future = MethodReferenceSearcher.findMethodReferences(args[1], searchMethod);
+        CompletableFuture<Pair<Collection<String>, Integer>> future = MethodReferenceSearcher.findMethodReferences(args[1], searchMethod);
         if (future == null) {
             throw new CommandException("commands.total_debug.searchreference.already_running");
         }
@@ -63,24 +64,33 @@ public class SearchReferenceCommand extends CommandBase {
             //don't print stacktrace if task was cancelled
             if (!(e instanceof RejectedExecutionException))
                 e.printStackTrace();
-            return Collections.emptyList();
-        }).thenAccept(results -> {
+            return Pair.of(Collections.emptyList(), -1);
+        }).thenAccept(resultPair -> {
             Minecraft.getMinecraft().addScheduledTask(() -> {
+                if (resultPair.getRight() == -1) {
+                    sender.sendMessage(new TextComponentString("There was an error during the scan. Please check " +
+                            "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
+                    return;
+                }
+
                 sender.sendMessage(new TextComponentString("-------------------").setStyle(new Style().setColor(TextFormatting.GOLD)));
 
                 int i = 0;
-                for (String result : results) {
+                for (String result : resultPair.getLeft()) {
                     sender.sendMessage(new TextComponentString(result)
                             .setStyle(new Style().setColor(i % 2 == 0 ? TextFormatting.WHITE : TextFormatting.GRAY)
                                     .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponentTranslation("commands.total_debug.searchreference.click_to_open")))
-                            .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));
+                                    .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));
 
                     i++;
                 }
-                sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.result_count", results.size())
+
+                sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.result_count", resultPair.getLeft().size())
                         .setStyle(new Style().setColor(TextFormatting.GREEN))
-                        .appendText(" ")
-                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.time", System.nanoTime() / 1_000_000 - t)));
+                        .appendText(", ")
+                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.time", System.nanoTime() / 1_000_000 - t))
+                        .appendText(", ")
+                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
             });
         });
     }

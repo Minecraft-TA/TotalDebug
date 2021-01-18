@@ -84,6 +84,7 @@ shadowJar {
 
     relocate "org.antlr", "com.github.minecraft_ta.totaldebug.shades.antlr"
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
+    relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
     dependencies {
         exclude(dependency {
