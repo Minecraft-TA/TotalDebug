@@ -11,7 +11,6 @@ import java.security.ProtectionDomain;
 
 public class ClassUtil {
 
-
     private ClassUtil() {
     }
 

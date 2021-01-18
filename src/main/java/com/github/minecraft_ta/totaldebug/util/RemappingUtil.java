@@ -15,8 +15,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 public class RemappingUtil {
 
@@ -28,19 +30,27 @@ public class RemappingUtil {
 
     /**
      * Remaps all function, field and class references that are obfuscated in this class to their non-obfuscated names.
-     * @param clazz the class to read and remap
-     * @return a {@link ClassWriter} which has the new class written to it
+     *
+     * @param clazz          the class to read and remap
+     * @param methodConsumer a consumer which is supplied with a each function call that is visited after it has been
+     *                       remapped. If this is not null, only methods will be remapped. First param is the method
+     *                       name the call is in and second is the signature of the method
+     * @return a {@link ClassWriter} which has the new class written to it; will be null if {@code methodConsumer} is
+     * not null or something went wrong
      */
     @Nullable
-    public static ClassWriter getRemappedClass(@Nonnull Class<?> clazz) {
+    public static ClassWriter getRemappedClass(@Nonnull Class<?> clazz, BiConsumer<String, String> methodConsumer) {
+        if (clazz.isInterface())
+            return null;
+
         byte[] bytecode = ClassUtil.getBytecode(clazz);
         if (bytecode == null)
             return null;
 
-        long millis = System.nanoTime() / 1_000_000;
+        boolean methodsOnly = methodConsumer != null;
 
         //read class into class node
-        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        ClassWriter writer = methodsOnly ? null : new ClassWriter(ClassWriter.COMPUTE_MAXS);
         ClassReader reader = new ClassReader(bytecode);
 
         ClassNode node = new ClassNode();
@@ -58,7 +68,9 @@ public class RemappingUtil {
         }
 
         //remap fields
-        for (FieldNode field : node.fields) {
+        List<FieldNode> classFields = methodsOnly ? null : node.fields;
+        for (int i = 0; classFields != null && i < classFields.size(); i++) {
+            FieldNode field = classFields.get(i);
             if (mappedPair != null)
                 field.name = attributeMappings.getOrDefault(field.name, field.name);
             else
@@ -67,31 +79,52 @@ public class RemappingUtil {
             field.desc = remapTypeString(field.desc);
 
             if (field.signature != null) {
+                int genericIndex = field.signature.indexOf('<');
+                //lets not mess with this
+                if (genericIndex == -1)
+                    continue;
+
                 field.signature = field.desc.substring(0, field.desc.length() - 1) +
-                        remapTypeString(field.signature.substring(field.signature.indexOf('<')));
+                        remapTypeString(field.signature.substring(genericIndex));
             }
         }
 
         //remap methods
-        for (MethodNode method : node.methods) {
-            InsnList instructions = method.instructions;
-            ListIterator<AbstractInsnNode> iterator = instructions.iterator();
+        List<MethodNode> classMethods = node.methods;
+        for (int i = 0; classMethods != null && i < classMethods.size(); i++) {
+            MethodNode method = classMethods.get(i);
 
             //remap method name and desc
-            String signature = findMappedMemberName(method.name + method.desc, clazz);
-            method.name = signature.substring(0, signature.indexOf('('));
+            String signature = findMappedMemberName(method.name + method.desc, clazz).getRight();
+            String newMethodName = signature.substring(0, signature.indexOf('('));
+            if (newMethodName.equals(method.name))
+                method.name = forgeMappings.getOrDefault(newMethodName, newMethodName);
+            else
+                method.name = newMethodName;
             method.desc = signature.substring(signature.indexOf('('));
 
             //remap local variables
-            for (LocalVariableNode localVariable : method.localVariables) {
+            List<LocalVariableNode> localVariables = methodsOnly ? null : method.localVariables;
+            for (int j = 0; localVariables != null && j < localVariables.size(); j++) {
+                LocalVariableNode localVariable = localVariables.get(j);
                 localVariable.desc = remapTypeString(localVariable.desc);
 
                 if (localVariable.signature != null) {
+                    int genericIndex = localVariable.signature.indexOf('<');
+                    //lets not mess with this
+                    if (genericIndex == -1)
+                        continue;
+
                     localVariable.signature = localVariable.desc.substring(0, localVariable.desc.length() - 1) +
-                            remapTypeString(localVariable.signature.substring(localVariable.signature.indexOf('<')));
+                            remapTypeString(localVariable.signature.substring(genericIndex));
                 }
             }
 
+            InsnList instructions = method.instructions;
+            if (instructions == null)
+                continue;
+
+            ListIterator<AbstractInsnNode> iterator = instructions.iterator();
             //remap instructions
             while (iterator.hasNext()) {
                 AbstractInsnNode insnNode = iterator.next();
@@ -102,6 +135,7 @@ public class RemappingUtil {
 
                     String methodSignature = methodInsnNode.name + methodInsnNode.desc;
                     String newDesc = null;
+                    String actualOwnerClass = methodInsnNode.owner;
 
                     //if owner is obfuscated
                     if (pair != null) {
@@ -124,7 +158,9 @@ public class RemappingUtil {
                                 return writer;
                             }
 
-                            newSignature = findMappedMemberName(methodSignature, currentClass);
+                            Pair<Class<?>, String> mappedMemberPair = findMappedMemberName(methodSignature, currentClass);
+                            newSignature = mappedMemberPair.getRight();
+                            actualOwnerClass = mappedMemberPair.getLeft().getName().replace('.', '/');
                         }
 
                         methodInsnNode.owner = pair.getLeft();
@@ -138,9 +174,13 @@ public class RemappingUtil {
                     }
 
                     methodInsnNode.desc = newDesc == null ? remapTypeString(methodInsnNode.desc) : newDesc;
-                } else if (insnNode instanceof InvokeDynamicInsnNode) {
+
+                    if (methodsOnly)
+                        methodConsumer.accept(method.name, actualOwnerClass + "." +
+                                methodInsnNode.name + methodInsnNode.desc);
+                } else if (!methodsOnly && insnNode instanceof InvokeDynamicInsnNode) {
                     //TODO: maybe
-                } else if (insnNode instanceof FieldInsnNode) { //field access
+                } else if (!methodsOnly && insnNode instanceof FieldInsnNode) { //field access
                     FieldInsnNode fieldInsnNode = (FieldInsnNode) insnNode;
                     Pair<String, Map<String, String>> pair = mcpMappings.get(fieldInsnNode.owner);
                     if (pair != null) {
@@ -156,18 +196,18 @@ public class RemappingUtil {
                             return writer;
                         }
 
-                        fieldInsnNode.name = findMappedMemberName(fieldInsnNode.name, currentClass);
+                        fieldInsnNode.name = findMappedMemberName(fieldInsnNode.name, currentClass).getRight();
                     } else {
                         fieldInsnNode.name = forgeMappings.getOrDefault(fieldInsnNode.name, fieldInsnNode.name);
                     }
 
                     fieldInsnNode.desc = remapTypeString(fieldInsnNode.desc);
-                } else if (insnNode instanceof TypeInsnNode) { //type instruction
+                } else if (!methodsOnly && insnNode instanceof TypeInsnNode) { //type instruction
                     TypeInsnNode typeInsnNode = (TypeInsnNode) insnNode;
                     Pair<String, Map<String, String>> typePair = mcpMappings.get(typeInsnNode.desc);
                     if (typePair != null)
                         typeInsnNode.desc = typePair.getLeft();
-                } else if (insnNode instanceof LdcInsnNode) { //constant pool instruction
+                } else if (!methodsOnly && insnNode instanceof LdcInsnNode) { //constant pool instruction
                     LdcInsnNode ldcInsnNode = (LdcInsnNode) insnNode;
                     if (ldcInsnNode.cst instanceof Type) {
                         Type oldType = (Type) ldcInsnNode.cst;
@@ -187,9 +227,11 @@ public class RemappingUtil {
             node.interfaces.set(i, mcpMappings.getOrDefault(interfaceName, Pair.of(interfaceName, null)).getLeft());
         }
 
-        node.accept(writer);
 
-        double mil = System.nanoTime() / 1_000_000d - millis;
+        if (methodsOnly)
+            return null;
+
+        node.accept(writer);
         return writer;
     }
 
@@ -200,7 +242,7 @@ public class RemappingUtil {
      * For example:
      * <br>
      * <code>
-     *  Lnet/minecraft/stuff;FFZZanythingLtest/test;(Lhi;Lk;IIII)V
+     * Lnet/minecraft/stuff;FFZZanythingLtest/test;(Lhi;Lk;IIII)V
      * </code>
      *
      * @param v the string to remap
@@ -236,11 +278,12 @@ public class RemappingUtil {
      * @return the new mapped value if one was found; the original value otherwise
      */
     @Nonnull
-    private static String findMappedMemberName(String value, Class<?> clazz) {
+    private static Pair<Class<?>, String> findMappedMemberName(String value, Class<?> clazz) {
         String newValue = null;
+        Class<?> currentClass = clazz;
 
         while (true) {
-            String codeSource = ClassUtil.getClassCodeSource(clazz);
+            String codeSource = ClassUtil.getClassCodeSource(currentClass);
             if (codeSource == null)
                 break;
 
@@ -254,13 +297,13 @@ public class RemappingUtil {
                     break;
             }
 
-            clazz = clazz.getSuperclass();
+            currentClass = currentClass.getSuperclass();
 
-            if (clazz == null)
+            if (currentClass == null)
                 break;
         }
 
-        return newValue == null ? value : newValue;
+        return newValue == null ? Pair.of(clazz, value) : Pair.of(currentClass, newValue);
     }
 
     /**
@@ -270,7 +313,7 @@ public class RemappingUtil {
      * @return the class instance corresponding to the given name; {@code null} otherwise
      */
     @Nullable
-    private static Class<?> tryFindClassWithMappings(String superName) {
+    public static Class<?> tryFindClassWithMappings(String superName) {
         Class<?> superClazz;
         try {
             superClazz = Class.forName(superName.replace("/", "."));

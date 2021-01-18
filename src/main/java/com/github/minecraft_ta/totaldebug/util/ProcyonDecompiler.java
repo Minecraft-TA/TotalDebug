@@ -18,7 +18,7 @@ public class ProcyonDecompiler {
                 internalName = internalName.substring(0, internalName.length() - 6);
 
             try {
-                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName));
+                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName), null);
                 if (writer == null)
                     return false;
 
