@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.command.decompile;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.command.*;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.*;
 import net.minecraftforge.client.IClientCommand;
@@ -10,7 +11,6 @@ import net.minecraftforge.server.command.CommandTreeBase;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Iterator;
 
 public class DecompileCommand extends CommandTreeBase implements IClientCommand {
@@ -91,7 +91,6 @@ public class DecompileCommand extends CommandTreeBase implements IClientCommand 
             TotalDebug.PROXY.getDecompilationManager().openGui(clazz);
         }
 
-        @Nonnull
         public String getClassNotFoundTranslationKey() {
             return "commands.total_debug.decompile." + getName() + ".failed";
         }
@@ -102,7 +101,6 @@ public class DecompileCommand extends CommandTreeBase implements IClientCommand 
             return "commands.total_debug.decompile." + getName() + ".usage";
         }
 
-        @Nullable
         public abstract Class<?> getClassFromArg(@Nonnull String s);
     }
 }

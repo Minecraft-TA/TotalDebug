@@ -13,7 +13,6 @@ import java.util.List;
 
 public class ItemSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
-    @Nullable
     @Override
     public Class<?> getClassFromArg(@Nonnull String s) {
         Item item = Item.REGISTRY.getObject(new ResourceLocation(s));

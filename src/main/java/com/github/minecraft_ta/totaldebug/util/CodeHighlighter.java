@@ -36,8 +36,7 @@ public class CodeHighlighter {
     public static List<String> getHighlightedJavaCode(String str) {
         Java9Lexer lexer = new Java9Lexer(CharStreams.fromString(str));
 
-        //TODO: detect newline character
-        List<String> lines = Arrays.asList(str.split("\r\n"));
+        List<String> lines = Arrays.asList(str.split("\n"));
 
         lexer.setTokenFactory(new CommonTokenFactory(true));
 

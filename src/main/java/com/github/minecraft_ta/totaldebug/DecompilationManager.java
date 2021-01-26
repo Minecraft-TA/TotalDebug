@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug;
 
 import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
-import com.github.minecraft_ta.totaldebug.util.FernFlowerDecompiler;
+import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
 import com.google.common.base.Charsets;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.client.FMLClientHandler;
@@ -38,13 +38,9 @@ public class DecompilationManager {
     public boolean decompileClass(Class<?> clazz) {
         String name = clazz.getName();
 
-        FernFlowerDecompiler decompiler = new FernFlowerDecompiler();
-        decompiler.addClass(clazz);
-        decompiler.analyze();
-
         Path output = this.dataDir.resolve(name + ".java");
         try {
-            Files.write(output, decompiler.decompile(name).getBytes(StandardCharsets.UTF_8));
+            Files.write(output, ProcyonDecompiler.decompile(name).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to delete or write java file " + name, e);
         }
@@ -64,7 +60,10 @@ public class DecompilationManager {
     }
 
     public void openGui(Class<?> clazz) {
-        getDecompiledFileContent(clazz).thenAccept(s -> {
+        getDecompiledFileContent(clazz).exceptionally(throwable -> {
+            throwable.printStackTrace();
+            return "";
+        }).thenAccept(s -> {
             Minecraft.getMinecraft().addScheduledTask(() -> {
                 CodeViewScreen screen = new CodeViewScreen();
                 FMLClientHandler.instance().showGuiScreen(screen);
