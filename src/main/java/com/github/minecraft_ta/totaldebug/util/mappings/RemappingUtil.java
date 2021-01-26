@@ -172,7 +172,7 @@ public class RemappingUtil {
                     context.onMethodInsnMapping(method.name, actualOwnerClass + "." +
                             methodInsnNode.name + methodInsnNode.desc);
                 } else if (context.mapMethodInsn && insnNode instanceof InvokeDynamicInsnNode) {
-                    //TODO: maybe
+                    //don't think we need this
                 } else if (context.mapFieldInsn && insnNode instanceof FieldInsnNode) { //field access
                     FieldInsnNode fieldInsnNode = (FieldInsnNode) insnNode;
                     Pair<String, Map<String, String>> pair = mcpMappings.get(fieldInsnNode.owner);
@@ -223,19 +223,22 @@ public class RemappingUtil {
         if (mappedPair != null)
             node.name = mappedPair.getLeft();
 
+        //remap super name
         node.superName = mcpMappings.getOrDefault(node.superName, Pair.of(node.superName, null)).getLeft();
 
+        //remap interfaces
         for (int i = 0; i < node.interfaces.size(); i++) {
             String interfaceName = node.interfaces.get(i);
             node.interfaces.set(i, mcpMappings.getOrDefault(interfaceName, Pair.of(interfaceName, null)).getLeft());
         }
 
+        //write the remapped class
         node.accept(writer);
         return writer;
     }
 
     /**
-     * Remaps all types in a string. The string has to be in the java bytecode format. The method searches for an
+     * Remaps all types in a string. The string has to be in the java bytecode type format. The method searches for an
      * uppercase {@code L} followed by a {@code ;} at some point.
      * <br>
      * For example:
@@ -244,12 +247,12 @@ public class RemappingUtil {
      * Lnet/minecraft/stuff;FFZZanythingLtest/test;(Lhi;Lk;IIII)V
      * </code>
      *
-     * @param v the string to remap
+     * @param value the string to remap
      * @return the remapped string; will be the original string if nothing was remapped
      */
     @Nonnull
-    public static String remapTypeString(@Nonnull String v) {
-        StringBuilder builder = new StringBuilder(v);
+    public static String remapTypeString(@Nonnull String value) {
+        StringBuilder builder = new StringBuilder(value);
 
         for (int i = 0; i < builder.length(); i++) {
             char c = builder.charAt(i);
@@ -272,12 +275,13 @@ public class RemappingUtil {
     }
 
     /**
-     * Searches the given class and super classes for the given value. Can be a field name or method signature.
+     * Searches the given class and super classes for the given value.
      *
+     * @param value field name or method signature to search for
      * @return the new mapped value if one was found; the original value otherwise
      */
     @Nonnull
-    private static Pair<Class<?>, String> findMappedMemberName(String value, Class<?> clazz) {
+    private static Pair<Class<?>, String> findMappedMemberName(@Nonnull String value, @Nonnull Class<?> clazz) {
         String newValue = null;
         Class<?> currentClass = clazz;
 
@@ -308,22 +312,22 @@ public class RemappingUtil {
     /**
      * Tries to find the given class using the given name. If it fails, it tries again by remapping the given name.
      *
-     * @param superName the name of the class to find
+     * @param className the name of the class to find
      * @return the class instance corresponding to the given name; {@code null} otherwise
      */
     @Nullable
-    public static Class<?> tryFindClassWithMappings(String superName) {
+    public static Class<?> tryFindClassWithMappings(@Nonnull String className) {
         Class<?> superClazz;
         try {
-            superClazz = Class.forName(superName.replace("/", "."));
+            superClazz = Class.forName(className.replace("/", "."));
         } catch (Throwable e) {
             try {
-                Pair<String, Map<String, String>> superClassPair = mcpMappings.get(superName);
+                Pair<String, Map<String, String>> superClassPair = mcpMappings.get(className);
                 if (superClassPair == null)
                     return null;
                 superClazz = Class.forName(superClassPair.getLeft().replace("/", "."));
             } catch (Throwable classNotFoundException) {
-                TotalDebug.LOGGER.error("Unable to find class " + superName + ", " + mcpMappings.getOrDefault(superName, Pair.of("null", null)).getLeft(), e);
+                TotalDebug.LOGGER.error("Unable to find class " + className + ", " + mcpMappings.getOrDefault(className, Pair.of("null", null)).getLeft(), e);
                 return null;
             }
         }
