@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
+import com.github.minecraft_ta.totaldebug.util.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
@@ -21,6 +22,7 @@ public class ClientProxy extends CommonProxy {
 
     private final DecompilationManager decompilationManager = new DecompilationManager();
     private final TotalDebugClientConfig clientConfig = new TotalDebugClientConfig();
+    private CompanionApp companionApp;
 
     @Override
     public void preInit(FMLPreInitializationEvent e) {
@@ -32,6 +34,8 @@ public class ClientProxy extends CommonProxy {
     public void init(FMLInitializationEvent e) {
         super.init(e);
         this.decompilationManager.setup();
+        this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
+
         RemappingUtil.loadMappings();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
@@ -53,5 +57,10 @@ public class ClientProxy extends CommonProxy {
     @Override
     public TotalDebugClientConfig getClientConfig() {
         return this.clientConfig;
+    }
+
+    @Override
+    public CompanionApp getCompanionApp() {
+        return this.companionApp;
     }
 }

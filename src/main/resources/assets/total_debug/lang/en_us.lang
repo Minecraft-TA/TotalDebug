@@ -24,3 +24,10 @@ commands.total_debug.searchreference.result_count=Results: %d
 commands.total_debug.searchreference.time=Took: %dms
 commands.total_debug.searchreference.classes_count=Classes scanned: %d
 commands.total_debug.searchreference.click_to_open=*Click* to decompile the class
+
+companion_app.starting=Starting app...
+companion_app.connecting=Connecting...
+companion_app.connection_success=Connection successful!
+companion_app.connection_fail=Connection failed!
+companion_app.download_start=Downloading companion app version: %s
+companion_app.open_file=Opening file: %s
