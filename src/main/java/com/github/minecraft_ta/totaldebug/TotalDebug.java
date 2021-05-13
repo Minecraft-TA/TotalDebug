@@ -23,7 +23,8 @@ import org.apache.logging.log4j.Logger;
 @Mod(
         modid = TotalDebug.MOD_ID,
         name = TotalDebug.MOD_NAME,
-        version = TotalDebug.VERSION
+        version = TotalDebug.VERSION,
+        guiFactory = "com.github.minecraft_ta.totaldebug.gui.config.ModGuiFactory"
 )
 public class TotalDebug {
 

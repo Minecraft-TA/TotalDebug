@@ -10,7 +10,7 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class MethodReferenceSearcher {
+public class BytecodeReferenceSearcher {
 
     private static final int POOL_SIZE = Runtime.getRuntime().availableProcessors();
     private static ExecutorService EXECUTOR = Executors.newCachedThreadPool();
@@ -21,7 +21,7 @@ public class MethodReferenceSearcher {
      * @param searchMethod true if you want to search for methods; false otherwise
      */
     @Nullable
-    public static CompletableFuture<Pair<Collection<String>, Integer>> findMethodReferences(String signature, boolean searchMethod) {
+    public static CompletableFuture<Pair<Collection<String>, Integer>> findReferences(String signature, boolean searchMethod) {
         if (RUNNING)
             return null;
 

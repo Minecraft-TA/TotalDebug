@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.proxy;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
+import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.network.*;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -29,4 +30,6 @@ public class CommonProxy {
     public DecompilationManager getDecompilationManager() {
         return null;
     }
+
+    public TotalDebugClientConfig getClientConfig() { return null; }
 }

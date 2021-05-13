@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.command.searchreference;
 
-import com.github.minecraft_ta.totaldebug.util.mappings.MethodReferenceSearcher;
+import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearcher;
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -40,7 +40,7 @@ public class SearchReferenceCommand extends CommandBase {
     @Override
     public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
         if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
-            MethodReferenceSearcher.cancel();
+            BytecodeReferenceSearcher.cancel();
             sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.cancel_success")
                     .setStyle(new Style().setColor(TextFormatting.GREEN)));
             return;
@@ -53,7 +53,7 @@ public class SearchReferenceCommand extends CommandBase {
         long t = System.nanoTime() / 1_000_000;
 
         boolean searchMethod = args[0].equalsIgnoreCase("method");
-        CompletableFuture<Pair<Collection<String>, Integer>> future = MethodReferenceSearcher.findMethodReferences(args[1], searchMethod);
+        CompletableFuture<Pair<Collection<String>, Integer>> future = BytecodeReferenceSearcher.findReferences(args[1], searchMethod);
         if (future == null) {
             throw new CommandException("commands.total_debug.searchreference.already_running");
         }

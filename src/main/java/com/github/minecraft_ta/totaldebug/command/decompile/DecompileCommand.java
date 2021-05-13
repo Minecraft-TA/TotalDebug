@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totaldebug.command.decompile;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.command.*;
-import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.*;
 import net.minecraftforge.client.IClientCommand;
