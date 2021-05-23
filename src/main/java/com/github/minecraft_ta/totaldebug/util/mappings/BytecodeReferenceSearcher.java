@@ -132,7 +132,6 @@ public class BytecodeReferenceSearcher {
             mapTypeAndLdcInsn = false;
             mapFields = false;
             mapLocals = false;
-            mapMethodNameAndDesc = false;
         }
 
         @Override
