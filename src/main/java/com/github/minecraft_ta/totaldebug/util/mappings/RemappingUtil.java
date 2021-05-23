@@ -79,7 +79,7 @@ public class RemappingUtil {
                     continue;
 
                 field.signature = field.desc.substring(0, field.desc.length() - 1) +
-                        remapTypeString(field.signature.substring(genericIndex));
+                                  remapTypeString(field.signature.substring(genericIndex));
             }
         }
 
@@ -89,13 +89,15 @@ public class RemappingUtil {
             MethodNode method = classMethods.get(i);
 
             //remap method name and desc
-            String signature = findMappedMemberName(method.name + method.desc, clazz).getRight();
-            String newMethodName = signature.substring(0, signature.indexOf('('));
-            if (newMethodName.equals(method.name))
-                method.name = forgeMappings.getOrDefault(newMethodName, newMethodName);
-            else
-                method.name = newMethodName;
-            method.desc = signature.substring(signature.indexOf('('));
+            if (context.mapMethodNameAndDesc) {
+                String signature = findMappedMemberName(method.name + method.desc, clazz).getRight();
+                String newMethodName = signature.substring(0, signature.indexOf('('));
+                if (newMethodName.equals(method.name))
+                    method.name = forgeMappings.getOrDefault(newMethodName, newMethodName);
+                else
+                    method.name = newMethodName;
+                method.desc = signature.substring(signature.indexOf('('));
+            }
 
             //remap local variables
             List<LocalVariableNode> localVariables = context.mapLocals ? method.localVariables : null;
@@ -110,7 +112,7 @@ public class RemappingUtil {
                         continue;
 
                     localVariable.signature = localVariable.desc.substring(0, localVariable.desc.length() - 1) +
-                            remapTypeString(localVariable.signature.substring(genericIndex));
+                                              remapTypeString(localVariable.signature.substring(genericIndex));
                 }
             }
 
@@ -140,8 +142,8 @@ public class RemappingUtil {
 
                         //special case, need to also look in super classes for the method
                         if (methodInsnNode.getOpcode() == Opcodes.INVOKEINTERFACE ||
-                                methodInsnNode.getOpcode() == Opcodes.INVOKEVIRTUAL ||
-                                methodInsnNode.getOpcode() == Opcodes.INVOKESPECIAL) {
+                            methodInsnNode.getOpcode() == Opcodes.INVOKEVIRTUAL ||
+                            methodInsnNode.getOpcode() == Opcodes.INVOKESPECIAL) {
                             //get actual owner class
                             Class<?> currentClass = methodInsnNode.owner.equals(node.name) ?
                                     clazz :
@@ -170,7 +172,7 @@ public class RemappingUtil {
                     methodInsnNode.desc = newDesc == null ? remapTypeString(methodInsnNode.desc) : newDesc;
 
                     context.onMethodInsnMapping(method.name, actualOwnerClass + "." +
-                            methodInsnNode.name + methodInsnNode.desc);
+                                                             methodInsnNode.name + methodInsnNode.desc);
                 } else if (context.mapMethodInsn && insnNode instanceof InvokeDynamicInsnNode) {
                     //don't think we need this
                 } else if (context.mapFieldInsn && insnNode instanceof FieldInsnNode) { //field access
@@ -410,6 +412,7 @@ public class RemappingUtil {
         protected boolean mapMethodInsn = true;
         protected boolean mapFieldInsn = true;
         protected boolean mapTypeAndLdcInsn = true;
+        protected boolean mapMethodNameAndDesc = true;
 
         protected boolean write = true;
 

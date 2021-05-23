@@ -1,14 +1,15 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
-import io.github.classgraph.ClassGraph;
-import io.github.classgraph.ClassInfoList;
-import io.github.classgraph.ScanResult;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 public class BytecodeReferenceSearcher {
 
@@ -28,24 +29,9 @@ public class BytecodeReferenceSearcher {
         RUNNING = true;
 
         return CompletableFuture.supplyAsync(() -> {
-            try (ScanResult result = new ClassGraph()
-                    .enableClassInfo()
-                    .ignoreClassVisibility()
-                    .disableRuntimeInvisibleAnnotations()
-                    .disableNestedJarScanning()
-                    //try to filter as much as possible
-                    .rejectPackages("com.google", "com.typesafe", "org.apache", "org.scala-lang", "org.jline",
-                            "org.ow2", "org.objectweb", "net.sf", "net.minecraft", "net.minecraftforge", "javax.vecmath",
-                            "lzma", "org.stringtemplate", "nonapi.io.github.classgraph", "com.mojang", "paulscode",
-                            "io.netty", "com.ibm", "it.unimi", "net.java", "org.lwjgl", "org.codehaus", "org.glassfish",
-                            "org.abego", "com.github.minecraft_ta", "LZMA", "akka", "com.intellij", "baubles",
-                            "com.jcraft", "com.strobel", "com.sun", "com.oracle", "gnu.trove", "ibxm",
-                            "io.github.classgraph", "javafx", "jdk", "javax", "sun", "org.antlr", "joptsimple",
-                            "netscape", "org.jetbrains", "oshi", "scala", "org.relaxng", "org.groovy")
-                    .rejectJars("minecraft*.jar", "*forge*.jar")
-                    .scan(EXECUTOR, POOL_SIZE)) {
+            try {
+                List<Class<?>> allClasses = getFilteredClassesList();
 
-                ClassInfoList allClasses = result.getAllClasses();
                 if (allClasses.isEmpty()) {
                     RUNNING = false;
                     return Pair.of(Collections.emptyList(), 0);
@@ -72,15 +58,9 @@ public class BytecodeReferenceSearcher {
                         InternalRemappingContext context = new InternalRemappingContext(subResults, signature, searchMethod);
 
                         for (int j = startIndex; j <= finalEndIndex; j++) {
-                            Class<?> clazz;
-                            try {
-                                clazz = allClasses.get(j).loadClass();
-                            } catch (Throwable ignored) {
-                                //class can't be loaded
-                                continue;
-                            }
-
+                            Class<?> clazz = allClasses.get(j);
                             context.currentClass = clazz;
+
                             //remap and search
                             RemappingUtil.getRemappedClass(clazz, context);
                         }
@@ -98,7 +78,7 @@ public class BytecodeReferenceSearcher {
                 RUNNING = false;
 
                 return Pair.of(results, allClasses.size());
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
                 return Pair.of(Collections.emptyList(), 0);
             }
@@ -110,6 +90,30 @@ public class BytecodeReferenceSearcher {
         EXECUTOR = Executors.newCachedThreadPool();
 
         RUNNING = false;
+    }
+
+    private static List<Class<?>> getFilteredClassesList() {
+        List<String> packageBlacklist = Arrays.asList(
+                "com.google", "com.typesafe", "org.apache", "org.scala-lang", "org.jline",
+                "org.ow2", "org.objectweb", "net.sf", "net.minecraft", "net.minecraftforge", "javax.vecmath",
+                "lzma", "org.stringtemplate", "nonapi.io.github.classgraph", "com.mojang", "paulscode",
+                "io.netty", "com.ibm", "it.unimi", "net.java", "org.lwjgl", "org.codehaus", "org.glassfish",
+                "org.abego", "com.github.minecraft_ta.totaldebug", "LZMA", "akka", "com.intellij", "baubles",
+                "com.jcraft", "com.strobel", "com.sun", "com.oracle", "gnu.trove", "ibxm",
+                "io.github.classgraph", "javafx", "jdk", "javax", "sun", "org.antlr", "joptsimple",
+                "netscape", "org.jetbrains", "oshi", "scala", "org.relaxng", "org.groovy");
+
+        try {
+            Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
+            f.setAccessible(true);
+            return ((Map<String, Class<?>>) f.get(BytecodeReferenceSearcher.class.getClassLoader()))
+                    .values().stream()
+                    .filter(c -> packageBlacklist.stream().noneMatch(s -> c.getName().startsWith(s)))
+                    .collect(Collectors.toList());
+        } catch (Throwable t) {
+            TotalDebug.LOGGER.error("Error while trying to get the class list", t);
+            return Collections.emptyList();
+        }
     }
 
     private static final class InternalRemappingContext extends RemappingUtil.RemappingContext {
@@ -128,6 +132,7 @@ public class BytecodeReferenceSearcher {
             mapTypeAndLdcInsn = false;
             mapFields = false;
             mapLocals = false;
+            mapMethodNameAndDesc = false;
         }
 
         @Override
