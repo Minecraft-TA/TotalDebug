@@ -62,7 +62,7 @@ public class BytecodeReferenceSearcher {
                     int startIndex = i * partSize;
                     int endIndex = i == POOL_SIZE - 1 ? allClasses.size() - 1 : startIndex + partSize;
 
-                    //supply full to list one thread if we have less than POOL_SIZE results
+                    //supply full list to one thread if we have less than POOL_SIZE results
                     if (allClasses.size() < POOL_SIZE)
                         endIndex = allClasses.size() - 1;
 
