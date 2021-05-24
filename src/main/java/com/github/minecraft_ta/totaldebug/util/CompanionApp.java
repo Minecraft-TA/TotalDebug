@@ -19,7 +19,10 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClients;
 
-import java.io.*;
+import javax.annotation.Nullable;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.channels.Channels;
@@ -28,6 +31,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -186,12 +192,20 @@ public class CompanionApp {
 
         //TODO: linux
         Path exePath = this.appDir.resolve("TotalDebugCompanion.exe");
+        Path logFile = createLogFile();
 
         try {
-            this.companionAppProcess = new ProcessBuilder(
+            ProcessBuilder processBuilder = new ProcessBuilder(
                     exePath.toAbsolutePath().toString(),
                     "\"" + this.appDir.getParent().resolve(DecompilationManager.DECOMPILED_FILES_FOLDER).toAbsolutePath() + "\""
-            ).start();
+            );
+
+            if (logFile != null) {
+                processBuilder.redirectError(logFile.toFile());
+                processBuilder.redirectOutput(logFile.toFile());
+            }
+
+            this.companionAppProcess = processBuilder.start();
         } catch (IOException e) {
             this.companionAppProcess = null;
             TotalDebug.LOGGER.error("Unable to start companion app!", e);
@@ -255,6 +269,44 @@ public class CompanionApp {
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to download and unzip file", e);
         }
+    }
+
+    @Nullable
+    private Path createLogFile() {
+        Path logDir = this.appDir.resolve("logs");
+
+        if (!Files.exists(logDir)) {
+            try {
+                Files.createDirectory(logDir);
+            } catch (IOException e) {
+                TotalDebug.LOGGER.error("Unable to create log directory for companion app", e);
+                return null;
+            }
+        }
+
+        Path newLogFile = logDir.resolve(LocalDateTime.now().format(
+                new DateTimeFormatterBuilder()
+                        .appendValue(ChronoField.DAY_OF_MONTH)
+                        .appendLiteral('-')
+                        .appendValue(ChronoField.MONTH_OF_YEAR)
+                        .appendLiteral('-')
+                        .appendValue(ChronoField.YEAR)
+                        .appendLiteral('-')
+                        .appendValue(ChronoField.HOUR_OF_DAY)
+                        .appendLiteral(':')
+                        .appendValue(ChronoField.MINUTE_OF_HOUR)
+                        .appendLiteral(':')
+                        .appendValue(ChronoField.SECOND_OF_MINUTE)
+                        .toFormatter()
+        ) + ".log");
+        try {
+            Files.createFile(newLogFile);
+        } catch (IOException e) {
+            TotalDebug.LOGGER.error("Unable to create log file for companion app", e);
+            return null;
+        }
+
+        return newLogFile;
     }
 
     private static final class Metafile {
