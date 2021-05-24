@@ -72,20 +72,18 @@ public class DecompilationManager {
 
             //open in companion app
             if (TotalDebug.PROXY.getClientConfig().useCompanionApp) {
-                CompletableFuture.runAsync(() -> {
-                    CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
-                    companionApp.startAndConnect();
+                CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
+                companionApp.startAndConnect();
 
-                    if (companionApp.isConnected()) {
-                        Minecraft.getMinecraft().player.sendMessage(
-                                new TextComponentTranslation("companion_app.open_file",
-                                        new TextComponentString(filePath.getFileName().toString())
-                                                .setStyle(new Style().setColor(TextFormatting.WHITE))
-                                ).setStyle(new Style().setColor(TextFormatting.GRAY))
-                        );
-                        companionApp.sendOpenFileRequest(filePath);
-                    }
-                });
+                if (companionApp.isConnected()) {
+                    Minecraft.getMinecraft().player.sendMessage(
+                            new TextComponentTranslation("companion_app.open_file",
+                                    new TextComponentString(filePath.getFileName().toString())
+                                            .setStyle(new Style().setColor(TextFormatting.WHITE))
+                            ).setStyle(new Style().setColor(TextFormatting.GRAY))
+                    );
+                    companionApp.sendOpenFileRequest(filePath);
+                }
             } else { //open in default gui
                 getDecompiledFileContent(clazz).exceptionally(throwable -> {
                     throwable.printStackTrace();
