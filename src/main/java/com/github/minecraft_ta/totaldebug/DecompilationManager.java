@@ -74,7 +74,7 @@ public class DecompilationManager {
             if (TotalDebug.PROXY.getClientConfig().useCompanionApp) {
                 CompletableFuture.runAsync(() -> {
                     CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
-                    companionApp.startup();
+                    companionApp.startAndConnect();
 
                     if (companionApp.isConnected()) {
                         Minecraft.getMinecraft().player.sendMessage(

@@ -69,7 +69,7 @@ public class CompanionApp {
     /**
      * Downloads, starts and connects to the companion app and sends progress updates to the player
      */
-    public void startup() {
+    public void startAndConnect() {
         ICommandSender sender = Minecraft.getMinecraft().player;
 
         if (!isRunning()) {
@@ -78,17 +78,7 @@ public class CompanionApp {
             Path exePath = this.appDir.resolve("TotalDebugCompanion.exe");
 
             if (!Files.exists(exePath) ||
-                (this.metafile.totalDebugVersionChanged ||
-                 !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion))) {
-                //stop running application
-                if (this.companionAppProcess != null && this.companionAppProcess.isAlive()) {
-                    try {
-                        this.companionAppProcess.destroyForcibly().waitFor();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-
+                !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
                 downloadCompanionApp(this.metafile.newestCompatibleCompanionAppVersion);
                 this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
                 this.metafile.write();
@@ -269,16 +259,6 @@ public class CompanionApp {
 
     private static final class Metafile {
         /**
-         * The last known TotalDebug version
-         */
-        private String totalDebugVersion;
-        /**
-         * {@code true} if the current TotalDebug version does not match {@link #totalDebugVersion} and {@link #write()}
-         * has not been called
-         */
-        private boolean totalDebugVersionChanged;
-
-        /**
          * The newest version of the companion app that is compatible with the current TotalDebug version
          */
         private String newestCompatibleCompanionAppVersion;
@@ -314,24 +294,18 @@ public class CompanionApp {
             try {
                 List<String> lines = Files.readAllLines(path);
 
-                if (lines.size() != 2) {
-                    TotalDebug.LOGGER.error("Meta file does not contain 2 lines");
+                if (lines.size() != 1) {
+                    TotalDebug.LOGGER.error("Meta file does not contain 1 line");
                     Files.deleteIfExists(path);
                     initDefaultData();
                     return;
                 }
 
-                if (!lines.get(0).equals("v" + TotalDebug.VERSION)) {
-                    this.totalDebugVersionChanged = true;
-                    TotalDebug.LOGGER.info("Detected TotalDebug version change");
-                }
-
-                this.totalDebugVersion = "v" + TotalDebug.VERSION;
-                this.currentCompanionAppVersion = lines.get(1);
+                this.currentCompanionAppVersion = lines.get(0);
                 loadNewestCompanionAppVersion();
 
                 TotalDebug.LOGGER.info("Successfully loaded meta file. TotalDebug: {}, Companion: {}->{}",
-                        this.totalDebugVersion, this.currentCompanionAppVersion, this.newestCompatibleCompanionAppVersion);
+                        TotalDebug.VERSION, this.currentCompanionAppVersion, this.newestCompatibleCompanionAppVersion);
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Unable to read meta file", e);
                 try {
@@ -344,12 +318,11 @@ public class CompanionApp {
         }
 
         /**
-         * Saves this instance to the disk and sets {@link #totalDebugVersionChanged} to {@code false}.
+         * Saves this instance to the disk
          */
         public void write() {
-            this.totalDebugVersionChanged = false;
             try {
-                Files.write(this.path, Lists.newArrayList(this.totalDebugVersion, this.currentCompanionAppVersion));
+                Files.write(this.path, Lists.newArrayList(this.currentCompanionAppVersion));
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Unable to write meta file", e);
             }
@@ -358,13 +331,11 @@ public class CompanionApp {
         /**
          * Initializes this instance with default data and then writes it to the disk:
          * <ul>
-         * <li>{@link #totalDebugVersion} = "v" + {@link TotalDebug#VERSION}</li>
          * <li>{@link #newestCompatibleCompanionAppVersion} = {@link #loadNewestCompanionAppVersion()}</li>
          * <li>{@link #currentCompanionAppVersion} = {@link #newestCompatibleCompanionAppVersion}</li>
          * </ul>
          */
         private void initDefaultData() {
-            this.totalDebugVersion = "v" + TotalDebug.VERSION;
             loadNewestCompanionAppVersion();
             this.currentCompanionAppVersion = this.newestCompatibleCompanionAppVersion;
             write();
@@ -372,7 +343,7 @@ public class CompanionApp {
 
         /**
          * Performs a github API request to find the newest compatible version with the
-         * current {@link #totalDebugVersion} and sets {@link #newestCompatibleCompanionAppVersion}. Compatible means,
+         * current {@link TotalDebug#VERSION} and sets {@link #newestCompatibleCompanionAppVersion}. Compatible means,
          * that major and minor versions match. This also gets the release file size for the found version and sets
          * {@link #newestCompanionAppVersionSize}
          * <br><br>
@@ -399,6 +370,7 @@ public class CompanionApp {
                 byte[] responseData = outputStream.toByteArray();
 
                 JsonArray jsonArray = GSON.fromJson(new String(responseData, StandardCharsets.UTF_8), JsonArray.class);
+                String totalDebugVersion = "v" + TotalDebug.VERSION;
 
                 //find newest matching version
                 for (int i = 0; i < jsonArray.size(); i++) {
@@ -423,13 +395,9 @@ public class CompanionApp {
                 this.newestCompanionAppVersionSize = jsonArray.get(0).getAsJsonObject()
                         .getAsJsonArray("assets").get(0)
                         .getAsJsonObject().getAsJsonPrimitive("size").getAsLong();
-                return;
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Could not determine newest companion app version. Auto-update or downloading might not work", e);
             }
-
-            //it's better if this won't happen :^)
-            this.newestCompatibleCompanionAppVersion = "v" + TotalDebug.VERSION;
         }
     }
 }
