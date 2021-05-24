@@ -293,9 +293,9 @@ public class CompanionApp {
                         .appendValue(ChronoField.YEAR)
                         .appendLiteral('-')
                         .appendValue(ChronoField.HOUR_OF_DAY)
-                        .appendLiteral(':')
+                        .appendLiteral('.')
                         .appendValue(ChronoField.MINUTE_OF_HOUR)
-                        .appendLiteral(':')
+                        .appendLiteral('.')
                         .appendValue(ChronoField.SECOND_OF_MINUTE)
                         .toFormatter()
         ) + ".log");
