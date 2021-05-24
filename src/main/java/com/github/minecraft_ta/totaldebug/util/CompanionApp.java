@@ -73,6 +73,8 @@ public class CompanionApp {
         ICommandSender sender = Minecraft.getMinecraft().player;
 
         if (!isRunning()) {
+            this.metafile.loadNewestCompanionAppVersion();
+
             Path exePath = this.appDir.resolve("TotalDebugCompanion.exe");
 
             if (!Files.exists(exePath) ||
