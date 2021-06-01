@@ -16,7 +16,7 @@ apply plugin: 'antlr'
 apply plugin: 'com.github.johnrengelman.shadow'
 
 group = 'com.github.minecraft_ta'
-version = '1.1.1'
+version = '1.2.0'
 archivesBaseName = 'TotalDebug'
 
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'

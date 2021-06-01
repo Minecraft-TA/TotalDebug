@@ -30,7 +30,9 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Companion app integration
+            - Log files for companion app
+            - Improved reference search speed
+            - Added support to view reference search results in companion app
           draft: false
           prerelease: false
       - name: Upload jars to release
