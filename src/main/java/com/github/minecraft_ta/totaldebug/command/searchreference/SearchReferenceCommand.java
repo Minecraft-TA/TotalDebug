@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totaldebug.command.searchreference;
 
+import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.util.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearcher;
-import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
@@ -64,13 +65,23 @@ public class SearchReferenceCommand extends CommandBase {
                 e.printStackTrace();
             return Pair.of(Collections.emptyList(), -1);
         }).thenAccept(resultPair -> {
-            Minecraft.getMinecraft().addScheduledTask(() -> {
-                if (resultPair.getRight() == -1) {
-                    sender.sendMessage(new TextComponentString("There was an error during the scan. Please check " +
-                            "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
-                    return;
-                }
+            if (resultPair.getRight() == -1) {
+                sender.sendMessage(new TextComponentString("There was an error during the scan. Please check " +
+                                                           "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
+                return;
+            }
 
+            int scanTime = (int) (System.nanoTime() / 1_000_000 - t);
+
+            if (TotalDebug.PROXY.getClientConfig().useCompanionApp && resultPair.getLeft().size() > 0) {
+                CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
+                companionApp.startAndConnect();
+
+                if (companionApp.isConnected()) {
+                    //TODO: send message to player
+                    companionApp.sendReferenceSearchResults(args[1], resultPair.getLeft(), searchMethod, resultPair.getRight(), scanTime);
+                }
+            } else {
                 sender.sendMessage(new TextComponentString("-------------------").setStyle(new Style().setColor(TextFormatting.GOLD)));
 
                 int i = 0;
@@ -86,10 +97,10 @@ public class SearchReferenceCommand extends CommandBase {
                 sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.result_count", resultPair.getLeft().size())
                         .setStyle(new Style().setColor(TextFormatting.GREEN))
                         .appendText(", ")
-                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.time", System.nanoTime() / 1_000_000 - t))
+                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.time", scanTime))
                         .appendText(", ")
                         .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
-            });
+            }
         });
     }
 

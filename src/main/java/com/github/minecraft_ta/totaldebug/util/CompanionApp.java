@@ -21,6 +21,7 @@ import org.apache.http.impl.client.HttpClients;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -34,6 +35,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.Collection;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -125,7 +127,9 @@ public class CompanionApp {
             return false;
 
         try {
-            this.outputStream.write(0);
+            synchronized (this.outputStream) {
+                this.outputStream.write(0);
+            }
             return true;
         } catch (IOException e) {
             return false;
@@ -156,6 +160,27 @@ public class CompanionApp {
                 this.socket = new Socket();
                 this.socket.connect(new InetSocketAddress(25570), 500);
                 this.outputStream = new DataOutputStream(this.socket.getOutputStream());
+                DataInputStream inputStream = new DataInputStream(this.socket.getInputStream());
+
+                //receive thread
+                new Thread(() -> {
+                    while (isRunning() && isConnected()) {
+                        try {
+                            int id = inputStream.readUnsignedByte();
+                            switch (id) {
+                                case 1:
+                                    String clazz = inputStream.readUTF();
+                                    TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(clazz));
+                                    break;
+                                default:
+                                    TotalDebug.LOGGER.error("Unknown packet id received from companion app: {}", id);
+                                    break;
+                            }
+                            Thread.sleep(100);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }).start();
                 return true;
             } catch (Exception e) {
                 this.socket = null;
@@ -176,8 +201,32 @@ public class CompanionApp {
             throw new IllegalStateException("Not connected");
 
         try {
-            this.outputStream.write(1);
-            this.outputStream.writeUTF(file.toAbsolutePath().toString());
+            synchronized (this.outputStream) {
+                this.outputStream.write(1);
+                this.outputStream.writeUTF(file.toAbsolutePath().toString());
+            }
+        } catch (IOException e) {
+            TotalDebug.LOGGER.error("Error while sending open file request", e);
+        }
+    }
+
+    public void sendReferenceSearchResults(String query, Collection<String> results, boolean methodSearch, int classesCount,
+                                           int time) {
+        if (!isConnected())
+            throw new IllegalStateException("Not connected");
+
+        try {
+            synchronized (this.outputStream) {
+                this.outputStream.write(2);
+                this.outputStream.writeUTF(query);
+                this.outputStream.writeInt(results.size());
+                for (String result : results)
+                    this.outputStream.writeUTF(result);
+
+                this.outputStream.writeBoolean(methodSearch);
+                this.outputStream.writeInt(classesCount);
+                this.outputStream.writeInt(time);
+            }
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Error while sending open file request", e);
         }
