@@ -176,7 +176,6 @@ public class CompanionApp {
                                     TotalDebug.LOGGER.error("Unknown packet id received from companion app: {}", id);
                                     break;
                             }
-                            Thread.sleep(100);
                         } catch (Throwable ignored) {
                         }
                     }
