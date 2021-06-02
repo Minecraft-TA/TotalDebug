@@ -227,7 +227,7 @@ public class CompanionApp {
                 this.outputStream.writeInt(time);
             }
         } catch (IOException e) {
-            TotalDebug.LOGGER.error("Error while sending open file request", e);
+            TotalDebug.LOGGER.error("Error while sending search results", e);
         }
     }
 
