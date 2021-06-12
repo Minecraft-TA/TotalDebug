@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.command.searchreference;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.CompanionApp;
+import com.github.minecraft_ta.totaldebug.codeViewer.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearcher;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;

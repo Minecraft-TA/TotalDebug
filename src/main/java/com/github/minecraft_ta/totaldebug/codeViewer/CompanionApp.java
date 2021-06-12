@@ -1,5 +1,16 @@
-package com.github.minecraft_ta.totaldebug.util;
+package com.github.minecraft_ta.totaldebug.codeViewer;
 
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.Position;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.resolution.Resolvable;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserMethodDeclaration;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.google.common.collect.Lists;
@@ -140,7 +151,8 @@ public class CompanionApp {
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+        return true;
+//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
     }
 
     /**
@@ -172,6 +184,9 @@ public class CompanionApp {
                                     String clazz = inputStream.readUTF();
                                     TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(clazz));
                                     break;
+                                case 2:
+                                    handleTextClickEvent(inputStream);
+                                    break;
                                 default:
                                     TotalDebug.LOGGER.error("Unknown packet id received from companion app: {}", id);
                                     break;
@@ -189,13 +204,63 @@ public class CompanionApp {
         return false;
     }
 
+    private void handleTextClickEvent(DataInputStream inputStream) throws Throwable {
+        Path decompilationDir = TotalDebug.PROXY.getDecompilationManager().getDecompilationDir();
+        Path file = decompilationDir.resolve(inputStream.readUTF()).toAbsolutePath();
+        if (!Files.exists(file)) {
+            TotalDebug.LOGGER.error("Companion app sent file path that doesn't exist: {}", file.toString());
+            return;
+        }
+
+        String code = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        int row = inputStream.readInt();
+        int column = inputStream.readInt();
+        Position position = new Position(row + 1, column + 1);
+
+        PreParsedJavaParserTypeSolver typeSolver = new PreParsedJavaParserTypeSolver();
+        ParserConfiguration config = new ParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_8)
+                .setSymbolResolver(new JavaSymbolSolver(new CombinedTypeSolver(typeSolver, new ReflectionTypeSolver(false))));
+
+        JavaParser javaParser = new JavaParser(config);
+        CompilationUnit unit = javaParser.parse(code).getResult().orElse(null);
+        if (unit == null) {
+            TotalDebug.LOGGER.error("Unable to parse java file requested by companion app {}", file.toString());
+            return;
+        }
+
+        Node node = JavaParserHelper.getResolvableNodeAt(unit.findRootNode(), position);
+        if (node == null)
+            return;
+
+        try {
+            ReflectionMethodDeclaration method = (ReflectionMethodDeclaration) ((Resolvable<?>) node).resolve();
+
+            String name = method.declaringType().getQualifiedName();
+            TotalDebug.PROXY.getDecompilationManager().decompileClass(Class.forName(name));
+            typeSolver.addCompilationUnit(
+                    javaParser.parse(
+                            new String(
+                                    Files.readAllBytes(decompilationDir.resolve(name + ".java")),
+                                    StandardCharsets.UTF_8
+                            )
+                    ).getResult().get()
+            );
+
+            JavaParserMethodDeclaration m = (JavaParserMethodDeclaration) ((Resolvable) JavaParserHelper.getResolvableNodeAt(javaParser.parse(code).getResult().get().findRootNode(), position)).resolve();
+            TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(name), m.getWrappedNode().getRange().get().begin.line - 1);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
+
     /**
      * Sends a request to the companion app to open the given file
      *
      * @param file the file to open
      * @throws IllegalStateException if {@link #isConnected()} returns false
      */
-    public void sendOpenFileRequest(Path file) {
+    public void sendOpenFileRequest(Path file, int row) {
         if (!isConnected())
             throw new IllegalStateException("Not connected");
 
@@ -203,6 +268,7 @@ public class CompanionApp {
             synchronized (this.outputStream) {
                 this.outputStream.write(1);
                 this.outputStream.writeUTF(file.toAbsolutePath().toString());
+                this.outputStream.writeInt(row);
             }
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Error while sending open file request", e);

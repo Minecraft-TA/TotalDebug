@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug;
 
 import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
-import com.github.minecraft_ta.totaldebug.util.CompanionApp;
+import com.github.minecraft_ta.totaldebug.codeViewer.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
 import com.google.common.base.Charsets;
 import net.minecraft.client.Minecraft;
@@ -65,6 +65,10 @@ public class DecompilationManager {
     }
 
     public void openGui(Class<?> clazz) {
+        openGui(clazz, 0);
+    }
+
+    public void openGui(Class<?> clazz, int line) {
         CompletableFuture.runAsync(() -> {
             Path filePath = this.decompilationDir.resolve(clazz.getName() + ".java");
             if (!Files.exists(filePath))
@@ -82,7 +86,7 @@ public class DecompilationManager {
                                             .setStyle(new Style().setColor(TextFormatting.WHITE))
                             ).setStyle(new Style().setColor(TextFormatting.GRAY))
                     );
-                    companionApp.sendOpenFileRequest(filePath);
+                    companionApp.sendOpenFileRequest(filePath, line);
                 }
             } else { //open in default gui
                 getDecompiledFileContent(clazz).exceptionally(throwable -> {

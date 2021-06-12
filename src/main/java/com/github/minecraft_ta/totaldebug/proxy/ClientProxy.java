@@ -9,7 +9,7 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.util.CompanionApp;
+import com.github.minecraft_ta.totaldebug.codeViewer.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
