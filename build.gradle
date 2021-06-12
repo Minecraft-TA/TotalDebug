@@ -12,7 +12,6 @@ buildscript {
 
 apply plugin: 'idea'
 apply plugin: 'net.minecraftforge.gradle'
-apply plugin: 'antlr'
 apply plugin: 'com.github.johnrengelman.shadow'
 
 group = 'com.github.minecraft_ta'
@@ -72,21 +71,22 @@ dependencies {
     implementation "io.github.classgraph:classgraph:4.8.90"
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
 
-    implementation 'org.antlr:antlr4-runtime:4.7.2'
-    antlr 'org.antlr:antlr4:4.7.2'
+    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.22.0") {
+        exclude group: "com.google.guava"
+    }
 }
 
 shadowJar {
     classifier ''
 
-    relocate "org.antlr", "com.github.minecraft_ta.totaldebug.shades.antlr"
+    relocate "com.github.javaparser", "com.github.minecraft_ta.totaldebug.shades.javaparser"
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
     dependencies {
         exclude(dependency {
             it.moduleGroup != 'io.github.classgraph' &&
-                    it.moduleGroup != 'org.antlr' &&
+                    it.moduleGroup != 'com.github.javaparser' &&
                     it.moduleGroup != 'org.bitbucket.mstrobel'
         })
     }

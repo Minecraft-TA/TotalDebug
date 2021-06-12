@@ -96,6 +96,10 @@ public class DecompilationManager {
                     });
                 });
             }
+        }).exceptionally(throwable -> {
+            TotalDebug.LOGGER.error("Unable to decompile class {}", clazz.getName());
+            throwable.printStackTrace();
+            return null;
         });
     }
 
@@ -106,6 +110,10 @@ public class DecompilationManager {
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to create directory " + path + "!", e);
         }
+    }
+
+    public Path getDecompilationDir() {
+        return decompilationDir;
     }
 
     public Path getDataDir() {
