@@ -2,11 +2,13 @@ package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.init.Blocks;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
@@ -99,7 +101,13 @@ public class KeyInputHandler {
                 Item item = Item.REGISTRY.getObjectById(entityOrItemId);
                 if (item != null) {
                     if (item instanceof ItemBlock) {
-                        TotalDebug.PROXY.getDecompilationManager().openGui(((ItemBlock) item).getBlock().getClass());
+                        Block block = ((ItemBlock) item).getBlock();
+                        TileEntity tile = block.createTileEntity(world, block.getDefaultState());
+                        if (tile != null) {
+                            TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
+                            return;
+                        }
+                        TotalDebug.PROXY.getDecompilationManager().openGui(block.getClass());
                     } else {
                         TotalDebug.PROXY.getDecompilationManager().openGui(item.getClass());
                     }
