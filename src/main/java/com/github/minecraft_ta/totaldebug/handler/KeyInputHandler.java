@@ -41,16 +41,18 @@ public class KeyInputHandler {
 
         GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
         if (currentScreen instanceof GuiContainer) {
-            IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
+            if (TotalDebugJEIPlugin.INSTANCE != null) {
+                IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
 
-            Object ingredientUnderMouse = runtime.getIngredientListOverlay().getIngredientUnderMouse();
-            if (ingredientUnderMouse == null)
-                ingredientUnderMouse = runtime.getBookmarkOverlay().getIngredientUnderMouse();
+                Object ingredientUnderMouse = runtime.getIngredientListOverlay().getIngredientUnderMouse();
+                if (ingredientUnderMouse == null)
+                    ingredientUnderMouse = runtime.getBookmarkOverlay().getIngredientUnderMouse();
 
-            if (ingredientUnderMouse instanceof ItemStack) {
-                Item item = ((ItemStack) ingredientUnderMouse).getItem();
-                handle(HitType.ITEM, null, Item.getIdFromItem(item));
-                return;
+                if (ingredientUnderMouse instanceof ItemStack) {
+                    Item item = ((ItemStack) ingredientUnderMouse).getItem();
+                    handle(HitType.ITEM, null, Item.getIdFromItem(item));
+                    return;
+                }
             }
 
             GuiContainer guiContainer = (GuiContainer) currentScreen;
