@@ -151,8 +151,7 @@ public class CompanionApp {
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return true;
-//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
     }
 
     /**
