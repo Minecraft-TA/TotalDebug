@@ -2,6 +2,9 @@ package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.jei.TotalDebugJEIPlugin;
+import mezz.jei.api.IJeiRuntime;
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
@@ -10,6 +13,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
@@ -36,14 +40,21 @@ public class KeyInputHandler {
             return;
 
         GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
-        if (!(currentScreen instanceof GuiContainer))
-            return;
+        if (currentScreen instanceof GuiContainer) {
+            IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
+            Object ingredientUnderMouseIngridients = runtime.getIngredientListOverlay().getIngredientUnderMouse();
+            if (ingredientUnderMouseIngridients instanceof ItemStack) {
+                Item item = ((ItemStack) ingredientUnderMouseIngridients).getItem();
+                handle(HitType.ITEM, null, Item.getIdFromItem(item));
+                return;
+            }
 
-        GuiContainer guiContainer = (GuiContainer) currentScreen;
-        Slot slot = guiContainer.getSlotUnderMouse();
-        if (slot != null && slot.getHasStack()) {
-            Item item = guiContainer.getSlotUnderMouse().getStack().getItem();
-            handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(item));
+            GuiContainer guiContainer = (GuiContainer) currentScreen;
+            Slot slot = guiContainer.getSlotUnderMouse();
+            if (slot != null && slot.getHasStack()) {
+                Item item = guiContainer.getSlotUnderMouse().getStack().getItem();
+                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(item));
+            }
         }
     }
 
@@ -99,7 +110,13 @@ public class KeyInputHandler {
                 Item item = Item.REGISTRY.getObjectById(entityOrItemId);
                 if (item != null) {
                     if (item instanceof ItemBlock) {
-                        TotalDebug.PROXY.getDecompilationManager().openGui(((ItemBlock) item).getBlock().getClass());
+                        Block block = ((ItemBlock) item).getBlock();
+                        TileEntity tile = block.createTileEntity(world, block.getDefaultState());
+                        if (tile != null) {
+                            TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
+                            return;
+                        }
+                        TotalDebug.PROXY.getDecompilationManager().openGui(block.getClass());
                     } else {
                         TotalDebug.PROXY.getDecompilationManager().openGui(item.getClass());
                     }
