@@ -15,7 +15,7 @@ public class TotalDebugJEIPlugin implements IModPlugin {
     private IJeiRuntime runtime;
 
     @Override
-    public void register(IModRegistry registry) {
+    public void register(@Nonnull IModRegistry registry) {
         INSTANCE = this;
     }
 
