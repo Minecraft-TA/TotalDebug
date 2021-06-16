@@ -30,9 +30,8 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Log files for companion app
-            - Improved reference search speed
-            - Added support to view reference search results in companion app
+            - JEI Integration for decompile keybind
+            - New companion app support
           draft: false
           prerelease: false
       - name: Upload jars to release

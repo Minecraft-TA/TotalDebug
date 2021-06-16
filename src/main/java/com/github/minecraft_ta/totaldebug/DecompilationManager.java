@@ -65,7 +65,7 @@ public class DecompilationManager {
     }
 
     public void openGui(Class<?> clazz) {
-        openGui(clazz, 0);
+        openGui(clazz, 1);
     }
 
     public void openGui(Class<?> clazz, int line) {

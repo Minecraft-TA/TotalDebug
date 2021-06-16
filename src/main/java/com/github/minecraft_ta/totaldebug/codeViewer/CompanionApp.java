@@ -94,7 +94,7 @@ public class CompanionApp {
         if (!isRunning()) {
             this.metafile.loadNewestCompanionAppVersion();
 
-            Path exePath = this.appDir.resolve("TotalDebugCompanion.exe");
+            Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
 
             if (!Files.exists(exePath) ||
                 !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
@@ -307,11 +307,13 @@ public class CompanionApp {
             return;
 
         //TODO: linux
-        Path exePath = this.appDir.resolve("TotalDebugCompanion.exe");
+        Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
         Path logFile = createLogFile();
 
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
+                    this.appDir.resolve("bin").resolve("java.exe").toAbsolutePath().toString(),
+                    "-jar",
                     exePath.toAbsolutePath().toString(),
                     "\"" + this.appDir.getParent().resolve(DecompilationManager.DECOMPILED_FILES_FOLDER).toAbsolutePath() + "\""
             );
