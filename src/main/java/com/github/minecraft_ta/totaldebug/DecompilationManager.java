@@ -28,11 +28,8 @@ public class DecompilationManager {
         return CompletableFuture.supplyAsync(() -> {
             Path decompiledFilePath = this.decompilationDir.resolve(clazz.getName() + ".java");
 
-            //if not yet decompiled
-            if (!Files.exists(decompiledFilePath)) {
-                if (!decompileClass(clazz))
-                    return "";
-            }
+            if (!decompileClassIfNotExists(clazz))
+                return "";
 
             try {
                 return new String(Files.readAllBytes(decompiledFilePath), Charsets.UTF_8);
@@ -43,17 +40,20 @@ public class DecompilationManager {
         });
     }
 
-    public boolean decompileClass(Class<?> clazz) {
+    public boolean decompileClassIfNotExists(Class<?> clazz) {
         String name = clazz.getName();
 
         Path output = this.decompilationDir.resolve(name + ".java");
+        if (Files.exists(output))
+            return true;
+
         try {
             Files.write(output, ProcyonDecompiler.decompile(name).getBytes(StandardCharsets.UTF_8));
+            return true;
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to delete or write java file " + name, e);
+            return false;
         }
-
-        return true;
     }
 
     public void setup() {
@@ -71,8 +71,7 @@ public class DecompilationManager {
     public void openGui(Class<?> clazz, int line) {
         CompletableFuture.runAsync(() -> {
             Path filePath = this.decompilationDir.resolve(clazz.getName() + ".java");
-            if (!Files.exists(filePath))
-                decompileClass(clazz);
+            decompileClassIfNotExists(clazz);
 
             //open in companion app
             if (TotalDebug.PROXY.getClientConfig().useCompanionApp) {

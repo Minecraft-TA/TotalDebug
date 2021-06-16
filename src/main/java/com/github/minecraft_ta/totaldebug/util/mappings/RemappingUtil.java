@@ -36,9 +36,6 @@ public class RemappingUtil {
      */
     @Nullable
     public static ClassWriter getRemappedClass(@Nonnull Class<?> clazz, @Nonnull RemappingContext context) {
-        if (clazz.isInterface())
-            return null;
-
         byte[] bytecode = ClassUtil.getBytecode(clazz);
         if (bytecode == null)
             return null;
@@ -50,7 +47,7 @@ public class RemappingUtil {
         ClassNode node = new ClassNode();
         reader.accept(node, 0);
 
-        String codeSource = ClassUtil.getClassCodeSource(clazz);
+        String codeSource = ClassUtil.getClassCodeSourceName(clazz);
         if (codeSource == null)
             return null;
 
@@ -288,7 +285,7 @@ public class RemappingUtil {
         Class<?> currentClass = clazz;
 
         while (true) {
-            String codeSource = ClassUtil.getClassCodeSource(currentClass);
+            String codeSource = ClassUtil.getClassCodeSourceName(currentClass);
             if (codeSource == null)
                 break;
 

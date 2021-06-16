@@ -7,11 +7,24 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Optional;
 
 public class JavaParserHelper {
+
+    public static Method getReflectMethodFromReflectionMethodDeclaration(ReflectionMethodDeclaration methodDeclaration) {
+        try {
+            Field field = methodDeclaration.getClass().getDeclaredField("method");
+            field.setAccessible(true);
+            return (Method) field.get(methodDeclaration);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static CompilationUnit parse(String code, boolean typeSolver) {
         ParserConfiguration config = new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_8);

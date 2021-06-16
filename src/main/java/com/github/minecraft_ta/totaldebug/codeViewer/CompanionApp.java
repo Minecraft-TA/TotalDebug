@@ -5,14 +5,14 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.resolution.Resolvable;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserMethodDeclaration;
 import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -216,10 +216,8 @@ public class CompanionApp {
         int column = inputStream.readInt();
         Position position = new Position(row + 1, column + 1);
 
-        PreParsedJavaParserTypeSolver typeSolver = new PreParsedJavaParserTypeSolver();
         ParserConfiguration config = new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_8)
-                .setSymbolResolver(new JavaSymbolSolver(new CombinedTypeSolver(typeSolver, new ReflectionTypeSolver(false))));
+                .setSymbolResolver(new JavaSymbolSolver(new ReflectionTypeSolver(false)));
 
         JavaParser javaParser = new JavaParser(config);
         CompilationUnit unit = javaParser.parse(code).getResult().orElse(null);
@@ -236,18 +234,23 @@ public class CompanionApp {
             ReflectionMethodDeclaration method = (ReflectionMethodDeclaration) ((Resolvable<?>) node).resolve();
 
             String name = method.declaringType().getQualifiedName();
-            TotalDebug.PROXY.getDecompilationManager().decompileClass(Class.forName(name));
-            typeSolver.addCompilationUnit(
-                    javaParser.parse(
-                            new String(
-                                    Files.readAllBytes(decompilationDir.resolve(name + ".java")),
-                                    StandardCharsets.UTF_8
-                            )
-                    ).getResult().get()
-            );
+            TotalDebug.PROXY.getDecompilationManager().decompileClassIfNotExists(Class.forName(name));
 
-            JavaParserMethodDeclaration m = (JavaParserMethodDeclaration) ((Resolvable) JavaParserHelper.getResolvableNodeAt(javaParser.parse(code).getResult().get().findRootNode(), position)).resolve();
-            TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(name), m.getWrappedNode().getRange().get().begin.line - 1);
+            config.setSymbolResolver(null);
+            CompilationUnit declaringTypeUnit = javaParser.parse(
+                    new String(
+                            Files.readAllBytes(decompilationDir.resolve(name + ".java")),
+                            StandardCharsets.UTF_8
+                    )
+            ).getResult().get();
+
+            String signatureToMatch = ClassUtil.getSimplifiedSignatureForMethod(JavaParserHelper.getReflectMethodFromReflectionMethodDeclaration(method));
+            int line = declaringTypeUnit.getType(0).getMembers().stream()
+                    .filter(m -> m instanceof MethodDeclaration)
+                    .filter(m -> ((MethodDeclaration) m).getSignature().toString().equals(signatureToMatch))
+                    .findFirst().get().getRange().get().begin.line;
+
+            TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(name), line);
         } catch (Throwable t) {
             t.printStackTrace();
         }

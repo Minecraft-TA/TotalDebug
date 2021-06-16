@@ -12,7 +12,6 @@ public class CodeHighlighter {
 
     public static List<String> getHighlightedJavaCode(String code) {
         List<String> lines = Arrays.asList(code.split("\n"));
-        ParserConfiguration conf = new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_8);
 
         TokenRange globalTokenRange;
         try {
