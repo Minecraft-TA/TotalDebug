@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.codeViewer;
+package com.github.minecraft_ta.totaldebug.companionApp;
 
 import com.github.javaparser.*;
 import org.apache.commons.lang3.tuple.Triple;

@@ -70,11 +70,15 @@ repositories {
     maven {
         url "https://dvs1.progwml6.com/files/maven"
     }
+    maven {
+        url 'https://jitpack.io'
+    }
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2854'
 
+    implementation "com.github.tth05:SCNet:master-SNAPSHOT"
     implementation "io.github.classgraph:classgraph:4.8.90"
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
 
@@ -93,11 +97,13 @@ shadowJar {
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
+    relocate "com.github.tth05", "com.github.minecraft_ta.totaldebug.shades"
     dependencies {
         exclude(dependency {
             it.moduleGroup != 'io.github.classgraph' &&
                     it.moduleGroup != 'com.github.javaparser' &&
-                    it.moduleGroup != 'org.bitbucket.mstrobel'
+                    it.moduleGroup != 'org.bitbucket.mstrobel' &&
+                    it.moduleGroup != 'com.github.tth05'
         })
     }
 }

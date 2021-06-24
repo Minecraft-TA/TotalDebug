@@ -56,7 +56,7 @@ public class ClassUtil {
     }
 
     /**
-     * @return a type signature for the given {@code method} which looks javaparsers signature when it has no type
+     * @return a type signature for <<<<<the given {@code method} which looks javaparsers signature when it has no type
      * information
      */
     @Nonnull
@@ -66,10 +66,10 @@ public class ClassUtil {
         for (int i = 0; i < parameters.length; i++) {
             Type parameter = parameters[i];
             String typeName = parameter.getTypeName();
-            if (typeName.contains("."))
-                typeName = typeName.substring(typeName.lastIndexOf('.') + 1);
             if (typeName.endsWith(">"))
                 typeName = typeName.substring(0, typeName.indexOf('<'));
+            if (typeName.contains("."))
+                typeName = typeName.substring(typeName.lastIndexOf('.') + 1);
 
             signatureBuilder.append(typeName);
 

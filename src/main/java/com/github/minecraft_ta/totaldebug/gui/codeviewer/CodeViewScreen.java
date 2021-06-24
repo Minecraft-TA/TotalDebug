@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.gui.codeviewer;
 
 import com.github.minecraft_ta.totaldebug.gui.Scrollbar;
-import com.github.minecraft_ta.totaldebug.codeViewer.CodeHighlighter;
+import com.github.minecraft_ta.totaldebug.companionApp.CodeHighlighter;
 import net.minecraft.client.gui.GuiScreen;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;

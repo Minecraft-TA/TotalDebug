@@ -1,18 +1,12 @@
-package com.github.minecraft_ta.totaldebug.codeViewer;
+package com.github.minecraft_ta.totaldebug.companionApp;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParserConfiguration;
-import com.github.javaparser.Position;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.resolution.Resolvable;
-import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.reflectionmodel.ReflectionMethodDeclaration;
-import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.CodeViewClickMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.DecompileAndOpenRequestMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenSearchResultsMessage;
+import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -32,11 +26,8 @@ import org.apache.http.impl.client.HttpClients;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -46,7 +37,6 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
-import java.util.Collection;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -61,8 +51,15 @@ public class CompanionApp {
     private final Metafile metafile;
 
     private Process companionAppProcess;
-    private Socket socket;
-    private DataOutputStream outputStream;
+    private final Client companionAppClient = new Client();
+    {
+        companionAppClient.getMessageProcessor().registerMessage((short) 1, OpenFileMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 2, OpenSearchResultsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 3, DecompileAndOpenRequestMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 4, CodeViewClickMessage.class);
+        companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
+    }
 
     public CompanionApp(Path appDir) {
         this.appDir = appDir;
@@ -134,24 +131,19 @@ public class CompanionApp {
      * @return {@code true} if we're still connected to the companion app; {@code false} otherwise
      */
     public boolean isConnected() {
-        if (this.socket == null || !this.socket.isConnected() || this.socket.isClosed())
-            return false;
-
-        try {
-            synchronized (this.outputStream) {
-                this.outputStream.write(0);
-            }
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
+        return this.companionAppClient.isConnected();
     }
 
     /**
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+        return true;
+//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+    }
+
+    public Client getCompanionAppClient() {
+        return this.companionAppClient;
     }
 
     /**
@@ -165,138 +157,7 @@ public class CompanionApp {
         if (isConnected())
             return true;
 
-        for (int i = 0; i < retries; i++) {
-            try {
-                Thread.sleep(delay);
-                this.socket = new Socket();
-                this.socket.connect(new InetSocketAddress(25570), 500);
-                this.outputStream = new DataOutputStream(this.socket.getOutputStream());
-                DataInputStream inputStream = new DataInputStream(this.socket.getInputStream());
-
-                //receive thread
-                new Thread(() -> {
-                    while (isRunning() && isConnected()) {
-                        try {
-                            int id = inputStream.readUnsignedByte();
-                            switch (id) {
-                                case 1:
-                                    String clazz = inputStream.readUTF();
-                                    TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(clazz));
-                                    break;
-                                case 2:
-                                    handleTextClickEvent(inputStream);
-                                    break;
-                                default:
-                                    TotalDebug.LOGGER.error("Unknown packet id received from companion app: {}", id);
-                                    break;
-                            }
-                        } catch (Throwable ignored) {
-                        }
-                    }
-                }).start();
-                return true;
-            } catch (Exception e) {
-                this.socket = null;
-            }
-        }
-
-        return false;
-    }
-
-    private void handleTextClickEvent(DataInputStream inputStream) throws Throwable {
-        Path decompilationDir = TotalDebug.PROXY.getDecompilationManager().getDecompilationDir();
-        Path file = decompilationDir.resolve(inputStream.readUTF()).toAbsolutePath();
-        if (!Files.exists(file)) {
-            TotalDebug.LOGGER.error("Companion app sent file path that doesn't exist: {}", file.toString());
-            return;
-        }
-
-        String code = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-        int row = inputStream.readInt();
-        int column = inputStream.readInt();
-        Position position = new Position(row + 1, column + 1);
-
-        ParserConfiguration config = new ParserConfiguration()
-                .setSymbolResolver(new JavaSymbolSolver(new ReflectionTypeSolver(false)));
-
-        JavaParser javaParser = new JavaParser(config);
-        CompilationUnit unit = javaParser.parse(code).getResult().orElse(null);
-        if (unit == null) {
-            TotalDebug.LOGGER.error("Unable to parse java file requested by companion app {}", file.toString());
-            return;
-        }
-
-        Node node = JavaParserHelper.getResolvableNodeAt(unit.findRootNode(), position);
-        if (node == null)
-            return;
-
-        try {
-            ReflectionMethodDeclaration method = (ReflectionMethodDeclaration) ((Resolvable<?>) node).resolve();
-
-            String name = method.declaringType().getQualifiedName();
-            TotalDebug.PROXY.getDecompilationManager().decompileClassIfNotExists(Class.forName(name));
-
-            config.setSymbolResolver(null);
-            CompilationUnit declaringTypeUnit = javaParser.parse(
-                    new String(
-                            Files.readAllBytes(decompilationDir.resolve(name + ".java")),
-                            StandardCharsets.UTF_8
-                    )
-            ).getResult().get();
-
-            String signatureToMatch = ClassUtil.getSimplifiedSignatureForMethod(JavaParserHelper.getReflectMethodFromReflectionMethodDeclaration(method));
-            int line = declaringTypeUnit.getType(0).getMembers().stream()
-                    .filter(m -> m instanceof MethodDeclaration)
-                    .filter(m -> ((MethodDeclaration) m).getSignature().toString().equals(signatureToMatch))
-                    .findFirst().get().getRange().get().begin.line;
-
-            TotalDebug.PROXY.getDecompilationManager().openGui(Class.forName(name), line);
-        } catch (Throwable t) {
-            t.printStackTrace();
-        }
-    }
-
-    /**
-     * Sends a request to the companion app to open the given file
-     *
-     * @param file the file to open
-     * @throws IllegalStateException if {@link #isConnected()} returns false
-     */
-    public void sendOpenFileRequest(Path file, int row) {
-        if (!isConnected())
-            throw new IllegalStateException("Not connected");
-
-        try {
-            synchronized (this.outputStream) {
-                this.outputStream.write(1);
-                this.outputStream.writeUTF(file.toAbsolutePath().toString());
-                this.outputStream.writeInt(row);
-            }
-        } catch (IOException e) {
-            TotalDebug.LOGGER.error("Error while sending open file request", e);
-        }
-    }
-
-    public void sendReferenceSearchResults(String query, Collection<String> results, boolean methodSearch, int classesCount,
-                                           int time) {
-        if (!isConnected())
-            throw new IllegalStateException("Not connected");
-
-        try {
-            synchronized (this.outputStream) {
-                this.outputStream.write(2);
-                this.outputStream.writeUTF(query);
-                this.outputStream.writeInt(results.size());
-                for (String result : results)
-                    this.outputStream.writeUTF(result);
-
-                this.outputStream.writeBoolean(methodSearch);
-                this.outputStream.writeInt(classesCount);
-                this.outputStream.writeInt(time);
-            }
-        } catch (IOException e) {
-            TotalDebug.LOGGER.error("Error while sending search results", e);
-        }
+        return this.companionAppClient.connect(new InetSocketAddress(25570), delay, retries);
     }
 
     /**
@@ -428,6 +289,7 @@ public class CompanionApp {
     }
 
     private static final class Metafile {
+
         /**
          * The newest version of the companion app that is compatible with the current TotalDebug version
          */

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.command.decompile;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.command.*;
 import net.minecraft.server.MinecraftServer;
@@ -78,6 +79,7 @@ public class DecompileCommand extends CommandTreeBase implements IClientCommand 
 
         @Override
         public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, String[] args) throws WrongUsageException {
+            System.out.println(Minecraft.getMinecraft().player.world.getPrecipitationHeight(Minecraft.getMinecraft().player.getPosition()));
             if (args.length < 1)
                 throw new WrongUsageException(getUsage(sender));
 

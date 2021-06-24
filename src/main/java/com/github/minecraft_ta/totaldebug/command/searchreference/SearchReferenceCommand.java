@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totaldebug.command.searchreference;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.codeViewer.CompanionApp;
+import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearcher;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -78,8 +79,9 @@ public class SearchReferenceCommand extends CommandBase {
                 companionApp.startAndConnect();
 
                 if (companionApp.isConnected()) {
-                    //TODO: send message to player
-                    companionApp.sendReferenceSearchResults(args[1], resultPair.getLeft(), searchMethod, resultPair.getRight(), scanTime);
+                    companionApp.getCompanionAppClient().getMessageProcessor().enqueueMessage(
+                            new OpenSearchResultsMessage(args[1], resultPair.getLeft(), searchMethod, resultPair.getRight(), scanTime)
+                    );
                 }
             } else {
                 sender.sendMessage(new TextComponentString("-------------------").setStyle(new Style().setColor(TextFormatting.GOLD)));
