@@ -55,31 +55,6 @@ public class ClassUtil {
         }
     }
 
-    /**
-     * @return a type signature for <<<<<the given {@code method} which looks javaparsers signature when it has no type
-     * information
-     */
-    @Nonnull
-    public static String getSimplifiedSignatureForMethod(@Nonnull Method method) {
-        StringBuilder signatureBuilder = new StringBuilder(method.getName()).append('(');
-        Type[] parameters = method.getGenericParameterTypes().length != 0 ? method.getGenericParameterTypes() : method.getParameterTypes();
-        for (int i = 0; i < parameters.length; i++) {
-            Type parameter = parameters[i];
-            String typeName = parameter.getTypeName();
-            if (typeName.endsWith(">"))
-                typeName = typeName.substring(0, typeName.indexOf('<'));
-            if (typeName.contains("."))
-                typeName = typeName.substring(typeName.lastIndexOf('.') + 1);
-
-            signatureBuilder.append(typeName);
-
-            if (i != parameters.length - 1)
-                signatureBuilder.append(", ");
-        }
-
-        return signatureBuilder.append(')').toString();
-    }
-
     @Nullable
     public static String getClassCodeSourceName(Class<?> clazz) {
         ProtectionDomain protectionDomain = clazz.getProtectionDomain();
