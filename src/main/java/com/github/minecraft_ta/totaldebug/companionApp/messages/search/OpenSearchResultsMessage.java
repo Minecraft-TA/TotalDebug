@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.companionApp.messages;
+package com.github.minecraft_ta.totaldebug.companionApp.messages.search;
 
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;

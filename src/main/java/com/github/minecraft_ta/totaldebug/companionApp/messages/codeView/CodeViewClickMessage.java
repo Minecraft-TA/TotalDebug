@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.companionApp.messages;
+package com.github.minecraft_ta.totaldebug.companionApp.messages.codeView;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;

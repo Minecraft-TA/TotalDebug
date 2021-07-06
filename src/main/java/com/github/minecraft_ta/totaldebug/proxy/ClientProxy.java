@@ -5,16 +5,18 @@ import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenceCommand;
+import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
+import net.minecraftforge.fml.client.FMLClientHandler;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
+import net.minecraftforge.fml.common.IFMLSidedHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
@@ -62,5 +64,10 @@ public class ClientProxy extends CommonProxy {
     @Override
     public CompanionApp getCompanionApp() {
         return this.companionApp;
+    }
+
+    @Override
+    public IFMLSidedHandler getSidedHandler() {
+        return FMLClientHandler.instance();
     }
 }

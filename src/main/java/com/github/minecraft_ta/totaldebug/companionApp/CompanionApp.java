@@ -2,10 +2,12 @@ package com.github.minecraft_ta.totaldebug.companionApp;
 
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.CodeViewClickMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.DecompileAndOpenRequestMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenSearchResultsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
@@ -57,8 +59,14 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) 2, OpenSearchResultsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 3, DecompileAndOpenRequestMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 4, CodeViewClickMessage.class);
+
+        companionAppClient.getMessageProcessor().registerMessage((short) 5, CompanionAppReceiveDataStateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 6, CompanionAppChunkGridDataMessage.class);
+
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
+
+        companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
     }
 
     public CompanionApp(Path appDir) {
@@ -142,7 +150,7 @@ public class CompanionApp {
 //        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
     }
 
-    public Client getCompanionAppClient() {
+    public Client getClient() {
         return this.companionAppClient;
     }
 
