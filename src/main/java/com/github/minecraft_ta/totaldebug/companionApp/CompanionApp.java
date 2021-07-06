@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.companionApp;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
@@ -62,11 +63,13 @@ public class CompanionApp {
 
         companionAppClient.getMessageProcessor().registerMessage((short) 5, CompanionAppReceiveDataStateMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 6, CompanionAppChunkGridDataMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 7, CompanionAppChunkGridRequestInfoUpdateMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(CompanionAppChunkGridRequestInfoUpdateMessage.class, CompanionAppChunkGridRequestInfoUpdateMessage::handle);
     }
 
     public CompanionApp(Path appDir) {

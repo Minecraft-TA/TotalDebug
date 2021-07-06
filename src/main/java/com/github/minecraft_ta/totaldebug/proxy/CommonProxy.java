@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totaldebug.network.TickTimeRequestMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeResultMessage;
 import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMessage;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
@@ -39,6 +40,7 @@ public class CommonProxy {
 
         TotalDebug.INSTANCE.network.registerMessage(ReceiveDataStateMessage.class, ReceiveDataStateMessage.class, id++, Side.SERVER);
         TotalDebug.INSTANCE.network.registerMessage(ChunkGridDataMessage.class, ChunkGridDataMessage.class, id++, Side.CLIENT);
+        TotalDebug.INSTANCE.network.registerMessage(ChunkGridRequestInfoUpdateMessage.class, ChunkGridRequestInfoUpdateMessage.class, id++, Side.SERVER);
     }
 
     public void init(FMLInitializationEvent e) {

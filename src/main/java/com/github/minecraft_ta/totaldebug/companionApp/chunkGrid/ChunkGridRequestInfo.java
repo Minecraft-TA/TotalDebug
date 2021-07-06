@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.companionApp.chunkGrid;
 
+import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import io.netty.buffer.ByteBuf;
 
@@ -13,6 +14,17 @@ public class ChunkGridRequestInfo {
     private int maxChunkZ;
 
     private int dimension;
+
+    public ChunkGridRequestInfo() {
+    }
+
+    public ChunkGridRequestInfo(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ, int dimension) {
+        this.minChunkX = minChunkX;
+        this.minChunkZ = minChunkZ;
+        this.maxChunkX = maxChunkX;
+        this.maxChunkZ = maxChunkZ;
+        this.dimension = dimension;
+    }
 
     public void toBytes(ByteBufferOutputStream buf) {
         buf.writeInt(this.minChunkX);
@@ -30,14 +42,12 @@ public class ChunkGridRequestInfo {
         buf.writeInt(this.dimension);
     }
 
+    public static ChunkGridRequestInfo fromBytes(ByteBufferInputStream buf) {
+        return new ChunkGridRequestInfo(buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt());
+    }
+
     public static ChunkGridRequestInfo fromBytes(ByteBuf buf) {
-        ChunkGridRequestInfo info = new ChunkGridRequestInfo();
-        info.minChunkX = buf.readInt();
-        info.minChunkZ = buf.readInt();
-        info.maxChunkX = buf.readInt();
-        info.maxChunkZ = buf.readInt();
-        info.dimension = buf.readInt();
-        return info;
+        return new ChunkGridRequestInfo(buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt());
     }
 
     public int getMinChunkX() {
@@ -70,6 +80,14 @@ public class ChunkGridRequestInfo {
 
     public void setMaxChunkZ(int maxChunkZ) {
         this.maxChunkZ = maxChunkZ;
+    }
+
+    public int getWidth() {
+        return this.maxChunkX - this.minChunkX;
+    }
+
+    public int getHeight() {
+        return this.maxChunkZ - this.minChunkZ;
     }
 
     public int getDimension() {

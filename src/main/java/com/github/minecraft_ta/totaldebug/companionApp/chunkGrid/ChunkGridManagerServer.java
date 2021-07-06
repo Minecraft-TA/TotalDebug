@@ -16,13 +16,7 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
     public void addPlayer(UUID uuid) {
         synchronized (this.players) {
-            ChunkGridRequestInfo value = new ChunkGridRequestInfo();
-            value.setMinChunkX(0);
-            value.setMinChunkZ(0);
-            value.setMaxChunkX(15);
-            value.setMaxChunkZ(15);
-            this.players.put(uuid, value);
-//            this.players.put(uuid, ChunkGridRequestInfo.INVALID);
+            this.players.put(uuid, ChunkGridRequestInfo.INVALID);
         }
     }
 
@@ -42,8 +36,8 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                 if (chunkGridRequestInfo == ChunkGridRequestInfo.INVALID)
                     return;
 
-                int width = chunkGridRequestInfo.getMaxChunkX() - chunkGridRequestInfo.getMinChunkX();
-                int height = chunkGridRequestInfo.getMaxChunkZ() - chunkGridRequestInfo.getMinChunkZ();
+                int width = chunkGridRequestInfo.getWidth();
+                int height = chunkGridRequestInfo.getHeight();
 
                 WorldServer world = TotalDebug.PROXY.getSidedHandler().getServer().getWorld(chunkGridRequestInfo.getDimension());
 
@@ -59,10 +53,10 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
                         blockPos.setPos(chunkCenterX, 1, chunkCenterZ);
                         boolean isBlockLoaded = world.isBlockLoaded(blockPos);
-//                        if (isBlockLoaded /*&& world.isSpawnChunk(chunkX, chunkZ)*/)
-//                            stateArray[i][j] = SPAWN_CHUNK;
-                        if(isBlockLoaded)
-                            stateArray[i][j] = 1;
+                        if (isBlockLoaded && world.isSpawnChunk(chunkX, chunkZ))
+                            stateArray[i][j] = SPAWN_CHUNK;
+                        else if (isBlockLoaded)
+                            stateArray[i][j] = LAZY_CHUNK;
                     }
                 }
 
@@ -73,5 +67,11 @@ public class ChunkGridManagerServer implements IChunkGridManager {
         }
 
         blockPos.release();
+    }
+
+    public void setRequestInfo(UUID uniqueID, ChunkGridRequestInfo requestInfo) {
+        synchronized (this.players) {
+            this.players.put(uniqueID, requestInfo);
+        }
     }
 }
