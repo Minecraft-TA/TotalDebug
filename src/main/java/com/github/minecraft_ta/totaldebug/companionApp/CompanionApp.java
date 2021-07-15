@@ -105,7 +105,7 @@ public class CompanionApp {
             Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
 
             if (!Files.exists(exePath) ||
-                !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
+                    !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
                 downloadCompanionApp(this.metafile.newestCompatibleCompanionAppVersion);
                 this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
                 this.metafile.write();
@@ -149,8 +149,7 @@ public class CompanionApp {
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return true;
-//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
     }
 
     public Client getClient() {
