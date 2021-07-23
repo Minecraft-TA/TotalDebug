@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totaldebug.companionApp.chunkGrid;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridDataMessage;
+import it.unimi.dsi.fastutil.longs.Long2ByteMap;
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.WorldServer;
@@ -41,7 +43,7 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
                 WorldServer world = TotalDebug.PROXY.getSidedHandler().getServer().getWorld(chunkGridRequestInfo.getDimension());
 
-                byte[][] stateArray = new byte[width][height];
+                Long2ByteMap stateMap = new Long2ByteOpenHashMap();
 
                 for (int i = 0; i < width; i++) {
                     int chunkX = chunkGridRequestInfo.getMinChunkX() + i;
@@ -52,17 +54,19 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                         int chunkCenterZ = chunkZ * 16 + 8;
 
                         blockPos.setPos(chunkCenterX, 1, chunkCenterZ);
-                        boolean isBlockLoaded = world.isBlockLoaded(blockPos);
-                        if (isBlockLoaded && world.isSpawnChunk(chunkX, chunkZ))
-                            stateArray[i][j] = SPAWN_CHUNK;
-                        else if (isBlockLoaded)
-                            stateArray[i][j] = LAZY_CHUNK;
+                        boolean isChunkLoaded = world.getChunkProvider().chunkExists(chunkX, chunkZ);
+
+                        long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
+                        if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ))
+                            stateMap.put(posLong, SPAWN_CHUNK);
+                        else if (isChunkLoaded)
+                            stateMap.put(posLong, LAZY_CHUNK);
                     }
                 }
 
                 //...
                 EntityPlayerMP player = TotalDebug.PROXY.getSidedHandler().getServer().getPlayerList().getPlayerByUUID(uuid);
-                TotalDebug.INSTANCE.network.sendTo(new ChunkGridDataMessage(chunkGridRequestInfo, stateArray), player);
+                TotalDebug.INSTANCE.network.sendTo(new ChunkGridDataMessage(chunkGridRequestInfo, stateMap), player);
             }));
         }
 

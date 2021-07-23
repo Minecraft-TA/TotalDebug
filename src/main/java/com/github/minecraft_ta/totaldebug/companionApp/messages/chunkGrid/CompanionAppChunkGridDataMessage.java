@@ -3,27 +3,28 @@ package com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridRequestInfo;
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
+import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 
 public class CompanionAppChunkGridDataMessage extends AbstractMessageOutgoing {
 
     private ChunkGridRequestInfo requestInfo;
-    private byte[][] stateArray;
+    private Long2ByteMap stateMap;
 
     public CompanionAppChunkGridDataMessage() {}
 
-    public CompanionAppChunkGridDataMessage(ChunkGridRequestInfo requestInfo, byte[][] stateArray) {
+    public CompanionAppChunkGridDataMessage(ChunkGridRequestInfo requestInfo, Long2ByteMap stateMap) {
         this.requestInfo = requestInfo;
-        this.stateArray = stateArray;
+        this.stateMap = stateMap;
     }
 
     @Override
     public void write(ByteBufferOutputStream messageStream) {
         this.requestInfo.toBytes(messageStream);
-        messageStream.writeShort((short) this.stateArray.length);
-        messageStream.writeShort((short) this.stateArray[0].length);
+        messageStream.writeInt(this.stateMap.size());
 
-        for (byte[] bytes : this.stateArray) {
-            messageStream.writeByteArray(bytes);
-        }
+        this.stateMap.forEach((k, v) -> {
+            messageStream.writeLong(k);
+            messageStream.writeByte(v);
+        });
     }
 }
