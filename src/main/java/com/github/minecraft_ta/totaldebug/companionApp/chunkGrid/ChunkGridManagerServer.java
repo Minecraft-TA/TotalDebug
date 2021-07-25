@@ -9,6 +9,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.WorldServer;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,9 +35,13 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
         //Gather and send chunk data
         synchronized (this.players) {
-            this.players.forEach(((uuid, chunkGridRequestInfo) -> {
+            for (Iterator<Map.Entry<UUID, ChunkGridRequestInfo>> iterator = this.players.entrySet().iterator(); iterator.hasNext(); ) {
+                Map.Entry<UUID, ChunkGridRequestInfo> entry = iterator.next();
+                UUID uuid = entry.getKey();
+                ChunkGridRequestInfo chunkGridRequestInfo = entry.getValue();
+
                 if (chunkGridRequestInfo == ChunkGridRequestInfo.INVALID)
-                    return;
+                    continue;
 
                 int width = chunkGridRequestInfo.getWidth();
                 int height = chunkGridRequestInfo.getHeight();
@@ -66,8 +71,14 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
                 //...
                 EntityPlayerMP player = TotalDebug.PROXY.getSidedHandler().getServer().getPlayerList().getPlayerByUUID(uuid);
+
+                if (player == null) {
+                    iterator.remove();
+                    continue;
+                }
+
                 TotalDebug.INSTANCE.network.sendTo(new ChunkGridDataMessage(chunkGridRequestInfo, stateMap), player);
-            }));
+            }
         }
 
         blockPos.release();

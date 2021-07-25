@@ -42,6 +42,26 @@ public class ChunkGridRequestInfo {
         buf.writeInt(this.dimension);
     }
 
+    public void setWidth(int width) {
+        this.maxChunkX = this.minChunkX + width;
+    }
+
+    public void setHeight(int height) {
+        this.maxChunkZ = this.minChunkZ + height;
+    }
+
+    public void setSize(int width, int height) {
+        setWidth(width);
+        setHeight(height);
+    }
+
+    public void moveTo(int minChunkX, int minChunkZ) {
+        int width = getWidth(), height = getHeight();
+        this.minChunkX = minChunkX;
+        this.minChunkZ = minChunkZ;
+        setSize(width, height);
+    }
+
     public static ChunkGridRequestInfo fromBytes(ByteBufferInputStream buf) {
         return new ChunkGridRequestInfo(buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt(), buf.readInt());
     }
