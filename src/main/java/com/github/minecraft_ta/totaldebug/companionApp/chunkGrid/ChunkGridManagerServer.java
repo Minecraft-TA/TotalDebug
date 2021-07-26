@@ -6,6 +6,7 @@ import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.WorldServer;
 
 import java.util.HashMap;
@@ -73,6 +74,10 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                         long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
                         if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ))
                             stateMap.put(posLong, SPAWN_CHUNK);
+                        else if(world.getPlayerChunkMap().contains(chunkX, chunkZ))
+                            stateMap.put(posLong, PLAYER_LOADED_CHUNK);
+                        else if (isChunkLoaded && world.getChunkProvider().loadedChunks.get(ChunkPos.asLong(chunkX, chunkZ)).unloadQueued)
+                            stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);
                         else if (isChunkLoaded)
                             stateMap.put(posLong, LAZY_CHUNK);
                     }
