@@ -46,7 +46,16 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                 int width = chunkGridRequestInfo.getWidth();
                 int height = chunkGridRequestInfo.getHeight();
 
-                WorldServer world = TotalDebug.PROXY.getSidedHandler().getServer().getWorld(chunkGridRequestInfo.getDimension());
+                //Prevent causing a dimension load -> MinecraftServer#getWorld(int)
+                WorldServer world = null;
+                for (WorldServer serverWorld : TotalDebug.PROXY.getSidedHandler().getServer().worlds) {
+                    if (serverWorld.provider.getDimension() == chunkGridRequestInfo.getDimension()) {
+                        world = serverWorld;
+                        break;
+                    }
+                }
+                if (world == null)
+                    continue;
 
                 Long2ByteMap stateMap = new Long2ByteOpenHashMap();
 
