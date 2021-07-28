@@ -50,10 +50,7 @@ public class CommonProxy {
                 if (event.phase != TickEvent.Phase.END || event.type != TickEvent.Type.WORLD)
                     return;
 
-                if (event.side == Side.SERVER)
-                    getChunkGridManagerServer().update();
-                else
-                    getChunkGridManagerClient().update();
+                getChunkGridManagerServer().update();
             }
         });
     }

@@ -18,6 +18,8 @@ public class CompanionAppReceiveDataStateMessage extends AbstractMessageIncoming
     }
 
     public static void handle(CompanionAppReceiveDataStateMessage message) {
+        if (!message.state)
+            TotalDebug.PROXY.getChunkGridManagerClient().setFollowPlayer(false);
         TotalDebug.INSTANCE.network.sendToServer(new ReceiveDataStateMessage(message.state));
     }
 }
