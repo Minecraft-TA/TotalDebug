@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.companionApp.messages;
+package com.github.minecraft_ta.totaldebug.companionApp.messages.codeView;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.tth05.scnet.message.AbstractMessageIncoming;

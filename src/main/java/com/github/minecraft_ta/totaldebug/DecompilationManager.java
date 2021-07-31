@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug;
 
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
 import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
@@ -86,7 +86,7 @@ public class DecompilationManager {
                                             .setStyle(new Style().setColor(TextFormatting.WHITE))
                             ).setStyle(new Style().setColor(TextFormatting.GRAY))
                     );
-                    companionApp.getCompanionAppClient().getMessageProcessor().enqueueMessage(new OpenFileMessage(filePath, line));
+                    companionApp.getClient().getMessageProcessor().enqueueMessage(new OpenFileMessage(filePath, line));
                 }
             } else { //open in default gui
                 getDecompiledFileContent(clazz).exceptionally(throwable -> {

@@ -2,10 +2,14 @@ package com.github.minecraft_ta.totaldebug.companionApp;
 
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.CodeViewClickMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.DecompileAndOpenRequestMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenSearchResultsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridRequestInfoUpdateMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppUpdateFollowPlayerStateMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
@@ -57,8 +61,18 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) 2, OpenSearchResultsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 3, DecompileAndOpenRequestMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 4, CodeViewClickMessage.class);
+
+        companionAppClient.getMessageProcessor().registerMessage((short) 5, CompanionAppReceiveDataStateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 6, CompanionAppChunkGridDataMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 7, CompanionAppChunkGridRequestInfoUpdateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 8, CompanionAppUpdateFollowPlayerStateMessage.class);
+
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
+
+        companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(CompanionAppChunkGridRequestInfoUpdateMessage.class, CompanionAppChunkGridRequestInfoUpdateMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(CompanionAppUpdateFollowPlayerStateMessage.class, CompanionAppUpdateFollowPlayerStateMessage::handle);
     }
 
     public CompanionApp(Path appDir) {
@@ -94,7 +108,7 @@ public class CompanionApp {
             Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
 
             if (!Files.exists(exePath) ||
-                !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
+                    !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
                 downloadCompanionApp(this.metafile.newestCompatibleCompanionAppVersion);
                 this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
                 this.metafile.write();
@@ -138,11 +152,10 @@ public class CompanionApp {
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return true;
-//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
     }
 
-    public Client getCompanionAppClient() {
+    public Client getClient() {
         return this.companionAppClient;
     }
 

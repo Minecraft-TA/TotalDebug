@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totaldebug.command.searchreference;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.OpenSearchResultsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearcher;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -79,7 +79,7 @@ public class SearchReferenceCommand extends CommandBase {
                 companionApp.startAndConnect();
 
                 if (companionApp.isConnected()) {
-                    companionApp.getCompanionAppClient().getMessageProcessor().enqueueMessage(
+                    companionApp.getClient().getMessageProcessor().enqueueMessage(
                             new OpenSearchResultsMessage(args[1], resultPair.getLeft(), searchMethod, resultPair.getRight(), scanTime)
                     );
                 }
