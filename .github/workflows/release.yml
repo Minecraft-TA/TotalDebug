@@ -30,8 +30,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - JEI Integration for decompile keybind
-            - New companion app support
+            - Chunk grid tool support
           draft: false
           prerelease: false
       - name: Upload jars to release
