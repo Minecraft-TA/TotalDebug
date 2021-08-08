@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridDataMessage
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.WorldServer;
 
@@ -32,8 +31,6 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
     @Override
     public void update() {
-        BlockPos.PooledMutableBlockPos blockPos = BlockPos.PooledMutableBlockPos.retain();
-
         //Gather and send chunk data
         synchronized (this.players) {
             for (Iterator<Map.Entry<UUID, ChunkGridRequestInfo>> iterator = this.players.entrySet().iterator(); iterator.hasNext(); ) {
@@ -62,19 +59,15 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
                 for (int i = 0; i < width; i++) {
                     int chunkX = chunkGridRequestInfo.getMinChunkX() + i;
-                    int chunkCenterX = chunkX * 16 + 8;
 
                     for (int j = 0; j < height; j++) {
                         int chunkZ = chunkGridRequestInfo.getMinChunkZ() + j;
-                        int chunkCenterZ = chunkZ * 16 + 8;
-
-                        blockPos.setPos(chunkCenterX, 1, chunkCenterZ);
                         boolean isChunkLoaded = world.getChunkProvider().chunkExists(chunkX, chunkZ);
 
                         long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
                         if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ))
                             stateMap.put(posLong, SPAWN_CHUNK);
-                        else if(world.getPlayerChunkMap().contains(chunkX, chunkZ))
+                        else if (world.getPlayerChunkMap().contains(chunkX, chunkZ))
                             stateMap.put(posLong, PLAYER_LOADED_CHUNK);
                         else if (isChunkLoaded && world.getChunkProvider().loadedChunks.get(ChunkPos.asLong(chunkX, chunkZ)).unloadQueued)
                             stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);
@@ -94,8 +87,6 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                 TotalDebug.INSTANCE.network.sendTo(new ChunkGridDataMessage(chunkGridRequestInfo, stateMap), player);
             }
         }
-
-        blockPos.release();
     }
 
     public void setRequestInfo(UUID uniqueID, ChunkGridRequestInfo requestInfo) {
