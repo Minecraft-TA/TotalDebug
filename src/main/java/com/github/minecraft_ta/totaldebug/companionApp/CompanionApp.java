@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
@@ -67,12 +68,16 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) 7, CompanionAppChunkGridRequestInfoUpdateMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) 8, CompanionAppUpdateFollowPlayerStateMessage.class);
 
+        companionAppClient.getMessageProcessor().registerMessage((short) 9, RunScriptMessage.class);
+
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CompanionAppChunkGridRequestInfoUpdateMessage.class, CompanionAppChunkGridRequestInfoUpdateMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CompanionAppUpdateFollowPlayerStateMessage.class, CompanionAppUpdateFollowPlayerStateMessage::handle);
+
+        companionAppClient.getMessageBus().listenAlways(RunScriptMessage.class, RunScriptMessage::handle);
     }
 
     public CompanionApp(Path appDir) {
