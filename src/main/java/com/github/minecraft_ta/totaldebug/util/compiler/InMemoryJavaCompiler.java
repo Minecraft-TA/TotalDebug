@@ -8,43 +8,49 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
-import java.io.IOException;
-import java.io.StringWriter;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.stream.Collectors;
 
 public class InMemoryJavaCompiler {
 
-    public static Class<?> compile(String className, String code, ClassLoader classLoader) {
+    public static Class<?> compile(String className, String code) throws InMemoryCompilationFailedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 
         try {
-            InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(compiler.getStandardFileManager(null, null, null), classLoader);
+            InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(compiler.getStandardFileManager(null, null, null));
             DiagnosticCollector<JavaFileObject> dia = new DiagnosticCollector<>();
-            StringWriter writer = new StringWriter(100);
             JavaCompiler.CompilationTask task = compiler.getTask(
-                    writer,
+                    null,
                     fileManager,
                     dia, Lists.newArrayList("-cp", constructClassPathArgument()), null,
                     Lists.newArrayList(new StringInputObject(className, code))
             );
 
             boolean result = task.call();
-            writer.close();
-            if (!result)
-                return null;
+            if (!result) {
+                throw new InMemoryCompilationFailedException(dia.getDiagnostics().stream().map(Object::toString).collect(Collectors.joining("\n")));
+            }
 
             byte[] bytes = fileManager.getOutputObjectList().get(0).getByteCode();
             return UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null);
-        } catch (URISyntaxException | IOException e) {
-            e.printStackTrace();
+        } catch (URISyntaxException e) {
+            throw new InMemoryCompilationFailedException(e);
         }
-
-        return null;
     }
 
     private static String constructClassPathArgument() {
         return ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().map(URL::getFile).collect(Collectors.joining(";"));
+    }
+
+    public static class InMemoryCompilationFailedException extends Exception {
+
+        public InMemoryCompilationFailedException(String message) {
+            super(message);
+        }
+
+        public InMemoryCompilationFailedException(Throwable cause) {
+            super(cause);
+        }
     }
 }

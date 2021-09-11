@@ -1,38 +1,29 @@
 package com.github.minecraft_ta.totaldebug.companionApp.messages.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
+import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.tth05.scnet.message.AbstractMessageIncoming;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 
-import java.util.concurrent.ThreadLocalRandom;
-
 public class RunScriptMessage extends AbstractMessageIncoming {
 
+    private int scriptId;
     private String scriptText;
+    private boolean serverSide;
 
     @Override
     public void read(ByteBufferInputStream messageStream) {
+        this.scriptId = messageStream.readInt();
         this.scriptText = messageStream.readString();
+        this.serverSide = messageStream.readBoolean();
     }
 
     public static void handle(RunScriptMessage message) {
-        String className = "ScriptClass" + ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE);
-        String text =
-                "public class " + className + " { public static void run() {" +
-                message.scriptText +
-                "}}";
-
-        Class<?> scriptClass = InMemoryJavaCompiler.compile(className, text, RunScriptMessage.class.getClassLoader());
-        if (scriptClass == null) {
-            TotalDebug.LOGGER.error("Compilation failed for code:\n" + text);
-            return;
-        }
-
-        try {
-            scriptClass.getMethod("run").invoke(null);
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (message.serverSide) {
+            TotalDebug.INSTANCE.network.sendToServer(new RunScriptOnServerMessage(message.scriptId, message.scriptText));
+        } else {
+            ScriptRunner.runScript(message.scriptId, message.scriptText, null);
         }
     }
 }

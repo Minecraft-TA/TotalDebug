@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeVie
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
@@ -69,6 +70,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) 8, CompanionAppUpdateFollowPlayerStateMessage.class);
 
         companionAppClient.getMessageProcessor().registerMessage((short) 9, RunScriptMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) 10, ScriptStatusMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
