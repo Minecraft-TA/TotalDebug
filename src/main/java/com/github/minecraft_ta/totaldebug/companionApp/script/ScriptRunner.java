@@ -9,6 +9,9 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.relauncher.Side;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -61,10 +64,13 @@ public class ScriptRunner {
             ScriptStatusMessage statusMessage;
             if (exception != null) {
                 Throwable ex = exception.getCause();
-                ScriptStatusMessage.Type type = ex instanceof InMemoryJavaCompiler.InMemoryCompilationFailedException ?
-                        ScriptStatusMessage.Type.COMPILATION_FAILED : ScriptStatusMessage.Type.RUN_EXCEPTION;
+                boolean compilationException = ex instanceof InMemoryJavaCompiler.InMemoryCompilationFailedException;
+                ScriptStatusMessage.Type type = compilationException ? ScriptStatusMessage.Type.COMPILATION_FAILED : ScriptStatusMessage.Type.RUN_EXCEPTION;
 
-                statusMessage = new ScriptStatusMessage(id, type, ex.getMessage());
+                //Unwrap InvocationTargetException etc.
+                if (!compilationException && ex.getCause() != null)
+                    ex = ex.getCause();
+                statusMessage = new ScriptStatusMessage(id, type, getShortenedStackTrace(ex));
             } else {
                 statusMessage = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_COMPLETED, logOutput);
             }
@@ -75,5 +81,18 @@ public class ScriptRunner {
                 TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(statusMessage);
             }
         });
+    }
+
+    private static String getShortenedStackTrace(Throwable t) {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        t.printStackTrace(new PrintWriter(o, true));
+
+        String stackTrace = new String(o.toByteArray(), StandardCharsets.UTF_8);
+        int classIndex = stackTrace.indexOf("ScriptClass");
+        if (classIndex == -1)
+            return stackTrace;
+
+        int nextNewLineIndex = stackTrace.indexOf('\n', classIndex);
+        return stackTrace.substring(0, nextNewLineIndex);
     }
 }
