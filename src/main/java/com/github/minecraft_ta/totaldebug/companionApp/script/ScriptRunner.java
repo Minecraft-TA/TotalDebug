@@ -2,32 +2,39 @@ package com.github.minecraft_ta.totaldebug.companionApp.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
-import com.github.minecraft_ta.totaldebug.network.script.ServerScriptStatusMessage;
+import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
-import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.relauncher.Side;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 public class ScriptRunner {
 
-    private static final List<Script> runningScripts = new ObjectArrayList<>();
+    private static int CLASS_ID = 0;
 
     public static void runScript(int id, String code, EntityPlayer owner) {
-        String className = "ScriptClass" + id;
+        String className = "ScriptClass" + CLASS_ID++;
         String text =
-                "public class " + className + " { public static void run() {" +
-                code +
-                "}}";
+                "public class " + className + " { " +
+                "   public void run() throws Throwable {" +
+                "   " + code +
+                "   }" +
+                "   public java.io.StringWriter logWriter = new java.io.StringWriter();" +
+                "   public void logln(String s) {" +
+                "       this.log(String.format(\"%s%n\", s));" +
+                "   }" +
+                "   public void log(String s) {" +
+                "       this.logWriter.append(s);" +
+                "   }" +
+                "}";
 
         boolean isServerSide = FMLCommonHandler.instance().getEffectiveSide() == Side.SERVER;
 
-        Script script = new Script(id, CompletableFuture.runAsync(() -> {
+        CompletableFuture.supplyAsync(() -> {
             Class<?> scriptClass;
             try {
                 scriptClass = InMemoryJavaCompiler.compile(className, text);
@@ -35,40 +42,38 @@ public class ScriptRunner {
                 throw new CompletionException(e);
             }
 
+            ScriptStatusMessage statusMessage = new ScriptStatusMessage(id, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "");
+            if (isServerSide) {
+                TotalDebug.INSTANCE.network.sendTo(new CompanionAppForwardedMessage(statusMessage), (EntityPlayerMP) owner);
+            } else {
+                TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(statusMessage);
+            }
+
             try {
-                scriptClass.getMethod("run").invoke(null);
+                Object instance = scriptClass.newInstance();
+                scriptClass.getMethod("run").invoke(instance);
+
+                return scriptClass.getField("logWriter").get(instance).toString();
             } catch (Exception e) {
                 throw new CompletionException(e);
             }
-        }).exceptionally(exception -> {
-            runningScripts.removeIf(s -> s.id == id && s.owner == owner);
+        }).whenComplete((logOutput, exception) -> {
+            ScriptStatusMessage statusMessage;
+            if (exception != null) {
+                Throwable ex = exception.getCause();
+                ScriptStatusMessage.Type type = ex instanceof InMemoryJavaCompiler.InMemoryCompilationFailedException ?
+                        ScriptStatusMessage.Type.COMPILATION_FAILED : ScriptStatusMessage.Type.RUN_EXCEPTION;
 
-            Throwable ex = exception.getCause();
-            ScriptStatusMessage.Type type = ex instanceof InMemoryJavaCompiler.InMemoryCompilationFailedException ?
-                    ScriptStatusMessage.Type.COMPILATION_FAILED : ScriptStatusMessage.Type.RUN_EXCEPTION;
+                statusMessage = new ScriptStatusMessage(id, type, ex.getMessage());
+            } else {
+                statusMessage = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_COMPLETED, logOutput);
+            }
 
             if (isServerSide) {
-                TotalDebug.INSTANCE.network.sendTo(new ServerScriptStatusMessage(id, type, ex.getMessage()), (EntityPlayerMP) owner);
+                TotalDebug.INSTANCE.network.sendTo(new CompanionAppForwardedMessage(statusMessage), (EntityPlayerMP) owner);
             } else {
-                TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(new ScriptStatusMessage(id, type, ex.getMessage()));
+                TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(statusMessage);
             }
-            return null;
-        }), owner);
-
-        runningScripts.add(script);
-    }
-
-    private static class Script {
-
-        private final int id;
-        //        private BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream()));
-        private final CompletableFuture<Void> scriptTask;
-        private final EntityPlayer owner;
-
-        public Script(int id, CompletableFuture<Void> scriptTask, EntityPlayer owner) {
-            this.id = id;
-            this.scriptTask = scriptTask;
-            this.owner = owner;
-        }
+        });
     }
 }

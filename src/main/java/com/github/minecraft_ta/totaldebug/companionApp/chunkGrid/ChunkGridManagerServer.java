@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totaldebug.companionApp.chunkGrid;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
+import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -84,7 +85,7 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                     continue;
                 }
 
-                TotalDebug.INSTANCE.network.sendTo(new ChunkGridDataMessage(chunkGridRequestInfo, stateMap), player);
+                TotalDebug.INSTANCE.network.sendTo(new CompanionAppForwardedMessage(new CompanionAppChunkGridDataMessage(chunkGridRequestInfo, stateMap)), player);
             }
         }
     }
