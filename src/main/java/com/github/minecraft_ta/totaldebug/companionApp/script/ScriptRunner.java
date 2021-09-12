@@ -8,23 +8,31 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.relauncher.Side;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ScriptRunner {
+
+    private static final Pattern IMPORT_PATTERN = Pattern.compile("^import\\s(.*);");
 
     private static int CLASS_ID = 0;
 
     public static void runScript(int id, String code, EntityPlayer owner) {
+        Pair<String, String> importsCodePair = extractImports(code);
+
         String className = "ScriptClass" + CLASS_ID++;
         String text =
+                importsCodePair.getLeft() +
                 "public class " + className + " { " +
                 "   public void run() throws Throwable {" +
-                "   " + code +
+                "   " + importsCodePair.getRight() +
                 "   }" +
                 "   public java.io.StringWriter logWriter = new java.io.StringWriter();" +
                 "   public void logln(String s) {" +
@@ -81,6 +89,17 @@ public class ScriptRunner {
                 TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(statusMessage);
             }
         });
+    }
+
+    private static Pair<String, String> extractImports(String code) {
+        Matcher matcher = IMPORT_PATTERN.matcher(code);
+
+        StringBuilder imports = new StringBuilder();
+        while(matcher.find()) {
+            imports.append(matcher.group());
+        }
+
+        return Pair.of(imports.toString(), code.replaceAll(IMPORT_PATTERN.pattern() + "(\\r\\n|\\r|\\n)", ""));
     }
 
     private static String getShortenedStackTrace(Throwable t) {
