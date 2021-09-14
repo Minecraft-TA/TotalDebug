@@ -39,7 +39,7 @@ public class InMemoryJavaCompiler {
         }
     }
 
-    private static String constructClassPathArgument() {
+    public static String constructClassPathArgument() {
         return ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().map(URL::getFile).collect(Collectors.joining(";"));
     }
 

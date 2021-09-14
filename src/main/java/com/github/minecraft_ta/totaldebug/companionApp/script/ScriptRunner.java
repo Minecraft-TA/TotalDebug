@@ -30,10 +30,10 @@ public class ScriptRunner {
         String className = "ScriptClass" + CLASS_ID++;
         String text =
                 importsCodePair.getLeft() +
-                "public class " + className + " { " +
-                "   public void run() throws Throwable {" +
-                "   " + importsCodePair.getRight() +
-                "   }" +
+                "public class " + className + " {\n" +
+                "   public void run() throws Throwable {\n" +
+                "   " + importsCodePair.getRight() + "\n" +
+                "   }\n" +
                 "   public java.io.StringWriter logWriter = new java.io.StringWriter();" +
                 "   public void logln(String s) {" +
                 "       this.log(String.format(\"%s%n\", s));" +
@@ -78,7 +78,7 @@ public class ScriptRunner {
                 //Unwrap InvocationTargetException etc.
                 if (!compilationException && ex.getCause() != null)
                     ex = ex.getCause();
-                statusMessage = new ScriptStatusMessage(id, type, getShortenedStackTrace(ex));
+                statusMessage = new ScriptStatusMessage(id, type, compilationException ? ex.getMessage() : getShortenedStackTrace(ex));
             } else {
                 statusMessage = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_COMPLETED, logOutput);
             }
