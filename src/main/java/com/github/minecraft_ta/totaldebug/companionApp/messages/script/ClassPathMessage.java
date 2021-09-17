@@ -33,7 +33,7 @@ public class ClassPathMessage extends AbstractMessage {
                             }
                         })
                         .filter(Objects::nonNull)
-                        .filter(s -> !s.contains("akka"))
+                        .filter(s -> !s.contains("akka") && !s.contains("jre\\lib"))
                         .collect(Collectors.joining(";"))
         );
     }
