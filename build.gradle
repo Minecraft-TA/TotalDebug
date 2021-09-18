@@ -78,7 +78,7 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2854'
 
-    implementation "com.github.tth05:SCNet:master-SNAPSHOT"
+    implementation "com.github.tth05:SCNet:519b65"
     implementation "io.github.classgraph:classgraph:4.8.90"
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
 

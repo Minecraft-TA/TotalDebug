@@ -79,7 +79,7 @@ public class DecompilationManager {
                 CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
                 companionApp.startAndConnect();
 
-                if (companionApp.isConnected()) {
+                if (companionApp.isConnected() && companionApp.waitForUI()) {
                     Minecraft.getMinecraft().player.sendMessage(
                             new TextComponentTranslation("companion_app.open_file",
                                     new TextComponentString(filePath.getFileName().toString())
