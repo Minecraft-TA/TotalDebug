@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.companionApp;
 
-import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.CompanionAppReadyMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
@@ -56,6 +55,7 @@ import java.util.zip.ZipInputStream;
 public class CompanionApp {
 
     public static final String COMPANION_APP_FOLDER = "companion-app";
+    public static final String DATA_FOLDER = "data";
 
     private static final Gson GSON = new GsonBuilder().create();
 
@@ -235,7 +235,7 @@ public class CompanionApp {
                     "--illegal-access=permit",
                     "-jar",
                     exePath.toAbsolutePath().toString(),
-                    "\"" + this.appDir.getParent().resolve(DecompilationManager.DECOMPILED_FILES_FOLDER).toAbsolutePath() + "\""
+                    "\"" + this.appDir.getParent().resolve(DATA_FOLDER).toAbsolutePath() + "\""
             );
 
             if (logFile != null) {

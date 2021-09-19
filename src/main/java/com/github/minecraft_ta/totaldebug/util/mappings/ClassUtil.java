@@ -1,21 +1,49 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.launchwrapper.LaunchClassLoader;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
-import java.lang.reflect.Type;
+import java.lang.reflect.Field;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
 
     private ClassUtil() {
+    }
+
+    public static void dumpMinecraftClasses(@Nonnull Path outputPath) {
+        try {
+            if (!Files.exists(outputPath))
+                Files.createFile(outputPath);
+            try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath))) {
+                Field f = LaunchClassLoader.class.getDeclaredField("resourceCache");
+                f.setAccessible(true);
+                ((Map<String, byte[]>) f.get(BytecodeReferenceSearcher.class.getClassLoader())).entrySet().stream()
+                        .filter(e -> e.getKey().contains("net.minecraft") && !e.getKey().startsWith("$"))
+                        .forEach(e -> {
+                            ZipEntry entry = new ZipEntry(e.getKey().replace('.', '/') + ".class");
+                            try {
+                                outputStream.putNextEntry(entry);
+                                outputStream.write(e.getValue());
+                                outputStream.closeEntry();
+                            } catch (IOException ignored) {}
+                        });
+            }
+        } catch (Exception e) {
+            TotalDebug.LOGGER.error("Unable to dump minecraft classes", e);
+        }
     }
 
     @Nullable
