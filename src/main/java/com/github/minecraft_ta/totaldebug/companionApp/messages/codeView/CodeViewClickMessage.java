@@ -45,7 +45,7 @@ public class CodeViewClickMessage extends AbstractMessageIncoming {
         }
 
         try {
-            String code = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            String code = removeAnsiCodes(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
             Position position = new Position(message.row + 1, message.column + 1);
 
             ParserConfiguration config = new ParserConfiguration()
@@ -86,10 +86,10 @@ public class CodeViewClickMessage extends AbstractMessageIncoming {
             //Parse the target class
             config.setSymbolResolver(null);
             CompilationUnit declaringTypeUnit = javaParser.parse(
-                    new String(
+                    removeAnsiCodes(new String(
                             Files.readAllBytes(decompilationDir.resolve(name + ".java")),
                             StandardCharsets.UTF_8
-                    )
+                    ))
             ).getResult().get();
 
             //Find the resolved object in the target class
@@ -113,5 +113,9 @@ public class CodeViewClickMessage extends AbstractMessageIncoming {
         } catch (Throwable t) {
             t.printStackTrace();
         }
+    }
+
+    private static String removeAnsiCodes(String text) {
+        return text.replaceAll("[\\u001b]\\[[0-9;]+?m(.*?)[\\u001b]\\[m", "$1");
     }
 }

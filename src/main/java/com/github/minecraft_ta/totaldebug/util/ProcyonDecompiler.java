@@ -2,9 +2,9 @@ package com.github.minecraft_ta.totaldebug.util;
 
 import com.strobel.assembler.metadata.ITypeLoader;
 import com.strobel.assembler.metadata.MetadataSystem;
+import com.strobel.decompiler.AnsiTextOutput;
 import com.strobel.decompiler.DecompilationOptions;
 import com.strobel.decompiler.DecompilerSettings;
-import com.strobel.decompiler.PlainTextOutput;
 import com.strobel.decompiler.languages.java.JavaFormattingOptions;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
@@ -52,7 +52,9 @@ public class ProcyonDecompiler {
         decompilationOptions.setFullDecompilation(true);
 
         StringWriter writer = new StringWriter();
-        settings.getLanguage().decompileType(system.lookupType(name).resolve(), new PlainTextOutput(writer), decompilationOptions);
+        //Why would Procyon even check for this...
+        System.setProperty("Ansi", "true");
+        settings.getLanguage().decompileType(system.lookupType(name).resolve(), new AnsiTextOutput(writer, AnsiTextOutput.ColorScheme.LIGHT), decompilationOptions);
         return writer.toString();
     }
 }
