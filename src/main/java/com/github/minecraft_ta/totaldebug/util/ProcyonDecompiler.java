@@ -7,6 +7,7 @@ import com.strobel.decompiler.DecompilerSettings;
 import com.strobel.decompiler.PlainTextOutput;
 import com.strobel.decompiler.languages.java.JavaFormattingOptions;
 import net.minecraft.launchwrapper.LaunchClassLoader;
+import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -22,6 +23,8 @@ public class ProcyonDecompiler {
                 byte[] code = ((LaunchClassLoader) ProcyonDecompiler.class.getClassLoader()).getClassBytes(internalName);
                 if (code == null)
                     return false;
+
+                code = new DeobfuscationTransformer().transform(internalName, internalName, code);
 
                 buffer.position(0);
                 buffer.putByteArray(code, 0, code.length);
