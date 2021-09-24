@@ -23,8 +23,10 @@ public class ServerProxy extends CommonProxy {
                 else
                     tasks = ServerProxy.super.postTickTasks;
 
-                tasks.forEach(Runnable::run);
-                tasks.clear();
+                synchronized (tasks) {
+                    tasks.forEach(Runnable::run);
+                    tasks.clear();
+                }
             }
         });
     }

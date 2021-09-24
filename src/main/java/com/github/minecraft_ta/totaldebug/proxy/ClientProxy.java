@@ -55,8 +55,10 @@ public class ClientProxy extends CommonProxy {
                 else
                     tasks = ClientProxy.super.postTickTasks;
 
-                tasks.forEach(Runnable::run);
-                tasks.clear();
+                synchronized (tasks) {
+                    tasks.forEach(Runnable::run);
+                    tasks.clear();
+                }
 
                 if (event.phase != TickEvent.Phase.END)
                     return;

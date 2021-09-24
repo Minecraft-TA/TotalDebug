@@ -90,10 +90,14 @@ public class CommonProxy {
     }
 
     public void addPreTickTask(Runnable task) {
-        this.preTickTasks.add(task);
+        synchronized (this.preTickTasks) {
+            this.preTickTasks.add(task);
+        }
     }
 
     public void addPostTickTask(Runnable task) {
-        this.postTickTasks.add(task);
+        synchronized (this.postTickTasks) {
+            this.postTickTasks.add(task);
+        }
     }
 }
