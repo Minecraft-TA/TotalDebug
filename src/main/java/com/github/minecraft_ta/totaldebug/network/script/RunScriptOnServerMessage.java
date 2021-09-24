@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.network.script;
 
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import io.netty.buffer.ByteBuf;
+import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
@@ -12,12 +14,14 @@ public class RunScriptOnServerMessage implements IMessage, IMessageHandler<RunSc
 
     private int scriptId;
     private String scriptText;
+    private ExecutionEnvironment executionEnvironment;
 
     public RunScriptOnServerMessage() {}
 
-    public RunScriptOnServerMessage(int scriptId, String scriptText) {
+    public RunScriptOnServerMessage(int scriptId, String scriptText, ExecutionEnvironment executionEnvironment) {
         this.scriptId = scriptId;
         this.scriptText = scriptText;
+        this.executionEnvironment = executionEnvironment;
     }
 
     @Override
@@ -27,6 +31,7 @@ public class RunScriptOnServerMessage implements IMessage, IMessageHandler<RunSc
         byte[] bytes = new byte[length];
         buf.readBytes(bytes);
         this.scriptText = new String(bytes, StandardCharsets.UTF_8);
+        this.executionEnvironment = ExecutionEnvironment.valueOf(ByteBufUtils.readUTF8String(buf));
     }
 
     @Override
@@ -35,11 +40,12 @@ public class RunScriptOnServerMessage implements IMessage, IMessageHandler<RunSc
         byte[] bytes = this.scriptText.getBytes(StandardCharsets.UTF_8);
         buf.writeInt(bytes.length);
         buf.writeBytes(bytes);
+        ByteBufUtils.writeUTF8String(buf, this.executionEnvironment.name());
     }
 
     @Override
     public RunScriptOnServerMessage onMessage(RunScriptOnServerMessage message, MessageContext ctx) {
-        ScriptRunner.runScript(message.scriptId, message.scriptText, ctx.getServerHandler().player);
+        ScriptRunner.runScript(message.scriptId, message.scriptText, ctx.getServerHandler().player, message.executionEnvironment);
         return null;
     }
 }

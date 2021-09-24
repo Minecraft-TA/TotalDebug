@@ -22,6 +22,8 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
+import java.util.List;
+
 public class ClientProxy extends CommonProxy {
 
     private final DecompilationManager decompilationManager = new DecompilationManager();
@@ -47,7 +49,16 @@ public class ClientProxy extends CommonProxy {
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onClientTick(TickEvent.ClientTickEvent event) {
-                if (event.phase != TickEvent.Phase.END || event.type != TickEvent.Type.CLIENT)
+                List<Runnable> tasks;
+                if (event.phase == TickEvent.Phase.START)
+                    tasks = ClientProxy.super.preTickTasks;
+                else
+                    tasks = ClientProxy.super.postTickTasks;
+
+                tasks.forEach(Runnable::run);
+                tasks.clear();
+
+                if (event.phase != TickEvent.Phase.END)
                     return;
 
                 getChunkGridManagerClient().update();
