@@ -9,10 +9,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;

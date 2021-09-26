@@ -10,11 +10,13 @@ import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class InMemoryJavaCompiler {
 
-    public static Class<?> compile(String className, String code) throws InMemoryCompilationFailedException {
+    public static List<Class<?>> compile(String code, String... classNames) throws InMemoryCompilationFailedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 
         try {
@@ -24,7 +26,7 @@ public class InMemoryJavaCompiler {
                     null,
                     fileManager,
                     dia, Lists.newArrayList("-cp", constructClassPathArgument()), null,
-                    Lists.newArrayList(new StringInputObject(className, code))
+                    Lists.newArrayList(new StringInputObject(classNames[0], code))
             );
 
             boolean result = task.call();
@@ -32,8 +34,16 @@ public class InMemoryJavaCompiler {
                 throw new InMemoryCompilationFailedException(dia.getDiagnostics().stream().map(Object::toString).collect(Collectors.joining("\n")));
             }
 
-            byte[] bytes = fileManager.getOutputObjectList().get(0).getByteCode();
-            return UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null);
+            List<Class<?>> loadedClasses = new ArrayList<>();
+            List<BytecodeOutputObject> outputObjectList = fileManager.getOutputObjectList();
+            for (int i = outputObjectList.size() - 1; i >= 0; i--) {
+                BytecodeOutputObject outputObject = outputObjectList.get(i);
+                String className = classNames[i];
+                byte[] bytes = outputObject.getByteCode();
+                loadedClasses.add(UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
+            }
+
+            return loadedClasses;
         } catch (URISyntaxException e) {
             throw new InMemoryCompilationFailedException(e);
         }

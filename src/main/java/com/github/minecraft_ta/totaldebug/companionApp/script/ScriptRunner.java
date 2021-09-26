@@ -9,10 +9,10 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.relauncher.Side;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,37 +25,22 @@ import java.util.regex.Pattern;
 
 public class ScriptRunner {
 
-    private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s(.*?);");
-
     private static int CLASS_ID = 0;
 
     private static final List<Script> runningScripts = new ArrayList<>();
 
     public static void runScript(int id, String code, EntityPlayer owner, ExecutionEnvironment executionEnvironment) {
-        Pair<String, String> importsCodePair = extractImports(code);
-
-        String className = "ScriptClass" + CLASS_ID++;
-        String text =
-                importsCodePair.getLeft() +
-                "public class " + className + " {\n" +
-                "   public void run() throws Throwable {\n" +
-                "   " + importsCodePair.getRight() + "\n" +
-                "   }\n" +
-                "   public java.io.StringWriter logWriter = new java.io.StringWriter();" +
-                "   public void logln(String s) {" +
-                "       this.log(String.format(\"%s%n\", s));" +
-                "   }" +
-                "   public void log(String s) {" +
-                "       this.logWriter.append(s);" +
-                "   }" +
-                "}";
+        String className = extractClassName(code) + CLASS_ID++;
+        String finalCode = code
+                .replaceFirst("public class\\s+(.*?)\\s+extends\\s+BaseScript", "public class " + className + " extends BaseScript" + CLASS_ID)
+                .replaceFirst("class\\s+BaseScript\\s+", "class BaseScript" + CLASS_ID);
 
         boolean isServerSide = FMLCommonHandler.instance().getEffectiveSide() == Side.SERVER;
 
         CompletableFuture.supplyAsync(() -> {
             Class<?> scriptClass;
             try {
-                scriptClass = InMemoryJavaCompiler.compile(className, text);
+                scriptClass = InMemoryJavaCompiler.compile(finalCode, className, "BaseScript" + CLASS_ID).get(1);
             } catch (InMemoryJavaCompiler.InMemoryCompilationFailedException e) {
                 throw new CompletionException(e);
             }
@@ -80,7 +65,9 @@ public class ScriptRunner {
                         Object instance = compiledClass.newInstance();
                         compiledClass.getMethod("run").invoke(instance);
 
-                        future.complete(compiledClass.getField("logWriter").get(instance).toString());
+                        Field logWriterField = compiledClass.getSuperclass().getDeclaredField("logWriter");
+                        logWriterField.setAccessible(true);
+                        future.complete(logWriterField.get(instance).toString());
                     } catch (Throwable e) {
                         future.completeExceptionally(e);
                     }
@@ -129,6 +116,14 @@ public class ScriptRunner {
         }
     }
 
+    private static String extractClassName(String code) {
+        Matcher matcher = Pattern.compile("class\\s+(.*?)\\s").matcher(code);
+        if (!matcher.find())
+            return "";
+
+        return matcher.group(1);
+    }
+
     private static Optional<Script> findScript(int id, EntityPlayer owner) {
         return runningScripts.stream().filter(s -> s.owner.getUniqueID().equals(owner.getUniqueID()) && s.ownerScriptId == id).findFirst();
     }
@@ -156,17 +151,6 @@ public class ScriptRunner {
         } else {
             TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(statusMessage);
         }
-    }
-
-    private static Pair<String, String> extractImports(String code) {
-        Matcher matcher = IMPORT_PATTERN.matcher(code);
-
-        StringBuilder imports = new StringBuilder();
-        while (matcher.find()) {
-            imports.append(matcher.group());
-        }
-
-        return Pair.of(imports.toString(), code.replaceAll(IMPORT_PATTERN.pattern() + "(\\r\\n|\\r|\\n)", ""));
     }
 
     private static String getShortenedStackTrace(Throwable t) {

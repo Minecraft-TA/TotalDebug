@@ -7,7 +7,6 @@ import javax.tools.JavaFileObject;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 
 public class InMemoryJavaFileManager extends ForwardingJavaFileManager<JavaFileManager> {
@@ -28,11 +27,6 @@ public class InMemoryJavaFileManager extends ForwardingJavaFileManager<JavaFileM
             e.printStackTrace();
             return null;
         }
-    }
-
-    @Override
-    public boolean handleOption(String current, Iterator<String> remaining) {
-        return super.handleOption(current, remaining);
     }
 
     public List<BytecodeOutputObject> getOutputObjectList() {
