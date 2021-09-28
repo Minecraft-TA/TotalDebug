@@ -99,6 +99,7 @@ public class ScriptRunner {
                 synchronized (runningScripts) {
                     runningScripts.add(new Script(owner, id, () -> {
                         future.cancel(true);
+                        thread.interrupt();
                         thread.stop();
                     }));
                 }
