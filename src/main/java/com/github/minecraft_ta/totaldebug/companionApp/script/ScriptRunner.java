@@ -93,7 +93,7 @@ public class ScriptRunner {
                 }
 
                 future.whenComplete((logOutput, ex) -> {
-                    onScriptRunCompleted(id, owner, isServerSide, logOutput, ex);
+                    onScriptRunCompleted(id, owner, isServerSide, className, logOutput, ex);
                 });
 
                 synchronized (runningScripts) {
@@ -129,7 +129,7 @@ public class ScriptRunner {
         return runningScripts.stream().filter(s -> s.owner.getUniqueID().equals(owner.getUniqueID()) && s.ownerScriptId == id).findFirst();
     }
 
-    private static void onScriptRunCompleted(int id, EntityPlayer owner, boolean isServerSide, String logOutput, Throwable ex) {
+    private static void onScriptRunCompleted(int id, EntityPlayer owner, boolean isServerSide, String className, String logOutput, Throwable ex) {
         synchronized (runningScripts) {
             findScript(id, owner).ifPresent(runningScripts::remove);
         }
@@ -138,7 +138,7 @@ public class ScriptRunner {
         if (ex != null) {
             if (ex.getCause() != null)
                 ex = ex.getCause();
-            message = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_EXCEPTION, ex instanceof CancellationException ? "Script run cancelled" : getShortenedStackTrace(ex));
+            message = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_EXCEPTION, ex instanceof CancellationException ? "Script run cancelled" : getShortenedStackTrace(ex, className));
         } else {
             message = new ScriptStatusMessage(id, ScriptStatusMessage.Type.RUN_COMPLETED, logOutput);
         }
@@ -154,12 +154,12 @@ public class ScriptRunner {
         }
     }
 
-    private static String getShortenedStackTrace(Throwable t) {
+    private static String getShortenedStackTrace(Throwable t, String className) {
         ByteArrayOutputStream o = new ByteArrayOutputStream();
         t.printStackTrace(new PrintWriter(o, true));
 
         String stackTrace = new String(o.toByteArray(), StandardCharsets.UTF_8);
-        int classIndex = stackTrace.indexOf("ScriptClass");
+        int classIndex = stackTrace.indexOf(className);
         if (classIndex == -1)
             return stackTrace;
 
