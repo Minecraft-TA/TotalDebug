@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util.compiler;
 
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
 import com.google.common.collect.Lists;
 import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
 import net.minecraft.launchwrapper.LaunchClassLoader;
@@ -8,11 +9,13 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class InMemoryJavaCompiler {
 
@@ -50,7 +53,14 @@ public class InMemoryJavaCompiler {
     }
 
     public static String constructClassPathArgument() {
-        return ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().map(URL::getFile).collect(Collectors.joining(";"));
+        try {
+            return Stream.concat(
+                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream(),
+                    Stream.of(ClassPathMessage.MINECRAFT_CLASS_LIB_PATH.toUri().toURL())
+            ).map(URL::getFile).collect(Collectors.joining(";"));
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static class InMemoryCompilationFailedException extends Exception {

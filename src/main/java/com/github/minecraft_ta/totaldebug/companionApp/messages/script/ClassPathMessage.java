@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 
 public class ClassPathMessage extends AbstractMessage {
 
-    private static final Path MINECRAFT_CLASS_LIB_PATH = TotalDebug.PROXY.getDecompilationManager().getDataDir()
+    public static final Path MINECRAFT_CLASS_LIB_PATH = TotalDebug.PROXY.getDecompilationManager().getDataDir()
             .resolve(CompanionApp.DATA_FOLDER).resolve("minecraft-class-dump.jar").toAbsolutePath().normalize();
 
     @Override
