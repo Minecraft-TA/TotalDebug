@@ -35,9 +35,9 @@ public class ClassUtil {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
             transformersField.setAccessible(true);
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
-                    .filter(t -> t instanceof PatchingTransformer || t instanceof DeobfuscationTransformer ||
-                                 t instanceof ItemStackTransformer || t instanceof ItemBlockTransformer || t instanceof ItemBlockSpecialTransformer).collect(Collectors.toList());
-            LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new ForgeMappingsTransformer());
+                    .filter(t -> t instanceof DeobfuscationTransformer || t instanceof ItemStackTransformer ||
+                                 t instanceof ItemBlockTransformer || t instanceof ItemBlockSpecialTransformer).collect(Collectors.toList());
+            LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
             TRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("transformName", String.class);
@@ -88,7 +88,9 @@ public class ClassUtil {
                     bytes = transformer.transform(untransformedName, transformedName, bytes);
                 }
             } else {
-                bytes = getBytecode(Class.forName(name.replace('/', '.')));
+                try {
+                    bytes = getBytecode(Class.forName(name.replace('/', '.')));
+                } catch (ClassNotFoundException ignored) {}
             }
 
             return bytes;

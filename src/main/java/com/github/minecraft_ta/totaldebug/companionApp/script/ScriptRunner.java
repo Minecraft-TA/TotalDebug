@@ -159,7 +159,7 @@ public class ScriptRunner {
         t.printStackTrace(new PrintWriter(o, true));
 
         String stackTrace = new String(o.toByteArray(), StandardCharsets.UTF_8);
-        int classIndex = stackTrace.indexOf(className);
+        int classIndex = stackTrace.lastIndexOf(className);
         if (classIndex == -1)
             return stackTrace;
 

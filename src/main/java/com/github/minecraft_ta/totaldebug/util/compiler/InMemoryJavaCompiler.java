@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totaldebug.util.compiler;
 
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
+import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import com.google.common.collect.Lists;
 import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
+import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 
 import javax.tools.DiagnosticCollector;
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class InMemoryJavaCompiler {
+
+    private static final IClassTransformer TRANSFORMER = new RuntimeMappingsTransformer(true);
 
     public static List<Class<?>> compile(String code, String... classNames) throws InMemoryCompilationFailedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -44,7 +48,7 @@ public class InMemoryJavaCompiler {
             for (int i = outputObjectList.size() - 1; i >= 0; i--) {
                 BytecodeOutputObject outputObject = outputObjectList.get(i);
                 String className = classNames[i];
-                byte[] bytes = outputObject.getByteCode();
+                byte[] bytes = TRANSFORMER.transform(className, className, outputObject.getByteCode());
                 loadedClasses.add(UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
             }
 

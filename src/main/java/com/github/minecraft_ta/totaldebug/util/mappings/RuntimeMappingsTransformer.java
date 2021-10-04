@@ -19,12 +19,22 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ForgeMappingsTransformer extends Remapper implements IClassTransformer {
+public class RuntimeMappingsTransformer extends Remapper implements IClassTransformer {
 
     /**
      * obfuscated name -> pair of real name and class member mappings (obfuscated name -> real name)
      */
     private static final Map<String, BiMap<String, String>> MCP_MAPPINGS = new HashMap<>();
+
+    private final boolean reobfuscate;
+
+    public RuntimeMappingsTransformer() {
+        this(false);
+    }
+
+    public RuntimeMappingsTransformer(boolean reobfuscate) {
+        this.reobfuscate = reobfuscate;
+    }
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
@@ -41,20 +51,64 @@ public class ForgeMappingsTransformer extends Remapper implements IClassTransfor
             }
         };
         //Skip debug symbols for minecraft classes to allow Procyon to generate proper variable names
-        reader.accept(classVisitor, ClassReader.SKIP_FRAMES | (transformedName.startsWith("net.minecraft") ? ClassReader.SKIP_DEBUG : 0));
+        reader.accept(classVisitor, transformedName.startsWith("net.minecraft") ? ClassReader.SKIP_DEBUG : 0);
         return writer.toByteArray();
     }
 
     @Override
     public String mapFieldName(String owner, String name, String desc) {
-        BiMap<String, String> memberMap = MCP_MAPPINGS.get(owner);
-        return memberMap == null ? name : memberMap.getOrDefault(name, name);
+        return findMappedMember(owner, name);
     }
 
     @Override
     public String mapMethodName(String owner, String name, String desc) {
+        return StringUtils.substringBefore(findMappedMember(owner, name + desc), "(");
+    }
+
+    private String findMappedMember(String owner, String name) {
         BiMap<String, String> memberMap = MCP_MAPPINGS.get(owner);
-        return memberMap == null ? name : StringUtils.substringBefore(memberMap.getOrDefault(name + desc, name), "(");
+        String newName = memberMap == null ? null : getFromBiMap(name, memberMap, this.reobfuscate);
+        //Don't continue if it's not a forge obfuscated field/method, or we found a mapping
+        if (newName != null || (!name.startsWith("field") && !name.startsWith("func")))
+            return newName == null ? name : newName;
+
+        //Find mapped name in super classes
+        try {
+            Class<?> ownerClass = Class.forName(owner.replace('/', '.'));
+            if (!ownerClass.isInterface())
+                ownerClass = ownerClass.getSuperclass();
+
+            while (ownerClass != null) {
+                memberMap = MCP_MAPPINGS.get(ownerClass.getName().replace('.', '/'));
+                newName = memberMap == null ? null : getFromBiMap(name, memberMap, this.reobfuscate);
+                //Search super interfaces for interfaces
+                if (newName == null && ownerClass.isInterface())
+                    newName = findMappedMemberOfInterface(ownerClass, name);
+                if (newName != null)
+                    return newName;
+
+                ownerClass = ownerClass.getSuperclass();
+            }
+        } catch (Exception e) {
+            return name;
+        }
+
+        return name;
+    }
+
+    private String findMappedMemberOfInterface(Class<?> interfaceClass, String name) {
+        for (Class<?> interfaceSubClass : interfaceClass.getInterfaces()) {
+            BiMap<String, String> memberMap = MCP_MAPPINGS.get(interfaceSubClass.getName().replace('.', '/'));
+            String newName = memberMap == null ? findMappedMemberOfInterface(interfaceSubClass, name) : getFromBiMap(name, memberMap, this.reobfuscate);
+            if (newName != null)
+                return newName;
+        }
+
+        return null;
+    }
+
+    private <T> T getFromBiMap(T key, BiMap<T, T> biMap, boolean inverse) {
+        return inverse ? biMap.inverse().get(key) : biMap.get(key);
     }
 
     /**
