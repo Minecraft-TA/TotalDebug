@@ -21,6 +21,8 @@ public class InMemoryJavaCompiler {
 
     public static List<Class<?>> compile(String code, String... classNames) throws InMemoryCompilationFailedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null)
+            throw new InMemoryCompilationFailedException("Java Compiler not found! Please use JDK instead of JRE.\nCurrent JAVA_HOME: " + System.getProperty("java.home"));
 
         try {
             InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(compiler.getStandardFileManager(null, null, null));
@@ -55,7 +57,7 @@ public class InMemoryJavaCompiler {
     public static String constructClassPathArgument() {
         try {
             return Stream.concat(
-                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream(),
+                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-")),
                     Stream.of(ClassPathMessage.MINECRAFT_CLASS_LIB_PATH.toUri().toURL())
             ).map(URL::getFile).collect(Collectors.joining(";"));
         } catch (MalformedURLException e) {

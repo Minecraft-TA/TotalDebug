@@ -37,6 +37,7 @@ public class ClassUtil {
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
                     .filter(t -> t instanceof PatchingTransformer || t instanceof DeobfuscationTransformer ||
                                  t instanceof ItemStackTransformer || t instanceof ItemBlockTransformer || t instanceof ItemBlockSpecialTransformer).collect(Collectors.toList());
+            LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new ForgeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
             TRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("transformName", String.class);
@@ -82,12 +83,16 @@ public class ClassUtil {
             String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
             String transformedName = getTransformedName(name);
             byte[] bytes = LAUNCH_CLASS_LOADER.getClassBytes(untransformedName);
-            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                bytes = transformer.transform(untransformedName, transformedName, bytes);
+            if (bytes != null) {
+                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                    bytes = transformer.transform(untransformedName, transformedName, bytes);
+                }
+            } else {
+                bytes = getBytecode(Class.forName(name.replace('/', '.')));
             }
 
             return bytes;
-        } catch (IllegalAccessException | InvocationTargetException | IOException e) {
+        } catch (Exception e) {
             return null;
         }
     }
