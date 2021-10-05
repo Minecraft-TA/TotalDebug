@@ -35,7 +35,7 @@ public class ScriptRunner {
                 .replaceFirst("public class\\s+(.*?)\\s+extends\\s+BaseScript", "public class " + className + " extends BaseScript" + CLASS_ID)
                 .replaceFirst("class\\s+BaseScript\\s+", "class BaseScript" + CLASS_ID);
 
-        boolean isServerSide = FMLCommonHandler.instance().getEffectiveSide() == Side.SERVER;
+        boolean isServerSide = FMLCommonHandler.instance().getSide() == Side.SERVER;
 
         CompletableFuture.supplyAsync(() -> {
             Class<?> scriptClass;
@@ -114,6 +114,18 @@ public class ScriptRunner {
     public static void stopScript(int id, EntityPlayer owner) {
         synchronized (runningScripts) {
             findScript(id, owner).ifPresent(s -> s.cancel.run());
+        }
+    }
+
+    public static void stopAllScripts(EntityPlayer player) {
+        synchronized (runningScripts) {
+            new ArrayList<>(runningScripts).stream().filter(s -> s.owner.getUniqueID().equals(player.getUniqueID())).forEach(s -> s.cancel.run());
+        }
+    }
+
+    public static void stopAllScripts() {
+        synchronized (runningScripts) {
+            new ArrayList<>(runningScripts).forEach(s -> s.cancel.run());
         }
     }
 

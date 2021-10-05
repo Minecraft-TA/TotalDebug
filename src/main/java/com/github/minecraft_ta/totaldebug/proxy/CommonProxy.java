@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerClient;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
+import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeRequestMessage;
@@ -21,6 +22,7 @@ import net.minecraftforge.fml.common.IFMLSidedHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.relauncher.Side;
@@ -61,6 +63,12 @@ public class CommonProxy {
                     return;
 
                 getChunkGridManagerServer().update();
+            }
+        });
+        MinecraftForge.EVENT_BUS.register(new Object() {
+            @SubscribeEvent
+            public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+                ScriptRunner.stopAllScripts(event.player);
             }
         });
     }
