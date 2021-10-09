@@ -58,7 +58,6 @@ public class ScriptRunner {
                 statusMessage = new ScriptStatusMessage(id, type, ex.getMessage());
                 sendToClientOrCompanionApp(owner, isServerSide, statusMessage);
             } else {
-                //TODO: switch over execution environment
                 CompletableFuture<String> future = new CompletableFuture<>();
                 Thread thread = new Thread(() -> {
                     try {

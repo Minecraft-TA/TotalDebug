@@ -7,6 +7,8 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.server.FMLServerHandler;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 public class ServerProxy extends CommonProxy {
@@ -29,6 +31,11 @@ public class ServerProxy extends CommonProxy {
                 }
             }
         });
+    }
+
+    @Override
+    public Path getMinecraftClassDumpPath() {
+        return Paths.get(".").resolve("total-debug").resolve("minecraft-class-dump.jar");
     }
 
     @Override

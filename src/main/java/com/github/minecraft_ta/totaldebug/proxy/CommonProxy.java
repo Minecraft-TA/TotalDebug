@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfo
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
+import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.IFMLSidedHandler;
@@ -27,6 +28,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.relauncher.Side;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,6 +58,8 @@ public class CommonProxy {
     }
 
     public void init(FMLInitializationEvent e) {
+        RuntimeMappingsTransformer.loadMappings();
+
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onTick(TickEvent.ServerTickEvent event) {
@@ -90,6 +94,10 @@ public class CommonProxy {
     }
 
     public CompanionApp getCompanionApp() {
+        return null;
+    }
+
+    public Path getMinecraftClassDumpPath() {
         return null;
     }
 

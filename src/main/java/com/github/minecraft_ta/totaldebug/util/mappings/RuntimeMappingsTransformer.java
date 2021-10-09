@@ -73,7 +73,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
         BiMap<String, String> memberMap = MCP_MAPPINGS.get(owner);
         String newName = memberMap == null ? null : getFromBiMap(name, memberMap, this.reobfuscate);
         //Don't continue if it's not a forge obfuscated field/method, or we found a mapping
-        if (newName != null || (!name.startsWith("field") && !name.startsWith("func")))
+        if (newName != null || (!this.reobfuscate && !name.startsWith("field") && !name.startsWith("func")))
             return newName == null ? name : newName;
 
         //Find mapped name in super classes

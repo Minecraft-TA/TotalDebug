@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util.compiler;
 
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import com.google.common.collect.Lists;
 import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
@@ -11,11 +11,14 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
-import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -62,8 +65,14 @@ public class InMemoryJavaCompiler {
         try {
             return Stream.concat(
                     ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-")),
-                    Stream.of(ClassPathMessage.MINECRAFT_CLASS_LIB_PATH.toUri().toURL())
-            ).map(URL::getFile).collect(Collectors.joining(";"));
+                    Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
+            ).map(url -> {
+                try {
+                    return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name());
+                } catch (UnsupportedEncodingException ignored) {
+                    return null;
+                }
+            }).filter(Objects::nonNull).collect(Collectors.joining(";"));
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }

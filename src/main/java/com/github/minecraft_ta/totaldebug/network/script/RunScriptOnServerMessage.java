@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.network.script;
 
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import io.netty.buffer.ByteBuf;
 import net.minecraftforge.fml.common.network.ByteBufUtils;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
@@ -16,7 +17,8 @@ public class RunScriptOnServerMessage implements IMessage, IMessageHandler<RunSc
     private String scriptText;
     private ExecutionEnvironment executionEnvironment;
 
-    public RunScriptOnServerMessage() {}
+    public RunScriptOnServerMessage() {
+    }
 
     public RunScriptOnServerMessage(int scriptId, String scriptText, ExecutionEnvironment executionEnvironment) {
         this.scriptId = scriptId;
@@ -45,6 +47,7 @@ public class RunScriptOnServerMessage implements IMessage, IMessageHandler<RunSc
 
     @Override
     public RunScriptOnServerMessage onMessage(RunScriptOnServerMessage message, MessageContext ctx) {
+        ClassUtil.dumpMinecraftClasses();
         ScriptRunner.runScript(message.scriptId, message.scriptText, ctx.getServerHandler().player, message.executionEnvironment);
         return null;
     }

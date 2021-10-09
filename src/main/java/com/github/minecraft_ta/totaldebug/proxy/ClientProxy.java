@@ -22,6 +22,7 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
+import java.nio.file.Path;
 import java.util.List;
 
 public class ClientProxy extends CommonProxy {
@@ -41,8 +42,6 @@ public class ClientProxy extends CommonProxy {
         super.init(e);
         this.decompilationManager.setup();
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
-
-        RuntimeMappingsTransformer.loadMappings();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
@@ -88,6 +87,11 @@ public class ClientProxy extends CommonProxy {
     @Override
     public CompanionApp getCompanionApp() {
         return this.companionApp;
+    }
+
+    @Override
+    public Path getMinecraftClassDumpPath() {
+        return this.decompilationManager.getDataDir().resolve(CompanionApp.DATA_FOLDER).resolve("minecraft-class-dump.jar").toAbsolutePath().normalize();
     }
 
     @Override

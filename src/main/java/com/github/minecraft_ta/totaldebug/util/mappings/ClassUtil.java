@@ -3,9 +3,11 @@ package com.github.minecraft_ta.totaldebug.util.mappings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraftforge.fml.common.asm.transformers.*;
+import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
+import net.minecraftforge.fml.common.asm.transformers.ItemBlockSpecialTransformer;
+import net.minecraftforge.fml.common.asm.transformers.ItemBlockTransformer;
+import net.minecraftforge.fml.common.asm.transformers.ItemStackTransformer;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -50,12 +52,19 @@ public class ClassUtil {
     private ClassUtil() {
     }
 
-    public static void dumpMinecraftClasses(@Nonnull Path outputPath) {
+    public static void dumpMinecraftClasses() {
+        Path outputPath = TotalDebug.PROXY.getMinecraftClassDumpPath();
+        if (Files.exists(outputPath))
+            return;
+
+        TotalDebug.LOGGER.info("Creating minecraft class file dump jar");
         try {
-            if (!Files.exists(outputPath))
-                Files.createFile(outputPath);
+            long time = System.nanoTime();
+
+            Files.createDirectories(outputPath.getParent());
+            Files.createFile(outputPath);
             try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath))) {
-                Field f = LaunchClassLoader.class.getDeclaredField("resourceCache");
+                Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
                 f.setAccessible(true);
                 ((Map<String, byte[]>) f.get(BytecodeReferenceSearcher.class.getClassLoader())).keySet().stream()
                         .map(ClassUtil::getTransformedName)
@@ -72,6 +81,8 @@ public class ClassUtil {
                             } catch (IOException ignored) {}
                         });
             }
+
+            TotalDebug.LOGGER.info("Completed dumping minecraft classes in {}ms", (System.nanoTime() - time) / 1_000_000);
         } catch (Exception e) {
             TotalDebug.LOGGER.error("Unable to dump minecraft classes", e);
         }

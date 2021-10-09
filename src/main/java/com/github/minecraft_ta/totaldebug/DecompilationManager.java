@@ -58,7 +58,7 @@ public class DecompilationManager {
     }
 
     public void setup() {
-        this.dataDir = FMLClientHandler.instance().getSavesDirectory().toPath().getParent().resolve("code-viewer");
+        this.dataDir = FMLClientHandler.instance().getSavesDirectory().toPath().getParent().resolve("total-debug");
         this.decompilationDir = this.dataDir.resolve(CompanionApp.DATA_FOLDER).resolve(DECOMPILED_FILES_FOLDER);
 
         createDirectory(this.dataDir);
