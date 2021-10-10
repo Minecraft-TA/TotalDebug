@@ -59,6 +59,10 @@ public class ScriptRunner {
                 sendToClientOrCompanionApp(owner, isServerSide, statusMessage);
             } else {
                 CompletableFuture<String> future = new CompletableFuture<>();
+                future.whenComplete((logOutput, ex) -> {
+                    onScriptRunCompleted(id, owner, isServerSide, className, logOutput, ex);
+                });
+
                 Thread thread = new Thread(() -> {
                     try {
                         Object instance = compiledClass.newInstance();
@@ -90,10 +94,6 @@ public class ScriptRunner {
                         });
                         break;
                 }
-
-                future.whenComplete((logOutput, ex) -> {
-                    onScriptRunCompleted(id, owner, isServerSide, className, logOutput, ex);
-                });
 
                 synchronized (runningScripts) {
                     runningScripts.add(new Script(owner, id, () -> {

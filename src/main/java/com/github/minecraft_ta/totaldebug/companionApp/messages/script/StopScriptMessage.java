@@ -17,6 +17,18 @@ public class StopScriptMessage extends AbstractMessageIncoming {
     }
 
     public static void handle(StopScriptMessage message) {
+        if (Minecraft.getMinecraft().player == null) {
+            TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(new ScriptStatusMessage(message.scriptId, ScriptStatusMessage.Type.RUN_EXCEPTION, "Script was automatically stopped. Result unknown."));
+            return;
+        }
+
+        //Stop all scripts of this player
+        if (message.scriptId == -1) {
+            ScriptRunner.stopAllScripts(Minecraft.getMinecraft().player);
+            TotalDebug.INSTANCE.network.sendToServer(new StopScriptOnServerMessage(message.scriptId));
+            return;
+        }
+
         //Is script running client side?
         if (ScriptRunner.isScriptRunning(message.scriptId, Minecraft.getMinecraft().player)) {
             ScriptRunner.stopScript(message.scriptId, Minecraft.getMinecraft().player);

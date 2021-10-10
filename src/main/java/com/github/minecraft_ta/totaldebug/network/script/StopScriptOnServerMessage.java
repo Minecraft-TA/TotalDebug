@@ -29,6 +29,11 @@ public class StopScriptOnServerMessage implements IMessage, IMessageHandler<Stop
 
     @Override
     public StopScriptOnServerMessage onMessage(StopScriptOnServerMessage message, MessageContext ctx) {
+        if (message.scriptId == -1) {
+            ScriptRunner.stopAllScripts(ctx.getServerHandler().player);
+            return null;
+        }
+
         if (ScriptRunner.isScriptRunning(message.scriptId, ctx.getServerHandler().player))
             ScriptRunner.stopScript(message.scriptId, ctx.getServerHandler().player);
         return null;
