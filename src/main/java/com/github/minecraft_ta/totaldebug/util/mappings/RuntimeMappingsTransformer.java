@@ -79,15 +79,15 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
         //Find mapped name in super classes
         try {
             Class<?> ownerClass = Class.forName(owner.replace('/', '.'));
-            if (!ownerClass.isInterface())
-                ownerClass = ownerClass.getSuperclass();
 
             while (ownerClass != null) {
                 memberMap = MCP_MAPPINGS.get(ownerClass.getName().replace('.', '/'));
                 newName = memberMap == null ? null : getFromBiMap(name, memberMap, this.reobfuscate);
+
                 //Search super interfaces for interfaces
-                if (newName == null && ownerClass.isInterface())
+                if (newName == null)
                     newName = findMappedMemberOfInterface(ownerClass, name);
+
                 if (newName != null)
                     return newName;
 
