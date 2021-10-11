@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
+import org.apache.commons.lang3.SystemUtils;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -64,7 +65,7 @@ public class InMemoryJavaCompiler {
     public static String constructClassPathArgument() {
         try {
             return Stream.concat(
-                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-")),
+                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-") && !url.toString().endsWith("/1.12.2.jar")),
                     Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
             ).map(url -> {
                 try {
@@ -72,7 +73,7 @@ public class InMemoryJavaCompiler {
                 } catch (UnsupportedEncodingException ignored) {
                     return null;
                 }
-            }).filter(Objects::nonNull).collect(Collectors.joining(";"));
+            }).filter(Objects::nonNull).collect(Collectors.joining(SystemUtils.IS_OS_UNIX ? ":" : ";"));
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }
