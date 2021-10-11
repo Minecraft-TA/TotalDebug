@@ -10,7 +10,7 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
+import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
@@ -21,6 +21,9 @@ import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+
+import java.nio.file.Path;
+import java.util.List;
 
 public class ClientProxy extends CommonProxy {
 
@@ -40,14 +43,23 @@ public class ClientProxy extends CommonProxy {
         this.decompilationManager.setup();
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
 
-        RemappingUtil.loadMappings();
-
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onClientTick(TickEvent.ClientTickEvent event) {
-                if (event.phase != TickEvent.Phase.END || event.type != TickEvent.Type.CLIENT)
+                List<Runnable> tasks;
+                if (event.phase == TickEvent.Phase.START)
+                    tasks = ClientProxy.super.preTickTasks;
+                else
+                    tasks = ClientProxy.super.postTickTasks;
+
+                synchronized (tasks) {
+                    tasks.forEach(Runnable::run);
+                    tasks.clear();
+                }
+
+                if (event.phase != TickEvent.Phase.END)
                     return;
 
                 getChunkGridManagerClient().update();
@@ -75,6 +87,11 @@ public class ClientProxy extends CommonProxy {
     @Override
     public CompanionApp getCompanionApp() {
         return this.companionApp;
+    }
+
+    @Override
+    public Path getMinecraftClassDumpPath() {
+        return this.decompilationManager.getDataDir().resolve(CompanionApp.DATA_FOLDER).resolve("minecraft-class-dump.jar").toAbsolutePath().normalize();
     }
 
     @Override

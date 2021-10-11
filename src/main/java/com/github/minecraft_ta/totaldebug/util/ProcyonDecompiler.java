@@ -1,13 +1,12 @@
 package com.github.minecraft_ta.totaldebug.util;
 
-import com.github.minecraft_ta.totaldebug.util.mappings.RemappingUtil;
+import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.strobel.assembler.metadata.ITypeLoader;
 import com.strobel.assembler.metadata.MetadataSystem;
+import com.strobel.decompiler.AnsiTextOutput;
 import com.strobel.decompiler.DecompilationOptions;
 import com.strobel.decompiler.DecompilerSettings;
-import com.strobel.decompiler.PlainTextOutput;
 import com.strobel.decompiler.languages.java.JavaFormattingOptions;
-import org.objectweb.asm.ClassWriter;
 
 import java.io.StringWriter;
 
@@ -19,11 +18,7 @@ public class ProcyonDecompiler {
                 internalName = internalName.substring(0, internalName.length() - 6);
 
             try {
-                ClassWriter writer = RemappingUtil.getRemappedClass(Class.forName(internalName), new RemappingUtil.RemappingContext());
-                if (writer == null)
-                    return false;
-
-                byte[] code = writer.toByteArray();
+                byte[] code = ClassUtil.getBytecodeFromLaunchClassLoader(internalName);
                 if (code == null)
                     return false;
 
@@ -31,14 +26,17 @@ public class ProcyonDecompiler {
                 buffer.putByteArray(code, 0, code.length);
                 buffer.position(0);
                 return true;
-            } catch (ClassNotFoundException e) {
+            } catch (Exception e) {
                 return false;
             }
         };
 
         DecompilerSettings settings = new DecompilerSettings();
+        settings.setForceExplicitImports(true);
         settings.setUnicodeOutputEnabled(false);
-        settings.setShowSyntheticMembers(true);
+        settings.setShowSyntheticMembers(false);
+        settings.setRetainRedundantCasts(false);
+        settings.setForceExplicitTypeArguments(true);
         settings.setTypeLoader(loader);
         settings.setJavaFormattingOptions(JavaFormattingOptions.createDefault());
 
@@ -50,7 +48,9 @@ public class ProcyonDecompiler {
         decompilationOptions.setFullDecompilation(true);
 
         StringWriter writer = new StringWriter();
-        settings.getLanguage().decompileType(system.lookupType(name).resolve(), new PlainTextOutput(writer), decompilationOptions);
+        //Why would Procyon even check for this...
+        System.setProperty("Ansi", "true");
+        settings.getLanguage().decompileType(system.lookupType(name).resolve(), new AnsiTextOutput(writer, AnsiTextOutput.ColorScheme.LIGHT), decompilationOptions);
         return writer.toString();
     }
 }

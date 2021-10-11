@@ -6,28 +6,39 @@ import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerClient;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
+import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
+import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeRequestMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeResultMessage;
 import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
-import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridDataMessage;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMessage;
+import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
+import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
+import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.IFMLSidedHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.relauncher.Side;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CommonProxy {
 
     private final ChunkGridManagerServer chunkGridManagerServer = new ChunkGridManagerServer();
     private final ChunkGridManagerClient chunkGridManagerClient = new ChunkGridManagerClient();
 
+    protected final List<Runnable> preTickTasks = new ArrayList<>();
+    protected final List<Runnable> postTickTasks = new ArrayList<>();
 
     public void preInit(FMLPreInitializationEvent e) {
         GameRegistry.registerTileEntity(TickBlockTile.class, new ResourceLocation(TotalDebug.MOD_ID, "tick_block_tile"));
@@ -39,18 +50,29 @@ public class CommonProxy {
         TotalDebug.INSTANCE.network.registerMessage(TickTimeRequestMessage.class, TickTimeRequestMessage.class, id++, Side.SERVER);
 
         TotalDebug.INSTANCE.network.registerMessage(ReceiveDataStateMessage.class, ReceiveDataStateMessage.class, id++, Side.SERVER);
-        TotalDebug.INSTANCE.network.registerMessage(ChunkGridDataMessage.class, ChunkGridDataMessage.class, id++, Side.CLIENT);
         TotalDebug.INSTANCE.network.registerMessage(ChunkGridRequestInfoUpdateMessage.class, ChunkGridRequestInfoUpdateMessage.class, id++, Side.SERVER);
+
+        TotalDebug.INSTANCE.network.registerMessage(RunScriptOnServerMessage.class, RunScriptOnServerMessage.class, id++, Side.SERVER);
+        TotalDebug.INSTANCE.network.registerMessage(CompanionAppForwardedMessage.class, CompanionAppForwardedMessage.class, id++, Side.CLIENT);
+        TotalDebug.INSTANCE.network.registerMessage(StopScriptOnServerMessage.class, StopScriptOnServerMessage.class, id++, Side.SERVER);
     }
 
     public void init(FMLInitializationEvent e) {
+        RuntimeMappingsTransformer.loadMappings();
+
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
-            public void onTick(TickEvent.WorldTickEvent event) {
-                if (event.phase != TickEvent.Phase.END || event.type != TickEvent.Type.WORLD)
+            public void onTick(TickEvent.ServerTickEvent event) {
+                if (event.phase != TickEvent.Phase.END)
                     return;
 
                 getChunkGridManagerServer().update();
+            }
+        });
+        MinecraftForge.EVENT_BUS.register(new Object() {
+            @SubscribeEvent
+            public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+                ScriptRunner.stopAllScripts(event.player);
             }
         });
     }
@@ -75,7 +97,23 @@ public class CommonProxy {
         return null;
     }
 
+    public Path getMinecraftClassDumpPath() {
+        return null;
+    }
+
     public IFMLSidedHandler getSidedHandler() {
-        throw new IllegalStateException();
+        throw new UnsupportedOperationException();
+    }
+
+    public void addPreTickTask(Runnable task) {
+        synchronized (this.preTickTasks) {
+            this.preTickTasks.add(task);
+        }
+    }
+
+    public void addPostTickTask(Runnable task) {
+        synchronized (this.postTickTasks) {
+            this.postTickTasks.add(task);
+        }
     }
 }

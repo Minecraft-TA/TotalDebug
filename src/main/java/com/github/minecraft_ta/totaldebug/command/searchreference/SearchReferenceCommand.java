@@ -78,7 +78,7 @@ public class SearchReferenceCommand extends CommandBase {
                 CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
                 companionApp.startAndConnect();
 
-                if (companionApp.isConnected()) {
+                if (companionApp.isConnected() && companionApp.waitForUI()) {
                     companionApp.getClient().getMessageProcessor().enqueueMessage(
                             new OpenSearchResultsMessage(args[1], resultPair.getLeft(), searchMethod, resultPair.getRight(), scanTime)
                     );

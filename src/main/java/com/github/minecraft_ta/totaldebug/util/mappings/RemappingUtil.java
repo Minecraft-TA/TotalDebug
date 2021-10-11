@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
@@ -11,9 +10,6 @@ import org.objectweb.asm.tree.*;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
@@ -334,75 +330,8 @@ public class RemappingUtil {
         return superClazz;
     }
 
-    /**
-     * Loads all forge and searge mappings.
-     */
-    public static void loadMappings() {
-        try {
-            InputStream forgeMappingsStream = ClassUtil.class.getClassLoader().getResourceAsStream("forge_mappings.csv");
-            InputStream mcpMappingsStream = ClassUtil.class.getClassLoader().getResourceAsStream("mcp_mappings.tsrg");
-
-            if (forgeMappingsStream == null || mcpMappingsStream == null)
-                throw new IllegalStateException("Forge or mcp mappings not found");
-
-            IOUtils.readLines(forgeMappingsStream, StandardCharsets.UTF_8).stream()
-                    .map(s -> s.split(","))
-                    .forEach((ar) -> forgeMappings.put(ar[0], ar[1]));
-
-            //load all mappings
-            Map<String, String> currentMap = null;
-            for (String line : IOUtils.readLines(mcpMappingsStream, StandardCharsets.UTF_8)) {
-                int indexOfFirstSpace = line.indexOf(' ');
-
-                if (line.startsWith("\t")) { //class field or method
-                    if (currentMap == null)
-                        throw new IllegalStateException("Hit unexpected \t while parsing mcp mappings");
-
-                    String name = line.substring(1, indexOfFirstSpace);
-                    String other = line.substring(indexOfFirstSpace + 1);
-
-                    if (!other.startsWith("(")) { //field
-                        currentMap.put(name, forgeMappings.getOrDefault(other, other));
-                    } else { //method
-                        int indexOfLastSpace = other.lastIndexOf(' ');
-                        String desc = other.substring(0, indexOfLastSpace);
-
-                        String newName = other.substring(indexOfLastSpace + 1);
-                        newName = forgeMappings.getOrDefault(newName, newName);
-
-                        currentMap.put(name + desc, newName + desc);
-                    }
-                } else { // start of new class
-                    mcpMappings.put(line.substring(0, indexOfFirstSpace),
-                            Pair.of(
-                                    line.substring(indexOfFirstSpace + 1),
-                                    (currentMap = new HashMap<>())
-                            )
-                    );
-                }
-            }
-
-            //second pass to remap return values and parameters
-            mcpMappings.forEach((obfuscatedClassName, pair) -> {
-                Map<String, String> classMemberMap = pair.getRight();
-
-                classMemberMap.forEach((k, v) -> {
-                    int closingBracketIndex = v.lastIndexOf(')');
-                    int openingBracketIndex = v.indexOf('(');
-
-                    //not a method
-                    if (openingBracketIndex == -1 || closingBracketIndex == -1)
-                        return;
-
-                    classMemberMap.put(k, v.substring(0, openingBracketIndex) + remapTypeString(v.substring(openingBracketIndex)));
-                });
-            });
-        } catch (IOException e) {
-            TotalDebug.LOGGER.error("Error while loading mappings", e);
-        }
-    }
-
     public static class RemappingContext {
+
         protected boolean mapFields = true;
         protected boolean mapLocals = true;
 

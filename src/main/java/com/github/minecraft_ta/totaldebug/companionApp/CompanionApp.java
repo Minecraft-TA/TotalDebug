@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.companionApp;
 
-import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.CompanionAppReadyMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
@@ -42,12 +43,17 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class CompanionApp {
 
     public static final String COMPANION_APP_FOLDER = "companion-app";
+    public static final String DATA_FOLDER = "data";
 
     private static final Gson GSON = new GsonBuilder().create();
 
@@ -55,17 +61,25 @@ public class CompanionApp {
     private final Metafile metafile;
 
     private Process companionAppProcess;
+    private CompletableFuture<Void> awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
     private final Client companionAppClient = new Client();
     {
-        companionAppClient.getMessageProcessor().registerMessage((short) 1, OpenFileMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 2, OpenSearchResultsMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 3, DecompileAndOpenRequestMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 4, CodeViewClickMessage.class);
+        int id = 1;
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReadyMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, OpenFileMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, OpenSearchResultsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, DecompileAndOpenRequestMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CodeViewClickMessage.class);
 
-        companionAppClient.getMessageProcessor().registerMessage((short) 5, CompanionAppReceiveDataStateMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 6, CompanionAppChunkGridDataMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 7, CompanionAppChunkGridRequestInfoUpdateMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) 8, CompanionAppUpdateFollowPlayerStateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReceiveDataStateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppChunkGridDataMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppChunkGridRequestInfoUpdateMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppUpdateFollowPlayerStateMessage.class);
+
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, RunScriptMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ScriptStatusMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ClassPathMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -73,6 +87,12 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CompanionAppChunkGridRequestInfoUpdateMessage.class, CompanionAppChunkGridRequestInfoUpdateMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CompanionAppUpdateFollowPlayerStateMessage.class, CompanionAppUpdateFollowPlayerStateMessage::handle);
+
+        companionAppClient.getMessageBus().listenAlways(RunScriptMessage.class, RunScriptMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(ClassPathMessage.class, ClassPathMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(StopScriptMessage.class, StopScriptMessage::handle);
+
+        companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
     }
 
     public CompanionApp(Path appDir) {
@@ -108,7 +128,7 @@ public class CompanionApp {
             Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
 
             if (!Files.exists(exePath) ||
-                    !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
+                !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
                 downloadCompanionApp(this.metafile.newestCompatibleCompanionAppVersion);
                 this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
                 this.metafile.write();
@@ -127,6 +147,10 @@ public class CompanionApp {
                     new TextComponentTranslation("companion_app.connecting")
                             .setStyle(new Style().setColor(TextFormatting.GRAY))
             );
+
+            this.awaitCompanionAppUIReadyFuture.cancel(true);
+            this.awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
+
             if (connect(5, 1000)) {
                 sender.sendMessage(
                         new TextComponentTranslation("companion_app.connection_success")
@@ -142,6 +166,26 @@ public class CompanionApp {
     }
 
     /**
+     * @return {@code true} if the companion's UI is ready
+     */
+    public boolean waitForUI() {
+        if (this.awaitCompanionAppUIReadyFuture.isDone())
+            return true;
+
+        try {
+            this.awaitCompanionAppUIReadyFuture.get(60, TimeUnit.SECONDS);
+            this.awaitCompanionAppUIReadyFuture.cancel(true);
+            return true;
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            TotalDebug.LOGGER.error("Timed out while waiting for companion app ready message", e);
+            if (this.companionAppClient.isConnected())
+                this.companionAppClient.close();
+
+            return false;
+        }
+    }
+
+    /**
      * @return {@code true} if we're still connected to the companion app; {@code false} otherwise
      */
     public boolean isConnected() {
@@ -153,6 +197,7 @@ public class CompanionApp {
      */
     public boolean isRunning() {
         return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+//        return true;
     }
 
     public Client getClient() {
@@ -187,9 +232,10 @@ public class CompanionApp {
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
                     this.appDir.resolve("bin").resolve("java.exe").toAbsolutePath().toString(),
+                    "--illegal-access=permit",
                     "-jar",
                     exePath.toAbsolutePath().toString(),
-                    "\"" + this.appDir.getParent().resolve(DecompilationManager.DECOMPILED_FILES_FOLDER).toAbsolutePath() + "\""
+                    "\"" + this.appDir.getParent().resolve(DATA_FOLDER).toAbsolutePath() + "\""
             );
 
             if (logFile != null) {

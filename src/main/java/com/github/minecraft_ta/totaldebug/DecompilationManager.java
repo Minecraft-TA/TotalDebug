@@ -58,8 +58,8 @@ public class DecompilationManager {
     }
 
     public void setup() {
-        this.dataDir = FMLClientHandler.instance().getSavesDirectory().toPath().getParent().resolve("code-viewer");
-        this.decompilationDir = this.dataDir.resolve(DECOMPILED_FILES_FOLDER);
+        this.dataDir = FMLClientHandler.instance().getSavesDirectory().toPath().getParent().resolve("total-debug");
+        this.decompilationDir = this.dataDir.resolve(CompanionApp.DATA_FOLDER).resolve(DECOMPILED_FILES_FOLDER);
 
         createDirectory(this.dataDir);
         createDirectory(this.decompilationDir);
@@ -79,7 +79,7 @@ public class DecompilationManager {
                 CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
                 companionApp.startAndConnect();
 
-                if (companionApp.isConnected()) {
+                if (companionApp.isConnected() && companionApp.waitForUI()) {
                     Minecraft.getMinecraft().player.sendMessage(
                             new TextComponentTranslation("companion_app.open_file",
                                     new TextComponentString(filePath.getFileName().toString())
@@ -110,7 +110,7 @@ public class DecompilationManager {
     private void createDirectory(Path path) {
         try {
             if (Files.notExists(path))
-                Files.createDirectory(path);
+                Files.createDirectories(path);
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to create directory " + path + "!", e);
         }
