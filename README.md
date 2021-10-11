@@ -3,6 +3,7 @@ Forge mod providing useful utilities when automating to the extreme.
 
 - Adds a block which shows how often per second it is ticked
 - Adds a minimap like chunk view, similar to CarpetClient
+- Allows you to run java code on your server or client while in-game
 - Allows you to view the decompiled classes of Blocks, Tile Entities and more while you're in-game.
 - Allows you to search for method and field references in every loaded class (e.g. find every block that accelerates 
   tile entities)

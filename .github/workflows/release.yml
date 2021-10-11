@@ -30,7 +30,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Chunk grid tool support
+            - Live scripting support
           draft: false
           prerelease: false
       - name: Upload jars to release
