@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.jei.TotalDebugJEIPlugin;
 import mezz.jei.api.IJeiRuntime;
 import net.minecraft.block.Block;
@@ -23,6 +24,8 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import org.lwjgl.input.Keyboard;
 
+import java.util.concurrent.CompletableFuture;
+
 public class KeyInputHandler {
 
     private long lastRequested;
@@ -30,7 +33,16 @@ public class KeyInputHandler {
     @SubscribeEvent
     public void onKeyPress(InputEvent.KeyInputEvent event) {
         if (KeyBindings.CODE_GUI.isKeyDown()) {
-            rayTraceEyes();
+            if (!rayTraceEyes()) {
+                CompletableFuture.runAsync(() -> {
+                    final CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
+                    if (!companionApp.isConnected()) {
+                        companionApp.startAndConnect();
+                    } else {
+                        //TODO Focus companion app
+                    }
+                });
+            }
         }
     }
 
@@ -64,7 +76,7 @@ public class KeyInputHandler {
         }
     }
 
-    public void rayTraceEyes() {
+    public boolean rayTraceEyes() {
         RayTraceResult rayTraceResult = Minecraft.getMinecraft().objectMouseOver;
         WorldClient world = Minecraft.getMinecraft().world;
 
@@ -78,11 +90,12 @@ public class KeyInputHandler {
                         handle(HitType.TILE_ENTITY, blockPos, 0);
                     }
                 }
-                break;
+                return true;
             case ENTITY:
                 handle(HitType.LIVING_ENTITY, null, rayTraceResult.entityHit.getEntityId());
-                break;
+                return true;
         }
+        return false;
     }
 
     public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId) {
