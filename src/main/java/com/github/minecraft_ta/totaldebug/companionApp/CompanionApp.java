@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.companionApp;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.CompanionAppReadyMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
@@ -80,6 +81,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ScriptStatusMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ClassPathMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, FocusWindowMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);

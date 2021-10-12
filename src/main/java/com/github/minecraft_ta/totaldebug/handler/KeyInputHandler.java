@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.handler;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.jei.TotalDebugJEIPlugin;
 import mezz.jei.api.IJeiRuntime;
 import net.minecraft.block.Block;
@@ -32,18 +33,19 @@ public class KeyInputHandler {
 
     @SubscribeEvent
     public void onKeyPress(InputEvent.KeyInputEvent event) {
-        if (KeyBindings.CODE_GUI.isKeyDown()) {
-            if (!rayTraceEyes()) {
-                CompletableFuture.runAsync(() -> {
-                    final CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
-                    if (!companionApp.isConnected()) {
-                        companionApp.startAndConnect();
-                    } else {
-                        //TODO Focus companion app
-                    }
-                });
+        if (!KeyBindings.CODE_GUI.isKeyDown())
+            return;
+        if (rayTraceEyes())
+            return;
+
+        CompletableFuture.runAsync(() -> {
+            final CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
+            if (!companionApp.isConnected()) {
+                companionApp.startAndConnect();
+            } else {
+                companionApp.getClient().getMessageProcessor().enqueueMessage(new FocusWindowMessage());
             }
-        }
+        });
     }
 
     @SubscribeEvent
