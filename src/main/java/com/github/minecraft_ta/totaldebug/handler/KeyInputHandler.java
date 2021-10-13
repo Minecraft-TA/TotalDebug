@@ -63,8 +63,10 @@ public class KeyInputHandler {
                     ingredientUnderMouse = runtime.getBookmarkOverlay().getIngredientUnderMouse();
 
                 if (ingredientUnderMouse instanceof ItemStack) {
-                    Item item = ((ItemStack) ingredientUnderMouse).getItem();
-                    handle(HitType.ITEM, null, Item.getIdFromItem(item));
+                    ItemStack itemStack = ((ItemStack) ingredientUnderMouse);
+                    Item item = itemStack.getItem();
+
+                    handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
                     return;
                 }
             }
@@ -72,8 +74,8 @@ public class KeyInputHandler {
             GuiContainer guiContainer = (GuiContainer) currentScreen;
             Slot slot = guiContainer.getSlotUnderMouse();
             if (slot != null && slot.getHasStack()) {
-                Item item = guiContainer.getSlotUnderMouse().getStack().getItem();
-                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(item));
+                ItemStack itemStack = guiContainer.getSlotUnderMouse().getStack();
+                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
             }
         }
     }
@@ -87,20 +89,20 @@ public class KeyInputHandler {
                 BlockPos blockPos = rayTraceResult.getBlockPos();
                 if (!world.isAirBlock(blockPos)) {
                     if (world.getTileEntity(blockPos) == null) {
-                        handle(HitType.BLOCK_ENTITY, blockPos, 0);
+                        handle(HitType.BLOCK_ENTITY, blockPos, 0, 0);
                     } else {
-                        handle(HitType.TILE_ENTITY, blockPos, 0);
+                        handle(HitType.TILE_ENTITY, blockPos, 0, 0);
                     }
                 }
                 return true;
             case ENTITY:
-                handle(HitType.LIVING_ENTITY, null, rayTraceResult.entityHit.getEntityId());
+                handle(HitType.LIVING_ENTITY, null, rayTraceResult.entityHit.getEntityId(), 0);
                 return true;
         }
         return false;
     }
 
-    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId) {
+    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId, int damage) {
         if (System.currentTimeMillis() - lastRequested < 500)
             return;
         lastRequested = System.currentTimeMillis();
@@ -132,7 +134,7 @@ public class KeyInputHandler {
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).getBlock();
-                        TileEntity tile = block.createTileEntity(world, block.getDefaultState());
+                        TileEntity tile = block.createTileEntity(world, block.getBlockState().getValidStates().get(damage));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
