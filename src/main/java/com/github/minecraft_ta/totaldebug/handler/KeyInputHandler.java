@@ -53,7 +53,7 @@ public class KeyInputHandler {
         if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode()))
             return;
 
-        GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
+        GuiScreen currentScreen = event.getGui();
         if (currentScreen instanceof GuiContainer) {
             if (TotalDebugJEIPlugin.INSTANCE != null) {
                 IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
@@ -107,7 +107,7 @@ public class KeyInputHandler {
             return;
         lastRequested = System.currentTimeMillis();
 
-        World world = Minecraft.getMinecraft().world;
+        final World world = Minecraft.getMinecraft().world;
 
         switch (typeOfHit) {
             case BLOCK_ENTITY:
@@ -134,7 +134,7 @@ public class KeyInputHandler {
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).getBlock();
-                        TileEntity tile = block.createTileEntity(world, block.getBlockState().getValidStates().get(damage));
+                        TileEntity tile = block.createTileEntity(world, block.getStateFromMeta(damage));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
