@@ -12,11 +12,13 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.world.World;
@@ -53,7 +55,7 @@ public class KeyInputHandler {
         if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode()))
             return;
 
-        GuiScreen currentScreen = Minecraft.getMinecraft().currentScreen;
+        GuiScreen currentScreen = event.getGui();
         if (currentScreen instanceof GuiContainer) {
             if (TotalDebugJEIPlugin.INSTANCE != null) {
                 IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
@@ -63,8 +65,10 @@ public class KeyInputHandler {
                     ingredientUnderMouse = runtime.getBookmarkOverlay().getIngredientUnderMouse();
 
                 if (ingredientUnderMouse instanceof ItemStack) {
-                    Item item = ((ItemStack) ingredientUnderMouse).getItem();
-                    handle(HitType.ITEM, null, Item.getIdFromItem(item));
+                    ItemStack itemStack = ((ItemStack) ingredientUnderMouse);
+                    Item item = itemStack.getItem();
+
+                    handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
                     return;
                 }
             }
@@ -72,8 +76,8 @@ public class KeyInputHandler {
             GuiContainer guiContainer = (GuiContainer) currentScreen;
             Slot slot = guiContainer.getSlotUnderMouse();
             if (slot != null && slot.getHasStack()) {
-                Item item = guiContainer.getSlotUnderMouse().getStack().getItem();
-                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(item));
+                ItemStack itemStack = guiContainer.getSlotUnderMouse().getStack();
+                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
             }
         }
     }
@@ -87,25 +91,25 @@ public class KeyInputHandler {
                 BlockPos blockPos = rayTraceResult.getBlockPos();
                 if (!world.isAirBlock(blockPos)) {
                     if (world.getTileEntity(blockPos) == null) {
-                        handle(HitType.BLOCK_ENTITY, blockPos, 0);
+                        handle(HitType.BLOCK_ENTITY, blockPos, 0, 0);
                     } else {
-                        handle(HitType.TILE_ENTITY, blockPos, 0);
+                        handle(HitType.TILE_ENTITY, blockPos, 0, 0);
                     }
                 }
                 return true;
             case ENTITY:
-                handle(HitType.LIVING_ENTITY, null, rayTraceResult.entityHit.getEntityId());
+                handle(HitType.LIVING_ENTITY, null, rayTraceResult.entityHit.getEntityId(), 0);
                 return true;
         }
         return false;
     }
 
-    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId) {
+    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId, int meta) {
         if (System.currentTimeMillis() - lastRequested < 500)
             return;
         lastRequested = System.currentTimeMillis();
 
-        World world = Minecraft.getMinecraft().world;
+        final World world = Minecraft.getMinecraft().world;
 
         switch (typeOfHit) {
             case BLOCK_ENTITY:
@@ -132,7 +136,8 @@ public class KeyInputHandler {
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).getBlock();
-                        TileEntity tile = block.createTileEntity(world, block.getDefaultState());
+                        final EntityPlayer player = Minecraft.getMinecraft().player;
+                        TileEntity tile = block.createTileEntity(world, block.getStateForPlacement(world, new BlockPos(0, 0, 0), EnumFacing.UP, 0, 0, 0, meta, player, player.getActiveHand()));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
