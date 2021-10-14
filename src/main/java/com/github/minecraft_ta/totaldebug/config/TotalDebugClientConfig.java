@@ -27,7 +27,6 @@ public class TotalDebugClientConfig {
     @SubscribeEvent
     public void onConfigChange(ConfigChangedEvent.OnConfigChangedEvent event) {
         if (event.getModID().equals(TotalDebug.MOD_ID)) {
-            System.out.println(FMLCommonHandler.instance().getEffectiveSide());
             load();
         }
     }
