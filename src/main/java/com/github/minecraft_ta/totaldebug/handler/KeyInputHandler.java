@@ -12,11 +12,13 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.world.World;
@@ -102,7 +104,7 @@ public class KeyInputHandler {
         return false;
     }
 
-    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId, int damage) {
+    public void handle(HitType typeOfHit, BlockPos pos, int entityOrItemId, int meta) {
         if (System.currentTimeMillis() - lastRequested < 500)
             return;
         lastRequested = System.currentTimeMillis();
@@ -134,7 +136,8 @@ public class KeyInputHandler {
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).getBlock();
-                        TileEntity tile = block.createTileEntity(world, block.getStateFromMeta(damage));
+                        final EntityPlayer player = Minecraft.getMinecraft().player;
+                        TileEntity tile = block.createTileEntity(world, block.getStateForPlacement(world, new BlockPos(0, 0, 0), EnumFacing.UP, 0, 0, 0, meta, player, player.getActiveHand()));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
