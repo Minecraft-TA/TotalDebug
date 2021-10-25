@@ -30,7 +30,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Live scripting support
+            - Fix search reference not working
           draft: false
           prerelease: false
       - name: Upload jars to release
