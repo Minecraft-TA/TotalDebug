@@ -52,10 +52,18 @@ public class SearchReferenceCommand extends CommandBase {
             throw new CommandException("commands.total_debug.searchreference.usage");
         }
 
+        if (!args[1].matches("^([\\w/$]+\\.)?\\w[\\w/$();]+$")) {
+            throw new CommandException("commands.total_debug.searchreference.usage_examples");
+        }
+
         long t = System.nanoTime() / 1_000_000;
 
         boolean searchMethod = args[0].equalsIgnoreCase("method");
-        CompletableFuture<Pair<Collection<String>, Integer>> future = BytecodeReferenceSearcher.findReferences(args[1], searchMethod);
+
+        int dotIndex = args[1].indexOf('.');
+        String owner = dotIndex == -1 ? null : args[1].substring(0, dotIndex);
+        String toMatch = dotIndex == -1 ? args[1] : args[1].substring(dotIndex + 1);
+        CompletableFuture<Pair<Collection<String>, Integer>> future = BytecodeReferenceSearcher.findReferences(owner, toMatch, searchMethod);
         if (future == null) {
             throw new CommandException("commands.total_debug.searchreference.already_running");
         }

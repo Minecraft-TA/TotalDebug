@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import net.minecraft.launchwrapper.IClassTransformer;
-import net.minecraft.launchwrapper.Launch;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.ClassReader;
@@ -39,9 +38,6 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
-        if ((Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment"))
-            return basicClass;
-
         ClassReader reader = new ClassReader(basicClass);
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         ClassVisitor classVisitor = new ClassRemapper(writer, this) {
