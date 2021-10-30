@@ -105,7 +105,7 @@ public class ClassUtil {
             }
 
             return bytes;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return null;
         }
     }

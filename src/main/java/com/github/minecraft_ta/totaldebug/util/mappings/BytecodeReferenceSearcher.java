@@ -82,7 +82,7 @@ public class BytecodeReferenceSearcher {
                 RUNNING = false;
 
                 return Pair.of(results, allClasses.size());
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 e.printStackTrace();
                 return Pair.of(Collections.emptyList(), 0);
             }

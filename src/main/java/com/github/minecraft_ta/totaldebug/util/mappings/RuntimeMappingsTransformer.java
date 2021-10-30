@@ -89,7 +89,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
 
                 ownerClass = ownerClass.getSuperclass();
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return name;
         }
 
