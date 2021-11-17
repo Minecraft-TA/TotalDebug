@@ -16,6 +16,7 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemMonsterPlacer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
@@ -25,6 +26,8 @@ import net.minecraft.world.World;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
+import net.minecraftforge.fml.common.registry.EntityEntry;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.lwjgl.input.Keyboard;
 
 import java.util.concurrent.CompletableFuture;
@@ -68,7 +71,9 @@ public class KeyInputHandler {
                     ItemStack itemStack = ((ItemStack) ingredientUnderMouse);
                     Item item = itemStack.getItem();
 
-                    handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
+                    if (!checkForSpawnEggAndOpenGui(itemStack)) {
+                        handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
+                    }
                     return;
                 }
             }
@@ -77,9 +82,22 @@ public class KeyInputHandler {
             Slot slot = guiContainer.getSlotUnderMouse();
             if (slot != null && slot.getHasStack()) {
                 ItemStack itemStack = guiContainer.getSlotUnderMouse().getStack();
-                handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
+                if (!checkForSpawnEggAndOpenGui(itemStack)) {
+                    handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
+                }
             }
         }
+    }
+
+    private boolean checkForSpawnEggAndOpenGui(ItemStack itemStack) {
+        if (itemStack.getItem() instanceof ItemMonsterPlacer) {
+            final EntityEntry value = ForgeRegistries.ENTITIES.getValue(ItemMonsterPlacer.getNamedIdFrom(itemStack));
+            if (value != null) {
+                TotalDebug.PROXY.getDecompilationManager().openGui(value.getEntityClass());
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean rayTraceEyes() {
