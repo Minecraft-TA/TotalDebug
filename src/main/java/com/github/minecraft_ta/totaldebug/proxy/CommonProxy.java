@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManage
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
+import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
 import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeRequestMessage;
 import com.github.minecraft_ta.totaldebug.network.TickTimeResultMessage;
@@ -94,6 +95,10 @@ public class CommonProxy {
     }
 
     public CompanionApp getCompanionApp() {
+        return null;
+    }
+
+    public PacketLogger getPackerLogger() {
         return null;
     }
 

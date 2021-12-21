@@ -10,15 +10,16 @@ import io.netty.channel.ChannelPromise;
 import net.minecraft.network.Packet;
 
 import java.util.HashMap;
+import java.util.Map;
 
-public class PacketListener extends ChannelDuplexHandler {
+public class PacketLogger extends ChannelDuplexHandler {
 
-    private static final HashMap<String, Integer> incomingPackets = new HashMap<>();
-    private static final HashMap<String, Integer> outgoingPackets = new HashMap<>();
-    private static boolean incomingActive;
-    private static boolean outgoingActive;
+    private final Map<String, Integer> incomingPackets = new HashMap<>();
+    private final Map<String, Integer> outgoingPackets = new HashMap<>();
+    private boolean incomingActive;
+    private boolean outgoingActive;
 
-    public static void update() {
+    public void update() {
         final Client client = TotalDebug.PROXY.getCompanionApp().getClient();
         if (incomingActive) {
             client.getMessageProcessor().enqueueMessage(new IncomingPacketsMessage(incomingPackets));
@@ -28,12 +29,12 @@ public class PacketListener extends ChannelDuplexHandler {
         }
     }
 
-    public static void toggleIncomingActive() {
+    public void toggleIncomingActive() {
         incomingActive = !incomingActive;
         if (!incomingActive) incomingPackets.clear();
     }
 
-    public static void toggleOutgoingActive() {
+    public void toggleOutgoingActive() {
         outgoingActive = !outgoingActive;
         if (!outgoingActive) outgoingPackets.clear();
     }

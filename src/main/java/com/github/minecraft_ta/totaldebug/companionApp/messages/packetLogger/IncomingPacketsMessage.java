@@ -3,13 +3,13 @@ package com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger;
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
-import java.util.HashMap;
+import java.util.Map;
 
 public class IncomingPacketsMessage extends AbstractMessageOutgoing {
 
-    private final HashMap<String, Integer> incomingPackets;
+    private final Map<String, Integer> incomingPackets;
 
-    public IncomingPacketsMessage(HashMap<String, Integer> incomingPackets) {
+    public IncomingPacketsMessage(Map<String, Integer> incomingPackets) {
         this.incomingPackets = incomingPackets;
     }
 

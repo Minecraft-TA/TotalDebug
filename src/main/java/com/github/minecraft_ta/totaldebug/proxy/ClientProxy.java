@@ -10,7 +10,7 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
 import com.github.minecraft_ta.totaldebug.handler.ChannelInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
-import com.github.minecraft_ta.totaldebug.handler.PacketListener;
+import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
 import net.minecraftforge.client.ClientCommandHandler;
@@ -31,6 +31,7 @@ public class ClientProxy extends CommonProxy {
 
     private final DecompilationManager decompilationManager = new DecompilationManager();
     private final TotalDebugClientConfig clientConfig = new TotalDebugClientConfig();
+    private final PacketLogger packetLogger = new PacketLogger();
     private CompanionApp companionApp;
 
     @Override
@@ -67,7 +68,7 @@ public class ClientProxy extends CommonProxy {
                     return;
 
                 getChunkGridManagerClient().update();
-                PacketListener.update();
+                getPackerLogger().update();
             }
         });
 
@@ -92,6 +93,11 @@ public class ClientProxy extends CommonProxy {
     @Override
     public CompanionApp getCompanionApp() {
         return this.companionApp;
+    }
+
+    @Override
+    public PacketLogger getPackerLogger() {
+        return this.packetLogger;
     }
 
     @Override
