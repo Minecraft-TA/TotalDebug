@@ -109,7 +109,7 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
 
         companionAppClient.getMessageBus().listenAlways(SaveIncomingPacketsMessage.class, m -> PacketListener.toggleIncomingActive());
-        companionAppClient.getMessageBus().listenAlways(SaveIncomingPacketsMessage.class, m -> PacketListener.toggleOutgoingActive());
+        companionAppClient.getMessageBus().listenAlways(SaveOutgoingPacketsMessage.class, m -> PacketListener.toggleOutgoingActive());
 
     }
 
