@@ -10,8 +10,11 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveIncomingPacketsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveOutgoingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
+import com.github.minecraft_ta.totaldebug.handler.PacketListener;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
@@ -84,6 +87,9 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, FocusWindowMessage.class);
 
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveIncomingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveOutgoingPacketsMessage.class);
+
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
 
@@ -96,6 +102,10 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(StopScriptMessage.class, StopScriptMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
+
+        companionAppClient.getMessageBus().listenAlways(SaveIncomingPacketsMessage.class, m -> PacketListener.toggleIncomingActive());
+        companionAppClient.getMessageBus().listenAlways(SaveIncomingPacketsMessage.class, m -> PacketListener.toggleOutgoingActive());
+
     }
 
     public CompanionApp(Path appDir) {

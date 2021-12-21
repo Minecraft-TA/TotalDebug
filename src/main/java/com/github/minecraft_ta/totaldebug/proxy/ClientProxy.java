@@ -10,9 +10,9 @@ import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
 import com.github.minecraft_ta.totaldebug.handler.ChannelInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
+import com.github.minecraft_ta.totaldebug.handler.PacketListener;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
@@ -67,6 +67,7 @@ public class ClientProxy extends CommonProxy {
                     return;
 
                 getChunkGridManagerClient().update();
+                PacketListener.update();
             }
         });
 

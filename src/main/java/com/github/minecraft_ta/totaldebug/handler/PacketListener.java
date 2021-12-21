@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
+import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
+import com.github.tth05.scnet.Client;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -9,11 +13,30 @@ import java.util.HashMap;
 
 public class PacketListener extends ChannelDuplexHandler {
 
-    private boolean incomingActive;
-    private boolean outgoingActive;
+    private static final HashMap<String, Integer> incomingPackets = new HashMap<>();
+    private static final HashMap<String, Integer> outgoingPackets = new HashMap<>();
+    private static boolean incomingActive;
+    private static boolean outgoingActive;
 
-    private HashMap<String, Integer> incomingPackets = new HashMap<>();
-    private HashMap<String, Integer> outgoingPackets = new HashMap<>();
+    public static void update() {
+        final Client client = TotalDebug.PROXY.getCompanionApp().getClient();
+        if (incomingActive) {
+            client.getMessageProcessor().enqueueMessage(new IncomingPacketsMessage(incomingPackets));
+        }
+        if (outgoingActive) {
+            client.getMessageProcessor().enqueueMessage(new OutgoingPacketsMessage(outgoingPackets));
+        }
+    }
+
+    public static void toggleIncomingActive() {
+        incomingActive = !incomingActive;
+        if (!incomingActive) incomingPackets.clear();
+    }
+
+    public static void toggleOutgoingActive() {
+        outgoingActive = !outgoingActive;
+        if (!outgoingActive) outgoingPackets.clear();
+    }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -29,24 +52,6 @@ public class PacketListener extends ChannelDuplexHandler {
             outgoingPackets.merge(msg.getClass().getName(), 1, Integer::sum);
         }
         super.write(ctx, msg, promise);
-    }
-
-    public void activateIncoming() {
-        this.incomingActive = true;
-    }
-
-    public void deactivateIncoming() {
-        this.incomingPackets.clear();
-        this.incomingActive = false;
-    }
-
-    public void activateOutgoing() {
-        this.outgoingActive = true;
-    }
-
-    public void deactivateOutgoing() {
-        this.outgoingPackets.clear();
-        this.outgoingActive = false;
     }
 
 }
