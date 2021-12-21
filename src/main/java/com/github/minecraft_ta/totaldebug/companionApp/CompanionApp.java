@@ -10,6 +10,8 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveIncomingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveOutgoingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
@@ -68,6 +70,7 @@ public class CompanionApp {
     private Process companionAppProcess;
     private CompletableFuture<Void> awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
     private final Client companionAppClient = new Client();
+
     {
         int id = 1;
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReadyMessage.class);
@@ -89,6 +92,8 @@ public class CompanionApp {
 
         companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveIncomingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveOutgoingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, IncomingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
