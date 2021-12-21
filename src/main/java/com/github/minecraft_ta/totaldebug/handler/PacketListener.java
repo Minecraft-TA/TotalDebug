@@ -1,42 +1,52 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
-import com.github.minecraft_ta.totaldebug.event.PacketEvent;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import net.minecraft.network.Packet;
-import net.minecraftforge.common.MinecraftForge;
+
+import java.util.HashMap;
 
 public class PacketListener extends ChannelDuplexHandler {
 
+    private boolean incomingActive;
+    private boolean outgoingActive;
+
+    private HashMap<String, Integer> incomingPackets = new HashMap<>();
+    private HashMap<String, Integer> outgoingPackets = new HashMap<>();
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        boolean get = true;
-
-        if (msg instanceof Packet) {
-            PacketEvent.Incoming inPacket = new PacketEvent.Incoming((Packet<?>) msg);
-            MinecraftForge.EVENT_BUS.post(inPacket);
-            if (inPacket.isCanceled()) {
-                get = false;
-            }
-            msg = inPacket.getPacket();
+        if (incomingActive && msg instanceof Packet) {
+            incomingPackets.merge(msg.getClass().getName(), 1, Integer::sum);
         }
-        if (get) super.channelRead(ctx, msg);
+        super.channelRead(ctx, msg);
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        boolean send = true;
-
-        if (msg instanceof Packet) {
-            PacketEvent.Outgoing outPacket = new PacketEvent.Outgoing((Packet<?>) msg);
-            MinecraftForge.EVENT_BUS.post(outPacket);
-            if (outPacket.isCanceled()) {
-                send = false;
-            }
-            msg = outPacket.getPacket();
+        if (outgoingActive && msg instanceof Packet) {
+            outgoingPackets.merge(msg.getClass().getName(), 1, Integer::sum);
         }
-        if (send)
-            super.write(ctx, msg, promise);
+        super.write(ctx, msg, promise);
     }
+
+    public void activateIncoming() {
+        this.incomingActive = true;
+    }
+
+    public void deactivateIncoming() {
+        this.incomingPackets.clear();
+        this.incomingActive = false;
+    }
+
+    public void activateOutgoing() {
+        this.outgoingActive = true;
+    }
+
+    public void deactivateOutgoing() {
+        this.outgoingPackets.clear();
+        this.outgoingActive = false;
+    }
+
 }
