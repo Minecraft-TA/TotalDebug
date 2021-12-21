@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.enchantment.EnchantmentData;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.Slot;
@@ -75,6 +76,8 @@ public class KeyInputHandler {
                         handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
                     }
                     return;
+                } else if (ingredientUnderMouse instanceof EnchantmentData) {
+                    TotalDebug.PROXY.getDecompilationManager().openGui(((EnchantmentData) ingredientUnderMouse).enchantment.getClass());
                 }
             }
 
