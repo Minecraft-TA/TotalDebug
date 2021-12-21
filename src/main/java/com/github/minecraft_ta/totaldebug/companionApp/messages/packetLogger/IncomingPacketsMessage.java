@@ -15,6 +15,7 @@ public class IncomingPacketsMessage extends AbstractMessageOutgoing {
 
     @Override
     public void write(ByteBufferOutputStream messageStream) {
+        messageStream.writeInt(incomingPackets.size());
         incomingPackets.forEach((s, integer) -> {
             messageStream.writeString(s);
             messageStream.writeInt(integer);
