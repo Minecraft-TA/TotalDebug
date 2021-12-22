@@ -12,9 +12,11 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.Decompi
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveIncomingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.SaveOutgoingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketLoggerStateChangeMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.handler.PacketListener;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
@@ -90,8 +92,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, FocusWindowMessage.class);
 
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveIncomingPacketsMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, SaveOutgoingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketLoggerStateChangeMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, IncomingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
 
@@ -108,8 +109,10 @@ public class CompanionApp {
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
 
-        companionAppClient.getMessageBus().listenAlways(SaveIncomingPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().toggleIncomingActive());
-        companionAppClient.getMessageBus().listenAlways(SaveOutgoingPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().toggleOutgoingActive());
+        companionAppClient.getMessageBus().listenAlways(PacketLoggerStateChangeMessage.class, m -> {
+            TotalDebug.PROXY.getPackerLogger().setIncomingActive(m.isLogIncoming());
+            TotalDebug.PROXY.getPackerLogger().setOutgoingActive(m.isLogOutgoing());
+        });
 
     }
 

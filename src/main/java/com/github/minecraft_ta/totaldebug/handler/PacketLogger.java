@@ -29,14 +29,14 @@ public class PacketLogger extends ChannelDuplexHandler {
         }
     }
 
-    public void toggleIncomingActive() {
-        incomingActive = !incomingActive;
+    public void setIncomingActive(boolean incomingActive) {
         if (!incomingActive) incomingPackets.clear();
+        this.incomingActive = incomingActive;
     }
 
-    public void toggleOutgoingActive() {
-        outgoingActive = !outgoingActive;
+    public void setOutgoingActive(boolean outgoingActive) {
         if (!outgoingActive) outgoingPackets.clear();
+        this.outgoingActive = outgoingActive;
     }
 
     @Override
