@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenceCommand;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
+import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
 import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
@@ -45,6 +46,7 @@ public class ClientProxy extends CommonProxy {
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
+        MinecraftForge.EVENT_BUS.register(new BossBarHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onClientTick(TickEvent.ClientTickEvent event) {
