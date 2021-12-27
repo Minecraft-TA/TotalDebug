@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.tth05.jindex.ClassIndex;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
@@ -20,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -64,9 +67,7 @@ public class ClassUtil {
             Files.createDirectories(outputPath.getParent());
             Files.createFile(outputPath);
             try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath))) {
-                Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
-                f.setAccessible(true);
-                ((Map<String, byte[]>) f.get(BytecodeReferenceSearcher.class.getClassLoader())).keySet().stream()
+                ClassUtil.getCachedClassesFromLaunchClassLoader().keySet().stream()
                         .map(ClassUtil::getTransformedName)
                         .filter(k -> k.contains("net.minecraft") && !k.startsWith("$"))
                         .forEach(k -> {
@@ -85,6 +86,29 @@ public class ClassUtil {
             TotalDebug.LOGGER.info("Completed dumping minecraft classes in {}ms", (System.nanoTime() - time) / 1_000_000);
         } catch (Exception e) {
             TotalDebug.LOGGER.error("Unable to dump minecraft classes", e);
+        }
+    }
+
+    public static void createClassIndex(Path indexPath) {
+        long time = System.nanoTime();
+
+        Collection<Class<?>> classes = getCachedClassesFromLaunchClassLoader().values();
+        List<byte[]> classData = new ArrayList<>(classes.size());
+        for (Class<?> clazz : classes)
+            classData.add(getBytecodeFromLaunchClassLoader(clazz.getName()));
+
+        new ClassIndex(classData).saveToFile(indexPath.toAbsolutePath().normalize().toString());
+
+        TotalDebug.LOGGER.info("Completed indexing {} cached classes in {}ms", classes.size(), (System.nanoTime() - time) / 1_000_000);
+    }
+
+    public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
+        try {
+            Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
+            f.setAccessible(true);
+            return (Map<String, Class<?>>) f.get(LAUNCH_CLASS_LOADER);
+        } catch (Throwable e) {
+            throw new IllegalStateException(e);
         }
     }
 

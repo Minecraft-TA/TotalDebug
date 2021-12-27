@@ -33,3 +33,4 @@ companion_app.connection_success=Connection successful!
 companion_app.connection_fail=Connection failed!
 companion_app.download_start=Downloading companion app version: %s
 companion_app.open_file=Opening file: %s
+companion_app.start_indexing=Indexing classes...

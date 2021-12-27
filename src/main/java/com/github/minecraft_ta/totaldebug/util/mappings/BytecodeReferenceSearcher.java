@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -108,9 +107,7 @@ public class BytecodeReferenceSearcher {
                 "netscape", "org.jetbrains", "oshi", "scala", "org.relaxng", "org.groovy");
 
         try {
-            Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
-            f.setAccessible(true);
-            return ((Map<String, Class<?>>) f.get(BytecodeReferenceSearcher.class.getClassLoader()))
+            return ClassUtil.getCachedClassesFromLaunchClassLoader()
                     .values().stream()
                     .filter(c -> packageBlacklist.stream().noneMatch(s -> c.getName().startsWith(s)))
                     .collect(Collectors.toList());
