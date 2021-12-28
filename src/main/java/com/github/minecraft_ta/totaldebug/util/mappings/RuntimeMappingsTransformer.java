@@ -74,7 +74,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
 
         //Find mapped name in super classes
         try {
-            Class<?> ownerClass = Class.forName(owner.replace('/', '.'));
+            Class<?> ownerClass = Class.forName(owner.replace('/', '.'), false, RuntimeMappingsTransformer.class.getClassLoader());
 
             while (ownerClass != null) {
                 memberMap = MCP_MAPPINGS.get(ownerClass.getName().replace('.', '/'));

@@ -100,7 +100,7 @@ shadowJar {
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
-    relocate "com.github.tth05", "com.github.minecraft_ta.totaldebug.shades"
+    relocate "com.github.tth05.scnet", "com.github.minecraft_ta.totaldebug.shades.scnet"
     dependencies {
         exclude(dependency {
             it.moduleGroup != 'io.github.classgraph' &&

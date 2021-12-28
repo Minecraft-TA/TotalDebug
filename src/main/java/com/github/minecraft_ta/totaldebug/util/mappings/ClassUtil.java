@@ -94,12 +94,19 @@ public class ClassUtil {
 
         Collection<Class<?>> classes = getCachedClassesFromLaunchClassLoader().values();
         List<byte[]> classData = new ArrayList<>(classes.size());
-        for (Class<?> clazz : classes)
-            classData.add(getBytecodeFromLaunchClassLoader(clazz.getName()));
+        //TODO: Show progress to player because this takes a while
+        for (Class<?> clazz : classes) {
+            byte[] bytecode = getBytecodeFromLaunchClassLoader(clazz.getName());
+            if (bytecode == null)
+                continue;
 
+            classData.add(bytecode);
+        }
+
+        //FIXME: This is a memory leak
         new ClassIndex(classData).saveToFile(indexPath.toAbsolutePath().normalize().toString());
 
-        TotalDebug.LOGGER.info("Completed indexing {} cached classes in {}ms", classes.size(), (System.nanoTime() - time) / 1_000_000);
+        TotalDebug.LOGGER.info("Completed indexing {}/{} cached classes in {}ms", classData.size(), classes.size(), (System.nanoTime() - time) / 1_000_000);
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
@@ -124,7 +131,7 @@ public class ClassUtil {
                 }
             } else {
                 try {
-                    bytes = getBytecode(Class.forName(name.replace('/', '.')));
+                    bytes = getBytecode(Class.forName(name.replace('/', '.'), false, LAUNCH_CLASS_LOADER));
                 } catch (ClassNotFoundException ignored) {}
             }
 
