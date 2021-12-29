@@ -137,19 +137,18 @@ public class CompanionApp {
                 this.metafile.write();
             }
 
+            if (!Files.exists(TotalDebug.PROXY.getMinecraftClassDumpPath())) {
+                sender.sendMessage(new TextComponentTranslation("companion_app.dumping_minecraft_classes").setStyle(new Style().setColor(TextFormatting.GRAY)));
+                ClassUtil.dumpMinecraftClasses();
+            }
+
             Path indexPath = TotalDebug.PROXY.getDecompilationManager().getDataDir().resolve(DATA_FOLDER).resolve("index");
             if (!Files.exists(indexPath)) {
-                sender.sendMessage(
-                        new TextComponentTranslation("companion_app.start_indexing")
-                                .setStyle(new Style().setColor(TextFormatting.GRAY))
-                );
+                sender.sendMessage(new TextComponentTranslation("companion_app.start_indexing").setStyle(new Style().setColor(TextFormatting.GRAY)));
                 ClassUtil.createClassIndex(indexPath);
             }
 
-            sender.sendMessage(
-                    new TextComponentTranslation("companion_app.starting")
-                            .setStyle(new Style().setColor(TextFormatting.GRAY))
-            );
+            sender.sendMessage(new TextComponentTranslation("companion_app.starting").setStyle(new Style().setColor(TextFormatting.GRAY)));
             startApp();
         }
 

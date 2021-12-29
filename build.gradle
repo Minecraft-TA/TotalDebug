@@ -75,6 +75,9 @@ repositories {
     maven {
         url 'https://jitpack.io'
     }
+    maven {
+        url "https://packagecloud.io/tth05/repo/maven2"
+    }
 }
 
 dependencies {
@@ -83,7 +86,7 @@ dependencies {
     implementation "com.github.tth05:SCNet:519b65"
     implementation "io.github.classgraph:classgraph:4.8.90"
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
-    implementation fileTree("libs")
+    implementation "com.github.tth05:jindex:0.0.2"
 
     compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")

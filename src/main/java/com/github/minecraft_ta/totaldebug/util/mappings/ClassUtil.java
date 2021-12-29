@@ -4,13 +4,19 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.tth05.jindex.ClassIndex;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.ModContainer;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockSpecialTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemStackTransformer;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -22,10 +28,12 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -92,21 +100,50 @@ public class ClassUtil {
     public static void createClassIndex(Path indexPath) {
         long time = System.nanoTime();
 
-        Collection<Class<?>> classes = getCachedClassesFromLaunchClassLoader().values();
-        List<byte[]> classData = new ArrayList<>(classes.size());
         //TODO: Show progress to player because this takes a while
-        for (Class<?> clazz : classes) {
-            byte[] bytecode = getBytecodeFromLaunchClassLoader(clazz.getName());
-            if (bytecode == null)
-                continue;
 
-            classData.add(bytecode);
-        }
+        Map<String, byte[]> cachedClasses = new ConcurrentHashMap<>();
+        Stream.concat(
+                //All mod jars
+                Loader.instance().getModList().stream().map(ModContainer::getSource).distinct().filter(f -> !f.toString().equals("minecraft.jar")),
+                //Minecraft classes and jdk
+                Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toFile(), new File(System.getProperty("java.home"), "lib" + File.separator + "rt.jar"))
+        ).filter(file -> file.getName().endsWith(".jar")).parallel().forEach(file -> {
+            try (ZipFile zipFile = new ZipFile(file)) {
+                Enumeration<ZipArchiveEntry> iterator = zipFile.getEntriesInPhysicalOrder();
+                for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
+                    if (entry.isDirectory() || !entry.getName().endsWith(".class"))
+                        continue;
 
-        //FIXME: This is a memory leak
-        new ClassIndex(classData).saveToFile(indexPath.toAbsolutePath().normalize().toString());
+                    String className = getTransformedName(entry.getName().substring(0, entry.getName().length() - 6));
 
-        TotalDebug.LOGGER.info("Completed indexing {}/{} cached classes in {}ms", classData.size(), classes.size(), (System.nanoTime() - time) / 1_000_000);
+                    ZipArchiveEntry finalEntry = entry;
+                    cachedClasses.computeIfAbsent(className, (s) -> {
+                        byte[] buf = getBytecodeFromLaunchClassLoader(className, false);
+                        if (buf == null) {
+                            buf = new byte[(int) finalEntry.getSize()];
+                            try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
+                                IOUtils.readFully(inputStream, buf);
+                            } catch (Throwable ignored) {
+                                return null;
+                            }
+
+                            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                                buf = transformer.transform(className, className, buf);
+                            }
+                        }
+
+                        return buf;
+                    });
+                }
+            } catch (Throwable throwable) {
+                TotalDebug.LOGGER.error("Exception while reading mod jar " + file, throwable);
+            }
+        });
+
+        new ClassIndex(new ArrayList<>(cachedClasses.values())).saveToFile(indexPath.toAbsolutePath().normalize().toString());
+
+        TotalDebug.LOGGER.info("Completed indexing {} classes in {}ms", cachedClasses.size(), (System.nanoTime() - time) / 1_000_000);
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
@@ -121,6 +158,11 @@ public class ClassUtil {
 
     @Nullable
     public static byte[] getBytecodeFromLaunchClassLoader(String name) {
+        return getBytecodeFromLaunchClassLoader(name, true);
+    }
+
+    @Nullable
+    public static byte[] getBytecodeFromLaunchClassLoader(String name, boolean loadIfAbsent) {
         try {
             String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
             String transformedName = getTransformedName(name);
@@ -129,7 +171,7 @@ public class ClassUtil {
                 for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
                     bytes = transformer.transform(untransformedName, transformedName, bytes);
                 }
-            } else {
+            } else if (loadIfAbsent) {
                 try {
                     bytes = getBytecode(Class.forName(name.replace('/', '.'), false, LAUNCH_CLASS_LOADER));
                 } catch (ClassNotFoundException ignored) {}
