@@ -43,6 +43,7 @@ public class ClassUtil {
     private static final List<IClassTransformer> LAUNCH_CLASS_LOADER_TRANSFORMERS;
     private static final Method UNTRANSFORM_NAME_METHOD;
     private static final Method TRANSFORM_NAME_METHOD;
+    private static final Map<String, byte[]> LAUNCH_CLASS_LOADER_RESOURCE_CACHE;
     static {
         try {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
@@ -55,6 +56,10 @@ public class ClassUtil {
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
             TRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("transformName", String.class);
             TRANSFORM_NAME_METHOD.setAccessible(true);
+
+            Field resourceCacheField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("resourceCache");
+            resourceCacheField.setAccessible(true);
+            LAUNCH_CLASS_LOADER_RESOURCE_CACHE = (Map<String, byte[]>) resourceCacheField.get(LAUNCH_CLASS_LOADER);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -109,6 +114,10 @@ public class ClassUtil {
                 //Minecraft classes and jdk
                 Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toFile(), new File(System.getProperty("java.home"), "lib" + File.separator + "rt.jar"))
         ).filter(file -> file.getName().endsWith(".jar")).parallel().forEach(file -> {
+            //The JDK doesn't need any transformation and the class dump already went through it
+            boolean ignoreLaunchClassLoader = file.getName().equals("rt.jar") ||
+                                              file.getName().equals("minecraft-class-dump.jar");
+
             try (ZipFile zipFile = new ZipFile(file)) {
                 Enumeration<ZipArchiveEntry> iterator = zipFile.getEntriesInPhysicalOrder();
                 for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
@@ -119,7 +128,7 @@ public class ClassUtil {
 
                     ZipArchiveEntry finalEntry = entry;
                     cachedClasses.computeIfAbsent(className, (s) -> {
-                        byte[] buf = getBytecodeFromLaunchClassLoader(className, false);
+                        byte[] buf = ignoreLaunchClassLoader ? null : getBytecodeFromLaunchClassLoader(className, false);
                         if (buf == null) {
                             buf = new byte[(int) finalEntry.getSize()];
                             try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
@@ -128,8 +137,10 @@ public class ClassUtil {
                                 return null;
                             }
 
-                            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                                buf = transformer.transform(className, className, buf);
+                            if (!ignoreLaunchClassLoader) {
+                                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                                    buf = transformer.transform(className, className, buf);
+                                }
                             }
                         }
 
@@ -166,7 +177,7 @@ public class ClassUtil {
         try {
             String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
             String transformedName = getTransformedName(name);
-            byte[] bytes = LAUNCH_CLASS_LOADER.getClassBytes(untransformedName);
+            byte[] bytes = LAUNCH_CLASS_LOADER_RESOURCE_CACHE.get(untransformedName);
             if (bytes != null) {
                 for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
                     bytes = transformer.transform(untransformedName, transformedName, bytes);
