@@ -30,13 +30,16 @@ public class PacketLogger extends ChannelDuplexHandler {
     }
 
     public void setIncomingActive(boolean incomingActive) {
-        if (!incomingActive) incomingPackets.clear();
         this.incomingActive = incomingActive;
     }
 
     public void setOutgoingActive(boolean outgoingActive) {
-        if (!outgoingActive) outgoingPackets.clear();
         this.outgoingActive = outgoingActive;
+    }
+
+    public void clear() {
+        incomingPackets.clear();
+        outgoingPackets.clear();
     }
 
     @Override
