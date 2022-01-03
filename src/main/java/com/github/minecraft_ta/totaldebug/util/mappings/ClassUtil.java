@@ -32,6 +32,7 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -105,52 +106,81 @@ public class ClassUtil {
     public static void createClassIndex(Path indexPath) {
         long time = System.nanoTime();
 
+        //TODO: Prevent running this twice at the same time
+
         //TODO: Show progress to player because this takes a while
 
         Map<String, byte[]> cachedClasses = new ConcurrentHashMap<>();
-        Stream.concat(
+        List<File> jarFiles = Stream.concat(
                 //All mod jars
                 Loader.instance().getModList().stream().map(ModContainer::getSource).distinct().filter(f -> !f.toString().equals("minecraft.jar")),
                 //Minecraft classes and jdk
                 Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toFile(), new File(System.getProperty("java.home"), "lib" + File.separator + "rt.jar"))
-        ).filter(file -> file.getName().endsWith(".jar")).parallel().forEach(file -> {
-            //The JDK doesn't need any transformation and the class dump already went through it
-            boolean ignoreLaunchClassLoader = file.getName().equals("rt.jar") ||
-                                              file.getName().equals("minecraft-class-dump.jar");
+        ).filter(file -> file.getName().endsWith(".jar")).collect(Collectors.toList());
 
-            try (ZipFile zipFile = new ZipFile(file)) {
-                Enumeration<ZipArchiveEntry> iterator = zipFile.getEntriesInPhysicalOrder();
-                for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
-                    if (entry.isDirectory() || !entry.getName().endsWith(".class"))
-                        continue;
+        int threadCount = Runtime.getRuntime().availableProcessors();
+        CountDownLatch latch = new CountDownLatch(threadCount);
 
-                    String className = getTransformedName(entry.getName().substring(0, entry.getName().length() - 6));
+        for (int i = 0; i < threadCount; i++) {
+            new Thread(() -> {
+                while (true) {
+                    File file;
+                    synchronized (jarFiles) {
+                        if (jarFiles.isEmpty())
+                            break;
 
-                    ZipArchiveEntry finalEntry = entry;
-                    cachedClasses.computeIfAbsent(className, (s) -> {
-                        byte[] buf = ignoreLaunchClassLoader ? null : getBytecodeFromLaunchClassLoader(className, false);
-                        if (buf == null) {
-                            buf = new byte[(int) finalEntry.getSize()];
-                            try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
-                                IOUtils.readFully(inputStream, buf);
-                            } catch (Throwable ignored) {
-                                return null;
-                            }
+                        file = jarFiles.remove(0);
+                    }
 
-                            if (!ignoreLaunchClassLoader) {
-                                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                                    buf = transformer.transform(className, className, buf);
+                    //The JDK doesn't need any transformation and the class dump already went through it
+                    boolean ignoreLaunchClassLoader = file.getName().equals("rt.jar") ||
+                                                      file.getName().equals("minecraft-class-dump.jar");
+
+                    try (ZipFile zipFile = new ZipFile(file)) {
+                        Enumeration<ZipArchiveEntry> iterator = zipFile.getEntriesInPhysicalOrder();
+                        for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
+                            if (entry.isDirectory() || !entry.getName().endsWith(".class"))
+                                continue;
+
+                            String className = getTransformedName(entry.getName().substring(0, entry.getName().length() - 6));
+
+                            ZipArchiveEntry finalEntry = entry;
+                            cachedClasses.computeIfAbsent(className, (s) -> {
+                                byte[] buf = ignoreLaunchClassLoader ? null : getBytecodeFromLaunchClassLoader(className, false);
+                                if (buf == null) {
+                                    buf = new byte[(int) finalEntry.getSize()];
+                                    try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
+                                        IOUtils.readFully(inputStream, buf);
+                                    } catch (Throwable ignored) {
+                                        return null;
+                                    }
+
+                                    if (!ignoreLaunchClassLoader) {
+                                        for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                                            buf = transformer.transform(className, className, buf);
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
-                        return buf;
-                    });
+                                return buf;
+                            });
+                        }
+                    } catch (Throwable throwable) {
+                        TotalDebug.LOGGER.error("Exception while reading mod jar " + file, throwable);
+                    }
                 }
-            } catch (Throwable throwable) {
-                TotalDebug.LOGGER.error("Exception while reading mod jar " + file, throwable);
-            }
-        });
+
+                latch.countDown();
+            }).start();
+        }
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            TotalDebug.LOGGER.error("Latch was interrupted", e);
+        }
+
+        TotalDebug.LOGGER.info("Completed bytecode gathering in {}ms", (System.nanoTime() - time) / 1_000_000);
 
         new ClassIndex(new ArrayList<>(cachedClasses.values())).saveToFile(indexPath.toAbsolutePath().normalize().toString());
 
@@ -178,16 +208,29 @@ public class ClassUtil {
             String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
             String transformedName = getTransformedName(name);
             byte[] bytes = LAUNCH_CLASS_LOADER_RESOURCE_CACHE.get(untransformedName);
-            if (bytes != null) {
-                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+            if (!loadIfAbsent) {
+                if (bytes == null)
+                    return null;
+                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS)
                     bytes = transformer.transform(untransformedName, transformedName, bytes);
-                }
-            } else if (loadIfAbsent) {
-                try {
-                    bytes = getBytecode(Class.forName(name.replace('/', '.'), false, LAUNCH_CLASS_LOADER));
-                } catch (ClassNotFoundException ignored) {}
+                return bytes;
             }
 
+            try {
+                if (bytes == null)
+                    bytes = LAUNCH_CLASS_LOADER.getClassBytes(untransformedName);
+            } catch (IOException ignored) {}
+            try {
+                if (bytes == null)
+                    bytes = getBytecode(Class.forName(name.replace('/', '.'), false, LAUNCH_CLASS_LOADER));
+            } catch (ClassNotFoundException ignored) {}
+
+            if (bytes == null)
+                return null;
+
+            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                bytes = transformer.transform(untransformedName, transformedName, bytes);
+            }
             return bytes;
         } catch (Throwable e) {
             return null;
