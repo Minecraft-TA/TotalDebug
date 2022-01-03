@@ -12,4 +12,10 @@ public class ChannelInputHandler {
         ChannelPipeline pipeline = event.getManager().channel().pipeline();
         pipeline.addBefore("packet_handler", "listener", TotalDebug.PROXY.getPackerLogger());
     }
+
+    @SubscribeEvent
+    public void onFMLNetworkClientDisconnectionFromServer(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+        ChannelPipeline pipeline = event.getManager().channel().pipeline();
+        pipeline.remove(TotalDebug.PROXY.getPackerLogger());
+    }
 }
