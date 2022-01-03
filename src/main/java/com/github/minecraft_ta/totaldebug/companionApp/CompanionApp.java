@@ -12,7 +12,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.Decompi
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketClearMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.ClearPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketLoggerStateChangeMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
@@ -96,7 +96,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketLoggerStateChangeMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, IncomingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketClearMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ClearPacketsMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -116,7 +116,7 @@ public class CompanionApp {
             TotalDebug.PROXY.getPackerLogger().setOutgoingActive(m.isLogOutgoing());
         });
 
-        companionAppClient.getMessageBus().listenAlways(PacketClearMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
+        companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
     }
 
     public CompanionApp(Path appDir) {
