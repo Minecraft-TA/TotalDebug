@@ -4,6 +4,7 @@ import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class IncomingPacketsMessage extends AbstractMessageOutgoing {
@@ -11,7 +12,7 @@ public class IncomingPacketsMessage extends AbstractMessageOutgoing {
     private final Map<String, Pair<Integer, Integer>> incomingPackets;
 
     public IncomingPacketsMessage(Map<String, Pair<Integer, Integer>> incomingPackets) {
-        this.incomingPackets = incomingPackets;
+        this.incomingPackets = new HashMap<>(incomingPackets);
     }
 
     @Override
