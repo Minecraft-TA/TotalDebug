@@ -16,10 +16,12 @@ import net.minecraft.network.PacketBuffer;
 import net.minecraftforge.fml.common.network.FMLIndexedMessageToMessageCodec;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.internal.FMLProxyPacket;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleIndexedCodec;
 import net.minecraftforge.fml.relauncher.Side;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
@@ -68,34 +70,59 @@ public class PacketLogger extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (incomingActive && msg instanceof Packet) {
-            if (msg instanceof FMLProxyPacket) {
-                FMLProxyPacket fmlPacket = (FMLProxyPacket) msg;
-                SimpleIndexedCodec codec = NetworkRegistry.INSTANCE.getChannel(fmlPacket.channel(), Side.CLIENT).pipeline().get(SimpleIndexedCodec.class);
-                if (codec != null) {
-                    ByteBuf payload = fmlPacket.payload();
-                    payload.markReaderIndex();
-                    byte discriminator = payload.readByte();
-                    Class<?> clazz = ((Byte2ObjectMap<Class<?>>) discriminators.get(codec)).get(discriminator);
-                    incomingPackets.merge(clazz.getName(), Pair.of(1, payload.readableBytes()), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
-                    payload.resetReaderIndex();
+        try {
+            if (incomingActive && msg instanceof Packet) {
+                if (msg instanceof FMLProxyPacket) {
+                    FMLProxyPacket fmlPacket = (FMLProxyPacket) msg;
+                    SimpleIndexedCodec codec = NetworkRegistry.INSTANCE.getChannel(fmlPacket.channel(), Side.CLIENT).pipeline().get(SimpleIndexedCodec.class);
+                    if (codec != null) {
+                        ByteBuf payload = fmlPacket.payload();
+                        payload.markReaderIndex();
+                        byte discriminator = payload.readByte();
+                        Class<? extends IMessage> clazz = ((Byte2ObjectMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
+                        incomingPackets.merge(clazz.getName(), Pair.of(1, payload.readableBytes()), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
+                        payload.resetReaderIndex();
+                    }
+                } else {
+                    incomingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
                 }
-            } else {
-                incomingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
             }
+
+        }
+        catch (Exception e) {
+            e.printStackTrace();
         }
         super.channelRead(ctx, msg);
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (outgoingActive && msg instanceof Packet) {
-            outgoingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
+        try {
+            if (outgoingActive && msg instanceof Packet) {
+                if (msg instanceof FMLProxyPacket) {
+                    FMLProxyPacket fmlPacket = (FMLProxyPacket) msg;
+                    SimpleIndexedCodec codec = NetworkRegistry.INSTANCE.getChannel(fmlPacket.channel(), Side.CLIENT).pipeline().get(SimpleIndexedCodec.class);
+                    if (codec != null) {
+                        ByteBuf payload = fmlPacket.payload();
+                        payload.markReaderIndex();
+                        byte discriminator = payload.readByte();
+                        Class<? extends IMessage> clazz = ((Byte2ObjectMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
+                        outgoingPackets.merge(clazz.getName(), Pair.of(1, payload.readableBytes()), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
+                        payload.resetReaderIndex();
+                    }
+                } else {
+                    outgoingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
+                }
+            }
+
+        }
+        catch (Exception e) {
+            e.printStackTrace();
         }
         super.write(ctx, msg, promise);
     }
 
-    private int getPacketSize(Object msg) throws java.io.IOException {
+    private int getPacketSize(Object msg) throws IOException {
         PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
         ((Packet<?>) msg).writePacketData(buf);
         return buf.readableBytes();
