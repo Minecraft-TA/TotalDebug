@@ -87,9 +87,7 @@ public class PacketLogger extends ChannelDuplexHandler {
                     incomingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
                 }
             }
-
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         super.channelRead(ctx, msg);
@@ -114,9 +112,7 @@ public class PacketLogger extends ChannelDuplexHandler {
                     outgoingPackets.merge(msg.getClass().getName(), Pair.of(1, getPacketSize(msg)), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
                 }
             }
-
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         super.write(ctx, msg, promise);
@@ -124,7 +120,9 @@ public class PacketLogger extends ChannelDuplexHandler {
 
     private int getPacketSize(Object msg) throws IOException {
         PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
-        ((Packet<?>) msg).writePacketData(buf);
+        try {
+            ((Packet<?>) msg).writePacketData(buf);
+        } catch (NullPointerException ignored) {}
         return buf.readableBytes();
     }
 
