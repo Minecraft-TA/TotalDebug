@@ -100,7 +100,6 @@ dependencies {
 
 shadowJar {
     classifier ''
-    exclude("module-info.class")
 
     relocate "com.github.javaparser", "com.github.minecraft_ta.totaldebug.shades.javaparser"
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
@@ -108,6 +107,8 @@ shadowJar {
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
     relocate "com.github.tth05.scnet", "com.github.minecraft_ta.totaldebug.shades.scnet"
     dependencies {
+        exclude("**/module-info.class")
+        exclude("**/maven/**")
         exclude(dependency {
             it.moduleGroup != 'io.github.classgraph' &&
                     it.moduleGroup != 'com.github.javaparser' &&

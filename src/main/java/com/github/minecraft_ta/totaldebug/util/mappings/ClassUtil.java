@@ -137,7 +137,7 @@ public class ClassUtil {
                                                       file.getName().equals("minecraft-class-dump.jar");
 
                     try (ZipFile zipFile = new ZipFile(file)) {
-                        Enumeration<ZipArchiveEntry> iterator = zipFile.getEntriesInPhysicalOrder();
+                        Enumeration<ZipArchiveEntry> iterator = zipFile.getEntries();
                         for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
                             if (entry.isDirectory() || !entry.getName().endsWith(".class"))
                                 continue;
@@ -151,13 +151,19 @@ public class ClassUtil {
                                     buf = new byte[(int) finalEntry.getSize()];
                                     try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
                                         IOUtils.readFully(inputStream, buf);
-                                    } catch (Throwable ignored) {
+                                    } catch (Throwable throwable) {
+                                        TotalDebug.LOGGER.error("Unable to read zip entry, " + file + " -> " + finalEntry, throwable);
                                         return null;
                                     }
 
                                     if (!ignoreLaunchClassLoader) {
-                                        for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                                            buf = transformer.transform(className, className, buf);
+                                        try {
+                                            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+                                                buf = transformer.transform(className, className, buf);
+                                            }
+                                        } catch (Throwable throwable) {
+                                            TotalDebug.LOGGER.error("Error while transforming class bytecode, " + file + " -> " + finalEntry, throwable);
+                                            return null;
                                         }
                                     }
                                 }
