@@ -10,10 +10,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.ClearPacketsMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketLoggerStateChangeMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
@@ -97,6 +94,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, IncomingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ClearPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ChannelListMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -117,6 +115,8 @@ public class CompanionApp {
         });
 
         companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
+
+        companionAppClient.getMessageBus().listenAlways(ChannelListMessage.class, m -> companionAppClient.getMessageProcessor().enqueueMessage(new ChannelListMessage()));
     }
 
     public CompanionApp(Path appDir) {
