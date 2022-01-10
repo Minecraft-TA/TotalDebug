@@ -95,6 +95,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ClearPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ChannelListMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, SetChannelMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -117,6 +118,8 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
 
         companionAppClient.getMessageBus().listenAlways(ChannelListMessage.class, m -> companionAppClient.getMessageProcessor().enqueueMessage(new ChannelListMessage()));
+
+        companionAppClient.getMessageBus().listenAlways(SetChannelMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setChannel(m.getChannel()));
     }
 
     public CompanionApp(Path appDir) {
