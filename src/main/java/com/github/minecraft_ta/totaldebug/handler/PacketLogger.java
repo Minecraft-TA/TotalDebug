@@ -91,10 +91,18 @@ public class PacketLogger extends ChannelDuplexHandler {
             if (msg instanceof Packet) {
                 if (msg instanceof FMLProxyPacket) {
                     FMLProxyPacket fmlPacket = (FMLProxyPacket) msg;
-                    if (!activeChannel.equals("All channels") && !fmlPacket.channel().equals(activeChannel)) return;
+                    String channel = fmlPacket.channel();
+                    if (!activeChannel.equals("All channels") && !channel.equals(activeChannel)) return;
 
                     ByteBuf payload = fmlPacket.payload();
-                    SimpleIndexedCodec codec = NetworkRegistry.INSTANCE.getChannel(fmlPacket.channel(), Side.CLIENT).pipeline().get(SimpleIndexedCodec.class);
+
+                    //Handles jei packets differently because they send the packets themselves
+                    if (channel.equals("jei")) {
+                        handleJeiPacket(payload, packetMap);
+                        return;
+                    }
+
+                    SimpleIndexedCodec codec = NetworkRegistry.INSTANCE.getChannel(channel, Side.CLIENT).pipeline().get(SimpleIndexedCodec.class);
                     if (codec != null) {
                         payload.markReaderIndex();
                         byte discriminator = payload.readByte();
@@ -127,6 +135,48 @@ public class PacketLogger extends ChannelDuplexHandler {
         packetMap.merge(clazz.getName(), Pair.of(1, size), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
     }
 
+    /**
+     * Handles the packet sent by jei and adds it to the map.
+     * It's not possible to get directly because jei uses method references
+     *
+     * @param payload The packet payload
+     * @param packetMap The map to merge the packet into
+     */
+    private void handleJeiPacket(ByteBuf payload, Map<String, Pair<Integer, Integer>> packetMap) {
+        payload.markReaderIndex();
+        int packetId = payload.readByte();
+
+        Class<?> clazz = null;
+        try {
+            switch (packetId) {
+                case 0:
+                    if (outgoingActive) clazz = Class.forName("mezz.jei.network.packets.PacketRecipeTransfer");
+                    else clazz = Class.forName("mezz.jei.network.packets.PacketCheatPermission");
+                    break;
+                case 1:
+                    clazz = Class.forName("mezz.jei.network.packets.PacketDeletePlayerItem");
+                    break;
+                case 2:
+                    clazz = Class.forName("mezz.jei.network.packets.PacketGiveItemStack");
+                    break;
+                case 3:
+                    clazz = Class.forName("mezz.jei.network.packets.PacketSetHotbarItemStack");
+                    break;
+                case 4:
+                    clazz = Class.forName("mezz.jei.network.packets.PacketRequestCheatPermission");
+            }
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        if (clazz != null) {
+            putPacket(clazz, payload.readableBytes(), packetMap);
+        }
+        payload.resetReaderIndex();
+    }
+
+    /**
+     * Gets the size of the packet in bytes by writing it to a buffer and reading the size
+     */
     private int getPacketSize(Object msg) throws IOException {
         PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
         try {
