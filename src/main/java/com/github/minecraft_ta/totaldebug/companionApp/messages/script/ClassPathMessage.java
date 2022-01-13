@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totaldebug.companionApp.messages.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
-import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
@@ -44,7 +43,6 @@ public class ClassPathMessage extends AbstractMessage {
 
     public static void handle(ClassPathMessage m) {
         CompletableFuture.runAsync(() -> {
-            ClassUtil.dumpMinecraftClasses();
             TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(new ClassPathMessage());
         });
     }

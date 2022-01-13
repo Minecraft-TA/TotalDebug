@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.Decompi
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
+import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
@@ -136,11 +137,18 @@ public class CompanionApp {
                 this.metafile.write();
             }
 
+            if (!Files.exists(TotalDebug.PROXY.getMinecraftClassDumpPath())) {
+                sender.sendMessage(new TextComponentTranslation("companion_app.dumping_minecraft_classes").setStyle(new Style().setColor(TextFormatting.GRAY)));
+                ClassUtil.dumpMinecraftClasses();
+            }
 
-            sender.sendMessage(
-                    new TextComponentTranslation("companion_app.starting")
-                            .setStyle(new Style().setColor(TextFormatting.GRAY))
-            );
+            Path indexPath = TotalDebug.PROXY.getDecompilationManager().getDataDir().resolve(DATA_FOLDER).resolve("index");
+            if (!Files.exists(indexPath)) {
+                sender.sendMessage(new TextComponentTranslation("companion_app.start_indexing").setStyle(new Style().setColor(TextFormatting.GRAY)));
+                ClassUtil.createClassIndex(indexPath);
+            }
+
+            sender.sendMessage(new TextComponentTranslation("companion_app.starting").setStyle(new Style().setColor(TextFormatting.GRAY)));
             startApp();
         }
 

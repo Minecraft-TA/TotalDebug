@@ -75,6 +75,9 @@ repositories {
     maven {
         url 'https://jitpack.io'
     }
+    maven {
+        url "https://packagecloud.io/tth05/repo/maven2"
+    }
 }
 
 dependencies {
@@ -83,6 +86,9 @@ dependencies {
     implementation "com.github.tth05:SCNet:519b65"
     implementation "io.github.classgraph:classgraph:4.8.90"
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
+    implementation "com.github.tth05:jindex:0.0.3"
+
+//    implementation files("C:\\Users\\Tim\\AppData\\Roaming\\gdlauncher_next\\instances\\ATM3-Neu\\mods\\Thaumcraft-1.12.2-6.1.BETA26.jar")
 
     compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
@@ -99,8 +105,10 @@ shadowJar {
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
     relocate "com.strobel", "com.github.minecraft_ta.totaldebug.shades.procyon"
-    relocate "com.github.tth05", "com.github.minecraft_ta.totaldebug.shades"
+    relocate "com.github.tth05.scnet", "com.github.minecraft_ta.totaldebug.shades.scnet"
     dependencies {
+        exclude("**/module-info.class")
+        exclude("**/maven/**")
         exclude(dependency {
             it.moduleGroup != 'io.github.classgraph' &&
                     it.moduleGroup != 'com.github.javaparser' &&
