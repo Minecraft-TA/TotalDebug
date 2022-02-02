@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totaldebug.util;
 
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraftforge.fml.common.Mod;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -28,6 +30,10 @@ public class ObjectToNbtHelper {
     private static NBTTagCompound objectToNbt(Object object, Set<Object> seenObjects) {
         NBTTagCompound nbt = new NBTTagCompound();
         for (Field declaredField : object.getClass().getDeclaredFields()) {
+            int modifiers = declaredField.getModifiers();
+            if (Modifier.isStatic(modifiers) && Modifier.isFinal(modifiers)) {
+                continue;
+            }
             declaredField.setAccessible(true);
             try {
                 Object value = declaredField.get(object);
