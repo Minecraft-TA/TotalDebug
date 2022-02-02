@@ -7,11 +7,7 @@ import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenceCommand;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
-import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
-import com.github.minecraft_ta.totaldebug.handler.ChannelInputHandler;
-import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
-import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
-import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
+import com.github.minecraft_ta.totaldebug.handler.*;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
@@ -31,7 +27,7 @@ public class ClientProxy extends CommonProxy {
 
     private final DecompilationManager decompilationManager = new DecompilationManager();
     private final TotalDebugClientConfig clientConfig = new TotalDebugClientConfig();
-    private final PacketLogger packetLogger = new PacketLogger();
+    private PacketLogger packetLogger;
     private CompanionApp companionApp;
 
     @Override
@@ -45,6 +41,7 @@ public class ClientProxy extends CommonProxy {
         super.init(e);
         this.decompilationManager.setup();
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
+        this.packetLogger = new PacketLogger();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());

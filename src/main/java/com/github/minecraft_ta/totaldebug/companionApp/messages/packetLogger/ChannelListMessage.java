@@ -18,7 +18,6 @@ public class ChannelListMessage extends AbstractMessage {
     @Override
     public void write(ByteBufferOutputStream messageStream) {
         Set<String> channels = NetworkRegistry.INSTANCE.channelNamesFor(Side.CLIENT);
-        System.out.println(channels.size());
         messageStream.writeInt(channels.size());
         channels.forEach(messageStream::writeString);
     }

@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totaldebug.handler;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketContentMessage;
+import com.github.minecraft_ta.totaldebug.util.ObjectToNbtHelper;
 import com.github.tth05.scnet.Client;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -24,13 +26,17 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 @ChannelHandler.Sharable
 public class PacketLogger extends ChannelDuplexHandler {
 
     private final Map<String, Pair<Integer, Integer>> incomingPackets = new HashMap<>();
     private final Map<String, Pair<Integer, Integer>> outgoingPackets = new HashMap<>();
+    private final Set<String> packetsToCapture = new HashSet<>();
+    private final Client client = TotalDebug.PROXY.getCompanionApp().getClient();
     private boolean incomingActive;
     private boolean outgoingActive;
     private String activeChannel;
@@ -48,7 +54,6 @@ public class PacketLogger extends ChannelDuplexHandler {
     }
 
     public void update() {
-        final Client client = TotalDebug.PROXY.getCompanionApp().getClient();
         if (incomingActive) {
             client.getMessageProcessor().enqueueMessage(new IncomingPacketsMessage(incomingPackets));
         }
@@ -108,14 +113,14 @@ public class PacketLogger extends ChannelDuplexHandler {
                         byte discriminator = payload.readByte();
                         //noinspection unchecked
                         Class<? extends IMessage> clazz = ((Byte2ObjectMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
-                        putPacket(clazz, payload.readableBytes(), packetMap);
+                        putPacket(clazz, payload.readableBytes(), packetMap, payload);
                         payload.resetReaderIndex();
                     } else {
-                        putPacket(fmlPacket.getClass(), payload.readableBytes(), packetMap);
+                        putPacket(fmlPacket.getClass(), payload.readableBytes(), packetMap, null);
                     }
                 } else {
                     if (activeChannel.equals("All channels") || activeChannel.equals("minecraft")) {
-                        putPacket(msg.getClass(), getPacketSize(msg), packetMap);
+                        putPacket(msg.getClass(), getPacketSize(msg), packetMap, msg);
                     }
                 }
             }
@@ -131,7 +136,23 @@ public class PacketLogger extends ChannelDuplexHandler {
      * @param size      The size of the packet in bytes
      * @param packetMap The map to merge the packet into
      */
-    private void putPacket(Class<?> clazz, int size, Map<String, Pair<Integer, Integer>> packetMap) {
+    private void putPacket(Class<?> clazz, int size, Map<String, Pair<Integer, Integer>> packetMap, Object payloadOrPacket) {
+        if (packetsToCapture.contains(clazz.getName())) {
+            if (payloadOrPacket instanceof ByteBuf) {
+                try {
+                    Object packetObject = clazz.newInstance();
+                    if (packetObject instanceof IMessage) {
+                        ((IMessage) packetObject).fromBytes((ByteBuf) payloadOrPacket);
+                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), ObjectToNbtHelper.objectToNbt(packetObject)));
+                    }
+                } catch (InstantiationException | IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (payloadOrPacket instanceof Packet) {
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), ObjectToNbtHelper.objectToNbt(payloadOrPacket)));
+            }
+        }
         packetMap.merge(clazz.getName(), Pair.of(1, size), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
     }
 
@@ -139,7 +160,7 @@ public class PacketLogger extends ChannelDuplexHandler {
      * Handles the packet sent by jei and adds it to the map.
      * It's not possible to get directly because jei uses method references
      *
-     * @param payload The packet payload
+     * @param payload   The packet payload
      * @param packetMap The map to merge the packet into
      */
     private void handleJeiPacket(ByteBuf payload, Map<String, Pair<Integer, Integer>> packetMap) {
@@ -169,7 +190,7 @@ public class PacketLogger extends ChannelDuplexHandler {
             e.printStackTrace();
         }
         if (clazz != null) {
-            putPacket(clazz, payload.readableBytes(), packetMap);
+            putPacket(clazz, payload.readableBytes(), packetMap, payload);
         }
         payload.resetReaderIndex();
     }
@@ -188,5 +209,13 @@ public class PacketLogger extends ChannelDuplexHandler {
 
     public void setChannel(String channel) {
         this.activeChannel = channel;
+    }
+
+    public void setPacketsToCapture(String packet, boolean remove) {
+        if (remove) {
+            packetsToCapture.remove(packet);
+        } else {
+            packetsToCapture.add(packet);
+        }
     }
 }

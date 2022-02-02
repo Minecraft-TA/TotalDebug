@@ -16,7 +16,6 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScript
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
-import com.github.minecraft_ta.totaldebug.handler.PacketListener;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
 import com.google.common.collect.Lists;
@@ -96,6 +95,8 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ClearPacketsMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ChannelListMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, SetChannelMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketContentMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CapturePacketMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -120,6 +121,8 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(ChannelListMessage.class, m -> companionAppClient.getMessageProcessor().enqueueMessage(new ChannelListMessage()));
 
         companionAppClient.getMessageBus().listenAlways(SetChannelMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setChannel(m.getChannel()));
+
+        companionAppClient.getMessageBus().listenAlways(CapturePacketMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setPacketsToCapture(m.getPacket(), m.isRemove()));
     }
 
     public CompanionApp(Path appDir) {
