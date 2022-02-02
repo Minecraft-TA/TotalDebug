@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totaldebug.util;
 import net.minecraft.nbt.NBTTagCompound;
 
 import java.lang.reflect.Field;
+import java.util.HashSet;
+import java.util.Set;
 
 public class ObjectToNbtHelper {
 
@@ -13,6 +15,17 @@ public class ObjectToNbtHelper {
      * @return The converted NBTTagCompound
      */
     public static NBTTagCompound objectToNbt(Object object) {
+        return objectToNbt(object, new HashSet<>());
+    }
+
+    /**
+     * Helper method to convert an object to an NBTTagCompound
+     *
+     * @param object      The object to convert
+     * @param seenObjects A set of already seen objects to prevent infinite recursion
+     * @return The converted NBTTagCompound
+     */
+    private static NBTTagCompound objectToNbt(Object object, Set<Object> seenObjects) {
         NBTTagCompound nbt = new NBTTagCompound();
         for (Field declaredField : object.getClass().getDeclaredFields()) {
             declaredField.setAccessible(true);
@@ -20,8 +33,9 @@ public class ObjectToNbtHelper {
                 Object value = declaredField.get(object);
                 if (value == null || declaredField.getType().isPrimitive() || isWrapper(value)) {
                     nbt.setString(declaredField.getName(), String.valueOf(value));
-                } else {
-                    nbt.setTag(declaredField.getName(), objectToNbt(value));
+                } else if (!seenObjects.contains(value)) {
+                    seenObjects.add(value);
+                    nbt.setTag(declaredField.getName(), objectToNbt(value, seenObjects));
                 }
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
