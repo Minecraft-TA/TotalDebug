@@ -73,6 +73,7 @@ public class PacketLogger extends ChannelDuplexHandler {
     public void clear() {
         incomingPackets.clear();
         outgoingPackets.clear();
+        packetsToCapture.clear();
     }
 
     @Override
