@@ -42,7 +42,15 @@ public class ObjectToNbtHelper {
                     seenObjects.add(value);
                     if (value instanceof Iterable) {
                         NBTTagCompound iterableNbt = new NBTTagCompound();
-                        ((Iterable<?>) value).forEach(o -> iterableNbt.setTag(String.valueOf(o), objectToNbt(o, seenObjects)));
+                        int i = 0;
+                        for (Object arrayObject : ((Iterable<?>) value)) {
+                            if (arrayObject == null || isWrapper(iterableNbt)) {
+                                iterableNbt.setString(String.valueOf(i), String.valueOf(arrayObject));
+                            } else {
+                                iterableNbt.setTag(String.valueOf(i), objectToNbt(arrayObject, seenObjects));
+                            }
+                            i++;
+                        }
                         nbt.setTag(declaredField.getName(), iterableNbt);
                     } else if (value.getClass().isArray()) {
                         NBTTagCompound arrayNbt = new NBTTagCompound();
@@ -77,6 +85,31 @@ public class ObjectToNbtHelper {
                 object instanceof Short ||
                 object instanceof Byte ||
                 object instanceof String;
+    }
+
+    public static void main(String[] args) {
+        List<String> stringList = Arrays.asList("a", "b", "c", "d", "e");
+        ArrayList<String> listOfStrings = new ArrayList<>();
+        listOfStrings.add("a");
+        listOfStrings.add("b");
+        listOfStrings.add("c");
+        listOfStrings.add("d");
+        listOfStrings.add("e");
+        Test t = new Test("lol", new int[]{1, 2, 3, 4}, listOfStrings);
+        System.out.println(objectToNbt(t));
+        //System.out.println(objectToNbt(stringList));
+    }
+
+    private static class Test {
+        private String a;
+        private int[] b;
+        private ArrayList<String> listOfStrings;
+
+        public Test(String a, int[] b, ArrayList<String> listOfStrings) {
+            this.a = a;
+            this.b = b;
+            this.listOfStrings = listOfStrings;
+        }
     }
 
 }
