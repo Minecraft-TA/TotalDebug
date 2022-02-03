@@ -5,7 +5,8 @@ import net.minecraft.nbt.NBTTagCompound;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Set;
 
 public class ObjectToNbtHelper {
 
@@ -90,30 +91,4 @@ public class ObjectToNbtHelper {
                 object instanceof Byte ||
                 object instanceof String;
     }
-
-    public static void main(String[] args) {
-        List<String> stringList = Arrays.asList("a", "b", "c", "d", "e");
-        ArrayList<String> listOfStrings = new ArrayList<>();
-        listOfStrings.add("a");
-        listOfStrings.add("b");
-        listOfStrings.add("c");
-        listOfStrings.add("d");
-        listOfStrings.add("e");
-        Test t = new Test("lol", new int[]{1, 2, 3, 4}, listOfStrings);
-        System.out.println(objectToNbt(t));
-        //System.out.println(objectToNbt(stringList));
-    }
-
-    private static class Test {
-        private String a;
-        private int[] b;
-        private ArrayList<String> listOfStrings;
-
-        public Test(String a, int[] b, ArrayList<String> listOfStrings) {
-            this.a = a;
-            this.b = b;
-            this.listOfStrings = listOfStrings;
-        }
-    }
-
 }
