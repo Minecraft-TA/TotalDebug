@@ -1,12 +1,11 @@
 package com.github.minecraft_ta.totaldebug.util;
 
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraftforge.fml.common.Mod;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class ObjectToNbtHelper {
 
@@ -41,7 +40,25 @@ public class ObjectToNbtHelper {
                     nbt.setString(declaredField.getName(), String.valueOf(value));
                 } else if (!seenObjects.contains(value)) {
                     seenObjects.add(value);
-                    nbt.setTag(declaredField.getName(), objectToNbt(value, seenObjects));
+                    if (value instanceof Iterable) {
+                        NBTTagCompound iterableNbt = new NBTTagCompound();
+                        ((Iterable<?>) value).forEach(o -> iterableNbt.setTag(String.valueOf(o), objectToNbt(o, seenObjects)));
+                        nbt.setTag(declaredField.getName(), iterableNbt);
+                    } else if (value.getClass().isArray()) {
+                        NBTTagCompound arrayNbt = new NBTTagCompound();
+                        int length = Array.getLength(value);
+                        for (int i = 0; i < length; i++) {
+                            Object arrayElement = Array.get(value, i);
+                            if (arrayElement == null || isWrapper(arrayElement)) {
+                                arrayNbt.setString(String.valueOf(i), String.valueOf(arrayElement));
+                            } else {
+                                arrayNbt.setTag(String.valueOf(i), objectToNbt(arrayElement, seenObjects));
+                            }
+                        }
+                        nbt.setTag(declaredField.getName(), arrayNbt);
+                    } else {
+                        nbt.setTag(declaredField.getName(), objectToNbt(value, seenObjects));
+                    }
                 }
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
