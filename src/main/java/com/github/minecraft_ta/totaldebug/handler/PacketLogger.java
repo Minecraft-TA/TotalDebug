@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.IncomingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketContentMessage;
-import com.github.minecraft_ta.totaldebug.util.ObjectToNbtHelper;
 import com.github.tth05.scnet.Client;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -144,14 +143,14 @@ public class PacketLogger extends ChannelDuplexHandler {
                     Object packetObject = clazz.newInstance();
                     if (packetObject instanceof IMessage) {
                         ((IMessage) packetObject).fromBytes((ByteBuf) payloadOrPacket);
-                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), ObjectToNbtHelper.objectToNbt(packetObject)));
+                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), packetObject));
                     }
                 } catch (InstantiationException | IllegalAccessException e) {
                     e.printStackTrace();
                 }
             }
             if (payloadOrPacket instanceof Packet) {
-                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), ObjectToNbtHelper.objectToNbt(payloadOrPacket)));
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), payloadOrPacket));
             }
         }
         packetMap.merge(clazz.getName(), Pair.of(1, size), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
