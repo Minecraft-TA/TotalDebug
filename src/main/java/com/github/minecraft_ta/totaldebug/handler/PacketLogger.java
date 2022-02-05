@@ -113,14 +113,14 @@ public class PacketLogger extends ChannelDuplexHandler {
                         byte discriminator = payload.readByte();
                         //noinspection unchecked
                         Class<? extends IMessage> clazz = ((Byte2ObjectMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
-                        putPacket(clazz, payload.readableBytes(), packetMap, payload);
+                        putPacket(clazz, payload.readableBytes(), packetMap, payload, channel);
                         payload.resetReaderIndex();
                     } else {
-                        putPacket(fmlPacket.getClass(), payload.readableBytes(), packetMap, null);
+                        putPacket(fmlPacket.getClass(), payload.readableBytes(), packetMap, null, channel);
                     }
                 } else {
                     if (activeChannel.equals("All channels") || activeChannel.equals("minecraft")) {
-                        putPacket(msg.getClass(), getPacketSize(msg), packetMap, msg);
+                        putPacket(msg.getClass(), getPacketSize(msg), packetMap, msg, "minecraft");
                     }
                 }
             }
@@ -132,25 +132,27 @@ public class PacketLogger extends ChannelDuplexHandler {
     /**
      * Merges the packet into the map, or creates a new entry if it doesn't exist
      *
-     * @param clazz     The class of the packet
-     * @param size      The size of the packet in bytes
-     * @param packetMap The map to merge the packet into
+     * @param clazz           The class of the packet
+     * @param size            The size of the packet in bytes
+     * @param packetMap       The map to merge the packet into
+     * @param payloadOrPacket The payload of the packet, or the packet itself if it's a Minecraft packet
+     * @param channel         The channel the packet was sent on
      */
-    private void putPacket(Class<?> clazz, int size, Map<String, Pair<Integer, Integer>> packetMap, Object payloadOrPacket) {
+    private void putPacket(Class<?> clazz, int size, Map<String, Pair<Integer, Integer>> packetMap, Object payloadOrPacket, String channel) {
         if (packetsToCapture.contains(clazz.getName())) {
             if (payloadOrPacket instanceof ByteBuf) {
                 try {
                     Object packetObject = clazz.newInstance();
                     if (packetObject instanceof IMessage) {
                         ((IMessage) packetObject).fromBytes((ByteBuf) payloadOrPacket);
-                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), packetObject));
+                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, packetObject));
                     }
                 } catch (InstantiationException | IllegalAccessException e) {
                     e.printStackTrace();
                 }
             }
             if (payloadOrPacket instanceof Packet) {
-                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), payloadOrPacket));
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, payloadOrPacket));
             }
         }
         packetMap.merge(clazz.getName(), Pair.of(1, size), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
@@ -190,7 +192,7 @@ public class PacketLogger extends ChannelDuplexHandler {
             e.printStackTrace();
         }
         if (clazz != null) {
-            putPacket(clazz, payload.readableBytes(), packetMap, payload);
+            putPacket(clazz, payload.readableBytes(), packetMap, payload, "jei");
         }
         payload.resetReaderIndex();
     }
