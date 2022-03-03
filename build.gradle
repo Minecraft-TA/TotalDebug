@@ -84,16 +84,14 @@ dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2854'
 
     implementation "com.github.tth05:SCNet:519b65"
-    implementation "io.github.classgraph:classgraph:4.8.90"
-    implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.36"
+    implementation 'io.github.classgraph:classgraph:4.8.139'
+    implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
     implementation "com.github.tth05:jindex:0.0.3"
-
-//    implementation files("C:\\Users\\Tim\\AppData\\Roaming\\gdlauncher_next\\instances\\ATM3-Neu\\mods\\Thaumcraft-1.12.2-6.1.BETA26.jar")
 
     compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
 
-    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.22.0") {
+    implementation('com.github.javaparser:javaparser-symbol-solver-core:3.24.0') {
         exclude group: "com.google.guava"
     }
 }
