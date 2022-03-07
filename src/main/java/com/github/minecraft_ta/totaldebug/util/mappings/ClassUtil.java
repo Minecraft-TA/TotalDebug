@@ -1,38 +1,33 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraftforge.fml.common.Loader;
-import net.minecraftforge.fml.common.ModContainer;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockSpecialTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemStackTransformer;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipFile;
-import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
-import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -110,87 +105,32 @@ public class ClassUtil {
 
         //TODO: Show progress to player because this takes a while
 
-        Map<String, byte[]> cachedClasses = new ConcurrentHashMap<>();
-        List<File> jarFiles = Stream.concat(
-                //All mod jars
-                Loader.instance().getModList().stream().map(ModContainer::getSource).distinct().filter(f -> !f.toString().equals("minecraft.jar")),
-                //Minecraft classes and jdk
-                Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toFile(), new File(System.getProperty("java.home"), "lib" + File.separator + "rt.jar"))
-        ).filter(file -> file.getName().endsWith(".jar")).collect(Collectors.toList());
-
-        int threadCount = Runtime.getRuntime().availableProcessors();
-        CountDownLatch latch = new CountDownLatch(threadCount);
-
-        for (int i = 0; i < threadCount; i++) {
-            new Thread(() -> {
-                while (true) {
-                    File file;
-                    synchronized (jarFiles) {
-                        if (jarFiles.isEmpty())
-                            break;
-
-                        file = jarFiles.remove(0);
-                    }
-
-                    //The JDK doesn't need any transformation and the class dump already went through it
-                    boolean ignoreLaunchClassLoader = file.getName().equals("rt.jar") ||
-                                                      file.getName().equals("minecraft-class-dump.jar");
-
-                    try (ZipFile zipFile = new ZipFile(file)) {
-                        Enumeration<ZipArchiveEntry> iterator = zipFile.getEntries();
-                        for (ZipArchiveEntry entry = iterator.nextElement(); iterator.hasMoreElements(); entry = iterator.nextElement()) {
-                            if (entry.isDirectory() || !entry.getName().endsWith(".class"))
-                                continue;
-
-                            String className = getTransformedName(entry.getName().substring(0, entry.getName().length() - 6));
-
-                            ZipArchiveEntry finalEntry = entry;
-                            cachedClasses.computeIfAbsent(className, (s) -> {
-                                byte[] buf = ignoreLaunchClassLoader ? null : getBytecodeFromLaunchClassLoader(className, false);
-                                if (buf == null) {
-                                    buf = new byte[(int) finalEntry.getSize()];
-                                    try (InputStream inputStream = zipFile.getInputStream(finalEntry)) {
-                                        IOUtils.readFully(inputStream, buf);
-                                    } catch (Throwable throwable) {
-                                        TotalDebug.LOGGER.error("Unable to read zip entry, " + file + " -> " + finalEntry, throwable);
-                                        return null;
-                                    }
-
-                                    if (!ignoreLaunchClassLoader) {
-                                        try {
-                                            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                                                buf = transformer.transform(className, className, buf);
-                                            }
-                                        } catch (Throwable throwable) {
-                                            TotalDebug.LOGGER.error("Error while transforming class bytecode, " + file + " -> " + finalEntry, throwable);
-                                            return null;
-                                        }
-                                    }
-                                }
-
-                                return buf;
-                            });
-                        }
-                    } catch (Throwable throwable) {
-                        TotalDebug.LOGGER.error("Exception while reading mod jar " + file, throwable);
-                    }
-                }
-
-                latch.countDown();
-            }).start();
-        }
-
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            TotalDebug.LOGGER.error("Latch was interrupted", e);
-        }
-
         TotalDebug.LOGGER.info("Completed bytecode gathering in {}ms", (System.nanoTime() - time) / 1_000_000);
 
-        new ClassIndex(new ArrayList<>(cachedClasses.values())).saveToFile(indexPath.toAbsolutePath().normalize().toString());
+        List<String> jarPaths = Stream.concat(
+                ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
+                        .filter(url -> {
+                            String str = url.toString();
+                            return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
+                                   str.endsWith(".jar") && //Filter for only jars
+                                   (!str.contains("jre") || str.endsWith("rt.jar")); //Filter everything from JDK except rt
+                        })
+                        .map(url -> {
+                            try {
+                                //URLs suck
+                                return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
+                            } catch (UnsupportedEncodingException ignored) {
+                                return null;
+                            }
+                        }).filter(Objects::nonNull),
+                Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString())
+        ).collect(Collectors.toList());
 
-        TotalDebug.LOGGER.info("Completed indexing {} classes in {}ms", cachedClasses.size(), (System.nanoTime() - time) / 1_000_000);
+        ClassIndex classIndex = ClassIndex.fromJars(jarPaths);
+        classIndex.saveToFile(indexPath.toAbsolutePath().normalize().toString());
+        classIndex.destroy();
+
+        TotalDebug.LOGGER.info("Completed indexing classes in {}ms", (System.nanoTime() - time) / 1_000_000);
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
