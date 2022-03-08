@@ -113,7 +113,8 @@ public class ClassUtil {
                             String str = url.toString();
                             return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
-                                   (!str.contains("jre") || str.endsWith("rt.jar")); //Filter everything from JDK except rt
+                                   (!str.contains("jre") || str.endsWith("rt.jar")) && //Filter everything from JDK except rt
+                                    !str.contains("scala") && !str.contains("IDEA");
                         })
                         .map(url -> {
                             try {
@@ -124,7 +125,7 @@ public class ClassUtil {
                             }
                         }).filter(Objects::nonNull),
                 Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString())
-        ).collect(Collectors.toList());
+        ).distinct().collect(Collectors.toList());
 
         ClassIndex classIndex = ClassIndex.fromJars(jarPaths);
         classIndex.saveToFile(indexPath.toAbsolutePath().normalize().toString());
