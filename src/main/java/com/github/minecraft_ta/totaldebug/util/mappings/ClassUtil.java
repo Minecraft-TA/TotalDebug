@@ -3,12 +3,16 @@ package com.github.minecraft_ta.totaldebug.util.mappings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
+import io.github.classgraph.ClassGraph;
+import io.github.classgraph.ClassInfo;
+import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockSpecialTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemBlockTransformer;
 import net.minecraftforge.fml.common.asm.transformers.ItemStackTransformer;
+import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
@@ -75,21 +79,29 @@ public class ClassUtil {
 
             Files.createDirectories(outputPath.getParent());
             Files.createFile(outputPath);
-            try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath))) {
-                ClassUtil.getCachedClassesFromLaunchClassLoader().keySet().stream()
-                        .map(ClassUtil::getTransformedName)
-                        .filter(k -> k.contains("net.minecraft") && !k.startsWith("$"))
-                        .forEach(k -> {
-                            ZipEntry entry = new ZipEntry(k.replace('.', '/') + ".class");
-                            try {
-                                byte[] bytes = getBytecodeFromLaunchClassLoader(k);
-                                if (bytes == null)
-                                    return;
-                                outputStream.putNextEntry(entry);
-                                outputStream.write(bytes);
-                                outputStream.closeEntry();
-                            } catch (IOException ignored) {}
-                        });
+            try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath));
+                 ScanResult scanResult = new ClassGraph().enableClassInfo().disableNestedJarScanning().disableRuntimeInvisibleAnnotations()
+                         .acceptPackages("net.minecraft*").scan()) {
+                for (ClassInfo classInfo : scanResult.getAllClasses()) {
+                    String k = classInfo.getName();
+
+                    ZipEntry entry = new ZipEntry(k.replace('.', '/') + ".class");
+                    try {
+                        byte[] bytes = getBytecodeFromLaunchClassLoader(k, false);
+                        if (bytes == null) {
+                            try (InputStream stream = classInfo.getResource().open()) {
+                                bytes = IOUtils.toByteArray(stream);
+                            }
+
+                            if (bytes == null)
+                                return;
+                        }
+
+                        outputStream.putNextEntry(entry);
+                        outputStream.write(bytes);
+                        outputStream.closeEntry();
+                    } catch (IOException ignored) {}
+                }
             }
 
             TotalDebug.LOGGER.info("Completed dumping minecraft classes in {}ms", (System.nanoTime() - time) / 1_000_000);
@@ -105,8 +117,6 @@ public class ClassUtil {
 
         //TODO: Show progress to player because this takes a while
 
-        TotalDebug.LOGGER.info("Completed bytecode gathering in {}ms", (System.nanoTime() - time) / 1_000_000);
-
         List<String> jarPaths = Stream.concat(
                 ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
                         .filter(url -> {
@@ -114,7 +124,7 @@ public class ClassUtil {
                             return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
                                    (!str.contains("jre") || str.endsWith("rt.jar")) && //Filter everything from JDK except rt
-                                    !str.contains("scala") && !str.contains("IDEA");
+                                   !str.contains("scala") && !str.contains("IDEA");
                         })
                         .map(url -> {
                             try {
