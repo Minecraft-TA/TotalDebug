@@ -1,14 +1,12 @@
 package com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger;
 
+import com.github.minecraft_ta.totaldebug.util.ObjectToJsonHelper;
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 
 public class PacketContentMessage extends AbstractMessageOutgoing {
 
-    private static final GsonBuilder BUILDER = new GsonBuilder();
-    private static final Gson GSON = BUILDER.serializeNulls().create();
     private final String packetName;
     private final String channel;
     private final Object packet;
@@ -23,6 +21,13 @@ public class PacketContentMessage extends AbstractMessageOutgoing {
     public void write(ByteBufferOutputStream messageStream) {
         messageStream.writeString(packetName);
         messageStream.writeString(channel);
-        messageStream.writeString(GSON.toJson(packet));
+        try {
+            messageStream.writeString(ObjectToJsonHelper.objectToJson(packet).toString());
+        } catch (StackOverflowError e) {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("error", "StackOverflowError");
+            messageStream.writeString(jsonObject.toString());
+            e.printStackTrace();
+        }
     }
 }
