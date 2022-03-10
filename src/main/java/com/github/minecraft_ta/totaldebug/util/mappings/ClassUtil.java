@@ -80,21 +80,26 @@ public class ClassUtil {
             Files.createDirectories(outputPath.getParent());
             Files.createFile(outputPath);
             try (ZipOutputStream outputStream = new ZipOutputStream(Files.newOutputStream(outputPath));
-                 ScanResult scanResult = new ClassGraph().enableClassInfo().disableNestedJarScanning().disableRuntimeInvisibleAnnotations()
-                         .acceptPackages("net.minecraft*").scan()) {
+                 ScanResult scanResult = new ClassGraph().enableClassInfo()
+                         .disableNestedJarScanning()
+                         .disableRuntimeInvisibleAnnotations()
+                         .acceptJars("1.12.2*.jar", "forge*.jar", "minecraft*.jar").scan()) {
+                //Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
-                    String k = classInfo.getName();
+                    String name = getTransformedName(classInfo.getName());
+                    if (!name.startsWith("net.minecraft"))
+                        continue;
 
-                    ZipEntry entry = new ZipEntry(k.replace('.', '/') + ".class");
+                    ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
                     try {
-                        byte[] bytes = getBytecodeFromLaunchClassLoader(k, false);
+                        byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
                         if (bytes == null) {
                             try (InputStream stream = classInfo.getResource().open()) {
                                 bytes = IOUtils.toByteArray(stream);
                             }
 
                             if (bytes == null)
-                                return;
+                                continue;
                         }
 
                         outputStream.putNextEntry(entry);
@@ -105,7 +110,7 @@ public class ClassUtil {
             }
 
             TotalDebug.LOGGER.info("Completed dumping minecraft classes in {}ms", (System.nanoTime() - time) / 1_000_000);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             TotalDebug.LOGGER.error("Unable to dump minecraft classes", e);
         }
     }
@@ -124,7 +129,7 @@ public class ClassUtil {
                             return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
                                    (!str.contains("jre") || str.endsWith("rt.jar")) && //Filter everything from JDK except rt
-                                   !str.contains("scala") && !str.contains("IDEA");
+                                   !str.contains("scala") && !str.contains("IDEA") && !str.contains("kotlin");
                         })
                         .map(url -> {
                             try {
