@@ -83,6 +83,7 @@ public class ClassUtil {
                  ScanResult scanResult = new ClassGraph().enableClassInfo()
                          .disableNestedJarScanning()
                          .disableRuntimeInvisibleAnnotations()
+                         .ignoreClassVisibility()
                          .acceptJars("1.12.2*.jar", "forge*.jar", "minecraft*.jar").scan()) {
                 //Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
