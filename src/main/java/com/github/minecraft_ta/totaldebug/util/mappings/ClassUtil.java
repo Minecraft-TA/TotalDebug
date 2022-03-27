@@ -129,7 +129,7 @@ public class ClassUtil {
                             String str = url.toString();
                             return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
-                                   (!str.contains("jre") || str.endsWith("rt.jar")) && //Filter everything from JDK except rt
+                                   (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
                                    !str.contains("scala") && !str.contains("IDEA") && !str.contains("kotlin");
                         })
                         .map(url -> {
