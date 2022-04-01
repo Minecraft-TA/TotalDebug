@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransform
 import com.google.common.collect.Lists;
 import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
 import net.minecraft.launchwrapper.IClassTransformer;
+import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.lang3.SystemUtils;
 
@@ -26,6 +27,7 @@ import java.util.stream.Stream;
 public class InMemoryJavaCompiler {
 
     private static final IClassTransformer TRANSFORMER = new RuntimeMappingsTransformer(true);
+    private static final boolean DEOBFUSCATED_ENVIRONMENT = (Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment");
 
     public static List<Class<?>> compile(String code, String... classNames) throws InMemoryCompilationFailedException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -52,7 +54,8 @@ public class InMemoryJavaCompiler {
             for (int i = outputObjectList.size() - 1; i >= 0; i--) {
                 BytecodeOutputObject outputObject = outputObjectList.get(i);
                 String className = classNames[i];
-                byte[] bytes = TRANSFORMER.transform(className, className, outputObject.getByteCode());
+
+                byte[] bytes = DEOBFUSCATED_ENVIRONMENT ? outputObject.getByteCode() : TRANSFORMER.transform(className, className, outputObject.getByteCode());
                 loadedClasses.add(UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
             }
 
