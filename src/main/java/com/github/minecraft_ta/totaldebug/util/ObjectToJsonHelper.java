@@ -18,11 +18,14 @@ public class ObjectToJsonHelper {
     private static final HashMap<Class<?>, ITypeSerializer<?>> SERIALIZERS = new HashMap<>();
     private static final List<Pair<Class<?>, ITypeSerializer<?>>> INHERITANCE_SERIALIZERS = new ArrayList<>();
     private static final ITypeSerializer<Object> STRING_SERIALIZER = object -> new JsonPrimitive(String.valueOf(object));
+    private static final ITypeSerializer<Number> NUMBER_SERIALIZER = JsonPrimitive::new;
+    private static final ITypeSerializer<Boolean> BOOLEAN_SERIALIZER = JsonPrimitive::new;
     private static final ArraySerializer ARRAY_SERIALIZER = new ArraySerializer();
 
     static {
-        Arrays.asList(Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class, Boolean.class, Character.class, String.class)
-                .forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
+        Arrays.asList(Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class).forEach(clazz -> SERIALIZERS.put(clazz, NUMBER_SERIALIZER));
+        Arrays.asList(String.class, Character.class).forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
+        SERIALIZERS.put(Boolean.class, BOOLEAN_SERIALIZER);
         SERIALIZERS.put(ItemStack.class, new ItemStackSerializer());
         SERIALIZERS.put(NBTTagCompound.class, new NBTTagCompoundSerializer());
 
@@ -36,8 +39,13 @@ public class ObjectToJsonHelper {
      * @param object The object to convert
      * @return The converted JsonObject
      */
-    public static JsonObject objectToJson(Object object) throws StackOverflowError {
-        return objectToJson(object, new HashSet<>());
+    public static JsonElement objectToJson(Object object) throws StackOverflowError {
+        ITypeSerializer<Object> serializer = getSerializer(object);
+        if (serializer != null) {
+            return serializer.serialize(object);
+        } else {
+            return objectToJson(object, new HashSet<>());
+        }
     }
 
     /**
