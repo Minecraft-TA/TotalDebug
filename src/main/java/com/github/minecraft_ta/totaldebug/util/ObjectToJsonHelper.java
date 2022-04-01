@@ -72,7 +72,7 @@ public class ObjectToJsonHelper {
                     ITypeSerializer<Object> serializer = getSerializer(value);
                     String fieldName = declaredField.getName();
                     if (clazz.getName().startsWith("net.minecraft")) {
-                        fieldName = RuntimeMappingsTransformer.forgeMappings.getOrDefault(fieldName, fieldName);
+                        fieldName = RuntimeMappingsTransformer.FORGE_MAPPINGS.getOrDefault(fieldName, fieldName);
                     }
                     if (serializer != null) {
                         json.add(fieldName, serializer.serialize(value));

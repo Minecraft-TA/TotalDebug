@@ -26,7 +26,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
      */
     private static final Map<String, BiMap<String, String>> MCP_MAPPINGS = new HashMap<>();
 
-    public static Map<String, String> forgeMappings;
+    public static final Map<String, String> FORGE_MAPPINGS = new HashMap<>();
 
     private final boolean reobfuscate;
 
@@ -125,9 +125,9 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                 throw new IllegalStateException("Forge or mcp mappings not found");
 
             //func_123 -> aFunction, field_234 -> a field
-            forgeMappings = IOUtils.readLines(forgeMappingsStream, StandardCharsets.UTF_8).stream()
+            IOUtils.readLines(forgeMappingsStream, StandardCharsets.UTF_8).stream()
                     .map(s -> s.split(","))
-                    .collect(HashMap::new, (map, s) -> map.put(s[0], s[1]), HashMap::putAll);
+                    .forEach((s) -> FORGE_MAPPINGS.put(s[0], s[1]));
 
             //aym$a -> net/minecraft/block/BlockSand$EnumType
             Map<String, String> typeNameMap = new HashMap<>();
@@ -144,13 +144,13 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                     String other = line.substring(indexOfFirstSpace + 1);
 
                     if (!other.startsWith("(")) { //field
-                        currentMap.put(other, forgeMappings.getOrDefault(other, other));
+                        currentMap.put(other, FORGE_MAPPINGS.getOrDefault(other, other));
                     } else { //method
                         int indexOfLastSpace = other.lastIndexOf(' ');
                         String name = other.substring(indexOfLastSpace + 1);
                         String desc = other.substring(0, indexOfLastSpace);
 
-                        currentMap.put(name + desc, forgeMappings.getOrDefault(name, name) + desc);
+                        currentMap.put(name + desc, FORGE_MAPPINGS.getOrDefault(name, name) + desc);
                     }
                 } else { // start of new class
                     String newName = line.substring(indexOfFirstSpace + 1);
