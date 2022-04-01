@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util;
 
+import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -29,7 +30,7 @@ public class ObjectToJsonHelper {
         SERIALIZERS.put(ItemStack.class, new ItemStackSerializer());
         SERIALIZERS.put(NBTTagCompound.class, new NBTTagCompoundSerializer());
 
-        INHERITANCE_SERIALIZERS.add(Pair.of(MapSerializer.class, new MapSerializer()));
+        INHERITANCE_SERIALIZERS.add(Pair.of(Map.class, new MapSerializer()));
         INHERITANCE_SERIALIZERS.add(Pair.of(Iterable.class, new IterableSerializer()));
     }
 
@@ -69,11 +70,15 @@ public class ObjectToJsonHelper {
                 try {
                     Object value = declaredField.get(object);
                     ITypeSerializer<Object> serializer = getSerializer(value);
+                    String fieldName = declaredField.getName();
+                    if (clazz.getName().startsWith("net.minecraft")) {
+                        fieldName = RuntimeMappingsTransformer.forgeMappings.getOrDefault(fieldName, fieldName);
+                    }
                     if (serializer != null) {
-                        json.add(declaredField.getName(), serializer.serialize(value));
+                        json.add(fieldName, serializer.serialize(value));
                     } else if (!seenObjects.contains(value)) {
                         seenObjects.add(value);
-                        json.add(declaredField.getName(), objectToJson(value, seenObjects));
+                        json.add(fieldName, objectToJson(value, seenObjects));
                     }
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();

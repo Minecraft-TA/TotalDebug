@@ -26,6 +26,8 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
      */
     private static final Map<String, BiMap<String, String>> MCP_MAPPINGS = new HashMap<>();
 
+    public static Map<String, String> forgeMappings;
+
     private final boolean reobfuscate;
 
     public RuntimeMappingsTransformer() {
@@ -123,7 +125,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                 throw new IllegalStateException("Forge or mcp mappings not found");
 
             //func_123 -> aFunction, field_234 -> a field
-            Map<String, String> forgeMappings = IOUtils.readLines(forgeMappingsStream, StandardCharsets.UTF_8).stream()
+            forgeMappings = IOUtils.readLines(forgeMappingsStream, StandardCharsets.UTF_8).stream()
                     .map(s -> s.split(","))
                     .collect(HashMap::new, (map, s) -> map.put(s[0], s[1]), HashMap::putAll);
 
