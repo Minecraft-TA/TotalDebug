@@ -84,6 +84,12 @@ public class ObjectToJsonHelper {
         return json;
     }
 
+    /**
+     * Gets the serializer for an object if one exists.
+     *
+     * @param value The object to get the serializer for
+     * @return The serializer for the object or null if none exists
+     */
     public static ITypeSerializer<Object> getSerializer(Object value) {
         if (value == null) {
             return STRING_SERIALIZER;
@@ -111,12 +117,27 @@ public class ObjectToJsonHelper {
 
     interface ITypeSerializer<T> {
 
+        /**
+         * Serializes an object to a JsonElement.
+         *
+         * @param object The object to serialize
+         * @return The object serialized to a JsonElement
+         */
         JsonElement serialize(T object);
 
     }
 
+
     static class ArraySerializer implements ITypeSerializer<Object> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This implementation serializes an array to a JsonArray.
+         *
+         * @param array The array to serialize
+         * @return The array serialized to a JsonArray
+         */
         @Override
         public JsonElement serialize(Object array) {
             JsonArray jsonArray = new JsonArray();
@@ -137,6 +158,14 @@ public class ObjectToJsonHelper {
 
     static class IterableSerializer implements ITypeSerializer<Object> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This implementation serializes an iterable to a JsonArray.
+         *
+         * @param iterable The iterable to serialize
+         * @return The iterable serialized to a JsonArray
+         */
         @Override
         public JsonElement serialize(Object iterable) {
             JsonArray jsonArray = new JsonArray();
@@ -155,6 +184,14 @@ public class ObjectToJsonHelper {
 
     static class MapSerializer implements ITypeSerializer<Object> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This implementation serializes a map to a JsonObject.
+         *
+         * @param map The map to serialize
+         * @return The map serialized to a JsonObject
+         */
         @Override
         public JsonElement serialize(Object map) {
             JsonObject jsonObject = new JsonObject();
@@ -173,6 +210,14 @@ public class ObjectToJsonHelper {
 
     static class ItemStackSerializer implements ITypeSerializer<ItemStack> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This implementation serializes an item stack to a JsonObject.
+         *
+         * @param itemStack The item stack to serialize
+         * @return The item stack serialized to a JsonObject
+         */
         @Override
         public JsonElement serialize(ItemStack itemStack) {
             JsonObject json = new JsonObject();
@@ -200,11 +245,25 @@ public class ObjectToJsonHelper {
 
     static class NBTTagCompoundSerializer implements ITypeSerializer<NBTTagCompound> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This implementation serializes an NBTTagCompound to a JsonObject.
+         *
+         * @param nbtTagCompound The NBTTagCompound to serialize
+         * @return The NBTTagCompound serialized to a JsonObject
+         */
         @Override
         public JsonElement serialize(NBTTagCompound nbtTagCompound) {
             return nbtToJson(nbtTagCompound);
         }
 
+        /**
+         * Converts an NBTTagCompound to a JsonObject using recursion.
+         *
+         * @param nbtTagCompound The NBTTagCompound to convert
+         * @return The NBTTagCompound converted to a JsonObject
+         */
         private JsonElement nbtToJson(NBTTagCompound nbtTagCompound) {
             JsonObject json = new JsonObject();
             for (String key : nbtTagCompound.getKeySet()) {
@@ -233,6 +292,5 @@ public class ObjectToJsonHelper {
         }
 
     }
-
 
 }
