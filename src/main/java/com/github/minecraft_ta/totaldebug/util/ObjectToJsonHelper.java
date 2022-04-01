@@ -1,15 +1,34 @@
 package com.github.minecraft_ta.totaldebug.util;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.nbt.NBTTagCompound;
+import com.google.gson.JsonPrimitive;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.*;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class ObjectToJsonHelper {
+
+    private static final HashMap<Class<?>, ITypeSerializer<?>> SERIALIZERS = new HashMap<>();
+    private static final List<Pair<Class<?>, ITypeSerializer<?>>> INHERITANCE_SERIALIZERS = new ArrayList<>();
+    private static final ITypeSerializer<Object> STRING_SERIALIZER = object -> new JsonPrimitive(String.valueOf(object));
+    private static final ArraySerializer ARRAY_SERIALIZER = new ArraySerializer();
+
+    static {
+        Arrays.asList(Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class, Boolean.class, Character.class, String.class)
+                .forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
+        SERIALIZERS.put(ItemStack.class, new ItemStackSerializer());
+        SERIALIZERS.put(NBTTagCompound.class, new NBTTagCompoundSerializer());
+
+        INHERITANCE_SERIALIZERS.add(Pair.of(MapSerializer.class, new MapSerializer()));
+        INHERITANCE_SERIALIZERS.add(Pair.of(Iterable.class, new IterableSerializer()));
+    }
 
     /**
      * Recursively converts an object to a JsonObject.
@@ -29,7 +48,7 @@ public class ObjectToJsonHelper {
      * @return The converted JsonObject
      * @throws StackOverflowError If the object has too many nested objects
      */
-    private static JsonObject objectToJson(Object object, Set<Object> seenObjects) throws StackOverflowError{
+    private static JsonObject objectToJson(Object object, Set<Object> seenObjects) throws StackOverflowError {
         JsonObject json = new JsonObject();
         Class<?> clazz = object.getClass();
         while (clazz != null) {
@@ -41,37 +60,12 @@ public class ObjectToJsonHelper {
                 declaredField.setAccessible(true);
                 try {
                     Object value = declaredField.get(object);
-                    if (value == null || declaredField.getType().isPrimitive() || isWrapper(value)) {
-                        json.addProperty(declaredField.getName(), String.valueOf(value));
+                    ITypeSerializer<Object> serializer = getSerializer(value);
+                    if (serializer != null) {
+                        json.add(declaredField.getName(), serializer.serialize(value));
                     } else if (!seenObjects.contains(value)) {
                         seenObjects.add(value);
-                        if (value instanceof Iterable) {
-                            JsonObject iterableJson = new JsonObject();
-                            int i = 0;
-                            for (Object arrayObject : ((Iterable<?>) value)) {
-                                if (arrayObject == null || isWrapper(iterableJson)) {
-                                    iterableJson.addProperty(String.valueOf(i), String.valueOf(arrayObject));
-                                } else {
-                                    iterableJson.add(String.valueOf(i), objectToJson(arrayObject, seenObjects));
-                                }
-                                i++;
-                            }
-                            json.add(declaredField.getName(), iterableJson);
-                        } else if (value.getClass().isArray()) {
-                            JsonObject arrayJson = new JsonObject();
-                            int length = Array.getLength(value);
-                            for (int i = 0; i < length; i++) {
-                                Object arrayElement = Array.get(value, i);
-                                if (arrayElement == null || isWrapper(arrayElement)) {
-                                    arrayJson.addProperty(String.valueOf(i), String.valueOf(arrayElement));
-                                } else {
-                                    arrayJson.add(String.valueOf(i), objectToJson(arrayElement, seenObjects));
-                                }
-                            }
-                            json.add(declaredField.getName(), arrayJson);
-                        } else {
-                            json.add(declaredField.getName(), objectToJson(value, seenObjects));
-                        }
+                        json.add(declaredField.getName(), objectToJson(value, seenObjects));
                     }
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
@@ -82,15 +76,155 @@ public class ObjectToJsonHelper {
         return json;
     }
 
-    private static boolean isWrapper(Object object) {
-        return object instanceof Integer ||
-                object instanceof Double ||
-                object instanceof Float ||
-                object instanceof Long ||
-                object instanceof Boolean ||
-                object instanceof Character ||
-                object instanceof Short ||
-                object instanceof Byte ||
-                object instanceof String;
+    public static ITypeSerializer<Object> getSerializer(Object value) {
+        if (value == null) {
+            return STRING_SERIALIZER;
+        }
+
+        Class<?> clazz = value.getClass();
+        if (clazz.isArray()) {
+            return ARRAY_SERIALIZER;
+        }
+
+        ITypeSerializer<?> iTypeSerializer = SERIALIZERS.get(clazz);
+        if (iTypeSerializer != null) {
+            //noinspection unchecked
+            return (ITypeSerializer<Object>) iTypeSerializer;
+        }
+
+        for (Pair<Class<?>, ITypeSerializer<?>> pair : INHERITANCE_SERIALIZERS) {
+            if (pair.getLeft().isAssignableFrom(clazz)) {
+                //noinspection unchecked
+                return (ITypeSerializer<Object>) pair.getRight();
+            }
+        }
+        return null;
     }
+
+    interface ITypeSerializer<T> {
+
+        JsonElement serialize(T object);
+
+    }
+
+    static class ArraySerializer implements ITypeSerializer<Object> {
+
+        @Override
+        public JsonElement serialize(Object array) {
+            JsonArray jsonArray = new JsonArray();
+            int length = Array.getLength(array);
+            for (int i = 0; i < length; i++) {
+                Object value = Array.get(array, i);
+                ITypeSerializer<Object> serializer = getSerializer(value);
+                if (serializer != null) {
+                    jsonArray.add(serializer.serialize(value));
+                } else {
+                    jsonArray.add(objectToJson(value));
+                }
+            }
+            return jsonArray;
+        }
+
+    }
+
+    static class IterableSerializer implements ITypeSerializer<Object> {
+
+        @Override
+        public JsonElement serialize(Object iterable) {
+            JsonArray jsonArray = new JsonArray();
+            for (Object value : (Iterable<?>) iterable) {
+                ITypeSerializer<Object> serializer = getSerializer(value);
+                if (serializer != null) {
+                    jsonArray.add(serializer.serialize(value));
+                } else {
+                    jsonArray.add(objectToJson(value));
+                }
+            }
+            return jsonArray;
+        }
+
+    }
+
+    static class MapSerializer implements ITypeSerializer<Object> {
+
+        @Override
+        public JsonElement serialize(Object map) {
+            JsonObject jsonObject = new JsonObject();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) map).entrySet()) {
+                ITypeSerializer<Object> serializer = getSerializer(entry.getValue());
+                if (serializer != null) {
+                    jsonObject.add(entry.getKey().toString(), serializer.serialize(entry.getValue()));
+                } else {
+                    jsonObject.add(entry.getKey().toString(), objectToJson(entry.getValue()));
+                }
+            }
+            return jsonObject;
+        }
+
+    }
+
+    static class ItemStackSerializer implements ITypeSerializer<ItemStack> {
+
+        @Override
+        public JsonElement serialize(ItemStack itemStack) {
+            JsonObject json = new JsonObject();
+            json.addProperty("stackSize", itemStack.getCount());
+            json.addProperty("displayName", itemStack.getDisplayName());
+            json.addProperty("item", itemStack.getItem().getClass().getName());
+            json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound()));
+            json.addProperty("isEmpty", itemStack.isEmpty());
+            json.addProperty("itemDamage", itemStack.getItemDamage());
+
+
+            try {
+                Field capNBT = itemStack.getClass().getDeclaredField("capNBT");
+                capNBT.setAccessible(true);
+                Object capNBTObject = capNBT.get(itemStack);
+                json.add("capNBT", getSerializer(capNBTObject).serialize(capNBTObject));
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
+
+            return json;
+        }
+
+    }
+
+    static class NBTTagCompoundSerializer implements ITypeSerializer<NBTTagCompound> {
+
+        @Override
+        public JsonElement serialize(NBTTagCompound nbtTagCompound) {
+            return nbtToJson(nbtTagCompound);
+        }
+
+        private JsonElement nbtToJson(NBTTagCompound nbtTagCompound) {
+            JsonObject json = new JsonObject();
+            for (String key : nbtTagCompound.getKeySet()) {
+                NBTBase tag = nbtTagCompound.getTag(key);
+                if (tag instanceof NBTTagCompound) {
+                    json.add(key, nbtToJson((NBTTagCompound) tag));
+                } else if (tag instanceof NBTTagList) {
+                    JsonArray jsonArray = new JsonArray();
+                    for (NBTBase nbtBase : ((NBTTagList) tag)) {
+                        if (nbtBase instanceof NBTTagCompound) {
+                            jsonArray.add(nbtToJson((NBTTagCompound) nbtBase));
+                        } else {
+                            jsonArray.add(nbtBase.toString());
+                        }
+                    }
+                    json.add(key, jsonArray);
+                } else if (tag instanceof NBTTagByteArray) {
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).getByteArray()));
+                } else if (tag instanceof NBTTagIntArray) {
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).getIntArray()));
+                } else {
+                    json.addProperty(key, tag.toString());
+                }
+            }
+            return json;
+        }
+
+    }
+
+
 }
