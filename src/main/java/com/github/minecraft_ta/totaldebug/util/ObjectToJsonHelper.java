@@ -129,6 +129,13 @@ public class ObjectToJsonHelper {
 
     interface ITypeSerializer<T> {
 
+        /**
+         * Serializes an object to a JsonElement.
+         *
+         * @param value       The object to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
+         * @return The serialized JsonElement
+         */
         default JsonElement serialize(T value, Set<Object> seenObjects) {
             return serializeImpl(value, seenObjects);
         }
@@ -136,7 +143,8 @@ public class ObjectToJsonHelper {
         /**
          * Serializes an object to a JsonElement.
          *
-         * @param object The object to serialize
+         * @param object      The object to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
          * @return The object serialized to a JsonElement
          */
         JsonElement serializeImpl(T object, Set<Object> seenObjects);
@@ -145,6 +153,16 @@ public class ObjectToJsonHelper {
 
     interface IRecursiveTypeSerializer<T> extends ITypeSerializer<T> {
 
+        /**
+         * {@inheritDoc}
+         * <p>
+         * This method will be called for every object that can not be serialized directly.
+         * It checks if it has already seen the object and will also add it to the set of seen objects.
+         *
+         * @param value       The object to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
+         * @return
+         */
         @Override
         default JsonElement serialize(T value, Set<Object> seenObjects) {
             if (seenObjects.contains(value)) {
