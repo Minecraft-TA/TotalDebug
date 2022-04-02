@@ -150,9 +150,12 @@ public class PacketLogger extends ChannelDuplexHandler {
                 } catch (InstantiationException | IllegalAccessException e) {
                     e.printStackTrace();
                 }
-            }
-            if (payloadOrPacket instanceof Packet) {
+            } else if (payloadOrPacket instanceof Packet) {
                 client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, payloadOrPacket));
+            } else {
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, new Object() {
+                    private final String message = "Unable to decode packet, no codec found";
+                }));
             }
         }
         packetMap.merge(clazz.getName(), Pair.of(1, size), (pair, pair2) -> Pair.of(pair.getLeft() + pair2.getLeft(), pair.getRight() + pair2.getRight()));
