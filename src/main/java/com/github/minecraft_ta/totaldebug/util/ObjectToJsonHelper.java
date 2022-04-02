@@ -18,9 +18,9 @@ public class ObjectToJsonHelper {
 
     private static final HashMap<Class<?>, ITypeSerializer<?>> SERIALIZERS = new HashMap<>();
     private static final List<Pair<Class<?>, ITypeSerializer<?>>> INHERITANCE_SERIALIZERS = new ArrayList<>();
-    private static final ITypeSerializer<Object> STRING_SERIALIZER = object -> new JsonPrimitive(String.valueOf(object));
-    private static final ITypeSerializer<Number> NUMBER_SERIALIZER = JsonPrimitive::new;
-    private static final ITypeSerializer<Boolean> BOOLEAN_SERIALIZER = JsonPrimitive::new;
+    private static final ITypeSerializer<Object> STRING_SERIALIZER = (object, seenObjects) -> new JsonPrimitive(String.valueOf(object));
+    private static final ITypeSerializer<Number> NUMBER_SERIALIZER = (object, seenObjects) -> new JsonPrimitive(object);
+    private static final ITypeSerializer<Boolean> BOOLEAN_SERIALIZER = (object, seenObjects) -> new JsonPrimitive(object);
     private static final ArraySerializer ARRAY_SERIALIZER = new ArraySerializer();
 
     static {
@@ -44,7 +44,7 @@ public class ObjectToJsonHelper {
         ITypeSerializer<Object> serializer = getSerializer(object);
         Set<Object> seeenObjects = Collections.newSetFromMap(new IdentityHashMap<>());
         if (serializer != null) {
-            return serializer.serialize(object);
+            return serializer.serialize(object, seeenObjects);
         } else {
             return objectToJson(object, seeenObjects);
         }
@@ -58,7 +58,11 @@ public class ObjectToJsonHelper {
      * @return The converted JsonObject
      * @throws StackOverflowError If the object has too many nested objects
      */
-    private static JsonObject objectToJson(Object object, Set<Object> seenObjects) throws StackOverflowError {
+    private static JsonElement objectToJson(Object object, Set<Object> seenObjects) throws StackOverflowError {
+        if (seenObjects.contains(object)) {
+            return new JsonPrimitive("[Circular Reference]");
+        }
+        seenObjects.add(object);
         JsonObject json = new JsonObject();
         Class<?> clazz = object.getClass();
         while (clazz != null) {
@@ -72,13 +76,15 @@ public class ObjectToJsonHelper {
                     Object value = declaredField.get(object);
                     ITypeSerializer<Object> serializer = getSerializer(value);
                     String fieldName = declaredField.getName();
+                    if (fieldName.startsWith("this$")) {
+                        continue;
+                    }
                     if (clazz.getName().startsWith("net.minecraft")) {
                         fieldName = RuntimeMappingsTransformer.FORGE_MAPPINGS.getOrDefault(fieldName, fieldName);
                     }
                     if (serializer != null) {
-                        json.add(fieldName, serializer.serialize(value));
-                    } else if (!seenObjects.contains(value)) {
-                        seenObjects.add(value);
+                        json.add(fieldName, serializer.serialize(value, seenObjects));
+                    } else {
                         json.add(fieldName, objectToJson(value, seenObjects));
                     }
                 } catch (IllegalAccessException e) {
@@ -123,18 +129,34 @@ public class ObjectToJsonHelper {
 
     interface ITypeSerializer<T> {
 
+        default JsonElement serialize(T value, Set<Object> seenObjects) {
+            return serializeImpl(value, seenObjects);
+        }
+
         /**
          * Serializes an object to a JsonElement.
          *
          * @param object The object to serialize
          * @return The object serialized to a JsonElement
          */
-        JsonElement serialize(T object);
+        JsonElement serializeImpl(T object, Set<Object> seenObjects);
 
     }
 
+    interface IRecursiveTypeSerializer<T> extends ITypeSerializer<T> {
 
-    static class ArraySerializer implements ITypeSerializer<Object> {
+        @Override
+        default JsonElement serialize(T value, Set<Object> seenObjects) {
+            if (seenObjects.contains(value)) {
+                return new JsonPrimitive("[Circular Reference]");
+            }
+            seenObjects.add(value);
+            return serializeImpl(value, seenObjects);
+        }
+    }
+
+
+    static class ArraySerializer implements IRecursiveTypeSerializer<Object> {
 
         /**
          * {@inheritDoc}
@@ -145,16 +167,16 @@ public class ObjectToJsonHelper {
          * @return The array serialized to a JsonArray
          */
         @Override
-        public JsonElement serialize(Object array) {
+        public JsonElement serializeImpl(Object array, Set<Object> seenObjects) {
             JsonArray jsonArray = new JsonArray();
             int length = Array.getLength(array);
             for (int i = 0; i < length; i++) {
                 Object value = Array.get(array, i);
                 ITypeSerializer<Object> serializer = getSerializer(value);
                 if (serializer != null) {
-                    jsonArray.add(serializer.serialize(value));
+                    jsonArray.add(serializer.serialize(value, seenObjects));
                 } else {
-                    jsonArray.add(objectToJson(value));
+                    jsonArray.add(objectToJson(value, seenObjects));
                 }
             }
             return jsonArray;
@@ -162,7 +184,7 @@ public class ObjectToJsonHelper {
 
     }
 
-    static class IterableSerializer implements ITypeSerializer<Object> {
+    static class IterableSerializer implements IRecursiveTypeSerializer<Object> {
 
         /**
          * {@inheritDoc}
@@ -173,14 +195,14 @@ public class ObjectToJsonHelper {
          * @return The iterable serialized to a JsonArray
          */
         @Override
-        public JsonElement serialize(Object iterable) {
+        public JsonElement serializeImpl(Object iterable, Set<Object> seenObjects) {
             JsonArray jsonArray = new JsonArray();
             for (Object value : (Iterable<?>) iterable) {
                 ITypeSerializer<Object> serializer = getSerializer(value);
                 if (serializer != null) {
-                    jsonArray.add(serializer.serialize(value));
+                    jsonArray.add(serializer.serialize(value, seenObjects));
                 } else {
-                    jsonArray.add(objectToJson(value));
+                    jsonArray.add(objectToJson(value, seenObjects));
                 }
             }
             return jsonArray;
@@ -188,7 +210,7 @@ public class ObjectToJsonHelper {
 
     }
 
-    static class MapSerializer implements ITypeSerializer<Object> {
+    static class MapSerializer implements IRecursiveTypeSerializer<Object> {
 
         /**
          * {@inheritDoc}
@@ -199,14 +221,14 @@ public class ObjectToJsonHelper {
          * @return The map serialized to a JsonObject
          */
         @Override
-        public JsonElement serialize(Object map) {
+        public JsonElement serializeImpl(Object map, Set<Object> seenObjects) {
             JsonObject jsonObject = new JsonObject();
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) map).entrySet()) {
                 ITypeSerializer<Object> serializer = getSerializer(entry.getValue());
                 if (serializer != null) {
-                    jsonObject.add(entry.getKey().toString(), serializer.serialize(entry.getValue()));
+                    jsonObject.add(entry.getKey().toString(), serializer.serialize(entry.getValue(), seenObjects));
                 } else {
-                    jsonObject.add(entry.getKey().toString(), objectToJson(entry.getValue()));
+                    jsonObject.add(entry.getKey().toString(), objectToJson(entry.getValue(), seenObjects));
                 }
             }
             return jsonObject;
@@ -214,7 +236,7 @@ public class ObjectToJsonHelper {
 
     }
 
-    static class ItemStackSerializer implements ITypeSerializer<ItemStack> {
+    static class ItemStackSerializer implements IRecursiveTypeSerializer<ItemStack> {
 
         /**
          * {@inheritDoc}
@@ -225,12 +247,12 @@ public class ObjectToJsonHelper {
          * @return The item stack serialized to a JsonObject
          */
         @Override
-        public JsonElement serialize(ItemStack itemStack) {
+        public JsonElement serializeImpl(ItemStack itemStack, Set<Object> seenObjects) {
             JsonObject json = new JsonObject();
             json.addProperty("stackSize", itemStack.getCount());
             json.addProperty("displayName", itemStack.getDisplayName());
             json.addProperty("item", itemStack.getItem().getClass().getName());
-            json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound()));
+            json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound(), seenObjects));
             json.addProperty("isEmpty", itemStack.isEmpty());
             json.addProperty("itemDamage", itemStack.getItemDamage());
 
@@ -239,7 +261,7 @@ public class ObjectToJsonHelper {
                 Field capNBT = itemStack.getClass().getDeclaredField("capNBT");
                 capNBT.setAccessible(true);
                 Object capNBTObject = capNBT.get(itemStack);
-                json.add("capNBT", getSerializer(capNBTObject).serialize(capNBTObject));
+                json.add("capNBT", getSerializer(capNBTObject).serialize(capNBTObject, seenObjects));
             } catch (NoSuchFieldException | IllegalAccessException e) {
                 e.printStackTrace();
             }
@@ -249,7 +271,7 @@ public class ObjectToJsonHelper {
 
     }
 
-    static class NBTTagCompoundSerializer implements ITypeSerializer<NBTTagCompound> {
+    static class NBTTagCompoundSerializer implements IRecursiveTypeSerializer<NBTTagCompound> {
 
         /**
          * {@inheritDoc}
@@ -260,8 +282,8 @@ public class ObjectToJsonHelper {
          * @return The NBTTagCompound serialized to a JsonObject
          */
         @Override
-        public JsonElement serialize(NBTTagCompound nbtTagCompound) {
-            return nbtToJson(nbtTagCompound);
+        public JsonElement serializeImpl(NBTTagCompound nbtTagCompound, Set<Object> seenObjects) {
+            return nbtToJson(nbtTagCompound, seenObjects);
         }
 
         /**
@@ -270,26 +292,26 @@ public class ObjectToJsonHelper {
          * @param nbtTagCompound The NBTTagCompound to convert
          * @return The NBTTagCompound converted to a JsonObject
          */
-        private JsonElement nbtToJson(NBTTagCompound nbtTagCompound) {
+        private JsonElement nbtToJson(NBTTagCompound nbtTagCompound, Set<Object> seenObjects) {
             JsonObject json = new JsonObject();
             for (String key : nbtTagCompound.getKeySet()) {
                 NBTBase tag = nbtTagCompound.getTag(key);
                 if (tag instanceof NBTTagCompound) {
-                    json.add(key, nbtToJson((NBTTagCompound) tag));
+                    json.add(key, nbtToJson((NBTTagCompound) tag, seenObjects));
                 } else if (tag instanceof NBTTagList) {
                     JsonArray jsonArray = new JsonArray();
                     for (NBTBase nbtBase : ((NBTTagList) tag)) {
                         if (nbtBase instanceof NBTTagCompound) {
-                            jsonArray.add(nbtToJson((NBTTagCompound) nbtBase));
+                            jsonArray.add(nbtToJson((NBTTagCompound) nbtBase, seenObjects));
                         } else {
                             jsonArray.add(nbtBase.toString());
                         }
                     }
                     json.add(key, jsonArray);
                 } else if (tag instanceof NBTTagByteArray) {
-                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).getByteArray()));
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).getByteArray(), seenObjects));
                 } else if (tag instanceof NBTTagIntArray) {
-                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).getIntArray()));
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).getIntArray(), seenObjects));
                 } else {
                     json.addProperty(key, tag.toString());
                 }
