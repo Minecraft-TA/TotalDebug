@@ -25,7 +25,7 @@ public class ObjectToJsonHelper {
 
     static {
         Arrays.asList(Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class).forEach(clazz -> SERIALIZERS.put(clazz, NUMBER_SERIALIZER));
-        Arrays.asList(String.class, Character.class).forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
+        Arrays.asList(String.class, Character.class, UUID.class).forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
         SERIALIZERS.put(Boolean.class, BOOLEAN_SERIALIZER);
         SERIALIZERS.put(ItemStack.class, new ItemStackSerializer());
         SERIALIZERS.put(NBTTagCompound.class, new NBTTagCompoundSerializer());
@@ -42,10 +42,11 @@ public class ObjectToJsonHelper {
      */
     public static JsonElement objectToJson(Object object) throws StackOverflowError {
         ITypeSerializer<Object> serializer = getSerializer(object);
+        Set<Object> seeenObjects = Collections.newSetFromMap(new IdentityHashMap<>());
         if (serializer != null) {
             return serializer.serialize(object);
         } else {
-            return objectToJson(object, new HashSet<>());
+            return objectToJson(object, seeenObjects);
         }
     }
 
