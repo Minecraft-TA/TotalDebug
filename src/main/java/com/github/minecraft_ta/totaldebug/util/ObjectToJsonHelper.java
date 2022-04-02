@@ -181,7 +181,8 @@ public class ObjectToJsonHelper {
          * <p>
          * This implementation serializes an array to a JsonArray.
          *
-         * @param array The array to serialize
+         * @param array       The array to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
          * @return The array serialized to a JsonArray
          */
         @Override
@@ -209,7 +210,8 @@ public class ObjectToJsonHelper {
          * <p>
          * This implementation serializes an iterable to a JsonArray.
          *
-         * @param iterable The iterable to serialize
+         * @param iterable    The iterable to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
          * @return The iterable serialized to a JsonArray
          */
         @Override
@@ -235,7 +237,8 @@ public class ObjectToJsonHelper {
          * <p>
          * This implementation serializes a map to a JsonObject.
          *
-         * @param map The map to serialize
+         * @param map         The map to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
          * @return The map serialized to a JsonObject
          */
         @Override
@@ -261,7 +264,8 @@ public class ObjectToJsonHelper {
          * <p>
          * This implementation serializes an item stack to a JsonObject.
          *
-         * @param itemStack The item stack to serialize
+         * @param itemStack   The item stack to serialize
+         * @param seenObjects A set of already seen objects to prevent infinite recursion
          * @return The item stack serialized to a JsonObject
          */
         @Override
@@ -297,6 +301,7 @@ public class ObjectToJsonHelper {
          * This implementation serializes an NBTTagCompound to a JsonObject.
          *
          * @param nbtTagCompound The NBTTagCompound to serialize
+         * @param seenObjects    A set of already seen objects to prevent infinite recursion
          * @return The NBTTagCompound serialized to a JsonObject
          */
         @Override
@@ -308,6 +313,7 @@ public class ObjectToJsonHelper {
          * Converts an NBTTagCompound to a JsonObject using recursion.
          *
          * @param nbtTagCompound The NBTTagCompound to convert
+         * @param seenObjects    A set of already seen objects to prevent infinite recursion
          * @return The NBTTagCompound converted to a JsonObject
          */
         private JsonElement nbtToJson(NBTTagCompound nbtTagCompound, Set<Object> seenObjects) {
