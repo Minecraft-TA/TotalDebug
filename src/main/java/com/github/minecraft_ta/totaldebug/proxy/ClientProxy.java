@@ -7,11 +7,8 @@ import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenceCommand;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
-import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
-import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
-import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
+import com.github.minecraft_ta.totaldebug.handler.*;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
-import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.config.Configuration;
@@ -30,6 +27,7 @@ public class ClientProxy extends CommonProxy {
 
     private final DecompilationManager decompilationManager = new DecompilationManager();
     private final TotalDebugClientConfig clientConfig = new TotalDebugClientConfig();
+    private PacketLogger packetLogger;
     private CompanionApp companionApp;
 
     @Override
@@ -43,8 +41,10 @@ public class ClientProxy extends CommonProxy {
         super.init(e);
         this.decompilationManager.setup();
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
+        this.packetLogger = new PacketLogger();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
+        MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new BossBarHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
@@ -65,6 +65,7 @@ public class ClientProxy extends CommonProxy {
                     return;
 
                 getChunkGridManagerClient().update();
+                getPackerLogger().update();
             }
         });
 
@@ -89,6 +90,11 @@ public class ClientProxy extends CommonProxy {
     @Override
     public CompanionApp getCompanionApp() {
         return this.companionApp;
+    }
+
+    @Override
+    public PacketLogger getPackerLogger() {
+        return this.packetLogger;
     }
 
     @Override

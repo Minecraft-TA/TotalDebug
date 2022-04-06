@@ -10,7 +10,11 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.*;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
@@ -65,6 +69,7 @@ public class CompanionApp {
     private Process companionAppProcess;
     private CompletableFuture<Void> awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
     private final Client companionAppClient = new Client();
+
     {
         int id = 1;
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReadyMessage.class);
@@ -84,6 +89,15 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, FocusWindowMessage.class);
 
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketLoggerStateChangeMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, IncomingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, OutgoingPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ClearPacketsMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, ChannelListMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, SetChannelMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketContentMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, CapturePacketMessage.class);
+
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
 
@@ -96,6 +110,19 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(StopScriptMessage.class, StopScriptMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
+
+        companionAppClient.getMessageBus().listenAlways(PacketLoggerStateChangeMessage.class, m -> {
+            TotalDebug.PROXY.getPackerLogger().setIncomingActive(m.isLogIncoming());
+            TotalDebug.PROXY.getPackerLogger().setOutgoingActive(m.isLogOutgoing());
+        });
+
+        companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
+
+        companionAppClient.getMessageBus().listenAlways(ChannelListMessage.class, m -> companionAppClient.getMessageProcessor().enqueueMessage(new ChannelListMessage()));
+
+        companionAppClient.getMessageBus().listenAlways(SetChannelMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setChannel(m.getChannel()));
+
+        companionAppClient.getMessageBus().listenAlways(CapturePacketMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setPacketsToCapture(m.getPacket(), m.isRemove()));
     }
 
     public CompanionApp(Path appDir) {
