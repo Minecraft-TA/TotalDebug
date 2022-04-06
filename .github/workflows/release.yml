@@ -30,7 +30,8 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Fix search reference not working
+            - Added packet logger 
+            - Added viewing of individual packets
           draft: false
           prerelease: false
       - name: Upload jars to release
