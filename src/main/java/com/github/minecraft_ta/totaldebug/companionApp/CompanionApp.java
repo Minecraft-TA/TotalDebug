@@ -97,6 +97,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, SetChannelMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, PacketContentMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CapturePacketMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, BlockPacketMessage.class);
 
         companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
@@ -233,8 +234,8 @@ public class CompanionApp {
      * @return {@code true} if the companion app is running; {@code false} otherwise
      */
     public boolean isRunning() {
-        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
-//        return true;
+//        return this.companionAppProcess != null && this.companionAppProcess.isAlive();
+       return true;
     }
 
     public Client getClient() {

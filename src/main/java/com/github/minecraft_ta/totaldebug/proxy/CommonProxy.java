@@ -9,10 +9,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManage
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
-import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
-import com.github.minecraft_ta.totaldebug.network.TickTimeRequestMessage;
-import com.github.minecraft_ta.totaldebug.network.TickTimeResultMessage;
-import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
+import com.github.minecraft_ta.totaldebug.network.*;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
@@ -56,6 +53,8 @@ public class CommonProxy {
         TotalDebug.INSTANCE.network.registerMessage(RunScriptOnServerMessage.class, RunScriptOnServerMessage.class, id++, Side.SERVER);
         TotalDebug.INSTANCE.network.registerMessage(CompanionAppForwardedMessage.class, CompanionAppForwardedMessage.class, id++, Side.CLIENT);
         TotalDebug.INSTANCE.network.registerMessage(StopScriptOnServerMessage.class, StopScriptOnServerMessage.class, id++, Side.SERVER);
+
+        TotalDebug.INSTANCE.network.registerMessage(PacketBlockMessage.class, PacketBlockMessage.class, id++, Side.SERVER);
     }
 
     public void init(FMLInitializationEvent e) {
