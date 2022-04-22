@@ -247,9 +247,9 @@ public class ObjectToJsonHelper {
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) map).entrySet()) {
                 ITypeSerializer<Object> serializer = getSerializer(entry.getValue());
                 if (serializer != null) {
-                    jsonObject.add(entry.getKey().toString(), serializer.serialize(entry.getValue(), seenObjects));
+                    jsonObject.add(String.valueOf(entry.getKey()), serializer.serialize(entry.getValue(), seenObjects));
                 } else {
-                    jsonObject.add(entry.getKey().toString(), objectToJson(entry.getValue(), seenObjects));
+                    jsonObject.add(String.valueOf(entry.getKey()), objectToJson(entry.getValue(), seenObjects));
                 }
             }
             return jsonObject;
