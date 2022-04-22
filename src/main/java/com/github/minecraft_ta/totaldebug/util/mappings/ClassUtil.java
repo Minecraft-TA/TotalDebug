@@ -130,7 +130,7 @@ public class ClassUtil {
                             return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
                                    (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
-                                   !str.contains("scala") && !str.contains("IDEA") && !str.contains("kotlin");
+                                   !str.contains("IDEA"); //Filter IDEA in dev environment
                         })
                         .map(url -> {
                             try {
