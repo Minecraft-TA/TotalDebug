@@ -9,11 +9,13 @@ public class PacketContentMessage extends AbstractMessageOutgoing {
 
     private final String packetName;
     private final String channel;
+    private final int bytes;
     private final Object packet;
 
-    public PacketContentMessage(String packetName, String channel, Object packet) {
+    public PacketContentMessage(String packetName, String channel,int bytes, Object packet) {
         this.packetName = packetName;
         this.channel = channel;
+        this.bytes = bytes;
         this.packet = packet;
     }
 
@@ -21,6 +23,7 @@ public class PacketContentMessage extends AbstractMessageOutgoing {
     public void write(ByteBufferOutputStream messageStream) {
         messageStream.writeString(packetName);
         messageStream.writeString(channel);
+        messageStream.writeInt(bytes);
         try {
             messageStream.writeString(ObjectToJsonHelper.objectToJson(packet).toString());
         } catch (StackOverflowError e) {

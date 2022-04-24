@@ -145,15 +145,15 @@ public class PacketLogger extends ChannelDuplexHandler {
                     Object packetObject = clazz.newInstance();
                     if (packetObject instanceof IMessage) {
                         ((IMessage) packetObject).fromBytes((ByteBuf) payloadOrPacket);
-                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, packetObject));
+                        client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, size, packetObject));
                     }
                 } catch (InstantiationException | IllegalAccessException e) {
                     e.printStackTrace();
                 }
             } else if (payloadOrPacket instanceof Packet) {
-                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, payloadOrPacket));
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, size, payloadOrPacket));
             } else {
-                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, new Object() {
+                client.getMessageProcessor().enqueueMessage(new PacketContentMessage(clazz.getName(), channel, size, new Object() {
                     private final String message = "Unable to decode packet, no codec found";
                 }));
             }
