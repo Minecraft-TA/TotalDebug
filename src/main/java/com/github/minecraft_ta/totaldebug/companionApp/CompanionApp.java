@@ -7,14 +7,12 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppUpdateFollowPlayerStateMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.CodeViewClickMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileAndOpenRequestMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
@@ -73,10 +71,8 @@ public class CompanionApp {
     {
         int id = 1;
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReadyMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, OpenFileMessage.class);
+        companionAppClient.getMessageProcessor().registerMessage((short) id++, DecompileOrOpenMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, OpenSearchResultsMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, DecompileAndOpenRequestMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, CodeViewClickMessage.class);
 
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReceiveDataStateMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppChunkGridDataMessage.class);
@@ -99,8 +95,7 @@ public class CompanionApp {
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CapturePacketMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, BlockPacketMessage.class);
 
-        companionAppClient.getMessageBus().listenAlways(DecompileAndOpenRequestMessage.class, DecompileAndOpenRequestMessage::handle);
-        companionAppClient.getMessageBus().listenAlways(CodeViewClickMessage.class, CodeViewClickMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(DecompileOrOpenMessage.class, DecompileOrOpenMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReceiveDataStateMessage.class, CompanionAppReceiveDataStateMessage::handle);
         companionAppClient.getMessageBus().listenAlways(CompanionAppChunkGridRequestInfoUpdateMessage.class, CompanionAppChunkGridRequestInfoUpdateMessage::handle);

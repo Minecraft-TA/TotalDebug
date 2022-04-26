@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totaldebug;
 
-import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.OpenFileMessage;
-import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
+import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
 import com.google.common.base.Charsets;
 import net.minecraft.client.Minecraft;
@@ -66,10 +66,10 @@ public class DecompilationManager {
     }
 
     public void openGui(Class<?> clazz) {
-        openGui(clazz, 1);
+        openGui(clazz, -1, null);
     }
 
-    public void openGui(Class<?> clazz, int line) {
+    public void openGui(Class<?> clazz, int targetMemberType, String targetMemberIdentifier) {
         CompletableFuture.runAsync(() -> {
             Path filePath = this.decompilationDir.resolve(clazz.getName() + ".java");
             decompileClassIfNotExists(clazz);
@@ -86,7 +86,7 @@ public class DecompilationManager {
                                             .setStyle(new Style().setColor(TextFormatting.WHITE))
                             ).setStyle(new Style().setColor(TextFormatting.GRAY))
                     );
-                    companionApp.getClient().getMessageProcessor().enqueueMessage(new OpenFileMessage(filePath, line));
+                    companionApp.getClient().getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(filePath, targetMemberType, targetMemberIdentifier));
                 }
             } else { //open in default gui
                 getDecompiledFileContent(clazz).exceptionally(throwable -> {
