@@ -6,6 +6,7 @@ import io.netty.channel.ChannelPipeline;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
 import java.util.HashMap;
@@ -14,6 +15,7 @@ import java.util.UUID;
 public class ChannelInputHandler {
 
     public static final HashMap<UUID, PacketBlocker> packetBlockers = new HashMap<>();
+    private boolean initialized;
 
     @SubscribeEvent
     public void onLoggIn(FMLNetworkEvent.ClientConnectedToServerEvent event) {
@@ -25,6 +27,7 @@ public class ChannelInputHandler {
     public void onFMLNetworkClientDisconnectionFromServer(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
         ChannelPipeline pipeline = event.getManager().channel().pipeline();
         pipeline.remove(TotalDebug.PROXY.getPackerLogger());
+        this.initialized = false;
     }
 
     @SubscribeEvent
@@ -41,7 +44,11 @@ public class ChannelInputHandler {
     }
 
     @SubscribeEvent
-    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        TotalDebug.PROXY.addPostTickTask(() -> TotalDebug.INSTANCE.network.sendToServer(new PacketBlockMessage(TotalDebug.PROXY.getClientConfig().blockedPacketClasses)));
+    public void onTickPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (!this.initialized && event.side.isClient()) {
+            this.initialized = true;
+            TotalDebug.INSTANCE.network.sendToServer(new PacketBlockMessage(TotalDebug.PROXY.getClientConfig().blockedPacketClasses));
+        }
     }
+
 }

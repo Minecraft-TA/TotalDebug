@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManage
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
+import com.github.minecraft_ta.totaldebug.handler.ChannelInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
 import com.github.minecraft_ta.totaldebug.network.*;
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfoUpdateMessage;
@@ -60,6 +61,7 @@ public class CommonProxy {
     public void init(FMLInitializationEvent e) {
         RuntimeMappingsTransformer.loadMappings();
 
+        MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onTick(TickEvent.ServerTickEvent event) {

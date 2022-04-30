@@ -26,16 +26,16 @@ public class PacketBlockMessage implements IMessage, IMessageHandler<PacketBlock
     @Override
     public void fromBytes(ByteBuf buf) {
         int length = buf.readInt();
-        blockedPackets = new ArrayList<>(length);
+        this.blockedPackets = new ArrayList<>(length);
         for (int i = 0; i < length; i++) {
-            blockedPackets.add(ByteBufUtils.readUTF8String(buf));
+            this.blockedPackets.add(ByteBufUtils.readUTF8String(buf));
         }
     }
 
     @Override
     public void toBytes(ByteBuf buf) {
-        buf.writeInt(blockedPackets.size());
-        for (String s : blockedPackets) {
+        buf.writeInt(this.blockedPackets.size());
+        for (String s : this.blockedPackets) {
             ByteBufUtils.writeUTF8String(buf, s);
         }
     }

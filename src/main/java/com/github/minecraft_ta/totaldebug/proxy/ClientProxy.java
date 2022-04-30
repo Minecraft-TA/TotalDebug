@@ -44,7 +44,6 @@ public class ClientProxy extends CommonProxy {
         this.packetLogger = new PacketLogger();
 
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
-        MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new BossBarHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
