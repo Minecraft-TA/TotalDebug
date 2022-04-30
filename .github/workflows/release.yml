@@ -30,8 +30,8 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Added packet logger 
-            - Added viewing of individual packets
+            - Added packet blocking
+            - Minor changes in packet logger gui
           draft: false
           prerelease: false
       - name: Upload jars to release
