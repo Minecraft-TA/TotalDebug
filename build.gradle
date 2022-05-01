@@ -1,7 +1,7 @@
 buildscript {
     repositories {
         maven { url = 'https://files.minecraftforge.net/maven/' }
-        maven { url = 'https://plugins.gradle.org/m2/'}
+        maven { url = 'https://plugins.gradle.org/m2/' }
         mavenCentral()
     }
     dependencies {
@@ -87,7 +87,7 @@ dependencies {
     implementation "com.github.tth05:SCNet:519b65"
     implementation 'io.github.classgraph:classgraph:4.8.140'
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
-    implementation "com.github.tth05:jindex:0.0.25"
+    implementation "com.github.tth05:jindex:0.0.32"
 
     compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
