@@ -32,14 +32,16 @@ public class ChannelInputHandler {
     @SubscribeEvent
     public void onLogginServer(FMLNetworkEvent.ServerConnectionFromClientEvent event) {
         ChannelPipeline pipeline = event.getManager().channel().pipeline();
-        PacketBlocker packetBlocker = new PacketBlocker();
-        packetBlockers.put(((NetHandlerPlayServer) event.getHandler()).player.getUniqueID(), packetBlocker);
-        pipeline.addBefore("packet_handler", "packet_blocker", packetBlocker);
+        if (pipeline.get("packet_handler") != null) {
+            PacketBlocker packetBlocker = new PacketBlocker();
+            packetBlockers.put(((NetHandlerPlayServer) event.getHandler()).player.getUniqueID(), packetBlocker);
+            pipeline.addBefore("packet_handler", "packet_blocker", packetBlocker);
+        }
     }
 
     @SubscribeEvent
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        packetBlockers.remove(event.player.getUniqueID());
+            packetBlockers.remove(event.player.getUniqueID());
     }
 
     @SubscribeEvent
