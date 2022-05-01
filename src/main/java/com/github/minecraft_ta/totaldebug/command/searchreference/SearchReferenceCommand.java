@@ -82,7 +82,7 @@ public class SearchReferenceCommand extends CommandBase {
 
             int scanTime = (int) (System.nanoTime() / 1_000_000 - t);
 
-            if (TotalDebug.PROXY.getClientConfig().useCompanionApp && resultPair.getLeft().size() > 0) {
+            if (TotalDebug.INSTANCE.config.useCompanionApp && resultPair.getLeft().size() > 0) {
                 CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
                 companionApp.startAndConnect();
 

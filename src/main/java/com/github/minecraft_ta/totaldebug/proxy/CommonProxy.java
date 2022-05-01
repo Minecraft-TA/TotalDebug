@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerClient;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
-import com.github.minecraft_ta.totaldebug.config.TotalDebugClientConfig;
 import com.github.minecraft_ta.totaldebug.handler.ChannelInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
 import com.github.minecraft_ta.totaldebug.network.*;
@@ -88,10 +87,6 @@ public class CommonProxy {
     }
 
     public DecompilationManager getDecompilationManager() {
-        return null;
-    }
-
-    public TotalDebugClientConfig getClientConfig() {
         return null;
     }
 

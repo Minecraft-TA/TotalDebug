@@ -9,7 +9,7 @@ public class BossBarHandler {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onBossBarRender(RenderGameOverlayEvent.BossInfo event) {
-        if (!TotalDebug.PROXY.getClientConfig().renderBossBar) {
+        if (!TotalDebug.INSTANCE.config.renderBossBar) {
             event.setCanceled(true);
         }
     }

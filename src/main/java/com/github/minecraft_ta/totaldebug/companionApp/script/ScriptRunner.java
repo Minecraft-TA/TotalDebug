@@ -36,8 +36,15 @@ public class ScriptRunner {
                 .replaceFirst("class\\s+BaseScript\\s+", "class BaseScript" + CLASS_ID);
 
         boolean isServerSide = FMLCommonHandler.instance().getSide() == Side.SERVER;
+        boolean isAllowedToRun = !isServerSide ||
+                                 (TotalDebug.INSTANCE.config.enableScripts &&
+                                  (!TotalDebug.INSTANCE.config.enableScriptsOnlyForOp ||
+                                   FMLCommonHandler.instance().getMinecraftServerInstance().getPlayerList().getOppedPlayers().getPermissionLevel(owner.getGameProfile()) >= 4));
 
         CompletableFuture.supplyAsync(() -> {
+            if (!isAllowedToRun)
+                throw new CompletionException(new CancellationException("Scripts are disabled or insufficient permissions"));
+
             Class<?> scriptClass;
             try {
                 scriptClass = InMemoryJavaCompiler.compile(finalCode, className, "BaseScript" + CLASS_ID).get(1);

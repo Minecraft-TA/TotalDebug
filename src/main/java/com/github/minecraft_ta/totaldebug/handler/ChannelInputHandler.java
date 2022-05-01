@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.network.PacketBlockMessage;
 import io.netty.channel.ChannelPipeline;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -47,7 +46,7 @@ public class ChannelInputHandler {
     public void onTickPlayerTick(TickEvent.PlayerTickEvent event) {
         if (!this.initialized && event.side.isClient()) {
             this.initialized = true;
-            TotalDebug.INSTANCE.network.sendToServer(new PacketBlockMessage(TotalDebug.PROXY.getClientConfig().blockedPacketClasses));
+            TotalDebug.INSTANCE.config.syncBlockedPackets();
         }
     }
 

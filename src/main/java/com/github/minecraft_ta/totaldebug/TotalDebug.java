@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug;
 
 import com.github.minecraft_ta.totaldebug.block.TickBlock;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.proxy.CommonProxy;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
@@ -10,6 +11,7 @@ import net.minecraft.item.ItemBlock;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.event.ModelRegistryEvent;
 import net.minecraftforge.client.model.ModelLoader;
+import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.SidedProxy;
@@ -43,9 +45,11 @@ public class TotalDebug {
     public static Logger LOGGER;
 
     public final SimpleNetworkWrapper network = NetworkRegistry.INSTANCE.newSimpleChannel(MOD_ID);
+    public final TotalDebugConfig config = new TotalDebugConfig();
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
+        this.config.init(new Configuration(event.getSuggestedConfigurationFile()));
         LOGGER = event.getModLog();
         PROXY.preInit(event);
     }
@@ -62,11 +66,13 @@ public class TotalDebug {
 
     @GameRegistry.ObjectHolder(MOD_ID)
     public static class Blocks {
+
         public static final TickBlock TICK_BLOCK = null;
     }
 
     @GameRegistry.ObjectHolder(MOD_ID)
     public static class Items {
+
         public static final ItemBlock TICK_BLOCK_ITEM = null;
     }
 

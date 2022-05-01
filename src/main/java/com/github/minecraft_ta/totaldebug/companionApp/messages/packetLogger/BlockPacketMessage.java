@@ -8,6 +8,6 @@ public class BlockPacketMessage extends AbstractMessageIncoming {
 
     @Override
     public void read(ByteBufferInputStream messageStream) {
-        TotalDebug.PROXY.getClientConfig().setBlockPacket(messageStream.readString());
+        TotalDebug.INSTANCE.config.toggleBlockedPacket(messageStream.readString());
     }
 }

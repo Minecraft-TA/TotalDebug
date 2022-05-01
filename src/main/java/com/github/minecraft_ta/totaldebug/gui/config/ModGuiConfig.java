@@ -8,11 +8,11 @@ public class ModGuiConfig extends GuiConfig {
     public ModGuiConfig(GuiScreen parentScreen) {
         super(
                 parentScreen,
-                TotalDebug.PROXY.getClientConfig().getConfigElements(),
+                TotalDebug.INSTANCE.config.getClientConfigElements(),
                 TotalDebug.MOD_ID,
                 false,
                 false,
-                GuiConfig.getAbridgedConfigPath(TotalDebug.PROXY.getClientConfig().getConfig().toString())
+                GuiConfig.getAbridgedConfigPath(TotalDebug.INSTANCE.config.getConfig().toString())
         );
     }
 }

@@ -75,7 +75,7 @@ public class DecompilationManager {
             decompileClassIfNotExists(clazz);
 
             //open in companion app
-            if (TotalDebug.PROXY.getClientConfig().useCompanionApp) {
+            if (TotalDebug.INSTANCE.config.useCompanionApp) {
                 CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
                 companionApp.startAndConnect();
 
