@@ -9,6 +9,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 
@@ -50,6 +51,12 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                 if (innerName != null && dollarIndex != -1)
                     innerName = name.substring(dollarIndex + 1);
                 super.visitInnerClass(name, outerName, innerName, access);
+            }
+
+            @Override
+            public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+                // Remove empty signatures
+                return super.visitField(access, name, desc, signature != null && signature.isEmpty() ? null : signature, value);
             }
         };
         //Skip debug symbols for minecraft classes to allow Procyon to generate proper variable names
