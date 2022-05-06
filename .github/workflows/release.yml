@@ -30,7 +30,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             Changes in this Release
-            - Bug fixes
+            - Update for new companion app version
           draft: false
           prerelease: false
       - name: Upload jars to release

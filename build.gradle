@@ -15,7 +15,7 @@ apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'com.github.johnrengelman.shadow'
 
 group = 'com.github.minecraft_ta'
-version = '1.7.2'
+version = '1.8.0'
 archivesBaseName = 'TotalDebug'
 
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
