@@ -265,6 +265,7 @@ public class CompanionApp {
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
                     this.appDir.resolve("bin").resolve("java.exe").toAbsolutePath().toString(),
+                    "--enable-preview",
                     "-jar",
                     exePath.toAbsolutePath().toString(),
                     "\"" + this.appDir.getParent().resolve(DATA_FOLDER).toAbsolutePath() + "\""

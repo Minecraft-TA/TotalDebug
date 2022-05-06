@@ -8,10 +8,7 @@ import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
-import net.minecraftforge.fml.common.asm.transformers.ItemBlockSpecialTransformer;
-import net.minecraftforge.fml.common.asm.transformers.ItemBlockTransformer;
-import net.minecraftforge.fml.common.asm.transformers.ItemStackTransformer;
+import net.minecraftforge.fml.common.asm.transformers.*;
 import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
@@ -27,6 +24,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.List;
@@ -49,8 +47,8 @@ public class ClassUtil {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
             transformersField.setAccessible(true);
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
-                    .filter(t -> t instanceof DeobfuscationTransformer || t instanceof ItemStackTransformer ||
-                                 t instanceof ItemBlockTransformer || t instanceof ItemBlockSpecialTransformer).collect(Collectors.toList());
+                    .filter(t -> t instanceof DeobfuscationTransformer)
+                    .collect(Collectors.toList());
             LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
@@ -96,7 +94,7 @@ public class ClassUtil {
                         byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
                         if (bytes == null) {
                             try (InputStream stream = classInfo.getResource().open()) {
-                                bytes = IOUtils.toByteArray(stream);
+                                bytes = runTransformers(classInfo.getName(), name, IOUtils.toByteArray(stream));
                             }
 
                             if (bytes == null)
@@ -123,25 +121,34 @@ public class ClassUtil {
 
         //TODO: Show progress to player because this takes a while
 
-        List<String> jarPaths = Stream.concat(
-                ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
-                        .filter(url -> {
-                            String str = url.toString();
-                            return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
-                                   str.endsWith(".jar") && //Filter for only jars
-                                   (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
-                                   !str.contains("IDEA"); //Filter IDEA in dev environment
-                        })
-                        .map(url -> {
-                            try {
-                                //URLs suck
-                                return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
-                            } catch (UnsupportedEncodingException ignored) {
-                                return null;
-                            }
-                        }).filter(Objects::nonNull),
-                Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString())
-        ).distinct().collect(Collectors.toList());
+        Stream<String> sourceStream = ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
+                .map(url -> {
+                    try {
+                        //URLs suck
+                        return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
+                    } catch (UnsupportedEncodingException ignored) {
+                        return null;
+                    }
+                }).filter(Objects::nonNull);
+
+        List<String> jarPaths;
+        // We get these separately because they might not be included in the sources of the class loader
+        try (Stream<Path> jreFiles = Files.list(Paths.get(System.getProperty("java.home")).resolve("lib"))) {
+            jarPaths = Stream.concat(
+                    sourceStream,
+                    Stream.concat(
+                            Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString()),
+                            jreFiles.map(p -> p.toAbsolutePath().toString())
+                    )
+            ).filter(str -> {
+                return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
+                       str.endsWith(".jar") && //Filter for only jars
+                       (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
+                       !str.contains("IDEA"); //Filter IDEA in dev environment
+            }).distinct().collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
         ClassIndex classIndex = ClassIndex.fromJars(jarPaths);
         classIndex.saveToFile(indexPath.toAbsolutePath().normalize().toString());
@@ -174,9 +181,7 @@ public class ClassUtil {
             if (!loadIfAbsent) {
                 if (bytes == null)
                     return null;
-                for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS)
-                    bytes = transformer.transform(untransformedName, transformedName, bytes);
-                return bytes;
+                return runTransformers(untransformedName, transformedName, bytes);
             }
 
             try {
@@ -191,13 +196,22 @@ public class ClassUtil {
             if (bytes == null)
                 return null;
 
-            for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
-                bytes = transformer.transform(untransformedName, transformedName, bytes);
-            }
+            bytes = runTransformers(untransformedName, transformedName, bytes);
             return bytes;
         } catch (Throwable e) {
             return null;
         }
+    }
+
+    public static byte[] runTransformers(String untransformedName, String transformedName, byte[] bytes) {
+        for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+            try {
+                bytes = transformer.transform(untransformedName, transformedName, bytes);
+            } catch (Throwable e) {
+                TotalDebug.LOGGER.error(String.format("Transformer %s failed for class %s, %s", transformer, untransformedName, transformedName), e);
+            }
+        }
+        return bytes;
     }
 
     private static String getTransformedName(String name) {
