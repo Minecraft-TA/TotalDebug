@@ -265,7 +265,6 @@ public class CompanionApp {
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(
                     this.appDir.resolve("bin").resolve("java.exe").toAbsolutePath().toString(),
-                    "--illegal-access=permit",
                     "-jar",
                     exePath.toAbsolutePath().toString(),
                     "\"" + this.appDir.getParent().resolve(DATA_FOLDER).toAbsolutePath() + "\""
