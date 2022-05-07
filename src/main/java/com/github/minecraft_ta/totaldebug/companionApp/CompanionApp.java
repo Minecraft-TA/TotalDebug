@@ -8,11 +8,10 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.Compan
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppUpdateFollowPlayerStateMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ClassPathMessage;
+import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
-import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.*;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
@@ -81,7 +80,6 @@ public class CompanionApp {
 
         companionAppClient.getMessageProcessor().registerMessage((short) id++, RunScriptMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, ScriptStatusMessage.class);
-        companionAppClient.getMessageProcessor().registerMessage((short) id++, ClassPathMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, StopScriptMessage.class);
         companionAppClient.getMessageProcessor().registerMessage((short) id++, FocusWindowMessage.class);
 
@@ -102,7 +100,6 @@ public class CompanionApp {
         companionAppClient.getMessageBus().listenAlways(CompanionAppUpdateFollowPlayerStateMessage.class, CompanionAppUpdateFollowPlayerStateMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(RunScriptMessage.class, RunScriptMessage::handle);
-        companionAppClient.getMessageBus().listenAlways(ClassPathMessage.class, ClassPathMessage::handle);
         companionAppClient.getMessageBus().listenAlways(StopScriptMessage.class, StopScriptMessage::handle);
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
