@@ -12,6 +12,13 @@ public class CompanionAppReceiveDataStateMessage extends AbstractMessageIncoming
 
     private boolean state;
 
+    public CompanionAppReceiveDataStateMessage() {
+    }
+
+    public CompanionAppReceiveDataStateMessage(boolean state) {
+        this.state = state;
+    }
+
     @Override
     public void read(ByteBufferInputStream messageStream) {
         this.state = messageStream.readBoolean();

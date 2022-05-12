@@ -11,6 +11,13 @@ public class StopScriptMessage extends AbstractMessageIncoming {
 
     private int scriptId;
 
+    public StopScriptMessage() {
+    }
+
+    public StopScriptMessage(int scriptId) {
+        this.scriptId = scriptId;
+    }
+
     @Override
     public void read(ByteBufferInputStream messageStream) {
         this.scriptId = messageStream.readInt();

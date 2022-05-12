@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScrip
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.github.tth05.scnet.Client;
+import com.github.tth05.scnet.IDisconnectedListener;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -66,7 +67,6 @@ public class CompanionApp {
     private Process companionAppProcess;
     private CompletableFuture<Void> awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
     private final Client companionAppClient = new Client();
-
     {
         int id = 1;
         companionAppClient.getMessageProcessor().registerMessage((short) id++, CompanionAppReadyMessage.class);
@@ -104,18 +104,21 @@ public class CompanionApp {
 
         companionAppClient.getMessageBus().listenAlways(CompanionAppReadyMessage.class, (m) -> awaitCompanionAppUIReadyFuture.complete(null));
 
-        companionAppClient.getMessageBus().listenAlways(PacketLoggerStateChangeMessage.class, m -> {
-            TotalDebug.PROXY.getPackerLogger().setIncomingActive(m.isLogIncoming());
-            TotalDebug.PROXY.getPackerLogger().setOutgoingActive(m.isLogOutgoing());
-        });
-
-        companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, m -> TotalDebug.PROXY.getPackerLogger().clear());
-
+        companionAppClient.getMessageBus().listenAlways(PacketLoggerStateChangeMessage.class, PacketLoggerStateChangeMessage::handle);
+        companionAppClient.getMessageBus().listenAlways(ClearPacketsMessage.class, ClearPacketsMessage::handle);
         companionAppClient.getMessageBus().listenAlways(ChannelListMessage.class, m -> companionAppClient.getMessageProcessor().enqueueMessage(new ChannelListMessage()));
-
         companionAppClient.getMessageBus().listenAlways(SetChannelMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setChannel(m.getChannel()));
-
         companionAppClient.getMessageBus().listenAlways(CapturePacketMessage.class, m -> TotalDebug.PROXY.getPackerLogger().setPacketsToCapture(m.getPacket(), m.isRemove()));
+
+        companionAppClient.addConnectionListener((IDisconnectedListener) () -> {
+            // Stop scripts
+            StopScriptMessage.handle(new StopScriptMessage(-1));
+            // Disable chunk grid
+            CompanionAppReceiveDataStateMessage.handle(new CompanionAppReceiveDataStateMessage(false));
+            // Disable packet logger
+            PacketLoggerStateChangeMessage.handle(new PacketLoggerStateChangeMessage(false, false));
+            ClearPacketsMessage.handle(new ClearPacketsMessage());
+        });
     }
 
     public CompanionApp(Path appDir) {

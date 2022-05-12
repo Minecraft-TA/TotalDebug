@@ -84,8 +84,8 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2854'
 
-    implementation "com.github.tth05:SCNet:519b65"
-    implementation 'io.github.classgraph:classgraph:4.8.140'
+    implementation "com.github.tth05:SCNet:d683b47"
+    implementation 'io.github.classgraph:classgraph:4.8.146'
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
     implementation "com.github.tth05:jindex:0.0.35"
 
