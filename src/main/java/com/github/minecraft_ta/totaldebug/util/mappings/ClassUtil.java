@@ -8,21 +8,19 @@ import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraftforge.fml.common.asm.transformers.*;
+import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.CodeSource;
@@ -125,8 +123,8 @@ public class ClassUtil {
                 .map(url -> {
                     try {
                         //URLs suck
-                        return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
-                    } catch (UnsupportedEncodingException ignored) {
+                        return Paths.get(url.getFile().substring(1)).normalize().toString();
+                    } catch (InvalidPathException ignored) {
                         return null;
                     }
                 }).filter(Objects::nonNull);
