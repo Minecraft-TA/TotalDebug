@@ -123,7 +123,7 @@ public class ClassUtil {
                 .map(url -> {
                     try {
                         //URLs suck
-                        return Paths.get(url.getFile().substring(1)).normalize().toString();
+                        return Paths.get(url.getFile().substring(1)).normalize().toString().replace("%20", " ");
                     } catch (InvalidPathException ignored) {
                         return null;
                     }
@@ -238,13 +238,8 @@ public class ClassUtil {
         }
 
         try {
-            byte[] buffer = new byte[8192];
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            int r;
-            while ((r = inputStream.read(buffer, 0, buffer.length)) != -1) {
-                out.write(buffer, 0, r);
-            }
-
+            IOUtils.copy(inputStream, out);
             return out.toByteArray();
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to close stream " + clazz.getName(), e);
