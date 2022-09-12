@@ -2,9 +2,7 @@ package com.github.minecraft_ta.totaldebug;
 
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
-import com.github.minecraft_ta.totaldebug.gui.codeviewer.CodeViewScreen;
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
-import com.google.common.base.Charsets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.text.Style;
 import net.minecraft.util.text.TextComponentString;
@@ -25,35 +23,18 @@ public class DecompilationManager {
     private Path dataDir;
     private Path decompilationDir;
 
-    public CompletableFuture<String> getDecompiledFileContent(Class<?> clazz) {
-        return CompletableFuture.supplyAsync(() -> {
-            Path decompiledFilePath = this.decompilationDir.resolve(clazz.getName() + ".java");
-
-            if (!decompileClassIfNotExists(clazz))
-                return "";
-
-            try {
-                return new String(Files.readAllBytes(decompiledFilePath), Charsets.UTF_8);
-            } catch (IOException e) {
-                TotalDebug.LOGGER.error("Error while reading decompiled file!", e);
-                return "";
-            }
-        });
-    }
-
-    public boolean decompileClassIfNotExists(Class<?> clazz) {
+    public void decompileClassIfNotExists(Class<?> clazz) {
         String name = clazz.getName();
 
         Path output = this.decompilationDir.resolve(name + ".java");
         if (Files.exists(output))
-            return true;
+            return;
 
         try {
             Files.write(output, ProcyonDecompiler.decompile(name).getBytes(StandardCharsets.UTF_8));
-            return true;
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to delete or write java file " + name, e);
-            return false;
+            throw new RuntimeException(e);
         }
     }
 
@@ -74,31 +55,17 @@ public class DecompilationManager {
             Path filePath = this.decompilationDir.resolve(clazz.getName() + ".java");
             decompileClassIfNotExists(clazz);
 
-            //open in companion app
-            if (TotalDebug.INSTANCE.config.useCompanionApp) {
-                CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
-                companionApp.startAndConnect();
+            CompanionApp companionApp = TotalDebug.PROXY.getCompanionApp();
+            companionApp.startAndConnect();
 
-                if (companionApp.isConnected() && companionApp.waitForUI()) {
-                    Minecraft.getMinecraft().player.sendMessage(
-                            new TextComponentTranslation("companion_app.open_file",
-                                    new TextComponentString(filePath.getFileName().toString())
-                                            .setStyle(new Style().setColor(TextFormatting.WHITE))
-                            ).setStyle(new Style().setColor(TextFormatting.GRAY))
-                    );
-                    companionApp.getClient().getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(filePath, targetMemberType, targetMemberIdentifier));
-                }
-            } else { //open in default gui
-                getDecompiledFileContent(clazz).exceptionally(throwable -> {
-                    throwable.printStackTrace();
-                    return "";
-                }).thenAccept(code -> {
-                    Minecraft.getMinecraft().addScheduledTask(() -> {
-                        CodeViewScreen screen = new CodeViewScreen();
-                        FMLClientHandler.instance().showGuiScreen(screen);
-                        screen.setJavaCode(code);
-                    });
-                });
+            if (companionApp.isConnected() && companionApp.waitForUI()) {
+                Minecraft.getMinecraft().player.sendMessage(
+                        new TextComponentTranslation("companion_app.open_file",
+                                new TextComponentString(filePath.getFileName().toString())
+                                        .setStyle(new Style().setColor(TextFormatting.WHITE))
+                        ).setStyle(new Style().setColor(TextFormatting.GRAY))
+                );
+                companionApp.getClient().getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(filePath, targetMemberType, targetMemberIdentifier));
             }
         }).exceptionally(throwable -> {
             TotalDebug.LOGGER.error("Unable to decompile class {}", clazz.getName());
