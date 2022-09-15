@@ -7,7 +7,10 @@ Forge mod providing useful utilities when automating to the extreme.
 - Allows you to view the decompiled classes of Blocks, Tile Entities and more while you're in-game.
 - Allows you to search for method and field references in every loaded class (e.g. find every block that accelerates 
   tile entities)
-- Displays TPS and MSPT when you press tab 
+- Displays TPS and MSPT when you press tab
+
+Most of these features are accessible through the companion app for this mod, which can be
+found here: https://github.com/Minecraft-TA/TotalDebugCompanion
 
 ### Credits
 
