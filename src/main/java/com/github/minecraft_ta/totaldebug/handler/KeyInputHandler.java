@@ -4,32 +4,20 @@ import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
-import com.github.minecraft_ta.totaldebug.jei.TotalDebugJEIPlugin;
+import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.InputEvent;
-import mezz.jei.api.IJeiRuntime;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.enchantment.EnchantmentData;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
-import net.minecraft.item.ItemMonsterPlacer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.fml.common.registry.EntityEntry;
-import net.minecraftforge.fml.common.registry.ForgeRegistries;
-import org.lwjgl.input.Keyboard;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -55,8 +43,8 @@ public class KeyInputHandler {
     }
 
     @SubscribeEvent
-    public void onGuiKeyPress(GuiScreenEvent.KeyboardInputEvent.Pre event) {
-        if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode()))
+    public void onGuiKeyPress(GuiScreenEvent/*.KeyboardInputEvent.Pre*/ event) {
+        /*if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode())) TODO Replace with Nei integration
             return;
 
         GuiScreen currentScreen = event.getGui();
@@ -89,29 +77,29 @@ public class KeyInputHandler {
                     handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
                 }
             }
-        }
+        }*/
     }
 
     private boolean checkForSpawnEggAndOpenGui(ItemStack itemStack) {
-        if (itemStack.getItem() instanceof ItemMonsterPlacer) {
+        /*if (itemStack.getItem() instanceof ItemMonsterPlacer) { TODO Readd later
             final EntityEntry value = ForgeRegistries.ENTITIES.getValue(ItemMonsterPlacer.getNamedIdFrom(itemStack));
             if (value != null) {
                 TotalDebug.PROXY.getDecompilationManager().openGui(value.getEntityClass());
                 return true;
             }
-        }
+        }*/
         return false;
     }
 
     public boolean rayTraceEyes() {
-        RayTraceResult rayTraceResult = Minecraft.getMinecraft().objectMouseOver;
-        WorldClient world = Minecraft.getMinecraft().world;
+        MovingObjectPosition rayTraceResult = Minecraft.getMinecraft().objectMouseOver;
+        WorldClient world = Minecraft.getMinecraft().theWorld;
 
         switch (rayTraceResult.typeOfHit) {
             case BLOCK:
-                BlockPos blockPos = rayTraceResult.getBlockPos();
-                if (!world.isAirBlock(blockPos)) {
-                    if (world.getTileEntity(blockPos) == null) {
+                BlockPos blockPos = new BlockPos(rayTraceResult.blockX, rayTraceResult.blockY, rayTraceResult.blockZ);
+                if (!world.isAirBlock(blockPos.getX(), blockPos.getY(), blockPos.getZ())) {
+                    if (world.getTileEntity(blockPos.getX(), blockPos.getY(), blockPos.getZ()) == null) {
                         handle(HitType.BLOCK_ENTITY, blockPos, 0, 0);
                     } else {
                         handle(HitType.TILE_ENTITY, blockPos, 0, 0);
@@ -130,14 +118,14 @@ public class KeyInputHandler {
             return;
         lastRequested = System.currentTimeMillis();
 
-        final World world = Minecraft.getMinecraft().world;
+        final World world = Minecraft.getMinecraft().theWorld;
 
         switch (typeOfHit) {
             case BLOCK_ENTITY:
-                TotalDebug.PROXY.getDecompilationManager().openGui(world.getBlockState(pos).getBlock().getClass());
+                TotalDebug.PROXY.getDecompilationManager().openGui(world.getBlock(pos.getX(), pos.getY(), pos.getZ()).getClass());
                 break;
             case TILE_ENTITY:
-                TileEntity tileEntity = world.getTileEntity(pos);
+                TileEntity tileEntity = world.getTileEntity(pos.getX(), pos.getY(), pos.getZ());
                 if (tileEntity != null) {
                     TotalDebug.PROXY.getDecompilationManager().openGui(tileEntity.getClass());
                 } else {
@@ -153,12 +141,11 @@ public class KeyInputHandler {
                 }
                 break;
             case ITEM:
-                Item item = Item.REGISTRY.getObjectById(entityOrItemId);
+                Item item = (Item) Item.itemRegistry.getObjectById(entityOrItemId); //TODO: Save I guess?
                 if (item != null) {
                     if (item instanceof ItemBlock) {
-                        Block block = ((ItemBlock) item).getBlock();
-                        final EntityPlayer player = Minecraft.getMinecraft().player;
-                        TileEntity tile = block.createTileEntity(world, block.getStateForPlacement(world, new BlockPos(0, 0, 0), EnumFacing.UP, 0, 0, 0, meta, player, player.getActiveHand()));
+                        Block block = ((ItemBlock) item).field_150939_a;
+                        TileEntity tile = block.createTileEntity(world, block.getDamageValue(world, pos.getX(), pos.getY(), pos.getZ()));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;

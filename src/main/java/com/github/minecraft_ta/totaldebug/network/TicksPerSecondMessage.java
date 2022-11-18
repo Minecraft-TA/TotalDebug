@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.network;
 
-import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
@@ -9,7 +8,6 @@ import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
-import net.minecraft.tileentity.TileEntity;
 import net.minecraft.world.World;
 
 public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPerSecondMessage, IMessage> {
@@ -51,17 +49,17 @@ public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPer
         if (world == null || message.pos == null)
             return null;
 
-        Minecraft.getMinecraft().func_152343_a(() -> {
+        /*Minecraft.getMinecraft().func_152343_a(() -> {
             BlockPos blockPos = message.pos;
-            if (!world.isBlockLoaded(blockPos))
+            if (!world.blockExists(blockPos.getX(), blockPos.getY(), blockPos.getZ()))
                 return;
 
             TileEntity te = world.getTileEntity(blockPos.getX(), blockPos.getY(), blockPos.getZ());
             if (!(te instanceof TickBlockTile))
                 return;
 
-            ((TickBlockTile) te).updateData(message.average, message.tps);
-        });
+            ((TickBlockTile) te).updateData(message.average, message.tps); TODO Callable returns something?
+        });*/
 
         return null;
     }

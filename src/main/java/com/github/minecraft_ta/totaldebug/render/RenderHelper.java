@@ -1,14 +1,6 @@
 package com.github.minecraft_ta.totaldebug.render;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.OpenGlHelper;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.entity.RenderManager;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.util.EnumFacing;
 
 public class RenderHelper {
 
@@ -16,7 +8,7 @@ public class RenderHelper {
      * @see net.minecraft.client.renderer.EntityRenderer#drawNameplate(FontRenderer, String, float, float, float, int, float, float, boolean, boolean)
      */
     public static void drawNameplate(FontRenderer fontRendererIn, String str, float x, float y, float z, int verticalShift) {
-        RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
+        /*RenderManager renderManager = Minecraft.getMinecraft().getRenderManager(); TODO idk opengl fuck off
         float viewerYaw = renderManager.playerViewY;
         float viewerPitch = renderManager.playerViewX;
         boolean isThirdPersonFrontal = renderManager.options.thirdPersonView == 2;
@@ -54,11 +46,11 @@ public class RenderHelper {
         fontRendererIn.drawString(str, -fontRendererIn.getStringWidth(str) / 2, verticalShift, 553648127);
         GlStateManager.enableLighting();
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-        GlStateManager.popMatrix();
+        GlStateManager.popMatrix();*/
     }
 
     public static void drawTickBlockSideText(FontRenderer fontRenderer, int tps, int average, double xIn, double y, double zIn) {
-        for (EnumFacing side : EnumFacing.HORIZONTALS) {
+        /*for (EnumFacing side : EnumFacing.HORIZONTALS) { TODO opengl
             //move to center of block
             double x = xIn + 0.5f;
             double z = zIn + 0.5f;
@@ -85,6 +77,6 @@ public class RenderHelper {
             GlStateManager.enableLighting();
             GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
             GlStateManager.popMatrix();
-        }
+        }*/
     }
 }

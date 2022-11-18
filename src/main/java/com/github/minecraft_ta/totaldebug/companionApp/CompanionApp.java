@@ -23,10 +23,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.ICommandSender;
-import net.minecraft.util.text.Style;
-import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextComponentTranslation;
-import net.minecraft.util.text.TextFormatting;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.ChatStyle;
+import net.minecraft.util.EnumChatFormatting;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -161,38 +160,38 @@ public class CompanionApp {
             }
 
             if (!Files.exists(TotalDebug.PROXY.getMinecraftClassDumpPath())) {
-                sender.sendMessage(new TextComponentTranslation("companion_app.dumping_minecraft_classes").setStyle(new Style().setColor(TextFormatting.GRAY)));
+                sender.addChatMessage(new ChatComponentTranslation("companion_app.dumping_minecraft_classes").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY)));
                 ClassUtil.dumpMinecraftClasses();
             }
 
             Path indexPath = TotalDebug.PROXY.getDecompilationManager().getDataDir().resolve(DATA_FOLDER).resolve("index");
             if (!Files.exists(indexPath)) {
-                sender.sendMessage(new TextComponentTranslation("companion_app.start_indexing").setStyle(new Style().setColor(TextFormatting.GRAY)));
+                sender.addChatMessage(new ChatComponentTranslation("companion_app.start_indexing").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY)));
                 ClassUtil.createClassIndex(indexPath);
             }
 
-            sender.sendMessage(new TextComponentTranslation("companion_app.starting").setStyle(new Style().setColor(TextFormatting.GRAY)));
+            sender.addChatMessage(new ChatComponentTranslation("companion_app.starting").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY)));
             startApp();
         }
 
         if (!isConnected()) {
-            sender.sendMessage(
-                    new TextComponentTranslation("companion_app.connecting")
-                            .setStyle(new Style().setColor(TextFormatting.GRAY))
+            sender.addChatMessage(
+                    new ChatComponentTranslation("companion_app.connecting")
+                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
             );
 
             this.awaitCompanionAppUIReadyFuture.cancel(true);
             this.awaitCompanionAppUIReadyFuture = new CompletableFuture<>();
 
             if (connect(5, 1000)) {
-                sender.sendMessage(
-                        new TextComponentTranslation("companion_app.connection_success")
-                                .setStyle(new Style().setColor(TextFormatting.GREEN))
+                sender.addChatMessage(
+                        new ChatComponentTranslation("companion_app.connection_success")
+                                .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GREEN))
                 );
             } else {
-                sender.sendMessage(
-                        new TextComponentTranslation("companion_app.connection_fail")
-                                .setStyle(new Style().setColor(TextFormatting.RED))
+                sender.addChatMessage(
+                        new ChatComponentTranslation("companion_app.connection_fail")
+                                .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.RED))
                 );
             }
         }
@@ -291,9 +290,9 @@ public class CompanionApp {
      * @param version the version to download
      */
     private void downloadCompanionApp(String version) {
-        Minecraft.getMinecraft().player.sendMessage(
-                new TextComponentTranslation("companion_app.download_start", version)
-                        .setStyle(new Style().setColor(TextFormatting.GRAY))
+        Minecraft.getMinecraft().thePlayer.addChatMessage(
+                new ChatComponentTranslation("companion_app.download_start", version)
+                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
         );
 
         HttpClient client = HttpClients.createDefault();
@@ -323,18 +322,18 @@ public class CompanionApp {
                     }
 
                     //send progress message
-                    Minecraft.getMinecraft().player.sendStatusMessage(
-                            new TextComponentString((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
-                                    .setStyle(new Style().setColor(TextFormatting.GOLD))
-                            , true);
+                    /*Minecraft.getMinecraft().thePlayer.sendStatusMessage( TODO Find out how to send status messages
+                            new ChatComponentText((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
+                                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
+                            , true);*/
                 }
             }
 
             //fake 100% message because we won't exactly reach that
-            Minecraft.getMinecraft().player.sendStatusMessage(
-                    new TextComponentString(100 + "%")
-                            .setStyle(new Style().setColor(TextFormatting.GOLD))
-                    , true);
+            /*Minecraft.getMinecraft().thePlayer.sendStatusMessage(
+                    new ChatComponentText(100 + "%")
+                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
+                    , true);*/
 
             TotalDebug.LOGGER.info("Successfully downloaded companion app version {}", version);
         } catch (IOException e) {

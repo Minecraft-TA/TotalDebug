@@ -65,14 +65,14 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                         boolean isChunkLoaded = world.getChunkProvider().chunkExists(chunkX, chunkZ);
 
                         long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
-                        if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ) && world.provider.dimensionId == 0)
+                        /*if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ) && world.provider.dimensionId == 0) TODO: Find out how to check if a chunk is a spawn chunk
                             stateMap.put(posLong, SPAWN_CHUNK);
-                        else if (world.getPlayerChunkMap().contains(chunkX, chunkZ))
-                            stateMap.put(posLong, PLAYER_LOADED_CHUNK);
+                        else *//*if (world.getPlayerChunkMap().contains(chunkX, chunkZ)) TODO: Find out how to get the player chunk map
+                            stateMap.put(posLong, PLAYER_LOADED_CHUNK);*/
                         //TODO: Find a way to check if chunk is queued for unloading
                         /*else if (isChunkLoaded && ((Chunk) world.theChunkProviderServer.loadedChunkHashMap.getValueByKey(ChunkCoordIntPair.chunkXZ2Int(chunkX, chunkZ))).isChunkLoaded)
-                            stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);*/
-                        else if (isChunkLoaded)
+                            stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);
+                        else */if (isChunkLoaded)
                             stateMap.put(posLong, LAZY_CHUNK);
                     }
                 }

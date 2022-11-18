@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.jei;
+/*package com.github.minecraft_ta.totaldebug.jei;
 
 import mezz.jei.api.IJeiRuntime;
 import mezz.jei.api.IModPlugin;
@@ -27,4 +27,4 @@ public class TotalDebugJEIPlugin implements IModPlugin {
     public IJeiRuntime getRuntime() {
         return runtime;
     }
-}
+}*/

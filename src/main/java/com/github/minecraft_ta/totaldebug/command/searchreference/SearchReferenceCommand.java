@@ -7,18 +7,13 @@ import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearche
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.Style;
-import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextComponentTranslation;
-import net.minecraft.util.text.TextFormatting;
-import net.minecraft.util.text.event.ClickEvent;
-import net.minecraft.util.text.event.HoverEvent;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.ChatStyle;
+import net.minecraft.util.EnumChatFormatting;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -43,8 +38,8 @@ public class SearchReferenceCommand extends CommandBase {
     public void processCommand(ICommandSender sender, String[] args) {
         if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
             BytecodeReferenceSearcher.cancel();
-            sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.cancel_success")
-                    .setStyle(new Style().setColor(TextFormatting.GREEN)));
+            sender.addChatMessage(new ChatComponentTranslation("commands.total_debug.searchreference.cancel_success")
+                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GREEN)));
             return;
         }
 
@@ -75,8 +70,8 @@ public class SearchReferenceCommand extends CommandBase {
             return Pair.of(Collections.emptyList(), -1);
         }).thenAccept(resultPair -> {
             if (resultPair.getRight() == -1) {
-                sender.sendMessage(new TextComponentString("There was an error during the scan. Please check " +
-                        "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
+                sender.addChatMessage(new ChatComponentText("There was an error during the scan. Please check " +
+                        "the logs and report to mod authors.").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.RED)));
                 return;
             }
 
@@ -92,24 +87,24 @@ public class SearchReferenceCommand extends CommandBase {
                     );
                 }
             } else {
-                sender.sendMessage(new TextComponentString("-------------------").setStyle(new Style().setColor(TextFormatting.GOLD)));
+                sender.addChatMessage(new ChatComponentText("-------------------").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
 
                 int i = 0;
                 for (String result : resultPair.getLeft()) {
-                    sender.sendMessage(new TextComponentString(result)
-                            .setStyle(new Style().setColor(i % 2 == 0 ? TextFormatting.WHITE : TextFormatting.GRAY)
-                                    .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponentTranslation("commands.total_debug.searchreference.click_to_open")))
-                                    .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));
+                    sender.addChatMessage(new ChatComponentText(result)
+                            .setChatStyle(new ChatStyle().setColor(i % 2 == 0 ? EnumChatFormatting.WHITE : EnumChatFormatting.GRAY)));
+                                    //.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentTranslation("commands.total_debug.searchreference.click_to_open"))) TODO: Readd
+                                    //.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));
 
                     i++;
                 }
 
-                sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.result_count", resultPair.getLeft().size())
-                        .setStyle(new Style().setColor(TextFormatting.GREEN))
+                sender.addChatMessage(new ChatComponentTranslation("commands.total_debug.searchreference.result_count", resultPair.getLeft().size())
+                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GREEN))
                         .appendText(", ")
-                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.time", scanTime))
+                        .appendSibling(new ChatComponentTranslation("commands.total_debug.searchreference.time", scanTime))
                         .appendText(", ")
-                        .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
+                        .appendSibling(new ChatComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
             }
         });
     }
