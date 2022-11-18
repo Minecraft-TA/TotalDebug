@@ -45,27 +45,7 @@ public class ClientProxy extends CommonProxy {
         FMLCommonHandler.instance().bus().register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new BossBarHandler());
-        MinecraftForge.EVENT_BUS.register(new Object() {
-            @SubscribeEvent
-            public void onClientTick(TickEvent.ClientTickEvent event) {
-                List<Runnable> tasks;
-                if (event.phase == TickEvent.Phase.START)
-                    tasks = ClientProxy.super.preTickTasks;
-                else
-                    tasks = ClientProxy.super.postTickTasks;
-
-                synchronized (tasks) {
-                    tasks.forEach(Runnable::run);
-                    tasks.clear();
-                }
-
-                if (event.phase != TickEvent.Phase.END)
-                    return;
-
-                getChunkGridManagerClient().update();
-                getPackerLogger().update();
-            }
-        });
+        FMLCommonHandler.instance().bus().register(new GlobalTickHandler());
 
         ClientRegistry.bindTileEntitySpecialRenderer(TickBlockTile.class, new TickBlockTileRenderer());
 
@@ -98,5 +78,28 @@ public class ClientProxy extends CommonProxy {
     @Override
     public IFMLSidedHandler getSidedHandler() {
         return FMLClientHandler.instance();
+    }
+
+    public class GlobalTickHandler {
+
+        @SubscribeEvent
+        public void onClientTick(TickEvent.ClientTickEvent event) {
+            List<Runnable> tasks;
+            if (event.phase == TickEvent.Phase.START)
+                tasks = ClientProxy.super.preTickTasks;
+            else
+                tasks = ClientProxy.super.postTickTasks;
+
+            synchronized (tasks) {
+                tasks.forEach(Runnable::run);
+                tasks.clear();
+            }
+
+            if (event.phase != TickEvent.Phase.END)
+                return;
+
+            getChunkGridManagerClient().update();
+            getPackerLogger().update();
+        }
     }
 }

@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMess
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.IFMLSidedHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -60,15 +61,7 @@ public class CommonProxy {
         RuntimeMappingsTransformer.loadMappings();
 
         MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());
-        MinecraftForge.EVENT_BUS.register(new Object() {
-            @SubscribeEvent
-            public void onTick(TickEvent.ServerTickEvent event) {
-                if (event.phase != TickEvent.Phase.END)
-                    return;
-
-                getChunkGridManagerServer().update();
-            }
-        });
+        FMLCommonHandler.instance().bus().register(new GlobalTickHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {
             @SubscribeEvent
             public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -114,6 +107,17 @@ public class CommonProxy {
     public void addPostTickTask(Runnable task) {
         synchronized (this.postTickTasks) {
             this.postTickTasks.add(task);
+        }
+    }
+
+    public class GlobalTickHandler {
+
+        @SubscribeEvent
+        public void onTick(TickEvent.ServerTickEvent event) {
+            if (event.phase != TickEvent.Phase.END)
+                return;
+
+            getChunkGridManagerServer().update();
         }
     }
 }

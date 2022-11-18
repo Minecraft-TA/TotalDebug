@@ -6,14 +6,26 @@ import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.util.ChunkCoordinates;
+import net.minecraft.world.ChunkCoordIntPair;
 import net.minecraft.world.WorldServer;
+import net.minecraft.world.gen.ChunkProviderServer;
+import nonapi.io.github.classgraph.reflection.ReflectionUtils;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.UUID;
+import java.lang.reflect.Field;
+import java.util.*;
 
 public class ChunkGridManagerServer implements IChunkGridManager {
+
+    private static final Field UNLOAD_QUEUE_FIELD;
+    static {
+        try {
+            UNLOAD_QUEUE_FIELD = ChunkProviderServer.class.getDeclaredField("chunksToUnload");
+            UNLOAD_QUEUE_FIELD.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     private final Map<UUID, ChunkGridRequestInfo> players = new HashMap<>();
 
@@ -55,7 +67,9 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                 if (world == null)
                     continue;
 
+                ChunkCoordinates spawnPoint = world.getSpawnPoint();
                 Long2ByteMap stateMap = new Long2ByteOpenHashMap();
+                Set<Long> chunksToUnload = (Set<Long>) ReflectionUtils.getFieldVal(false, world.getChunkProvider(), UNLOAD_QUEUE_FIELD);
 
                 for (int i = 0; i < width; i++) {
                     int chunkX = chunkGridRequestInfo.getMinChunkX() + i;
@@ -65,14 +79,13 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                         boolean isChunkLoaded = world.getChunkProvider().chunkExists(chunkX, chunkZ);
 
                         long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
-                        /*if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ) && world.provider.dimensionId == 0) TODO: Find out how to check if a chunk is a spawn chunk
+                        if (isChunkLoaded && isSpawnChunk(spawnPoint, chunkX, chunkZ) && world.provider.dimensionId == 0)
                             stateMap.put(posLong, SPAWN_CHUNK);
-                        else *//*if (world.getPlayerChunkMap().contains(chunkX, chunkZ)) TODO: Find out how to get the player chunk map
-                            stateMap.put(posLong, PLAYER_LOADED_CHUNK);*/
-                        //TODO: Find a way to check if chunk is queued for unloading
-                        /*else if (isChunkLoaded && ((Chunk) world.theChunkProviderServer.loadedChunkHashMap.getValueByKey(ChunkCoordIntPair.chunkXZ2Int(chunkX, chunkZ))).isChunkLoaded)
+                        else if (world.getPlayerManager().func_152621_a(chunkX, chunkZ))
+                            stateMap.put(posLong, PLAYER_LOADED_CHUNK);
+                        else if (isChunkLoaded && chunksToUnload.contains(ChunkCoordIntPair.chunkXZ2Int(chunkX, chunkZ)))
                             stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);
-                        else */if (isChunkLoaded)
+                        else if (isChunkLoaded)
                             stateMap.put(posLong, LAZY_CHUNK);
                     }
                 }
@@ -101,5 +114,13 @@ public class ChunkGridManagerServer implements IChunkGridManager {
         synchronized (this.players) {
             this.players.put(uniqueID, requestInfo);
         }
+    }
+
+    private static boolean isSpawnChunk(ChunkCoordinates spawnPoint, int chunkX, int chunkZ) {
+        int k = chunkX + 8 - spawnPoint.posX;
+        int l = chunkZ + 8 - spawnPoint.posZ;
+        short short1 = 8;
+
+        return k >= -short1 && k <= short1 && l >= -short1 && l <= short1;
     }
 }
