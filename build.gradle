@@ -93,6 +93,7 @@ dependencies {
     //compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     //runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
 
+    implementation group: 'fastutil', name: 'fastutil', version: '5.0.9'
     implementation('com.github.javaparser:javaparser-symbol-solver-core:3.24.0') {
         exclude group: "com.google.guava"
     }
