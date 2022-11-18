@@ -51,7 +51,7 @@ public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPer
         if (world == null || message.pos == null)
             return null;
 
-        Minecraft.getMinecraft().addScheduledTask(() -> {
+        Minecraft.getMinecraft().func_152343_a(() -> {
             BlockPos blockPos = message.pos;
             if (!world.isBlockLoaded(blockPos))
                 return;

@@ -206,7 +206,7 @@ public class PacketLogger extends ChannelDuplexHandler {
     private int getPacketSize(Object msg) throws IOException {
         PacketBuffer buf = new PacketBuffer(Unpooled.buffer());
         try {
-            ((Packet<?>) msg).writePacketData(buf);
+            ((Packet) msg).writePacketData(buf);
         } catch (NullPointerException ignored) {
         }
         return buf.readableBytes();

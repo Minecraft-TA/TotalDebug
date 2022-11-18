@@ -5,10 +5,10 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.Decompi
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
 import cpw.mods.fml.client.FMLClientHandler;
 import net.minecraft.client.Minecraft;
-import net.minecraft.util.text.Style;
-import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextComponentTranslation;
-import net.minecraft.util.text.TextFormatting;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.ChatStyle;
+import net.minecraft.util.EnumChatFormatting;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -59,11 +59,11 @@ public class DecompilationManager {
             companionApp.startAndConnect();
 
             if (companionApp.isConnected() && companionApp.waitForUI()) {
-                Minecraft.getMinecraft().player.sendMessage(
-                        new TextComponentTranslation("companion_app.open_file",
-                                new TextComponentString(filePath.getFileName().toString())
-                                        .setStyle(new Style().setColor(TextFormatting.WHITE))
-                        ).setStyle(new Style().setColor(TextFormatting.GRAY))
+                Minecraft.getMinecraft().thePlayer.addChatComponentMessage(
+                        new ChatComponentTranslation("companion_app.open_file",
+                                new ChatComponentText(filePath.getFileName().toString())
+                                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.WHITE))
+                        ).setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
                 );
                 companionApp.getClient().getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(filePath, targetMemberType, targetMemberIdentifier));
             }

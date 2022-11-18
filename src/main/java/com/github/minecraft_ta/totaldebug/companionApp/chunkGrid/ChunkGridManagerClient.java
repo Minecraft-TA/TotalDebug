@@ -18,8 +18,8 @@ public class ChunkGridManagerClient implements IChunkGridManager {
         if (!this.followPlayer)
             return;
 
-        int currentChunkX = Minecraft.getMinecraft().player.chunkCoordX;
-        int currentChunkZ = Minecraft.getMinecraft().player.chunkCoordZ;
+        int currentChunkX = Minecraft.getMinecraft().thePlayer.chunkCoordX;
+        int currentChunkZ = Minecraft.getMinecraft().thePlayer.chunkCoordZ;
 
         if (lastChunkX == currentChunkX && lastChunkZ == currentChunkZ)
             return;

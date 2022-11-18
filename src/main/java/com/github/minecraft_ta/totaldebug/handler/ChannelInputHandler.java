@@ -18,23 +18,23 @@ public class ChannelInputHandler {
 
     @SubscribeEvent
     public void onLoggIn(FMLNetworkEvent.ClientConnectedToServerEvent event) {
-        ChannelPipeline pipeline = event.getManager().channel().pipeline();
+        ChannelPipeline pipeline = event.manager.channel().pipeline();
         pipeline.addBefore("packet_handler", "listener", TotalDebug.PROXY.getPackerLogger());
     }
 
     @SubscribeEvent
     public void onFMLNetworkClientDisconnectionFromServer(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        ChannelPipeline pipeline = event.getManager().channel().pipeline();
+        ChannelPipeline pipeline = event.manager.channel().pipeline();
         pipeline.remove(TotalDebug.PROXY.getPackerLogger());
         this.initialized = false;
     }
 
     @SubscribeEvent
     public void onLogginServer(FMLNetworkEvent.ServerConnectionFromClientEvent event) {
-        ChannelPipeline pipeline = event.getManager().channel().pipeline();
+        ChannelPipeline pipeline = event.manager.channel().pipeline();
         if (pipeline.get("packet_handler") != null) {
             PacketBlocker packetBlocker = new PacketBlocker();
-            packetBlockers.put(((NetHandlerPlayServer) event.getHandler()).player.getUniqueID(), packetBlocker);
+            packetBlockers.put(((NetHandlerPlayServer) event.handler).playerEntity.getUniqueID(), packetBlocker);
             pipeline.addBefore("packet_handler", "packet_blocker", packetBlocker);
         }
     }

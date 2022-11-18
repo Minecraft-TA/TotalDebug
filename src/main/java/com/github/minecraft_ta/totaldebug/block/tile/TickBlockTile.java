@@ -2,9 +2,10 @@ package com.github.minecraft_ta.totaldebug.block.tile;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
+import com.github.minecraft_ta.totaldebug.util.BlockPos;
+import cpw.mods.fml.common.network.NetworkRegistry;
 import net.minecraft.client.renderer.texture.ITickable;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraftforge.fml.common.network.NetworkRegistry;
 
 public class TickBlockTile extends TileEntity implements ITickable {
 
@@ -29,17 +30,17 @@ public class TickBlockTile extends TileEntity implements ITickable {
         ticksPerSecond++;
 
         if ((System.currentTimeMillis() - timeStampSecond) >= 1000) {
-            TotalDebug.INSTANCE.network.sendToAllTracking(
+            TotalDebug.INSTANCE.network.sendToAllAround(
                     new TicksPerSecondMessage(
-                            this.getPos(),
+                            new BlockPos(this.xCoord, this.yCoord, this.zCoord),
                             this.ticksPerSecond,
                             this.counter == 0 ? 0 : (int) Math.round(this.totalTicks / (double) this.counter)
                     ),
                     new NetworkRegistry.TargetPoint(
-                            this.world.provider.getDimension(),
-                            this.getPos().getX(),
-                            this.getPos().getY(),
-                            this.getPos().getZ(),
+                            this.worldObj.provider.dimensionId,
+                            this.xCoord,
+                            this.yCoord,
+                            this.zCoord,
                             25
                     )
             );

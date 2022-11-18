@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.command.*;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.*;
 import net.minecraft.util.text.*;
 import net.minecraftforge.client.IClientCommand;
 import net.minecraftforge.server.command.CommandTreeBase;
@@ -12,7 +13,7 @@ import org.apache.commons.lang3.StringUtils;
 import javax.annotation.Nonnull;
 import java.util.Iterator;
 
-public class DecompileCommand extends CommandTreeBase implements IClientCommand {
+public class DecompileCommand extends CommandBase {
 
     public DecompileCommand() {
         addSubcommand(new ItemSubCommand());
@@ -24,46 +25,46 @@ public class DecompileCommand extends CommandTreeBase implements IClientCommand 
 
     @Nonnull
     @Override
-    public String getName() {
+    public String getCommandName() {
         return "decompile";
     }
 
     @Nonnull
     @Override
-    public String getUsage(@Nonnull ICommandSender sender) {
+    public String getCommandUsage(@Nonnull ICommandSender sender) {
         return "";
     }
 
     @Override
-    public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, String[] args) throws CommandException {
+    public void processCommand(@Nonnull ICommandSender sender, String[] args) throws CommandException {
         if (args.length < 1) {
-            ITextComponent component = new TextComponentTranslation("commands.total_debug.decompile.usage")
-                    .setStyle(new Style().setColor(TextFormatting.GOLD))
+            IChatComponent component = new ChatComponentTranslation("commands.total_debug.decompile.usage")
+                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
                     .appendText("\n");
 
             for (Iterator<ICommand> iterator = this.getSubCommands().iterator(); iterator.hasNext(); ) {
                 ICommand subCommand = iterator.next();
 
                 String subCommandUsage = I18n.format("commands.total_debug.decompile." + subCommand.getName() + ".usage");
-                ITextComponent listStartComponent = new TextComponentString("- ").setStyle(new Style().setColor(TextFormatting.DARK_GRAY));
+                IChatComponent listStartComponent = new ChatComponentText("- ").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.DARK_GRAY));
 
                 component.appendSibling(
                         listStartComponent.appendSibling(
                                 //subcommand name
-                                new TextComponentString(subCommand.getName())
-                                        .setStyle(new Style().setColor(TextFormatting.GRAY))
+                                new ChatComponentText(subCommand.getName())
+                                        .setStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
                                         .appendSibling(
                                                 //subcommand args
-                                                new TextComponentString(
+                                                new ChatComponentText(
                                                         subCommandUsage.substring(StringUtils
                                                                 .ordinalIndexOf(subCommandUsage, " ", 2))
-                                                ).setStyle(new Style().setColor(TextFormatting.WHITE))
+                                                ).setChatStyle(new ChatStyle().setColor(EnumChatFormatting.WHITE))
                                         ).appendText(!iterator.hasNext() ? "" : "\n")
                         )
                 );
             }
 
-            sender.sendMessage(component);
+            sender.addChatMessage(component);
         } else {
             super.execute(server, sender, args);
         }
@@ -83,7 +84,7 @@ public class DecompileCommand extends CommandTreeBase implements IClientCommand 
 
             Class<?> clazz = getClassFromArg(args[0]);
             if (clazz == null) {
-                sender.sendMessage(new TextComponentTranslation(getClassNotFoundTranslationKey(), args[0]));
+                sender.addChatMessage(new ChatComponentTranslation(getClassNotFoundTranslationKey(), args[0]));
                 return;
             }
 

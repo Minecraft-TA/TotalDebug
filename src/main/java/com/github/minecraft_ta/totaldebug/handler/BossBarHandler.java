@@ -8,8 +8,8 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent;
 public class BossBarHandler {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onBossBarRender(RenderGameOverlayEvent.BossInfo event) {
-        if (!TotalDebug.INSTANCE.config.renderBossBar) {
+    public void onBossBarRender(RenderGameOverlayEvent.Pre event) {
+        if (event.type == RenderGameOverlayEvent.ElementType.BOSSHEALTH && !TotalDebug.INSTANCE.config.renderBossBar) {
             event.setCanceled(true);
         }
     }
