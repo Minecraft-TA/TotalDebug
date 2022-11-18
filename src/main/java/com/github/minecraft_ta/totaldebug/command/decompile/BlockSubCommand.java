@@ -7,6 +7,7 @@ import net.minecraft.util.ResourceLocation;
 import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public class BlockSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
@@ -20,8 +21,8 @@ public class BlockSubCommand extends DecompileCommand.DecompileClassSubCommand {
     public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length != 1)
             return Collections.emptyList();
-        //TODO: Not sure
-        return getListOfStringsMatchingLastWord(args, String.valueOf(Block.blockRegistry.getKeys()));
+        return getListOfStringsMatchingLastWord(args, ((Set<Block>) Block.blockRegistry.getKeys()).stream()
+                .map(k -> k.getUnlocalizedName().substring(5)).toArray(String[]::new));
     }
 
     @Nonnull

@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.*;
+import nonapi.io.github.classgraph.reflection.ReflectionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.lang.reflect.Array;
@@ -23,6 +24,8 @@ public class ObjectToJsonHelper {
     private static final ITypeSerializer<Boolean> BOOLEAN_SERIALIZER = (object, seenObjects) -> new JsonPrimitive(object);
     private static final ArraySerializer ARRAY_SERIALIZER = new ArraySerializer();
 
+    private static final Field NBTTAG_LIST_TAG_LIST_FIELD;
+
     static {
         Arrays.asList(Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class).forEach(clazz -> SERIALIZERS.put(clazz, NUMBER_SERIALIZER));
         Arrays.asList(String.class, Character.class, UUID.class).forEach(clazz -> SERIALIZERS.put(clazz, STRING_SERIALIZER));
@@ -32,6 +35,13 @@ public class ObjectToJsonHelper {
 
         INHERITANCE_SERIALIZERS.add(Pair.of(Map.class, new MapSerializer()));
         INHERITANCE_SERIALIZERS.add(Pair.of(Iterable.class, new IterableSerializer()));
+
+        try {
+            NBTTAG_LIST_TAG_LIST_FIELD = NBTTagList.class.getDeclaredField("tagList");
+            NBTTAG_LIST_TAG_LIST_FIELD.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -277,17 +287,6 @@ public class ObjectToJsonHelper {
             json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound(), seenObjects));
             //json.addProperty("isEmpty", itemStack.isEmpty()); TODO Check if this is even a thing
             json.addProperty("itemDamage", itemStack.getItemDamage());
-
-
-            try {
-                Field capNBT = itemStack.getClass().getDeclaredField("capNBT");
-                capNBT.setAccessible(true);
-                Object capNBTObject = capNBT.get(itemStack);
-                json.add("capNBT", getSerializer(capNBTObject).serialize(capNBTObject, seenObjects));
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                e.printStackTrace();
-            }
-
             return json;
         }
 
@@ -323,17 +322,17 @@ public class ObjectToJsonHelper {
                 NBTBase tag = nbtTagCompound.getTag(key);
                 if (tag instanceof NBTTagCompound) {
                     json.add(key, nbtToJson((NBTTagCompound) tag, seenObjects));
-                } /*else if (tag instanceof NBTTagList) { TODO Find out how to iterate over NBTTagList
+                } else if (tag instanceof NBTTagList) {
                     JsonArray jsonArray = new JsonArray();
-                    for (NBTBase nbtBase : ((NBTTagList) tag)) {
+                    for (NBTBase nbtBase : (List<NBTBase>) ReflectionUtils.getFieldVal(false, tag, NBTTAG_LIST_TAG_LIST_FIELD)) {
                         if (nbtBase instanceof NBTTagCompound) {
                             jsonArray.add(nbtToJson((NBTTagCompound) nbtBase, seenObjects));
                         } else {
-                            jsonArray.add(nbtBase.toString());
+                            jsonArray.add(new JsonPrimitive(nbtBase.toString()));
                         }
                     }
                     json.add(key, jsonArray);
-                }*/ else if (tag instanceof NBTTagByteArray) {
+                } else if (tag instanceof NBTTagByteArray) {
                     json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).func_150292_c(), seenObjects));
                 } else if (tag instanceof NBTTagIntArray) {
                     json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).func_150302_c(), seenObjects));

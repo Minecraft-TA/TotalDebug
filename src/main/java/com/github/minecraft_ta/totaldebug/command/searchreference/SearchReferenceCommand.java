@@ -93,7 +93,7 @@ public class SearchReferenceCommand extends CommandBase {
                 for (String result : resultPair.getLeft()) {
                     sender.addChatMessage(new ChatComponentText(result)
                             .setChatStyle(new ChatStyle().setColor(i % 2 == 0 ? EnumChatFormatting.WHITE : EnumChatFormatting.GRAY)));
-                                    //.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentTranslation("commands.total_debug.searchreference.click_to_open"))) TODO: Readd
+                                    //.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentTranslation("commands.total_debug.searchreference.click_to_open")))
                                     //.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));
 
                     i++;

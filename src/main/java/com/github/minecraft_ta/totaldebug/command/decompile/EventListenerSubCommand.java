@@ -13,7 +13,6 @@ import javax.annotation.Nonnull;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class EventListenerSubCommand extends CommandBase {
 
@@ -89,10 +88,10 @@ public class EventListenerSubCommand extends CommandBase {
             if (classes == null)
                 return Collections.emptyList();
 
-            return getListOfStringsMatchingLastWord(args, classes.stream().map(Class::getName).collect(Collectors.toList()));
+            return getListOfStringsMatchingLastWord(args, classes.stream().map(Class::getName).toArray(String[]::new));
         }
 
-        return getListOfStringsMatchingLastWord(args, eventsToListeners.keySet());
+        return getListOfStringsMatchingLastWord(args, eventsToListeners.keySet().toArray(new String[0]));
     }
 
     @Nonnull

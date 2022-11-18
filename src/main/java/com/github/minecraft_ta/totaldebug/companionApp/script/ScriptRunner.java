@@ -36,17 +36,10 @@ public class ScriptRunner {
                 .replaceFirst("class\\s+BaseScript\\s+", "class BaseScript" + CLASS_ID);
 
         boolean isServerSide = FMLCommonHandler.instance().getSide() == Side.SERVER;
-        /*ServerConfigurationManager manager = FMLCommonHandler.instance().getMinecraftServerInstance().getConfigurationManager(); TODO get if player is op
-        manager.func_152603_m();
-        List playerEntityList = (List) manager.playerEntityList;
-        for (Object o : playerEntityList) {
-            EntityPlayerMP player = (EntityPlayerMP) o;
-            if(player.getGameProfile())
-        }*/
         boolean isAllowedToRun = !isServerSide ||
                                  (TotalDebug.INSTANCE.config.enableScripts &&
-                                  (!TotalDebug.INSTANCE.config.enableScriptsOnlyForOp));
-                                   //FMLCommonHandler.instance().getMinecraftServerInstance().getConfigurationManager().playerEntityList.getOppedPlayers().getPermissionLevel(owner.getGameProfile()) >= 4));
+                                  (!TotalDebug.INSTANCE.config.enableScriptsOnlyForOp) ||
+                                  owner.canCommandSenderUseCommand(4, "dummy"));
 
         CompletableFuture.supplyAsync(() -> {
             if (!isAllowedToRun)

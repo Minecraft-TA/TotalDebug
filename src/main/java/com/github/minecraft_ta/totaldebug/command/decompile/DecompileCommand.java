@@ -7,16 +7,20 @@ import net.minecraft.util.*;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 public class DecompileCommand extends CommandBase {
 
+    private final List<ICommand> subCommands = new ArrayList<>();
+
     public DecompileCommand() {
-        addSubcommand(new ItemSubCommand());
-        addSubcommand(new BlockSubCommand());
-        addSubcommand(new EntitySubCommand());
-        addSubcommand(new ClassSubCommand());
-        addSubcommand(new EventListenerSubCommand());
+        subCommands.add(new ItemSubCommand());
+        subCommands.add(new BlockSubCommand());
+        subCommands.add(new EntitySubCommand());
+        subCommands.add(new ClassSubCommand());
+        subCommands.add(new EventListenerSubCommand());
     }
 
     @Nonnull
@@ -38,7 +42,7 @@ public class DecompileCommand extends CommandBase {
                     .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
                     .appendText("\n");
 
-            for (Iterator<ICommand> iterator = this.getSubCommands().iterator(); iterator.hasNext(); ) {
+            for (Iterator<ICommand> iterator = this.subCommands.iterator(); iterator.hasNext(); ) {
                 ICommand subCommand = iterator.next();
 
                 String subCommandUsage = I18n.format("commands.total_debug.decompile." + subCommand.getCommandName() + ".usage");
@@ -62,13 +66,25 @@ public class DecompileCommand extends CommandBase {
 
             sender.addChatMessage(component);
         } else {
-            super.execute(sender, args);
-        }
-    }
+            ICommand cmd = this.subCommands.stream()
+                    .filter(c -> c.getCommandName().equals(args[0]))
+                    .findFirst()
+                    .orElse(null);
 
-    @Override
-    public boolean allowUsageWithoutPrefix(ICommandSender sender, String message) {
-        return false;
+            if (cmd == null) {
+                String subCommandsString = this.subCommands.stream()
+                        .map(ICommand::getCommandName)
+                        .reduce((s1, s2) -> s1 + ", " + s2)
+                        .orElse("");
+                throw new CommandException("Invalid subcommand %s. Available subcommands: %s", args[0], subCommandsString);
+            } else if (!cmd.canCommandSenderUseCommand(sender)) {
+                throw new CommandException("commands.generic.permission");
+            } else {
+                String[] newArgs = new String[args.length - 1];
+                System.arraycopy(args, 1, newArgs, 0, newArgs.length);
+                cmd.processCommand(sender, newArgs);
+            }
+        }
     }
 
     public abstract static class DecompileClassSubCommand extends CommandBase {

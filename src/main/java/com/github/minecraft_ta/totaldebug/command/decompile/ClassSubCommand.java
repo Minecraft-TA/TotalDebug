@@ -27,7 +27,7 @@ public class ClassSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
         String path = args[0];
 
-        int dotCount = StringUtils.countMatches(path, '.');
+        int dotCount = StringUtils.countMatches(path, ".");
 
         int lastIndexOfDot = path.lastIndexOf('.');
         if (lastIndexOfDot != -1)
@@ -42,15 +42,15 @@ public class ClassSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
             List<String> options = new LinkedList<>();
             for (ClassInfo info : classInfo) {
-                if (StringUtils.countMatches(info.getName(), '.') <= dotCount)
+                if (StringUtils.countMatches(info.getName(), ".") <= dotCount)
                     options.add(info.getName());
             }
             for (PackageInfo info : packageInfo) {
-                if (StringUtils.countMatches(info.getName(), '.') <= dotCount)
+                if (StringUtils.countMatches(info.getName(), ".") <= dotCount)
                     options.add(info.getName());
             }
 
-            return getListOfStringsMatchingLastWord(args, options);
+            return getListOfStringsMatchingLastWord(args, options.toArray(new String[0]));
         }
     }
 

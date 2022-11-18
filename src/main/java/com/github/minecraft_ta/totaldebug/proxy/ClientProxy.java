@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.client.registry.ClientRegistry;
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.IFMLSidedHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -41,7 +42,7 @@ public class ClientProxy extends CommonProxy {
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
         this.packetLogger = new PacketLogger();
 
-        MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
+        FMLCommonHandler.instance().bus().register(new KeyInputHandler());
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new BossBarHandler());
         MinecraftForge.EVENT_BUS.register(new Object() {

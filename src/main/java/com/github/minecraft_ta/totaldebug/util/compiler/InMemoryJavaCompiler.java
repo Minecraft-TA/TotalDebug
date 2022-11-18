@@ -3,11 +3,12 @@ package com.github.minecraft_ta.totaldebug.util.compiler;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import com.google.common.collect.Lists;
-import io.netty.util.internal.shaded.org.jctools.util.UnsafeAccess;
+import com.strobel.compilerservices.UnsafeAccess;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.lang3.SystemUtils;
+import sun.misc.Unsafe;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -56,7 +57,7 @@ public class InMemoryJavaCompiler {
                 String className = classNames[i];
 
                 byte[] bytes = DEOBFUSCATED_ENVIRONMENT ? outputObject.getByteCode() : TRANSFORMER.transform(className, className, outputObject.getByteCode());
-                loadedClasses.add(UnsafeAccess.UNSAFE.defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
+                loadedClasses.add(((Unsafe) UnsafeAccess.unsafe()).defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
             }
 
             return loadedClasses;
