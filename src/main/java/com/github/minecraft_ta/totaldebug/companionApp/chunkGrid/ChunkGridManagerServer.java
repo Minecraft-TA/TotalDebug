@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.companionApp.chunkGrid;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.chunkGrid.CompanionAppChunkGridDataMessage;
 import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
+import cpw.mods.fml.relauncher.ReflectionHelper;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -19,12 +20,7 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
     private static final Field UNLOAD_QUEUE_FIELD;
     static {
-        try {
-            UNLOAD_QUEUE_FIELD = ChunkProviderServer.class.getDeclaredField("chunksToUnload");
-            UNLOAD_QUEUE_FIELD.setAccessible(true);
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
-        }
+        UNLOAD_QUEUE_FIELD = ReflectionHelper.findField(ChunkProviderServer.class,"field_73248_b", "chunksToUnload");
     }
 
     private final Map<UUID, ChunkGridRequestInfo> players = new HashMap<>();

@@ -88,7 +88,8 @@ dependencies {
     implementation "com.github.tth05:SCNet:d683b47"
     implementation 'io.github.classgraph:classgraph:4.8.146'
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
-    implementation "com.github.tth05:jindex:0.0.35"
+    implementation "com.github.tth05:jindex:0.0.43"
+    implementation "com.github.GTNewHorizons:NotEnoughItems:2.3.5-GTNH:dev"
 
     //compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
     //runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
@@ -102,6 +103,8 @@ dependencies {
 shadowJar {
     classifier ''
 
+    setDuplicatesStrategy(DuplicatesStrategy.WARN)
+    minimize()
     relocate "com.github.javaparser", "com.github.minecraft_ta.totaldebug.shades.javaparser"
     relocate "io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.classgraph"
     relocate "nonapi.io.github.classgraph", "com.github.minecraft_ta.totaldebug.shades.nonapi"
@@ -114,13 +117,16 @@ shadowJar {
             it.moduleGroup != 'io.github.classgraph' &&
                     it.moduleGroup != 'com.github.javaparser' &&
                     it.moduleGroup != 'org.bitbucket.mstrobel' &&
-                    it.moduleGroup != 'com.github.tth05'
+                    it.moduleGroup != 'com.github.tth05' &&
+                    it.moduleGroup != 'fastutil'
         })
     }
 }
 
-reobf {
+reobf.dependsOn shadowJar
+
+/*reobf {
     shadowJar {}
-}
+}*/
 
 idea { module { inheritOutputDirs = true } }
