@@ -3,12 +3,12 @@ package com.github.minecraft_ta.totaldebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
+import cpw.mods.fml.client.FMLClientHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.text.Style;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.util.text.TextFormatting;
-import net.minecraftforge.fml.client.FMLClientHandler;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

@@ -3,8 +3,8 @@ package com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
-import net.minecraftforge.fml.common.network.NetworkRegistry;
-import net.minecraftforge.fml.relauncher.Side;
+import cpw.mods.fml.common.network.NetworkRegistry;
+import cpw.mods.fml.relauncher.Side;
 
 import java.util.Set;
 

@@ -15,16 +15,15 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMess
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
-import net.minecraft.util.ResourceLocation;
+import cpw.mods.fml.common.IFMLSidedHandler;
+import cpw.mods.fml.common.event.FMLInitializationEvent;
+import cpw.mods.fml.common.event.FMLPreInitializationEvent;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.PlayerEvent;
+import cpw.mods.fml.common.gameevent.TickEvent;
+import cpw.mods.fml.common.registry.GameRegistry;
+import cpw.mods.fml.relauncher.Side;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.IFMLSidedHandler;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.PlayerEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
-import net.minecraftforge.fml.common.registry.GameRegistry;
-import net.minecraftforge.fml.relauncher.Side;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,7 +38,7 @@ public class CommonProxy {
     protected final List<Runnable> postTickTasks = new ArrayList<>();
 
     public void preInit(FMLPreInitializationEvent e) {
-        GameRegistry.registerTileEntity(TickBlockTile.class, new ResourceLocation(TotalDebug.MOD_ID, "tick_block_tile"));
+        GameRegistry.registerTileEntity(TickBlockTile.class, "tick_block_tile");
 
         int id = 0;
         TotalDebug.INSTANCE.network.registerMessage(TicksPerSecondMessage.class, TicksPerSecondMessage.class, id++, Side.CLIENT);

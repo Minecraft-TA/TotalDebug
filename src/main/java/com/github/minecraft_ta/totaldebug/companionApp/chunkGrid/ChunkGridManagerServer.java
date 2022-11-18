@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import it.unimi.dsi.fastutil.longs.Long2ByteMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.WorldServer;
 
 import java.util.HashMap;
@@ -47,8 +46,8 @@ public class ChunkGridManagerServer implements IChunkGridManager {
 
                 //Prevent causing a dimension load -> MinecraftServer#getWorld(int)
                 WorldServer world = null;
-                for (WorldServer serverWorld : TotalDebug.PROXY.getSidedHandler().getServer().worlds) {
-                    if (serverWorld.provider.getDimension() == chunkGridRequestInfo.getDimension()) {
+                for (WorldServer serverWorld : TotalDebug.PROXY.getSidedHandler().getServer().worldServers) {
+                    if (serverWorld.provider.dimensionId == chunkGridRequestInfo.getDimension()) {
                         world = serverWorld;
                         break;
                     }
@@ -66,19 +65,27 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                         boolean isChunkLoaded = world.getChunkProvider().chunkExists(chunkX, chunkZ);
 
                         long posLong = (long) chunkX << 32 | (chunkZ & 0xffffffffL);
-                        if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ) && world.provider.getDimension() == 0)
+                        if (isChunkLoaded && world.isSpawnChunk(chunkX, chunkZ) && world.provider.dimensionId == 0)
                             stateMap.put(posLong, SPAWN_CHUNK);
                         else if (world.getPlayerChunkMap().contains(chunkX, chunkZ))
                             stateMap.put(posLong, PLAYER_LOADED_CHUNK);
-                        else if (isChunkLoaded && world.getChunkProvider().loadedChunks.get(ChunkPos.asLong(chunkX, chunkZ)).unloadQueued)
-                            stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);
+                        //TODO: Find a way to check if chunk is queued for unloading
+                        /*else if (isChunkLoaded && ((Chunk) world.theChunkProviderServer.loadedChunkHashMap.getValueByKey(ChunkCoordIntPair.chunkXZ2Int(chunkX, chunkZ))).isChunkLoaded)
+                            stateMap.put(posLong, QUEUED_TO_UNLOAD_CHUNK);*/
                         else if (isChunkLoaded)
                             stateMap.put(posLong, LAZY_CHUNK);
                     }
                 }
 
-                //...
-                EntityPlayerMP player = TotalDebug.PROXY.getSidedHandler().getServer().getPlayerList().getPlayerByUUID(uuid);
+                //TODO: Is this the best way to do this????
+                EntityPlayerMP player = null;
+                for (Object o : TotalDebug.PROXY.getSidedHandler().getServer().getConfigurationManager().playerEntityList) {
+                    EntityPlayerMP entityPlayerMP = (EntityPlayerMP) o;
+                    if (entityPlayerMP.getUniqueID().equals(uuid)) {
+                        player = entityPlayerMP;
+                        break;
+                    }
+                }
 
                 if (player == null) {
                     iterator.remove();

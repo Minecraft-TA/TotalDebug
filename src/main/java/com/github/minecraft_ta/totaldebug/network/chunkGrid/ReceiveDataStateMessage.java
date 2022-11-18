@@ -2,10 +2,10 @@ package com.github.minecraft_ta.totaldebug.network.chunkGrid;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerServer;
+import cpw.mods.fml.common.network.simpleimpl.IMessage;
+import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
+import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
-import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 import java.util.UUID;
 
@@ -32,7 +32,7 @@ public class ReceiveDataStateMessage implements IMessage, IMessageHandler<Receiv
 
     @Override
     public IMessage onMessage(ReceiveDataStateMessage message, MessageContext ctx) {
-        UUID playerId = ctx.getServerHandler().player.getUniqueID();
+        UUID playerId = ctx.getServerHandler().playerEntity.getUniqueID();
 
         ChunkGridManagerServer chunkGridManager = TotalDebug.PROXY.getChunkGridManagerServer();
         if (message.state)

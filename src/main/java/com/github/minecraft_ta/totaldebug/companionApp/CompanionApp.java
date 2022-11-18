@@ -146,7 +146,7 @@ public class CompanionApp {
      * Downloads, starts and connects to the companion app and sends progress updates to the player
      */
     public void startAndConnect() {
-        ICommandSender sender = Minecraft.getMinecraft().player;
+        ICommandSender sender = Minecraft.getMinecraft().thePlayer;
 
         if (!isRunning()) {
             this.metafile.loadNewestCompanionAppVersion();

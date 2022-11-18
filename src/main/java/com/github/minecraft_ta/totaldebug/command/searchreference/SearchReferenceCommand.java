@@ -29,18 +29,18 @@ public class SearchReferenceCommand extends CommandBase {
 
     @Nonnull
     @Override
-    public String getName() {
+    public String getCommandName() {
         return "searchreference";
     }
 
     @Nonnull
     @Override
-    public String getUsage(@Nonnull ICommandSender sender) {
+    public String getCommandUsage(@Nonnull ICommandSender sender) {
         return "";
     }
 
     @Override
-    public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
+    public void processCommand(ICommandSender sender, String[] args) {
         if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
             BytecodeReferenceSearcher.cancel();
             sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.cancel_success")
@@ -76,7 +76,7 @@ public class SearchReferenceCommand extends CommandBase {
         }).thenAccept(resultPair -> {
             if (resultPair.getRight() == -1) {
                 sender.sendMessage(new TextComponentString("There was an error during the scan. Please check " +
-                                                           "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
+                        "the logs and report to mod authors.").setStyle(new Style().setColor(TextFormatting.RED)));
                 return;
             }
 
@@ -115,7 +115,7 @@ public class SearchReferenceCommand extends CommandBase {
     }
 
     @Override
-    public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
+    public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length == 1) {
             return getListOfStringsMatchingLastWord(args, "method", "field", "cancel");
         }

@@ -2,10 +2,10 @@ package com.github.minecraft_ta.totaldebug.network.chunkGrid;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridRequestInfo;
+import cpw.mods.fml.common.network.simpleimpl.IMessage;
+import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
+import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
-import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
 public class ChunkGridRequestInfoUpdateMessage implements IMessage, IMessageHandler<ChunkGridRequestInfoUpdateMessage, IMessage> {
 
@@ -30,7 +30,7 @@ public class ChunkGridRequestInfoUpdateMessage implements IMessage, IMessageHand
 
     @Override
     public IMessage onMessage(ChunkGridRequestInfoUpdateMessage message, MessageContext ctx) {
-        TotalDebug.PROXY.getChunkGridManagerServer().setRequestInfo(ctx.getServerHandler().player.getUniqueID(), message.requestInfo);
+        TotalDebug.PROXY.getChunkGridManagerServer().setRequestInfo(ctx.getServerHandler().playerEntity.getUniqueID(), message.requestInfo);
         return null;
     }
 }

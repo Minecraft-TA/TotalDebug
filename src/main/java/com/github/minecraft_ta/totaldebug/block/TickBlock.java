@@ -3,40 +3,34 @@ package com.github.minecraft_ta.totaldebug.block;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
-import net.minecraft.block.state.IBlockState;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.EnumHand;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-
-import javax.annotation.Nonnull;
 
 public class TickBlock extends Block {
 
     public TickBlock() {
-        super(Material.IRON);
-        setCreativeTab(CreativeTabs.REDSTONE);
+        super(Material.iron);
+        setCreativeTab(CreativeTabs.tabRedstone);
     }
 
     @Override
-    public TileEntity createTileEntity(@Nonnull World world, @Nonnull IBlockState state) {
+    public TileEntity createTileEntity(World world, int metadata) {
         return new TickBlockTile();
     }
 
     @Override
-    public boolean hasTileEntity(@Nonnull IBlockState state) {
+    public boolean hasTileEntity(int metadata) {
         return true;
     }
 
     @Override
-    public boolean onBlockActivated(World worldIn, @Nonnull BlockPos pos, @Nonnull IBlockState state, @Nonnull EntityPlayer playerIn, @Nonnull EnumHand hand, @Nonnull EnumFacing facing, float hitX, float hitY, float hitZ) {
-        if (worldIn.isRemote || hand != EnumHand.MAIN_HAND)
+    public boolean onBlockActivated(World p_149727_1_, int p_149727_2_, int p_149727_3_, int p_149727_4_, EntityPlayer p_149727_5_, int p_149727_6_, float p_149727_7_, float p_149727_8_, float p_149727_9_) {
+        if (p_149727_1_.isRemote)
             return false;
 
-        TileEntity te = worldIn.getTileEntity(pos);
+        TileEntity te = p_149727_1_.getTileEntity(p_149727_2_, p_149727_3_, p_149727_4_);
         if (te != null) {
             ((TickBlockTile) te).resetAverage();
         }

@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.jei.TotalDebugJEIPlugin;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.InputEvent;
 import mezz.jei.api.IJeiRuntime;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
@@ -25,8 +27,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.lwjgl.input.Keyboard;
@@ -39,7 +39,7 @@ public class KeyInputHandler {
 
     @SubscribeEvent
     public void onKeyPress(InputEvent.KeyInputEvent event) {
-        if (!KeyBindings.CODE_GUI.isKeyDown())
+        if (!KeyBindings.CODE_GUI.getIsKeyPressed())
             return;
         if (rayTraceEyes())
             return;

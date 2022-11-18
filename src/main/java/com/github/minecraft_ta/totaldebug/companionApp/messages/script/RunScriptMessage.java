@@ -23,14 +23,14 @@ public class RunScriptMessage extends AbstractMessageIncoming {
     }
 
     public static void handle(RunScriptMessage message) {
-        if (Minecraft.getMinecraft().player == null) {
+        if (Minecraft.getMinecraft().thePlayer == null) {
             TotalDebug.PROXY.getCompanionApp().getClient().getMessageProcessor().enqueueMessage(new ScriptStatusMessage(message.scriptId, ScriptStatusMessage.Type.COMPILATION_FAILED, "Join a world to run scripts!"));
             return;
         }
         if (message.serverSide) {
             TotalDebug.INSTANCE.network.sendToServer(new RunScriptOnServerMessage(message.scriptId, message.scriptText, message.executionEnvironment));
         } else {
-            ScriptRunner.runScript(message.scriptId, message.scriptText, Minecraft.getMinecraft().player, message.executionEnvironment);
+            ScriptRunner.runScript(message.scriptId, message.scriptText, Minecraft.getMinecraft().thePlayer, message.executionEnvironment);
         }
     }
 }

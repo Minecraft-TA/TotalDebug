@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import cpw.mods.fml.common.eventhandler.EventPriority;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.fml.common.eventhandler.EventPriority;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 public class BossBarHandler {
 

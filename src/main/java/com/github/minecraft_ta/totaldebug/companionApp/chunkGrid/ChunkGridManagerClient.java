@@ -30,7 +30,7 @@ public class ChunkGridManagerClient implements IChunkGridManager {
     }
 
     public void centerOnPlayer() {
-        EntityPlayerSP player = Minecraft.getMinecraft().player;
+        EntityPlayerSP player = Minecraft.getMinecraft().thePlayer;
         ChunkGridRequestInfo requestInfo = TotalDebug.PROXY.getChunkGridManagerClient().getCurrentChunkGridRequestInfo();
 
         int width = requestInfo.getWidth(), height = requestInfo.getHeight();

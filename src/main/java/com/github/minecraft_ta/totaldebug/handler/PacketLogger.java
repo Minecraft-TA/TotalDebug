@@ -5,6 +5,12 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.Inc
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.OutgoingPacketsMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.packetLogger.PacketContentMessage;
 import com.github.tth05.scnet.Client;
+import cpw.mods.fml.common.network.FMLIndexedMessageToMessageCodec;
+import cpw.mods.fml.common.network.NetworkRegistry;
+import cpw.mods.fml.common.network.internal.FMLProxyPacket;
+import cpw.mods.fml.common.network.simpleimpl.IMessage;
+import cpw.mods.fml.common.network.simpleimpl.SimpleIndexedCodec;
+import cpw.mods.fml.relauncher.Side;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelDuplexHandler;
@@ -14,12 +20,6 @@ import io.netty.channel.ChannelPromise;
 import it.unimi.dsi.fastutil.bytes.Byte2ObjectMap;
 import net.minecraft.network.Packet;
 import net.minecraft.network.PacketBuffer;
-import net.minecraftforge.fml.common.network.FMLIndexedMessageToMessageCodec;
-import net.minecraftforge.fml.common.network.NetworkRegistry;
-import net.minecraftforge.fml.common.network.internal.FMLProxyPacket;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.SimpleIndexedCodec;
-import net.minecraftforge.fml.relauncher.Side;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;

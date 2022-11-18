@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
+import cpw.mods.fml.common.IFMLSidedHandler;
+import cpw.mods.fml.common.event.FMLInitializationEvent;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.TickEvent;
+import cpw.mods.fml.server.FMLServerHandler;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.IFMLSidedHandler;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
-import net.minecraftforge.fml.server.FMLServerHandler;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;

@@ -5,10 +5,10 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.script.Execution
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.network.CompanionAppForwardedMessage;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
+import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.relauncher.Side;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraftforge.fml.common.FMLCommonHandler;
-import net.minecraftforge.fml.relauncher.Side;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
@@ -39,7 +39,7 @@ public class ScriptRunner {
         boolean isAllowedToRun = !isServerSide ||
                                  (TotalDebug.INSTANCE.config.enableScripts &&
                                   (!TotalDebug.INSTANCE.config.enableScriptsOnlyForOp ||
-                                   FMLCommonHandler.instance().getMinecraftServerInstance().getPlayerList().getOppedPlayers().getPermissionLevel(owner.getGameProfile()) >= 4));
+                                   FMLCommonHandler.instance().getMinecraftServerInstance().getConfigurationManager().playerEntityList.getOppedPlayers().getPermissionLevel(owner.getGameProfile()) >= 4));
 
         CompletableFuture.supplyAsync(() -> {
             if (!isAllowedToRun)

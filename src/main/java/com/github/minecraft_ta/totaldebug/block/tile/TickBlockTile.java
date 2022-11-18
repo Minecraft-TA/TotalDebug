@@ -2,8 +2,8 @@ package com.github.minecraft_ta.totaldebug.block.tile;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
+import net.minecraft.client.renderer.texture.ITickable;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.ITickable;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 
 public class TickBlockTile extends TileEntity implements ITickable {
@@ -22,8 +22,8 @@ public class TickBlockTile extends TileEntity implements ITickable {
     }
 
     @Override
-    public void update() {
-        if (world.isRemote)
+    public void tick() {
+        if (worldObj.isRemote)
             return;
 
         ticksPerSecond++;
@@ -53,7 +53,7 @@ public class TickBlockTile extends TileEntity implements ITickable {
     }
 
     public void updateData(int average, int tps) {
-        if (world.isRemote) {
+        if (worldObj.isRemote) {
             this.average = average;
             this.ticksPerSecond = tps;
         }

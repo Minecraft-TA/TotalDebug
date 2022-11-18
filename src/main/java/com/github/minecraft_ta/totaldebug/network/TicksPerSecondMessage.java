@@ -1,16 +1,16 @@
 package com.github.minecraft_ta.totaldebug.network;
 
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
+import com.github.minecraft_ta.totaldebug.util.BlockPos;
+import cpw.mods.fml.common.network.simpleimpl.IMessage;
+import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
+import cpw.mods.fml.common.network.simpleimpl.MessageContext;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
-import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 
 public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPerSecondMessage, IMessage> {
 
@@ -46,16 +46,17 @@ public class TicksPerSecondMessage implements IMessage, IMessageHandler<TicksPer
     @SideOnly(Side.CLIENT)
     @Override
     public IMessage onMessage(TicksPerSecondMessage message, MessageContext ctx) {
-        World world = Minecraft.getMinecraft().world;
+        World world = Minecraft.getMinecraft().theWorld;
 
         if (world == null || message.pos == null)
             return null;
 
         Minecraft.getMinecraft().addScheduledTask(() -> {
-            if (!world.isBlockLoaded(message.pos))
+            BlockPos blockPos = message.pos;
+            if (!world.isBlockLoaded(blockPos))
                 return;
 
-            TileEntity te = world.getTileEntity(message.pos);
+            TileEntity te = world.getTileEntity(blockPos.getX(), blockPos.getY(), blockPos.getZ());
             if (!(te instanceof TickBlockTile))
                 return;
 
