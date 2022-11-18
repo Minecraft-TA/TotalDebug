@@ -271,11 +271,11 @@ public class ObjectToJsonHelper {
         @Override
         public JsonElement serializeImpl(ItemStack itemStack, Set<Object> seenObjects) {
             JsonObject json = new JsonObject();
-            json.addProperty("stackSize", itemStack.getCount());
+            json.addProperty("stackSize", itemStack.stackSize);
             json.addProperty("displayName", itemStack.getDisplayName());
             json.addProperty("item", itemStack.getItem().getClass().getName());
             json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound(), seenObjects));
-            json.addProperty("isEmpty", itemStack.isEmpty());
+            //json.addProperty("isEmpty", itemStack.isEmpty()); TODO Check if this is even a thing
             json.addProperty("itemDamage", itemStack.getItemDamage());
 
 
@@ -318,11 +318,12 @@ public class ObjectToJsonHelper {
          */
         private JsonElement nbtToJson(NBTTagCompound nbtTagCompound, Set<Object> seenObjects) {
             JsonObject json = new JsonObject();
-            for (String key : nbtTagCompound.getKeySet()) {
+            for (Object obj : nbtTagCompound.func_150296_c()) {
+                String key = (String) obj;
                 NBTBase tag = nbtTagCompound.getTag(key);
                 if (tag instanceof NBTTagCompound) {
                     json.add(key, nbtToJson((NBTTagCompound) tag, seenObjects));
-                } else if (tag instanceof NBTTagList) {
+                } /*else if (tag instanceof NBTTagList) { TODO Find out how to iterate over NBTTagList
                     JsonArray jsonArray = new JsonArray();
                     for (NBTBase nbtBase : ((NBTTagList) tag)) {
                         if (nbtBase instanceof NBTTagCompound) {
@@ -332,10 +333,10 @@ public class ObjectToJsonHelper {
                         }
                     }
                     json.add(key, jsonArray);
-                } else if (tag instanceof NBTTagByteArray) {
-                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).getByteArray(), seenObjects));
+                }*/ else if (tag instanceof NBTTagByteArray) {
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagByteArray) tag).func_150292_c(), seenObjects));
                 } else if (tag instanceof NBTTagIntArray) {
-                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).getIntArray(), seenObjects));
+                    json.add(key, ARRAY_SERIALIZER.serialize(((NBTTagIntArray) tag).func_150302_c(), seenObjects));
                 } else {
                     json.addProperty(key, tag.toString());
                 }
