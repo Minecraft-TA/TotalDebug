@@ -3,12 +3,12 @@ package com.github.minecraft_ta.totaldebug.util.mappings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
+import cpw.mods.fml.common.asm.transformers.DeobfuscationTransformer;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
 import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;

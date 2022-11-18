@@ -3,11 +3,7 @@ package com.github.minecraft_ta.totaldebug.command.decompile;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.command.*;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.*;
-import net.minecraft.util.text.*;
-import net.minecraftforge.client.IClientCommand;
-import net.minecraftforge.server.command.CommandTreeBase;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nonnull;
@@ -45,14 +41,14 @@ public class DecompileCommand extends CommandBase {
             for (Iterator<ICommand> iterator = this.getSubCommands().iterator(); iterator.hasNext(); ) {
                 ICommand subCommand = iterator.next();
 
-                String subCommandUsage = I18n.format("commands.total_debug.decompile." + subCommand.getName() + ".usage");
+                String subCommandUsage = I18n.format("commands.total_debug.decompile." + subCommand.getCommandName() + ".usage");
                 IChatComponent listStartComponent = new ChatComponentText("- ").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.DARK_GRAY));
 
                 component.appendSibling(
                         listStartComponent.appendSibling(
                                 //subcommand name
-                                new ChatComponentText(subCommand.getName())
-                                        .setStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
+                                new ChatComponentText(subCommand.getCommandName())
+                                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
                                         .appendSibling(
                                                 //subcommand args
                                                 new ChatComponentText(
@@ -66,7 +62,7 @@ public class DecompileCommand extends CommandBase {
 
             sender.addChatMessage(component);
         } else {
-            super.execute(server, sender, args);
+            super.execute(sender, args);
         }
     }
 
@@ -78,9 +74,9 @@ public class DecompileCommand extends CommandBase {
     public abstract static class DecompileClassSubCommand extends CommandBase {
 
         @Override
-        public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, String[] args) throws WrongUsageException {
+        public void processCommand(@Nonnull ICommandSender sender, String[] args) throws WrongUsageException {
             if (args.length < 1)
-                throw new WrongUsageException(getUsage(sender));
+                throw new WrongUsageException(getCommandUsage(sender));
 
             Class<?> clazz = getClassFromArg(args[0]);
             if (clazz == null) {
@@ -92,13 +88,13 @@ public class DecompileCommand extends CommandBase {
         }
 
         public String getClassNotFoundTranslationKey() {
-            return "commands.total_debug.decompile." + getName() + ".failed";
+            return "commands.total_debug.decompile." + getCommandName() + ".failed";
         }
 
         @Nonnull
         @Override
-        public String getUsage(@Nonnull ICommandSender sender) {
-            return "commands.total_debug.decompile." + getName() + ".usage";
+        public String getCommandUsage(@Nonnull ICommandSender sender) {
+            return "commands.total_debug.decompile." + getCommandName() + ".usage";
         }
 
         public abstract Class<?> getClassFromArg(@Nonnull String s);

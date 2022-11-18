@@ -68,7 +68,7 @@ public class TotalDebug {
         public static final ItemBlock TICK_BLOCK_ITEM = null;
     }
 
-    /*@Mod.EventBusSubscriber
+    /*@Mod.EventBusSubscriber TODO Readd registration of items and blocks
     public static class ObjectRegistryHandler {
 
         @SubscribeEvent

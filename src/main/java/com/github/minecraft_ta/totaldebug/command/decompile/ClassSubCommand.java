@@ -2,12 +2,9 @@ package com.github.minecraft_ta.totaldebug.command.decompile;
 
 import io.github.classgraph.*;
 import net.minecraft.command.ICommandSender;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.BlockPos;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,10 +20,8 @@ public class ClassSubCommand extends DecompileCommand.DecompileClassSubCommand {
         }
     }
 
-    @Nonnull
     @Override
-    public List<String> getTabCompletions(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender,
-                                          @Nonnull String[] args, @Nullable BlockPos targetPos) {
+    public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length != 1 || args[0].isEmpty())
             return Collections.emptyList();
 
@@ -61,7 +56,7 @@ public class ClassSubCommand extends DecompileCommand.DecompileClassSubCommand {
 
     @Nonnull
     @Override
-    public String getName() {
+    public String getCommandName() {
         return "class";
     }
 }

@@ -1,18 +1,15 @@
 package com.github.minecraft_ta.totaldebug.command.decompile;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import cpw.mods.fml.common.eventhandler.IEventListener;
+import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.command.WrongUsageException;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.eventhandler.IEventListener;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -59,7 +56,7 @@ public class EventListenerSubCommand extends CommandBase {
     }
 
     @Override
-    public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
+    public void processCommand(@Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
         if (args.length < 1)
             throw new WrongUsageException("commands.total_debug.decompile.eventlistener.usage");
 
@@ -80,11 +77,8 @@ public class EventListenerSubCommand extends CommandBase {
             TotalDebug.PROXY.getDecompilationManager().openGui(classes.get(0));
         }
     }
-
-    @Nonnull
     @Override
-    public List<String> getTabCompletions(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender,
-                                          @Nonnull String[] args, @Nullable BlockPos targetPos) {
+    public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length < 1 || args.length > 2)
             return Collections.emptyList();
 
@@ -103,13 +97,13 @@ public class EventListenerSubCommand extends CommandBase {
 
     @Nonnull
     @Override
-    public String getUsage(@Nonnull ICommandSender sender) {
+    public String getCommandUsage(@Nonnull ICommandSender sender) {
         return "";
     }
 
     @Nonnull
     @Override
-    public String getName() {
+    public String getCommandName() {
         return "eventlistener";
     }
 }
