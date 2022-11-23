@@ -106,6 +106,9 @@ public class SearchReferenceCommand extends CommandBase {
                         .appendText(", ")
                         .appendSibling(new ChatComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
             }
+        }).exceptionally(e -> {
+            e.printStackTrace();
+            return null;
         });
     }
 

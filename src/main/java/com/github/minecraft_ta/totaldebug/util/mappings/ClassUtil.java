@@ -3,7 +3,8 @@ package com.github.minecraft_ta.totaldebug.util.mappings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
-import cpw.mods.fml.common.asm.transformers.DeobfuscationTransformer;
+import cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer;
+import cpw.mods.fml.common.asm.transformers.TerminalTransformer;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
@@ -18,6 +19,7 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -45,7 +47,7 @@ public class ClassUtil {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
             transformersField.setAccessible(true);
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
-                    .filter(t -> t instanceof DeobfuscationTransformer)
+                    .filter(t -> !(t instanceof TerminalTransformer) && !(t instanceof EventSubscriptionTransformer))
                     .collect(Collectors.toList());
             LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
@@ -80,11 +82,11 @@ public class ClassUtil {
                          .disableNestedJarScanning()
                          .disableRuntimeInvisibleAnnotations()
                          .ignoreClassVisibility()
-                         .acceptJars("1.12.2*.jar", "forge*.jar", "minecraft*.jar").scan()) {
+                         .acceptJars("1.7.10*.jar", "forge*.jar", "minecraft*.jar").scan()) {
                 //Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
                     String name = getTransformedName(classInfo.getName());
-                    if (!name.startsWith("net.minecraft"))
+                    if (!name.startsWith("net.minecraft") && !name.startsWith("cpw.mods"))
                         continue;
 
                     ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
@@ -122,9 +124,9 @@ public class ClassUtil {
         Stream<String> sourceStream = ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
                 .map(url -> {
                     try {
-                        //URLs suck
-                        return Paths.get(url.getFile().substring(1)).normalize().toString().replace("%20", " ");
-                    } catch (InvalidPathException ignored) {
+                        return Paths.get(url.toURI()).toString();
+                    } catch (InvalidPathException | URISyntaxException ignored) {
+                        ignored.printStackTrace();
                         return null;
                     }
                 }).filter(Objects::nonNull);

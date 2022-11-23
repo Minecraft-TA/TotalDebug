@@ -88,7 +88,7 @@ dependencies {
     implementation "com.github.tth05:SCNet:d683b47"
     implementation 'io.github.classgraph:classgraph:4.8.146'
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
-    implementation "com.github.tth05:jindex:0.0.43"
+    implementation "com.github.tth05:jindex:0.0.45"
     implementation "com.github.GTNewHorizons:NotEnoughItems:2.3.5-GTNH:dev"
 
     //compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")

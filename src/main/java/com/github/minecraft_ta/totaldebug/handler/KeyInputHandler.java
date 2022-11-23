@@ -39,6 +39,9 @@ public class KeyInputHandler {
             } else {
                 companionApp.getClient().getMessageProcessor().enqueueMessage(new FocusWindowMessage());
             }
+        }).exceptionally((throwable) -> {
+            throwable.printStackTrace();
+            return null;
         });
     }
 
