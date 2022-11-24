@@ -42,7 +42,6 @@ public class SearchReferenceCommand extends CommandBase {
     @Override
     public void execute(@Nonnull MinecraftServer server, @Nonnull ICommandSender sender, @Nonnull String[] args) throws CommandException {
         if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
-            BytecodeReferenceSearcher.cancel();
             sender.sendMessage(new TextComponentTranslation("commands.total_debug.searchreference.cancel_success")
                     .setStyle(new Style().setColor(TextFormatting.GREEN)));
             return;
@@ -111,6 +110,9 @@ public class SearchReferenceCommand extends CommandBase {
                         .appendText(", ")
                         .appendSibling(new TextComponentTranslation("commands.total_debug.searchreference.classes_count", resultPair.getRight())));
             }
+        }).exceptionally(e -> {
+            e.printStackTrace();
+            return null;
         });
     }
 

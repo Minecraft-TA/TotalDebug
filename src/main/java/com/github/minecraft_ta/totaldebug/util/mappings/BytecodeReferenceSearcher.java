@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.util.ForkJoinHelper;
 import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -16,9 +17,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class BytecodeReferenceSearcher {
-
-    private static final int POOL_SIZE = Runtime.getRuntime().availableProcessors();
-    private static ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 
     private static boolean RUNNING = false;
 
@@ -37,62 +35,32 @@ public class BytecodeReferenceSearcher {
                 List<Class<?>> allClasses = getFilteredClassesList();
 
                 if (allClasses.isEmpty()) {
-                    RUNNING = false;
                     return Pair.of(Collections.emptyList(), 0);
                 }
 
-                int partSize = allClasses.size() / POOL_SIZE;
-                if (allClasses.size() < POOL_SIZE)
-                    partSize = allClasses.size();
+                Set<String> results = new HashSet<>(ForkJoinHelper.splitWork(allClasses, (input) -> {
+                    List<String> subResults = new ArrayList<>();
+                    ReferenceVisitor context = new ReferenceVisitor(subResults, owner, signature, searchMethod);
 
-                List<Callable<List<String>>> tasks = new ArrayList<>(POOL_SIZE);
+                    for (Class<?> clazz : input) {
+                        byte[] bytes = ClassUtil.getBytecodeFromLaunchClassLoader(clazz.getName());
+                        if (bytes == null)
+                            continue;
+                        new ClassReader(bytes).accept(context, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+                    }
 
-                //create tasks
-                for (int i = 0; i < (allClasses.size() < POOL_SIZE ? 1 : POOL_SIZE); i++) {
-                    int startIndex = i * partSize;
-                    int endIndex = i == POOL_SIZE - 1 ? allClasses.size() - 1 : startIndex + partSize;
+                    return subResults;
+                }));
 
-                    //supply full list to one thread if we have less than POOL_SIZE results
-                    if (allClasses.size() < POOL_SIZE)
-                        endIndex = allClasses.size() - 1;
-
-                    int finalEndIndex = endIndex;
-                    tasks.add(() -> {
-                        List<String> subResults = new ArrayList<>();
-                        ReferenceVisitor context = new ReferenceVisitor(subResults, owner, signature, searchMethod);
-
-                        for (int j = startIndex; j <= finalEndIndex; j++) {
-                            byte[] bytes = ClassUtil.getBytecodeFromLaunchClassLoader(allClasses.get(j).getName());
-                            if (bytes == null)
-                                continue;
-                            new ClassReader(bytes).accept(context, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-                        }
-
-                        return subResults;
-                    });
-                }
-
-                //execute tasks and merge results
-                Set<String> results = new HashSet<>();
-                for (Future<List<String>> future : EXECUTOR.invokeAll(tasks)) {
-                    results.addAll(future.get());
-                }
-
-                RUNNING = false;
 
                 return Pair.of(results, allClasses.size());
             } catch (Throwable e) {
                 e.printStackTrace();
                 return Pair.of(Collections.emptyList(), 0);
+            } finally {
+                RUNNING = false;
             }
         });
-    }
-
-    public static void cancel() {
-        EXECUTOR.shutdownNow();
-        EXECUTOR = Executors.newCachedThreadPool();
-
-        RUNNING = false;
     }
 
     private static List<Class<?>> getFilteredClassesList() {

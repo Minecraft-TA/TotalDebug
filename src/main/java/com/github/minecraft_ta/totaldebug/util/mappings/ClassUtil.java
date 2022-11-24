@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.util.ForkJoinHelper;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
 import io.github.classgraph.ClassGraph;
@@ -9,28 +10,24 @@ import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.fml.common.asm.transformers.DeobfuscationTransformer;
-import org.apache.commons.compress.utils.IOUtils;
+import org.apache.commons.io.IOUtils;
 
 import javax.annotation.Nullable;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
@@ -87,27 +84,17 @@ public class ClassUtil {
                     if (!name.startsWith("net.minecraft"))
                         continue;
 
-                    ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
-                    try {
-                        byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
-                        if (bytes == null) {
-                            try (InputStream stream = classInfo.getResource().open()) {
-                                bytes = runTransformers(classInfo.getName(), name, IOUtils.toByteArray(stream));
-                            }
-
-                            if (bytes == null)
-                                continue;
+                    writeTransformedClassToZip(outputStream, classInfo.getName(), name, () -> {
+                        try (InputStream stream = classInfo.getResource().open()) {
+                            return IOUtils.toByteArray(stream);
                         }
-
-                        outputStream.putNextEntry(entry);
-                        outputStream.write(bytes);
-                        outputStream.closeEntry();
-                    } catch (IOException ignored) {}
+                    });
                 }
             }
 
             TotalDebug.LOGGER.info("Completed dumping minecraft classes in {}ms", (System.nanoTime() - time) / 1_000_000);
-        } catch (Throwable e) {
+        } catch (
+                Throwable e) {
             TotalDebug.LOGGER.error("Unable to dump minecraft classes", e);
         }
     }
@@ -118,41 +105,112 @@ public class ClassUtil {
         //TODO: Prevent running this twice at the same time
 
         //TODO: Show progress to player because this takes a while
+        Path tmpDirPath = TotalDebug.PROXY.getDecompilationManager().getDataDir().resolve("tmp");
+        try {
+            if (!Files.exists(tmpDirPath))
+                Files.createDirectories(tmpDirPath);
 
-        Stream<String> sourceStream = ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
-                .map(url -> {
-                    try {
-                        //URLs suck
-                        return Paths.get(url.getFile().substring(1)).normalize().toString().replace("%20", " ");
-                    } catch (InvalidPathException ignored) {
-                        return null;
+            List<Path> classLoaderPaths = ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
+                    .map(url -> {
+                        try {
+                            Path path = Paths.get(url.toURI()).toAbsolutePath().normalize();
+                            return !Files.exists(path) ? null : path;
+                        } catch (InvalidPathException | URISyntaxException |
+                                 FileSystemNotFoundException exception) {
+                            exception.printStackTrace();
+                            return null;
+                        }
+                    }).filter(Objects::nonNull).collect(Collectors.toList());
+            List<Path> libraryPaths = classLoaderPaths.stream().filter(path -> !path.toString().contains("mods")).collect(Collectors.toList());
+            List<Path> modPaths = classLoaderPaths.stream().filter(path -> path.toString().contains("mods")).collect(Collectors.toList());
+            modPaths = ForkJoinHelper.splitWork(
+                    modPaths,
+                    (input) -> {
+                        List<Path> results = new ArrayList<>();
+
+                        for (Path path : input) {
+                            // We deobfuscate all mods into temporary jars here
+                            Path newPath = tmpDirPath.resolve(path.getFileName());
+                            try (ZipInputStream inputStream = new ZipInputStream(new BufferedInputStream(Files.newInputStream(path)));
+                                 ZipOutputStream outputStream = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(newPath)))) {
+                                ZipEntry entry;
+                                while ((entry = inputStream.getNextEntry()) != null) {
+                                    if (entry.isDirectory() || !entry.getName().endsWith(".class"))
+                                        continue;
+
+                                    String className = entry.getName().substring(0, entry.getName().length() - 6);
+                                    long entrySize = entry.getSize();
+                                    writeTransformedClassToZip(outputStream, className, className, () -> IOUtils.toByteArray(inputStream, entrySize));
+                                }
+                            } catch (Exception exception) {
+                                throw new RuntimeException(exception);
+                            }
+
+                            results.add(newPath);
+                        }
+
+                        return results;
                     }
-                }).filter(Objects::nonNull);
+            );
 
-        List<String> jarPaths;
-        // We get these separately because they might not be included in the sources of the class loader
-        try (Stream<Path> jreFiles = Files.list(Paths.get(System.getProperty("java.home")).resolve("lib"))) {
-            jarPaths = Stream.concat(
-                    sourceStream,
-                    Stream.concat(
-                            Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString()),
-                            jreFiles.map(p -> p.toAbsolutePath().toString())
-                    )
-            ).filter(str -> {
-                return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
-                       str.endsWith(".jar") && //Filter for only jars
-                       (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
-                       !str.contains("IDEA"); //Filter IDEA in dev environment
-            }).distinct().collect(Collectors.toList());
-        } catch (IOException e) {
+            List<String> jarPaths;
+            // We get these separately because they might not be included in the sources of the class loader
+            try (Stream<Path> jreFiles = Files.list(Paths.get(System.getProperty("java.home")).resolve("lib"))) {
+                jarPaths = Stream.concat(
+                                Stream.concat(
+                                        libraryPaths.stream(),
+                                        modPaths.stream()
+                                ).map(Path::toString),
+                                Stream.concat(
+                                        Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString()),
+                                        jreFiles.map(p -> p.toAbsolutePath().toString())
+                                )
+                        )
+                        .map(s -> s.replace('\\', '/'))
+                        .filter(str -> {
+                            return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
+                                   str.endsWith(".jar") && //Filter for only jars
+                                   (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
+                                   !str.contains("IDEA"); //Filter IDEA in dev environment
+                        })
+                        .distinct()
+                        .collect(Collectors.toList());
+            }
+
+            ClassIndex classIndex = ClassIndex.fromJars(jarPaths);
+            classIndex.saveToFile(indexPath.toAbsolutePath().normalize().toString());
+            classIndex.destroy();
+
+            TotalDebug.LOGGER.info("Completed indexing classes in {}ms", (System.nanoTime() - time) / 1_000_000);
+        } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            // Delete temp dir
+            try (Stream<Path> walk = Files.walk(tmpDirPath)) {
+                walk.sorted(Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(File::delete); // Avoids exception handling
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+    }
 
-        ClassIndex classIndex = ClassIndex.fromJars(jarPaths);
-        classIndex.saveToFile(indexPath.toAbsolutePath().normalize().toString());
-        classIndex.destroy();
+    private static void writeTransformedClassToZip(ZipOutputStream outputStream, String untransformedName, String name, UncheckedSupplier<byte[]> fallbackResourceSupplier) {
+        ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
+        try {
+            byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
+            if (bytes == null) {
+                bytes = runTransformers(untransformedName, name, fallbackResourceSupplier.get());
 
-        TotalDebug.LOGGER.info("Completed indexing classes in {}ms", (System.nanoTime() - time) / 1_000_000);
+                if (bytes == null)
+                    return;
+            }
+
+            outputStream.putNextEntry(entry);
+            outputStream.write(bytes);
+            outputStream.closeEntry();
+        } catch (IOException ignored) {}
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
@@ -284,5 +342,24 @@ public class ClassUtil {
             throw new IllegalStateException("Resource not from jar");
 
         return resourcePath.substring(resourcePath.lastIndexOf('!') + 2);
+    }
+
+    private interface UncheckedSupplier<T> extends Supplier<T> {
+
+        T uncheckedGet() throws Throwable;
+
+        @Override
+        default T get() {
+            try {
+                return uncheckedGet();
+            } catch (Throwable e) {
+                propagate(e);
+                throw new IllegalStateException("unreachable");
+            }
+        }
+
+        static <T extends Throwable> void propagate(Throwable e) throws T {
+            throw (T) e;
+        }
     }
 }
