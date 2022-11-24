@@ -17,6 +17,7 @@ import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.*;
@@ -116,10 +117,13 @@ public class ClassUtil {
             List<Path> classLoaderPaths = ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
                     .map(url -> {
                         try {
-                            Path path = Paths.get(url.toURI()).toAbsolutePath().normalize();
+                            URI uri = url.toURI();
+                            if (uri.getScheme().equals("asmgen"))
+                                return null;
+
+                            Path path = Paths.get(uri).toAbsolutePath().normalize();
                             return !Files.exists(path) ? null : path;
-                        } catch (InvalidPathException | URISyntaxException |
-                                 FileSystemNotFoundException exception) {
+                        } catch (InvalidPathException | URISyntaxException exception) {
                             exception.printStackTrace();
                             return null;
                         }
@@ -136,8 +140,8 @@ public class ClassUtil {
                         for (Path path : input) {
                             // We deobfuscate all mods into temporary jars here
                             Path newPath = tmpDirPath.resolve(path.getFileName());
-                            try (ZipInputStream inputStream = new ZipInputStream(new BufferedInputStream(Files.newInputStream(path)));
-                                 ZipOutputStream outputStream = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(newPath)))) {
+                            try (ZipInputStream inputStream = new ZipInputStream(new BufferedInputStream(Files.newInputStream(path), 64 * 1024));
+                                 ZipOutputStream outputStream = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(newPath), 64 * 1024))) {
                                 ZipEntry entry;
                                 while ((entry = inputStream.getNextEntry()) != null) {
                                     if (entry.isDirectory() || !entry.getName().endsWith(".class"))
