@@ -89,8 +89,8 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                 memberMap = MCP_MAPPINGS.get(ownerClass.getName().replace('.', '/'));
                 newName = memberMap == null ? null : getFromBiMap(name, memberMap, this.reobfuscate);
 
-                //Search super interfaces for interfaces
-                if (newName == null)
+                // Search in interfaces if we're looking for a method
+                if (newName == null && name.contains("("))
                     newName = findMappedMemberOfInterface(ownerClass, name);
 
                 if (newName != null)
@@ -108,9 +108,12 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
     private String findMappedMemberOfInterface(Class<?> interfaceClass, String name) {
         for (Class<?> interfaceSubClass : interfaceClass.getInterfaces()) {
             BiMap<String, String> memberMap = MCP_MAPPINGS.get(interfaceSubClass.getName().replace('.', '/'));
-            String newName = memberMap == null ? findMappedMemberOfInterface(interfaceSubClass, name) : getFromBiMap(name, memberMap, this.reobfuscate);
-            if (newName != null)
+            String newName;
+            if ((memberMap != null && (newName = getFromBiMap(name, memberMap, this.reobfuscate)) != null) ||
+                (newName = findMappedMemberOfInterface(interfaceSubClass, name)) != null
+            ) {
                 return newName;
+            }
         }
 
         return null;
