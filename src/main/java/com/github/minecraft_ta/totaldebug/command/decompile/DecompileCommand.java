@@ -36,6 +36,11 @@ public class DecompileCommand extends CommandBase {
     }
 
     @Override
+    public int getRequiredPermissionLevel() {
+        return 0;
+    }
+
+    @Override
     public void processCommand(@Nonnull ICommandSender sender, String[] args) throws CommandException {
         if (args.length < 1) {
             IChatComponent component = new ChatComponentTranslation("commands.total_debug.decompile.usage")
@@ -87,7 +92,32 @@ public class DecompileCommand extends CommandBase {
         }
     }
 
+    @Override
+    public List addTabCompletionOptions(ICommandSender sender, String[] args) {
+        if (args.length <= 1) {
+            return getListOfStringsMatchingLastWord(args, this.subCommands.stream().map(ICommand::getCommandName).toArray(String[]::new));
+        } else {
+            ICommand cmd = this.subCommands.stream()
+                    .filter(c -> c.getCommandName().equals(args[0]))
+                    .findFirst()
+                    .orElse(null);
+
+            if (cmd != null) {
+                String[] newArgs = new String[args.length - 1];
+                System.arraycopy(args, 1, newArgs, 0, newArgs.length);
+                return cmd.addTabCompletionOptions(sender, newArgs);
+            }
+
+            return null;
+        }
+    }
+
     public abstract static class DecompileClassSubCommand extends CommandBase {
+
+        @Override
+        public int getRequiredPermissionLevel() {
+            return 0;
+        }
 
         @Override
         public void processCommand(@Nonnull ICommandSender sender, String[] args) throws WrongUsageException {

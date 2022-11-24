@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.proxy;
 import com.github.minecraft_ta.totaldebug.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
+import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
 import com.github.minecraft_ta.totaldebug.command.searchreference.SearchReferenceCommand;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.handler.BossBarHandler;
@@ -49,7 +50,7 @@ public class ClientProxy extends CommonProxy {
 
         ClientRegistry.bindTileEntitySpecialRenderer(TickBlockTile.class, new TickBlockTileRenderer());
 
-        //ClientCommandHandler.instance.registerCommand(new DecompileCommand()); TODO: Fix the commands first
+        ClientCommandHandler.instance.registerCommand(new DecompileCommand());
         ClientCommandHandler.instance.registerCommand(new SearchReferenceCommand());
 
         KeyBindings.init();

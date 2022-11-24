@@ -35,6 +35,11 @@ public class SearchReferenceCommand extends CommandBase {
     }
 
     @Override
+    public int getRequiredPermissionLevel() {
+        return 0;
+    }
+
+    @Override
     public void processCommand(ICommandSender sender, String[] args) {
         if (args.length > 0 && args[0].equalsIgnoreCase("cancel")) {
             sender.addChatMessage(new ChatComponentTranslation("commands.total_debug.searchreference.cancel_success")

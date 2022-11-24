@@ -84,28 +84,19 @@ public class ClassUtil {
                          .disableRuntimeInvisibleAnnotations()
                          .ignoreClassVisibility()
                          .acceptJars("1.7.10*.jar", "forge*.jar", "minecraft*.jar").scan()) {
+                CRC32 crc32 = new CRC32();
+
                 // Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
                     String name = getTransformedName(classInfo.getName());
-                    if (!name.startsWith("net.minecraft") && !name.startsWith("cpw.mods"))
+                    if (!name.startsWith("net.minecraft"))
                         continue;
 
-                    ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
-                    try {
-                        byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
-                        if (bytes == null) {
-                            try (InputStream stream = classInfo.getResource().open()) {
-                                bytes = runTransformers(classInfo.getName(), name, IOUtils.toByteArray(stream));
-                            }
-
-                            if (bytes == null)
-                                continue;
+                    writeTransformedClassToZip(outputStream, classInfo.getName(), name, crc32, () -> {
+                        try (InputStream stream = classInfo.getResource().open()) {
+                            return IOUtils.toByteArray(stream);
                         }
-
-                        outputStream.putNextEntry(entry);
-                        outputStream.write(bytes);
-                        outputStream.closeEntry();
-                    } catch (IOException ignored) {}
+                    });
                 }
             }
 
