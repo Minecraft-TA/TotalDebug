@@ -69,7 +69,7 @@ public class InMemoryJavaCompiler {
     public static String constructClassPathArgument() {
         try {
             return Stream.concat(
-                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-") && !url.toString().endsWith("/1.12.2.jar")),
+                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-") && !url.toString().endsWith("/1.7.10.jar")),
                     Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
             ).map(url -> {
                 try {

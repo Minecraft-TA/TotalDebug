@@ -18,17 +18,21 @@ import java.util.Map;
 
 public class RuntimeMappingsTransformer extends Remapper implements IClassTransformer {
 
-    public static final Map<String, String> FORGE_MAPPINGS = new HashMap<>();
-    public static final Map<String, String> FORGE_MAPPINGS_INVERSE = new HashMap<>();
+    /**
+     * Class name -> (getCount(I)V -> func_35_a)
+     */
+    private static final Map<String, Map<String, String>> OBFUSCATION_MAPPINGS = new HashMap<>();
 
-    private final boolean reobfuscate;
+    public static final Map<String, String> FORGE_MAPPINGS = new HashMap<>();
+
+    private final boolean obfuscate;
 
     public RuntimeMappingsTransformer() {
         this(false);
     }
 
-    public RuntimeMappingsTransformer(boolean reobfuscate) {
-        this.reobfuscate = reobfuscate;
+    public RuntimeMappingsTransformer(boolean obfuscate) {
+        this.obfuscate = obfuscate;
     }
 
     @Override
@@ -58,16 +62,63 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
 
     @Override
     public String mapFieldName(String owner, String name, String desc) {
-        return mapName(name);
+        return mapName(owner, name, "");
     }
 
     @Override
     public String mapMethodName(String owner, String name, String desc) {
-        return mapName(name);
+        return mapName(owner, name, desc);
     }
 
-    private String mapName(String key) {
-        return !this.reobfuscate ? FORGE_MAPPINGS.getOrDefault(key, key) : FORGE_MAPPINGS_INVERSE.getOrDefault(key, key);
+    private String mapName(String owner, String name, String desc) {
+        return !this.obfuscate ? FORGE_MAPPINGS.getOrDefault(name, name) : obfuscateMember(owner, name, desc);
+    }
+
+    private String obfuscateMember(String owner, String name, String desc) {
+        String nameAndDesc = name + desc;
+
+        Map<String, String> memberMap = OBFUSCATION_MAPPINGS.get(owner);
+        String newName = memberMap == null ? null : memberMap.get(nameAndDesc);
+        // Don't continue if we found a mapping
+        if (newName != null)
+            return newName;
+
+        // Find mapped name in super classes
+        try {
+            Class<?> ownerClass = Class.forName(owner.replace('/', '.'), false, RuntimeMappingsTransformer.class.getClassLoader());
+
+            while (ownerClass != null) {
+                memberMap = OBFUSCATION_MAPPINGS.get(ownerClass.getName().replace('.', '/'));
+                newName = memberMap == null ? null : memberMap.get(nameAndDesc);
+
+                // Search in interfaces if we're looking for a method
+                if (newName == null && !desc.isEmpty())
+                    newName = findMappedMemberOfInterface(ownerClass, nameAndDesc);
+
+                if (newName != null)
+                    return newName;
+
+                ownerClass = ownerClass.getSuperclass();
+            }
+        } catch (Throwable e) {
+            return name;
+        }
+
+        return name;
+    }
+
+    private String findMappedMemberOfInterface(Class<?> interfaceClass, String name) {
+        for (Class<?> interfaceSubClass : interfaceClass.getInterfaces()) {
+            Map<String, String> memberMap = OBFUSCATION_MAPPINGS.get(interfaceSubClass.getName().replace('.', '/'));
+            String newName;
+            if ((memberMap != null && (newName = memberMap.get(name)) != null) ||
+                (newName = findMappedMemberOfInterface(interfaceSubClass, name)) != null
+            ) {
+                return newName;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -76,8 +127,9 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
     public static void loadMappings() {
         try {
             InputStream forgeMappingsStream = ClassUtil.class.getClassLoader().getResourceAsStream("forge_mappings.csv");
+            InputStream mcpMappingsStream = ClassUtil.class.getClassLoader().getResourceAsStream("mcp_mappings.tsrg");
 
-            if (forgeMappingsStream == null)
+            if (forgeMappingsStream == null || mcpMappingsStream == null)
                 throw new IllegalStateException("Forge or mcp mappings not found");
 
             //func_123 -> aFunction, field_234 -> aField
@@ -85,10 +137,31 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                     .map(s -> s.split(","))
                     .forEach((s) -> {
                         FORGE_MAPPINGS.put(s[0], s[1]);
-                        FORGE_MAPPINGS_INVERSE.put(s[1], s[0]);
                     });
+
+            for (String line : IOUtils.readLines(mcpMappingsStream, StandardCharsets.UTF_8)) {
+                // Remove `{CL, MD, FD}: ` from the start of the line
+                String[] info = line.substring(4).split(" ");
+
+                if (line.startsWith("F")) {
+                    String[] names = splitAfterLastSlash(info[1]);
+                    OBFUSCATION_MAPPINGS
+                            .computeIfAbsent(names[0], (k) -> new HashMap<>())
+                            .put(FORGE_MAPPINGS.getOrDefault(names[1], names[1]), names[1]);
+                } else if (line.startsWith("M")) {
+                    String[] names = splitAfterLastSlash(info[2]);
+                    OBFUSCATION_MAPPINGS
+                            .computeIfAbsent(names[0], (k) -> new HashMap<>())
+                            .put(FORGE_MAPPINGS.getOrDefault(names[1], names[1]) + info[3], names[1]);
+                }
+            }
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Error while loading mappings", e);
         }
+    }
+
+    private static String[] splitAfterLastSlash(String s) {
+        int index = s.lastIndexOf('/');
+        return new String[]{s.substring(0, index), s.substring(index + 1)};
     }
 }

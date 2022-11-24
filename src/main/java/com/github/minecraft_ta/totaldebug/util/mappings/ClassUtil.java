@@ -83,7 +83,7 @@ public class ClassUtil {
                          .disableRuntimeInvisibleAnnotations()
                          .ignoreClassVisibility()
                          .acceptJars("1.7.10*.jar", "forge*.jar", "minecraft*.jar").scan()) {
-                //Get minecraft classes using classpath scan
+                // Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
                     String name = getTransformedName(classInfo.getName());
                     if (!name.startsWith("net.minecraft") && !name.startsWith("cpw.mods"))
@@ -135,17 +135,21 @@ public class ClassUtil {
         // We get these separately because they might not be included in the sources of the class loader
         try (Stream<Path> jreFiles = Files.list(Paths.get(System.getProperty("java.home")).resolve("lib"))) {
             jarPaths = Stream.concat(
-                    sourceStream,
-                    Stream.concat(
-                            Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString()),
-                            jreFiles.map(p -> p.toAbsolutePath().toString())
+                            sourceStream,
+                            Stream.concat(
+                                    Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toString()),
+                                    jreFiles.map(p -> p.toAbsolutePath().toString())
+                            )
                     )
-            ).filter(str -> {
-                return !str.contains("forge-") && !str.endsWith("/1.12.2.jar") && //Filter unneeded forge jars
-                       str.endsWith(".jar") && //Filter for only jars
-                       (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
-                       !str.contains("IDEA"); //Filter IDEA in dev environment
-            }).distinct().collect(Collectors.toList());
+                    .map(s -> s.replace('\\', '/'))
+                    .filter(str -> {
+                        return !str.contains("forge-") && !str.endsWith("/1.7.10.jar") && //Filter unneeded forge jars
+                               str.endsWith(".jar") && //Filter for only jars
+                               (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
+                               !str.contains("IDEA"); //Filter IDEA in dev environment
+                    })
+                    .distinct()
+                    .collect(Collectors.toList());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
