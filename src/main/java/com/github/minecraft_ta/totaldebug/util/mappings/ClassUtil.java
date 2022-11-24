@@ -26,6 +26,7 @@ import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -78,13 +79,15 @@ public class ClassUtil {
                          .disableRuntimeInvisibleAnnotations()
                          .ignoreClassVisibility()
                          .acceptJars("1.12.2*.jar", "forge*.jar", "minecraft*.jar").scan()) {
+                CRC32 crc32 = new CRC32();
+
                 //Get minecraft classes using classpath scan
                 for (ClassInfo classInfo : scanResult.getAllClasses()) {
                     String name = getTransformedName(classInfo.getName());
                     if (!name.startsWith("net.minecraft"))
                         continue;
 
-                    writeTransformedClassToZip(outputStream, classInfo.getName(), name, () -> {
+                    writeTransformedClassToZip(outputStream, classInfo.getName(), name, crc32, () -> {
                         try (InputStream stream = classInfo.getResource().open()) {
                             return IOUtils.toByteArray(stream);
                         }
@@ -126,8 +129,10 @@ public class ClassUtil {
             modPaths = ForkJoinHelper.splitWork(
                     modPaths,
                     (input) -> {
+                        CRC32 crc32 = new CRC32();
                         List<Path> results = new ArrayList<>();
 
+                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                         for (Path path : input) {
                             // We deobfuscate all mods into temporary jars here
                             Path newPath = tmpDirPath.resolve(path.getFileName());
@@ -139,8 +144,11 @@ public class ClassUtil {
                                         continue;
 
                                     String className = entry.getName().substring(0, entry.getName().length() - 6);
-                                    long entrySize = entry.getSize();
-                                    writeTransformedClassToZip(outputStream, className, className, () -> IOUtils.toByteArray(inputStream, entrySize));
+                                    writeTransformedClassToZip(outputStream, className, className, crc32, () -> {
+                                        buffer.reset();
+                                        IOUtils.copy(inputStream, buffer);
+                                        return buffer.toByteArray();
+                                    });
                                 }
                             } catch (Exception exception) {
                                 throw new RuntimeException(exception);
@@ -196,7 +204,7 @@ public class ClassUtil {
         }
     }
 
-    private static void writeTransformedClassToZip(ZipOutputStream outputStream, String untransformedName, String name, UncheckedSupplier<byte[]> fallbackResourceSupplier) {
+    private static void writeTransformedClassToZip(ZipOutputStream outputStream, String untransformedName, String name, CRC32 crc32, UncheckedSupplier<byte[]> fallbackResourceSupplier) {
         ZipEntry entry = new ZipEntry(name.replace('.', '/') + ".class");
         try {
             byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
@@ -207,10 +215,17 @@ public class ClassUtil {
                     return;
             }
 
+            entry.setMethod(ZipEntry.STORED);
+            entry.setSize(bytes.length);
+            crc32.reset();
+            crc32.update(bytes);
+            entry.setCrc(crc32.getValue());
             outputStream.putNextEntry(entry);
             outputStream.write(bytes);
             outputStream.closeEntry();
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+            ignored.printStackTrace();
+        }
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
