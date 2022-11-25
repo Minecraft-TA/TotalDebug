@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util;
+package com.github.minecraft_ta.totaldebug.util.decompiler;
 
 import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
 import com.strobel.assembler.metadata.ITypeLoader;

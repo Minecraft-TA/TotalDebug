@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Function;
 
-public class ForkJoinHelper {
+public class ForkJoinUtils {
 
     private static final int POOL_SIZE = Runtime.getRuntime().availableProcessors();
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
@@ -16,7 +16,7 @@ public class ForkJoinHelper {
         return thread;
     });
 
-    public static <IN, OUT> List<OUT> splitWork(List<IN> input, Function<List<IN>, List<OUT>> worker) throws InterruptedException, ExecutionException {
+    public static <IN, OUT> List<OUT> parallelMap(List<IN> input, Function<List<IN>, List<OUT>> mapper) throws InterruptedException, ExecutionException {
         if (input == null || input.isEmpty())
             return Collections.emptyList();
 
@@ -30,7 +30,7 @@ public class ForkJoinHelper {
         for (int i = 0; i < Math.min(input.size(), POOL_SIZE); i++) {
             int startIndex = i * partSize;
             int endIndex = i == POOL_SIZE - 1 ? input.size() - 1 : startIndex + partSize;
-            tasks.add(() -> worker.apply(input.subList(startIndex, endIndex)));
+            tasks.add(() -> mapper.apply(input.subList(startIndex, endIndex)));
         }
 
         // Execute tasks and merge results

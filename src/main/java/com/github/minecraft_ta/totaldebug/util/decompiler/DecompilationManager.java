@@ -1,8 +1,8 @@
-package com.github.minecraft_ta.totaldebug;
+package com.github.minecraft_ta.totaldebug.util.decompiler;
 
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.codeView.DecompileOrOpenMessage;
-import com.github.minecraft_ta.totaldebug.util.ProcyonDecompiler;
 import cpw.mods.fml.client.FMLClientHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ChatComponentText;

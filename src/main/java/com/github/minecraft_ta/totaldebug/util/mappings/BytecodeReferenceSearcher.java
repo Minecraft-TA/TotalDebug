@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.ForkJoinHelper;
+import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -38,7 +38,7 @@ public class BytecodeReferenceSearcher {
                     return Pair.of(Collections.emptyList(), 0);
                 }
 
-                Set<String> results = new HashSet<>(ForkJoinHelper.splitWork(allClasses, (input) -> {
+                Set<String> results = new HashSet<>(ForkJoinUtils.parallelMap(allClasses, (input) -> {
                     List<String> subResults = new ArrayList<>();
                     ReferenceVisitor context = new ReferenceVisitor(subResults, owner, signature, searchMethod);
 

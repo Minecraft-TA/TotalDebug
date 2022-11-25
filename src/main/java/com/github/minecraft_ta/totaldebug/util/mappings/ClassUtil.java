@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.ForkJoinHelper;
+import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
 import cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer;

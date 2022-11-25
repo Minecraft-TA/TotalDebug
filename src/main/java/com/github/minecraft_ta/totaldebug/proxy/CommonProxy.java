@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
-import com.github.minecraft_ta.totaldebug.DecompilationManager;
+import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
