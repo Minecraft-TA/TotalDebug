@@ -41,7 +41,7 @@ public class ChannelInputHandler {
 
     @SubscribeEvent
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-            packetBlockers.remove(event.player.getUniqueID());
+        packetBlockers.remove(event.player.getUniqueID());
     }
 
     @SubscribeEvent

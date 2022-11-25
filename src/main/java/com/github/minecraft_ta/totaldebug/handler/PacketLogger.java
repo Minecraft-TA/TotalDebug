@@ -11,13 +11,13 @@ import cpw.mods.fml.common.network.internal.FMLProxyPacket;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.SimpleIndexedCodec;
 import cpw.mods.fml.relauncher.Side;
+import gnu.trove.map.hash.TByteObjectHashMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import it.unimi.dsi.fastutil.bytes.Byte2ObjectMap;
 import net.minecraft.network.Packet;
 import net.minecraft.network.PacketBuffer;
 import org.apache.commons.lang3.tuple.Pair;
@@ -112,7 +112,7 @@ public class PacketLogger extends ChannelDuplexHandler {
                         payload.markReaderIndex();
                         byte discriminator = payload.readByte();
                         //noinspection unchecked
-                        Class<? extends IMessage> clazz = ((Byte2ObjectMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
+                        Class<? extends IMessage> clazz = ((TByteObjectHashMap<Class<? extends IMessage>>) discriminators.get(codec)).get(discriminator);
                         putPacket(clazz, payload.readableBytes(), packetMap, payload, channel);
                         payload.resetReaderIndex();
                     } else {

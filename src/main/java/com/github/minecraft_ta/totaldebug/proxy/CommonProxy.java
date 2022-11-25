@@ -20,6 +20,7 @@ import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.IFMLSidedHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
+import cpw.mods.fml.common.eventhandler.EventBus;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -62,14 +63,10 @@ public class CommonProxy {
     public void init(FMLInitializationEvent e) {
         RuntimeMappingsTransformer.loadMappings();
 
-        MinecraftForge.EVENT_BUS.register(new ChannelInputHandler());
-        FMLCommonHandler.instance().bus().register(new GlobalTickHandler());
-        MinecraftForge.EVENT_BUS.register(new Object() {
-            @SubscribeEvent
-            public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-                ScriptRunner.stopAllScripts(event.player);
-            }
-        });
+        EventBus eventBus = FMLCommonHandler.instance().bus();
+        eventBus.register(new ChannelInputHandler());
+        eventBus.register(new GlobalTickHandler());
+        eventBus.register(new PlayerLeaveHandler());
     }
 
     public ChunkGridManagerServer getChunkGridManagerServer() {
@@ -109,6 +106,13 @@ public class CommonProxy {
     public void addPostTickTask(Runnable task) {
         synchronized (this.postTickTasks) {
             this.postTickTasks.add(task);
+        }
+    }
+
+    private static class PlayerLeaveHandler {
+        @SubscribeEvent
+        public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+            ScriptRunner.stopAllScripts(event.player);
         }
     }
 
