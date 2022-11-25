@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
+import com.github.minecraft_ta.totaldebug.block.TickBlock;
 import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
@@ -39,6 +40,7 @@ public class CommonProxy {
     protected final List<Runnable> postTickTasks = new ArrayList<>();
 
     public void preInit(FMLPreInitializationEvent e) {
+        GameRegistry.registerBlock(new TickBlock(), "tick_block");
         GameRegistry.registerTileEntity(TickBlockTile.class, "tick_block_tile");
 
         int id = 0;

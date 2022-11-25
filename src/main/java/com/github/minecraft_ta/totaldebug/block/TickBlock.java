@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.block;
 
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -13,6 +14,8 @@ public class TickBlock extends Block {
     public TickBlock() {
         super(Material.iron);
         setCreativeTab(CreativeTabs.tabRedstone);
+        setBlockName("tick_block");
+        setBlockTextureName(TotalDebug.MOD_ID + ":tick_block");
     }
 
     @Override

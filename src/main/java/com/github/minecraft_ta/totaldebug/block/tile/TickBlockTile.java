@@ -4,10 +4,9 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.TicksPerSecondMessage;
 import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.network.NetworkRegistry;
-import net.minecraft.client.renderer.texture.ITickable;
 import net.minecraft.tileentity.TileEntity;
 
-public class TickBlockTile extends TileEntity implements ITickable {
+public class TickBlockTile extends TileEntity {
 
     private int ticksPerSecond;
     private long timeStampSecond;
@@ -23,7 +22,7 @@ public class TickBlockTile extends TileEntity implements ITickable {
     }
 
     @Override
-    public void tick() {
+    public void updateEntity() {
         if (worldObj.isRemote)
             return;
 
