@@ -285,7 +285,6 @@ public class ObjectToJsonHelper {
             json.addProperty("displayName", itemStack.getDisplayName());
             json.addProperty("item", itemStack.getItem().getClass().getName());
             json.add("stackTagCompound", getSerializer(itemStack.getTagCompound()).serialize(itemStack.getTagCompound(), seenObjects));
-            //json.addProperty("isEmpty", itemStack.isEmpty()); TODO Check if this is even a thing
             json.addProperty("itemDamage", itemStack.getItemDamage());
             return json;
         }

@@ -68,26 +68,4 @@ public class TotalDebug {
         public static final ItemBlock TICK_BLOCK_ITEM = null;
     }
 
-    /*@Mod.EventBusSubscriber TODO Readd registration of items and blocks
-    public static class ObjectRegistryHandler {
-
-        @SubscribeEvent
-        public static void addItems(RegistryEvent.Register<Item> event) {
-            event.getRegistry().register(new ItemBlock(Blocks.TICK_BLOCK).setRegistryName(Blocks.TICK_BLOCK.getRegistryName()));
-        }
-
-        @SubscribeEvent
-        public static void addBlocks(RegistryEvent.Register<Block> event) {
-            event.getRegistry().register(new TickBlock().setRegistryName(new ResourceLocation(MOD_ID, "tick_block")).setTranslationKey("tick_block"));
-        }
-
-        @SubscribeEvent
-        public static void registerRenders(ModelRegistryEvent event) {
-            registerRender(Item.getItemFromBlock(Blocks.TICK_BLOCK));
-        }
-
-        public static void registerRender(Item item) {
-            ModelLoader.setCustomModelResourceLocation(item, 0, new ModelResourceLocation(item.getRegistryName(), "inventory"));
-        }
-    }*/
 }
