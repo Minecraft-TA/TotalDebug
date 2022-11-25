@@ -4,9 +4,6 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
-import cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer;
-import cpw.mods.fml.common.asm.transformers.SideTransformer;
-import cpw.mods.fml.common.asm.transformers.TerminalTransformer;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
@@ -15,7 +12,10 @@ import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.compress.utils.IOUtils;
 
 import javax.annotation.Nullable;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -36,6 +36,12 @@ import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
 
+    private static final List<String> TRANSFORMER_BLACKLIST = Arrays.asList(
+            "cpw.mods.fml.common.asm.transformers.TerminalTransformer",
+            "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",
+            "cpw.mods.fml.common.asm.transformers.SideTransformer",
+            "codechicken"
+    );
     private static final LaunchClassLoader LAUNCH_CLASS_LOADER = ((LaunchClassLoader) ClassUtil.class.getClassLoader());
     private static final List<IClassTransformer> LAUNCH_CLASS_LOADER_TRANSFORMERS;
     private static final Method UNTRANSFORM_NAME_METHOD;
@@ -46,9 +52,8 @@ public class ClassUtil {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
             transformersField.setAccessible(true);
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
-                    .filter(t -> !(t instanceof TerminalTransformer) &&
-                                 !(t instanceof EventSubscriptionTransformer) &&
-                                 !(t instanceof SideTransformer))
+                    .filter(t -> TRANSFORMER_BLACKLIST.stream()
+                            .noneMatch(s -> t.getClass().getName().startsWith(s)))
                     .collect(Collectors.toList());
             LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
@@ -160,7 +165,7 @@ public class ClassUtil {
                 )
                         .map(s -> s.replace('\\', '/'))
                         .filter(str -> {
-                            return !str.contains("forge-") && !str.endsWith("/1.7.10.jar") && //Filter unneeded forge jars
+                            return !str.contains("forge") && !str.endsWith("/1.7.10.jar") && //Filter unneeded forge jars
                                    str.endsWith(".jar") && //Filter for only jars
                                    (!str.contains("jre") || str.endsWith("rt.jar") || str.endsWith("jce.jar")) && //Filter everything from JDK except [rt, jce]
                                    !str.contains("IDEA"); //Filter IDEA in dev environment
