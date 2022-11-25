@@ -23,37 +23,6 @@ sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = co
 minecraft {
     version = '1.7.10-10.13.4.1614-1.7.10'
     runDir = "run"
-    /*mappings channel: 'stable', version: '39-1.12'
-    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
-    runs {
-        client {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
-            property 'forge.logging.console.level', 'debug'
-            property 'mixin.env.remapRefMap', 'true'
-            property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
-
-            mods {
-                codedebug {
-                    source sourceSets.main
-                }
-            }
-        }
-
-        server {
-            workingDirectory project.file('run')
-
-            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
-            property 'forge.logging.console.level', 'debug'
-
-            mods {
-                codedebug {
-                    source sourceSets.main
-                }
-            }
-        }
-    }*/
 }
 
 processResources {
@@ -91,9 +60,6 @@ dependencies {
     implementation "com.github.tth05:jindex:0.0.45"
     implementation "com.github.GTNewHorizons:NotEnoughItems:2.3.5-GTNH:dev"
 
-    //compileOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302:api")
-    //runtimeOnly fg.deobf("mezz.jei:jei_1.12.2:4.16.1.302")
-
     implementation group: 'fastutil', name: 'fastutil', version: '5.0.9'
     implementation('com.github.javaparser:javaparser-symbol-solver-core:3.24.0') {
         exclude group: "com.google.guava"
@@ -125,8 +91,5 @@ shadowJar {
 
 reobf.dependsOn shadowJar
 
-/*reobf {
-    shadowJar {}
-}*/
 
 idea { module { inheritOutputDirs = true } }
