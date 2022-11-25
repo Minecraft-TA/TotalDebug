@@ -20,8 +20,7 @@ public class ItemSubCommand extends DecompileCommand.DecompileClassSubCommand {
     public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length != 1)
             return Collections.emptyList();
-        return getListOfStringsMatchingLastWord(args, ((Set<Item>) Item.itemRegistry.getKeys()).stream()
-                .map(k -> k.getUnlocalizedName().substring(5)).toArray(String[]::new));
+        return getListOfStringsMatchingLastWord(args, ((Set<String>) Item.itemRegistry.getKeys()).toArray(new String[0]));
     }
 
     @Nonnull

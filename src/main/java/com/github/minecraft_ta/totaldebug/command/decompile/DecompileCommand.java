@@ -43,33 +43,29 @@ public class DecompileCommand extends CommandBase {
     @Override
     public void processCommand(@Nonnull ICommandSender sender, String[] args) throws CommandException {
         if (args.length < 1) {
-            IChatComponent component = new ChatComponentTranslation("commands.total_debug.decompile.usage")
-                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
-                    .appendText("\n");
+            sender.addChatMessage(new ChatComponentTranslation("commands.total_debug.decompile.usage")
+                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
 
             for (Iterator<ICommand> iterator = this.subCommands.iterator(); iterator.hasNext(); ) {
                 ICommand subCommand = iterator.next();
 
                 String subCommandUsage = I18n.format("commands.total_debug.decompile." + subCommand.getCommandName() + ".usage");
-                IChatComponent listStartComponent = new ChatComponentText("- ").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.DARK_GRAY));
-
-                component.appendSibling(
-                        listStartComponent.appendSibling(
-                                //subcommand name
-                                new ChatComponentText(subCommand.getCommandName())
-                                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
-                                        .appendSibling(
-                                                //subcommand args
-                                                new ChatComponentText(
-                                                        subCommandUsage.substring(StringUtils
-                                                                .ordinalIndexOf(subCommandUsage, " ", 2))
-                                                ).setChatStyle(new ChatStyle().setColor(EnumChatFormatting.WHITE))
-                                        ).appendText(!iterator.hasNext() ? "" : "\n")
-                        )
+                sender.addChatMessage(
+                        new ChatComponentText("- ").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.DARK_GRAY))
+                                .appendSibling(
+                                        //subcommand name
+                                        new ChatComponentText(subCommand.getCommandName())
+                                                .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
+                                                .appendSibling(
+                                                        //subcommand args
+                                                        new ChatComponentText(
+                                                                subCommandUsage.substring(StringUtils
+                                                                        .ordinalIndexOf(subCommandUsage, " ", 2))
+                                                        ).setChatStyle(new ChatStyle().setColor(EnumChatFormatting.WHITE))
+                                                )
+                                )
                 );
             }
-
-            sender.addChatMessage(component);
         } else {
             ICommand cmd = this.subCommands.stream()
                     .filter(c -> c.getCommandName().equals(args[0]))
