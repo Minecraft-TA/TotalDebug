@@ -10,7 +10,7 @@ public class RenderHelper {
     private static final int[] X_OFFSETS = new int[]{0, 0, -1, 1};
     private static final int[] Z_OFFSETS = new int[]{-1, 1, 0, 0};
     private static final int[] HORIZONTAL_INDEX = new int[]{2, 0, 1, 3};
-    private static final int[] HORIZONTAL_INDEX_OPPOSITE = new int[]{0, 2, 0, 3};
+    private static final int[] HORIZONTAL_INDEX_OPPOSITE = new int[]{0, 2, 3, 1};
 
     public static void drawTickBlockSideText(FontRenderer fontRenderer, int tps, int average, double xIn, double y, double zIn) {
         for (int i = 0; i < HORIZONTALS.length; i++) {
