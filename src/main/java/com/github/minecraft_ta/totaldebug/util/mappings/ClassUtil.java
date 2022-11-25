@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
 import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.tth05.jindex.ClassIndex;
 import cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer;
+import cpw.mods.fml.common.asm.transformers.SideTransformer;
 import cpw.mods.fml.common.asm.transformers.TerminalTransformer;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
@@ -45,7 +46,9 @@ public class ClassUtil {
             Field transformersField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("transformers");
             transformersField.setAccessible(true);
             LAUNCH_CLASS_LOADER_TRANSFORMERS = ((List<IClassTransformer>) transformersField.get(LAUNCH_CLASS_LOADER)).stream()
-                    .filter(t -> !(t instanceof TerminalTransformer) && !(t instanceof EventSubscriptionTransformer))
+                    .filter(t -> !(t instanceof TerminalTransformer) &&
+                                 !(t instanceof EventSubscriptionTransformer) &&
+                                 !(t instanceof SideTransformer))
                     .collect(Collectors.toList());
             LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
@@ -246,6 +249,9 @@ public class ClassUtil {
     }
 
     public static byte[] runTransformers(String untransformedName, String transformedName, byte[] bytes) {
+        if (untransformedName.startsWith("java"))
+            return bytes;
+
         for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
             try {
                 bytes = transformer.transform(untransformedName, transformedName, bytes);
