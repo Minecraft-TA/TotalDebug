@@ -6,10 +6,14 @@ import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.integration.GregtechIntegration;
 import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.InputEvent;
 import cpw.mods.fml.relauncher.ReflectionHelper;
+import gregtech.api.GregTech_API;
+import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
+import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -129,7 +133,12 @@ public class KeyInputHandler {
                 break;
             case TILE_ENTITY:
                 TileEntity tileEntity = world.getTileEntity(pos.getX(), pos.getY(), pos.getZ());
-                if (tileEntity != null) {
+                if (tileEntity instanceof IGregTechTileEntity) {
+                    IMetaTileEntity metaTileEntity = ((IGregTechTileEntity) tileEntity).getMetaTileEntity();
+                    if (metaTileEntity != null) {
+                        TotalDebug.PROXY.getDecompilationManager().openGui(metaTileEntity.getClass());
+                    }
+                } else if (tileEntity != null) {
                     TotalDebug.PROXY.getDecompilationManager().openGui(tileEntity.getClass());
                 } else {
                     TotalDebug.LOGGER.error("TileEntity is null");
@@ -148,8 +157,15 @@ public class KeyInputHandler {
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).field_150939_a;
-                        TileEntity tile = block.createTileEntity(world, block.getDamageValue(world, 0, 0, 0));
+                        TileEntity tile = block.createTileEntity(world, meta);
                         if (tile != null) {
+                            if (tile instanceof IGregTechTileEntity) {
+                                IMetaTileEntity metatileentity = GregTech_API.METATILEENTITIES[meta];
+                                if (metatileentity != null) {
+                                    TotalDebug.PROXY.getDecompilationManager().openGui(metatileentity.getClass());
+                                    return;
+                                }
+                            }
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
                         }
