@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
+import codechicken.nei.api.API;
+import codechicken.nei.guihook.GuiContainerManager;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
@@ -59,27 +61,17 @@ public class KeyInputHandler {
 
         GuiScreen currentScreen = event.gui;
         if (currentScreen instanceof GuiContainer) {
-            /*if (TotalDebugJEIPlugin.INSTANCE != null) {
-                IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
-
-                Object ingredientUnderMouse = runtime.getIngredientListOverlay().getIngredientUnderMouse();
-                if (ingredientUnderMouse == null)
-                    ingredientUnderMouse = runtime.getBookmarkOverlay().getIngredientUnderMouse();
-
-                if (ingredientUnderMouse instanceof ItemStack) {
-                    ItemStack itemStack = ((ItemStack) ingredientUnderMouse);
-                    Item item = itemStack.getItem();
-
-                    if (!checkForSpawnEggAndOpenGui(itemStack)) {
-                        handle(HitType.ITEM, null, Item.getIdFromItem(item), itemStack.getMetadata());
-                    }
-                    return;
-                } else if (ingredientUnderMouse instanceof EnchantmentData) {
-                    TotalDebug.PROXY.getDecompilationManager().openGui(((EnchantmentData) ingredientUnderMouse).enchantment.getClass());
-                }
-            }*/
-
+            //Get the slot the mouse is hovering over from not enough items
             GuiContainer guiContainer = (GuiContainer) currentScreen;
+            ItemStack stackMouseOver = GuiContainerManager.getStackMouseOver(guiContainer);
+            if (stackMouseOver != null) {
+                Item item = stackMouseOver.getItem();
+                if (!checkForSpawnEggAndOpenGui(stackMouseOver)) {
+                    handle(HitType.ITEM, null, Item.getIdFromItem(item), stackMouseOver.getItemDamage());
+                }
+                return;
+            }
+
             Slot slot = ReflectionHelper.getPrivateValue(GuiContainer.class, guiContainer, "theSlot", "field_147006_u");
             if (slot != null && slot.getHasStack()) {
                 ItemStack itemStack = slot.getStack();
