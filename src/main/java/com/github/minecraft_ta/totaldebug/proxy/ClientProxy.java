@@ -45,7 +45,9 @@ public class ClientProxy extends CommonProxy {
         this.companionApp = new CompanionApp(this.decompilationManager.getDataDir().resolve(CompanionApp.COMPANION_APP_FOLDER));
         this.packetLogger = new PacketLogger();
 
-        FMLCommonHandler.instance().bus().register(new KeyInputHandler());
+        KeyInputHandler keyInputHandler = new KeyInputHandler();
+        FMLCommonHandler.instance().bus().register(keyInputHandler);
+        MinecraftForge.EVENT_BUS.register(keyInputHandler);
         MinecraftForge.EVENT_BUS.register(new TabOverlayRenderHandler());
         MinecraftForge.EVENT_BUS.register(new BossBarHandler());
         FMLCommonHandler.instance().bus().register(new GlobalTickHandler());

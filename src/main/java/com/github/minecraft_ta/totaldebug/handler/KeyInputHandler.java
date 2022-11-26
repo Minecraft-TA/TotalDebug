@@ -7,17 +7,24 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessa
 import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.InputEvent;
+import cpw.mods.fml.relauncher.ReflectionHelper;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityList;
+import net.minecraft.inventory.Slot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemMonsterPlacer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.GuiScreenEvent;
+import org.lwjgl.input.Keyboard;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -46,13 +53,13 @@ public class KeyInputHandler {
     }
 
     @SubscribeEvent
-    public void onGuiKeyPress(GuiScreenEvent/*.KeyboardInputEvent.Pre*/ event) {
-        /*if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode())) TODO Replace with Nei integration
+    public void onGuiKeyPress(GuiScreenEvent.DrawScreenEvent.Post event) {
+        if (!Keyboard.isKeyDown(KeyBindings.CODE_GUI.getKeyCode()))
             return;
 
-        GuiScreen currentScreen = event.getGui();
+        GuiScreen currentScreen = event.gui;
         if (currentScreen instanceof GuiContainer) {
-            if (TotalDebugJEIPlugin.INSTANCE != null) {
+            /*if (TotalDebugJEIPlugin.INSTANCE != null) {
                 IJeiRuntime runtime = TotalDebugJEIPlugin.INSTANCE.getRuntime();
 
                 Object ingredientUnderMouse = runtime.getIngredientListOverlay().getIngredientUnderMouse();
@@ -70,27 +77,28 @@ public class KeyInputHandler {
                 } else if (ingredientUnderMouse instanceof EnchantmentData) {
                     TotalDebug.PROXY.getDecompilationManager().openGui(((EnchantmentData) ingredientUnderMouse).enchantment.getClass());
                 }
-            }
+            }*/
 
             GuiContainer guiContainer = (GuiContainer) currentScreen;
-            Slot slot = guiContainer.getSlotUnderMouse();
+            Slot slot = ReflectionHelper.getPrivateValue(GuiContainer.class, guiContainer, "theSlot", "field_147006_u");
             if (slot != null && slot.getHasStack()) {
-                ItemStack itemStack = guiContainer.getSlotUnderMouse().getStack();
+                ItemStack itemStack = slot.getStack();
+
                 if (!checkForSpawnEggAndOpenGui(itemStack)) {
-                    handle(HitType.ITEM, null, Item.REGISTRY.getIDForObject(itemStack.getItem()), itemStack.getMetadata());
+                    handle(HitType.ITEM, null, Item.itemRegistry.getIDForObject(itemStack.getItem()), itemStack.getItemDamage());
                 }
             }
-        }*/
+        }
     }
 
     private boolean checkForSpawnEggAndOpenGui(ItemStack itemStack) {
-        /*if (itemStack.getItem() instanceof ItemMonsterPlacer) { TODO Readd later
-            final EntityEntry value = ForgeRegistries.ENTITIES.getValue(ItemMonsterPlacer.getNamedIdFrom(itemStack));
+        if (itemStack.getItem() instanceof ItemMonsterPlacer) {
+            Entity value = EntityList.createEntityByID(itemStack.getItemDamage(), Minecraft.getMinecraft().theWorld);
             if (value != null) {
-                TotalDebug.PROXY.getDecompilationManager().openGui(value.getEntityClass());
+                TotalDebug.PROXY.getDecompilationManager().openGui(value.getClass());
                 return true;
             }
-        }*/
+        }
         return false;
     }
 
@@ -144,11 +152,11 @@ public class KeyInputHandler {
                 }
                 break;
             case ITEM:
-                Item item = (Item) Item.itemRegistry.getObjectById(entityOrItemId); //TODO: Save I guess?
+                Item item = (Item) Item.itemRegistry.getObjectById(entityOrItemId);
                 if (item != null) {
                     if (item instanceof ItemBlock) {
                         Block block = ((ItemBlock) item).field_150939_a;
-                        TileEntity tile = block.createTileEntity(world, block.getDamageValue(world, pos.getX(), pos.getY(), pos.getZ()));
+                        TileEntity tile = block.createTileEntity(world, block.getDamageValue(world, 0, 0, 0));
                         if (tile != null) {
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
