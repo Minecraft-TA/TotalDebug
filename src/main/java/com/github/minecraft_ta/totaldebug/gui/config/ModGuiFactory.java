@@ -21,11 +21,11 @@ public class ModGuiFactory implements IModGuiFactory {
 
     @Override
     public Set<RuntimeOptionCategoryElement> runtimeGuiCategories() {
-        return null; //TODO What is this?
+        return null;
     }
 
     @Override
     public RuntimeOptionGuiHandler getHandlerFor(RuntimeOptionCategoryElement runtimeOptionCategoryElement) {
-        return null; //TODO OR this?
+        return null;
     }
 }

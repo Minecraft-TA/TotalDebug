@@ -86,7 +86,6 @@ public class ChunkGridManagerServer implements IChunkGridManager {
                     }
                 }
 
-                //TODO: Is this the best way to do this????
                 EntityPlayerMP player = null;
                 for (Object o : TotalDebug.PROXY.getSidedHandler().getServer().getConfigurationManager().playerEntityList) {
                     EntityPlayerMP entityPlayerMP = (EntityPlayerMP) o;
