@@ -14,6 +14,7 @@ import cpw.mods.fml.relauncher.ReflectionHelper;
 import gregtech.api.GregTech_API;
 import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
 import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
+import gregtech.common.blocks.GT_Item_Machines;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -158,16 +159,17 @@ public class KeyInputHandler {
                 Item item = (Item) Item.itemRegistry.getObjectById(entityOrItemId);
                 if (item != null) {
                     if (item instanceof ItemBlock) {
+                        if (GregtechIntegration.getInstance().isEnabled() && item instanceof GT_Item_Machines) {
+                            IMetaTileEntity metatileentity = GregTech_API.METATILEENTITIES[meta];
+                            if (metatileentity != null) {
+                                TotalDebug.PROXY.getDecompilationManager().openGui(metatileentity.getClass());
+                                return;
+                            }
+                        }
+
                         Block block = ((ItemBlock) item).field_150939_a;
                         TileEntity tile = block.createTileEntity(world, meta);
                         if (tile != null) {
-                            if (GregtechIntegration.getInstance().isEnabled() && tile instanceof IGregTechTileEntity) {
-                                IMetaTileEntity metatileentity = GregTech_API.METATILEENTITIES[meta];
-                                if (metatileentity != null) {
-                                    TotalDebug.PROXY.getDecompilationManager().openGui(metatileentity.getClass());
-                                    return;
-                                }
-                            }
                             TotalDebug.PROXY.getDecompilationManager().openGui(tile.getClass());
                             return;
                         }
