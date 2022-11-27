@@ -2,11 +2,17 @@ package com.github.minecraft_ta.totaldebug.integration;
 
 import cpw.mods.fml.common.Loader;
 
-public interface TotalDebugIntegration {
+public abstract class TotalDebugIntegration {
 
-    default boolean isEnabled() {
-        return Loader.isModLoaded(getName());
+    private final boolean isEnabled;
+
+    public TotalDebugIntegration() {
+        this.isEnabled = Loader.isModLoaded(getName());
     }
 
-    String getName();
+    public boolean isEnabled() {
+        return this.isEnabled;
+    }
+
+    protected abstract String getName();
 }
