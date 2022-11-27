@@ -1,9 +1,14 @@
 package com.github.minecraft_ta.totaldebug.integration;
 
-public class GregtechIntegration implements TotalDebugIntegration {
+public class GregtechIntegration extends TotalDebugIntegration {
 
+    private static final GregtechIntegration INSTANCE = new GregtechIntegration();
+
+    public static GregtechIntegration getInstance() {
+        return INSTANCE;
+    }
     @Override
-    public String getName() {
+    protected String getName() {
         return "gregtech";
     }
 }

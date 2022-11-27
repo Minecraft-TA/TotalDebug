@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totaldebug.handler;
 
-import codechicken.nei.api.API;
 import codechicken.nei.guihook.GuiContainerManager;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.integration.GregtechIntegration;
+import com.github.minecraft_ta.totaldebug.integration.NotEnoughItemIntegration;
 import com.github.minecraft_ta.totaldebug.util.BlockPos;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.InputEvent;
@@ -67,13 +67,15 @@ public class KeyInputHandler {
         if (currentScreen instanceof GuiContainer) {
             //Get the slot the mouse is hovering over from not enough items
             GuiContainer guiContainer = (GuiContainer) currentScreen;
-            ItemStack stackMouseOver = GuiContainerManager.getStackMouseOver(guiContainer);
-            if (stackMouseOver != null) {
-                Item item = stackMouseOver.getItem();
-                if (!checkForSpawnEggAndOpenGui(stackMouseOver)) {
-                    handle(HitType.ITEM, null, Item.getIdFromItem(item), stackMouseOver.getItemDamage());
+            if (NotEnoughItemIntegration.getInstance().isEnabled()) {
+                ItemStack stackMouseOver = GuiContainerManager.getStackMouseOver(guiContainer);
+                if (stackMouseOver != null) {
+                    Item item = stackMouseOver.getItem();
+                    if (!checkForSpawnEggAndOpenGui(stackMouseOver)) {
+                        handle(HitType.ITEM, null, Item.getIdFromItem(item), stackMouseOver.getItemDamage());
+                    }
+                    return;
                 }
-                return;
             }
 
             Slot slot = ReflectionHelper.getPrivateValue(GuiContainer.class, guiContainer, "theSlot", "field_147006_u");
@@ -133,7 +135,7 @@ public class KeyInputHandler {
                 break;
             case TILE_ENTITY:
                 TileEntity tileEntity = world.getTileEntity(pos.getX(), pos.getY(), pos.getZ());
-                if (tileEntity instanceof IGregTechTileEntity) {
+                if (GregtechIntegration.getInstance().isEnabled() && tileEntity instanceof IGregTechTileEntity) {
                     IMetaTileEntity metaTileEntity = ((IGregTechTileEntity) tileEntity).getMetaTileEntity();
                     if (metaTileEntity != null) {
                         TotalDebug.PROXY.getDecompilationManager().openGui(metaTileEntity.getClass());
@@ -159,7 +161,7 @@ public class KeyInputHandler {
                         Block block = ((ItemBlock) item).field_150939_a;
                         TileEntity tile = block.createTileEntity(world, meta);
                         if (tile != null) {
-                            if (tile instanceof IGregTechTileEntity) {
+                            if (GregtechIntegration.getInstance().isEnabled() && tile instanceof IGregTechTileEntity) {
                                 IMetaTileEntity metatileentity = GregTech_API.METATILEENTITIES[meta];
                                 if (metatileentity != null) {
                                     TotalDebug.PROXY.getDecompilationManager().openGui(metatileentity.getClass());
