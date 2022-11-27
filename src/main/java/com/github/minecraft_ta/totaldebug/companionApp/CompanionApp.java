@@ -23,6 +23,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.ChatStyle;
 import net.minecraft.util.EnumChatFormatting;
@@ -45,7 +46,9 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -307,6 +310,7 @@ public class CompanionApp {
         HttpEntity entity = response.getEntity();
 
         long writtenBytes = 0;
+        Set<Integer> percentages = new HashSet<>();
 
         //download and unzip on the fly
         try (ZipInputStream zipInputStream = new ZipInputStream(Channels.newInputStream(Channels.newChannel(entity.getContent())))) {
@@ -321,19 +325,21 @@ public class CompanionApp {
                         writtenBytes += entry.getCompressedSize();
                     }
 
-                    //send progress message
-                    /*Minecraft.getMinecraft().thePlayer.sendStatusMessage( TODO Find out how to send status messages
-                            new ChatComponentText((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
-                                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
-                            , true);*/
+                    //Send progress update
+                    int percentage = (int) (writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize);
+                    if (!percentages.contains(percentage)) {
+                        Minecraft.getMinecraft().thePlayer.addChatMessage(
+                                new ChatComponentText((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
+                                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
+                        percentages.add(percentage);
+                    }
                 }
             }
 
             //fake 100% message because we won't exactly reach that
-            /*Minecraft.getMinecraft().thePlayer.sendStatusMessage(
+            Minecraft.getMinecraft().thePlayer.addChatMessage(
                     new ChatComponentText(100 + "%")
-                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD))
-                    , true);*/
+                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
 
             TotalDebug.LOGGER.info("Successfully downloaded companion app version {}", version);
         } catch (IOException e) {
