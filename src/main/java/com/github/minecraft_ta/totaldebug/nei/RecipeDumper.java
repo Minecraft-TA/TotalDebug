@@ -8,9 +8,9 @@ import codechicken.nei.config.DataDumper;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
 import com.github.minecraft_ta.totaldebug.integration.NotEnoughItemIntegration;
-import com.github.minecraft_ta.totaldebug.nei.serialization.AbstractRecipeHandlerSerializer;
-import com.github.minecraft_ta.totaldebug.nei.serialization.IRecipe;
-import com.github.minecraft_ta.totaldebug.nei.serialization.RecipeHandlerSerializer;
+import com.github.minecraft_ta.totaldebug.nei.serializer.AbstractRecipeHandlerSerializer;
+import com.github.minecraft_ta.totaldebug.nei.serializer.IRecipeSerializer;
+import com.github.minecraft_ta.totaldebug.nei.serializer.RecipeHandlerSerializerFactory;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import it.unimi.dsi.fastutil.Hash;
@@ -37,7 +37,7 @@ public class RecipeDumper extends DataDumper {
 
         @Override
         public boolean equals(ItemStack a, ItemStack b) {
-            return ItemStack.areItemStacksEqual(a, b);
+            return a.getItem() == b.getItem() && a.getItemDamage() == b.getItemDamage() && ItemStack.areItemStackTagsEqual(a, b);
         }
     };
     private boolean initialized;
@@ -58,12 +58,12 @@ public class RecipeDumper extends DataDumper {
 
     private void dumpRecipes() {
         CompletableFuture.runAsync(() -> {
-            Map<ItemStack, List<IRecipe>> itemStackListMap = loadRecipes(ItemList.items, new ObjectOpenCustomHashSet<>(STRATEGY));
+            Map<ItemStack, List<IRecipeSerializer>> itemStackListMap = loadRecipes(ItemList.items, new ObjectOpenCustomHashSet<>(STRATEGY));
 
             // Create a lookup map for the itemstacks
             Object2IntMap<ItemStack> itemStackLookup = new Object2IntOpenCustomHashMap<>(STRATEGY);
             int i = 0;
-            for (Map.Entry<ItemStack, List<IRecipe>> itemStackListEntry : itemStackListMap.entrySet()) {
+            for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : itemStackListMap.entrySet()) {
                 itemStackLookup.put(itemStackListEntry.getKey(), i++);
                 // Remove ItemStacks that have no recipes
                 if (itemStackListEntry.getValue().isEmpty())
@@ -85,14 +85,14 @@ public class RecipeDumper extends DataDumper {
                 // Write the recipes
                 out.writeInt(itemStackListMap.size());
 
-                for (Map.Entry<ItemStack, List<IRecipe>> itemStackListEntry : itemStackListMap.entrySet()) {
+                for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : itemStackListMap.entrySet()) {
                     // Write the itemstack id
                     out.writeInt(itemStackLookup.getInt(itemStackListEntry.getKey()));
 
                     // Write the recipes
                     out.writeInt(itemStackListEntry.getValue().size());
 
-                    for (IRecipe iRecipe : itemStackListEntry.getValue()) {
+                    for (IRecipeSerializer iRecipe : itemStackListEntry.getValue()) {
                         // Write the recipe type
                         out.writeUTF(iRecipe.getRecipeType());
 
@@ -107,12 +107,12 @@ public class RecipeDumper extends DataDumper {
     }
 
 
-    private Map<ItemStack, List<IRecipe>> loadRecipes(Collection<ItemStack> items, Set<ItemStack> oldItems) {
-        Map<ItemStack, List<IRecipe>> recipes = new Object2ObjectOpenCustomHashMap<>(STRATEGY);
+    private Map<ItemStack, List<IRecipeSerializer>> loadRecipes(Collection<ItemStack> items, Set<ItemStack> oldItems) {
+        Map<ItemStack, List<IRecipeSerializer>> recipes = new Object2ObjectOpenCustomHashMap<>(STRATEGY);
         Set<ItemStack> newItems = new ObjectOpenCustomHashSet<>(STRATEGY);
 
         for (ICraftingHandler craftinghandler : GuiCraftingRecipe.craftinghandlers) {
-            AbstractRecipeHandlerSerializer recipeHandlerSerializer = RecipeHandlerSerializer.getRecipeHandlerSerializer(craftinghandler.getClass());
+            AbstractRecipeHandlerSerializer recipeHandlerSerializer = RecipeHandlerSerializerFactory.getRecipeHandlerSerializer(craftinghandler.getClass());
             if (recipeHandlerSerializer != null) {
                 recipeHandlerSerializer.loadRecipes(craftinghandler, items, recipes, newItems);
             }

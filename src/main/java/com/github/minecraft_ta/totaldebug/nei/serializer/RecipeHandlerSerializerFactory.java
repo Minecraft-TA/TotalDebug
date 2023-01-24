@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.nei.serialization;
+package com.github.minecraft_ta.totaldebug.nei.serializer;
 
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.ShapedRecipeHandler;
@@ -7,7 +7,7 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import java.util.Map;
 
 
-public class RecipeHandlerSerializer {
+public class RecipeHandlerSerializerFactory {
 
     private static final Map<Class<? extends ICraftingHandler>, AbstractRecipeHandlerSerializer> RECIPEHANDLER_SERIALIZER = new Object2ObjectOpenHashMap<>();
     private static final Map<Class<? extends ICraftingHandler>, AbstractRecipeHandlerSerializer> INHERITANCE_SERIALIZERS = new Object2ObjectOpenHashMap<>();
