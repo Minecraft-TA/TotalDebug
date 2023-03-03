@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.nei.serializer;
 
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.ShapedRecipeHandler;
+import codechicken.nei.recipe.ShapelessRecipeHandler;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 
 import java.util.Map;
@@ -14,7 +15,7 @@ public class RecipeHandlerSerializerFactory {
 
     static {
         RECIPEHANDLER_SERIALIZER.put(ShapedRecipeHandler.class, new ShapedCraftingSerializer());
-
+        RECIPEHANDLER_SERIALIZER.put(ShapelessRecipeHandler.class, new ShapelessCraftingSerializer());
     }
 
 

@@ -1,36 +1,29 @@
 package com.github.minecraft_ta.totaldebug.nei.serializer;
 
 import codechicken.nei.recipe.ICraftingHandler;
-import cpw.mods.fml.relauncher.ReflectionHelper;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
-import net.minecraft.item.crafting.ShapedRecipes;
-import net.minecraftforge.oredict.ShapedOreRecipe;
+import net.minecraft.item.crafting.ShapelessRecipes;
+import net.minecraftforge.oredict.ShapelessOreRecipe;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.*;
 
-public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
+public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer {
 
-    /**
-     * Serializes all shaped crafting recipes we only to do this once
-     * <p>
-     * {@inheritDoc}
-     */
     @Override
     boolean loadRecipesImpl(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems) {
-        // We only need to do this once
         for (Object o : CraftingManager.getInstance().getRecipeList()) {
             if (o instanceof IRecipe) {
                 IRecipe recipe = (IRecipe) o;
                 IRecipeSerializer serializer = null;
-                if (recipe instanceof ShapedRecipes) {
-                    serializer = new ShapedRecipeSerializer((ShapedRecipes) recipe);
-                } else if (recipe instanceof ShapedOreRecipe) {
-                    serializer = new ShapedOreRecipeSerializer((ShapedOreRecipe) recipe);
+                if (recipe instanceof ShapelessRecipes) {
+                    serializer = new ShapelessRecipeSerializer((ShapelessRecipes) recipe);
+                } else if (recipe instanceof ShapelessOreRecipe) {
+                    serializer = new ShapelessOreRecipeSerializer((ShapelessOreRecipe) recipe);
                 }
                 if (serializer != null) {
                     recipes.computeIfAbsent(recipe.getRecipeOutput(), itemStack -> new ArrayList<>()).add(serializer);
@@ -42,24 +35,20 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
         return true;
     }
 
+    static class ShapelessRecipeSerializer implements IRecipeSerializer {
 
-    static class ShapedRecipeSerializer implements IRecipeSerializer {
+        private final ShapelessRecipes recipe;
 
-        private final ShapedRecipes recipe;
-
-        public ShapedRecipeSerializer(ShapedRecipes recipe) {
+        public ShapelessRecipeSerializer(ShapelessRecipes recipe) {
             this.recipe = recipe;
         }
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
-            out.writeInt(recipe.recipeWidth);
-            out.writeInt(recipe.recipeHeight);
-
-            for (ItemStack itemStack : recipe.recipeItems) {
-                if (itemStack == null) {
-                    out.writeInt(-1);
-                } else {
+            out.writeInt(recipe.recipeItems.size());
+            for (Object recipeItem : recipe.recipeItems) {
+                if (recipeItem instanceof ItemStack) {
+                    ItemStack itemStack = (ItemStack) recipeItem;
                     out.writeInt(itemStackLookup.getInt(itemStack));
                 }
             }
@@ -67,43 +56,38 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
 
         @Override
         public void discoverItems(Collection<ItemStack> items, Set<ItemStack> newItems) {
-            // Discover all items in the recipe
-            ItemStack recipeOutput = recipe.getRecipeOutput();
-            if (!items.contains(recipeOutput))
-                newItems.add(recipeOutput);
+            ItemStack stack = recipe.getRecipeOutput();
+            if (!items.contains(stack))
+                newItems.add(stack);
 
-            for (ItemStack itemStack : recipe.recipeItems) {
-                if (itemStack != null && !items.contains(itemStack))
-                    newItems.add(itemStack);
+            for (Object recipeItem : recipe.recipeItems) {
+                if (recipeItem instanceof ItemStack) {
+                    ItemStack itemStack = (ItemStack) recipeItem;
+                    if (!items.contains(itemStack)) {
+                        newItems.add(itemStack);
+                    }
+                }
             }
         }
 
         @Override
         public String getRecipeType() {
-            return "shaped";
+            return "shapeless";
         }
+
     }
 
-    static class ShapedOreRecipeSerializer implements IRecipeSerializer {
+    static class ShapelessOreRecipeSerializer implements IRecipeSerializer {
 
-        private final ShapedOreRecipe recipe;
+        private final ShapelessOreRecipe recipe;
 
-        ShapedOreRecipeSerializer(ShapedOreRecipe recipe) {
+        public ShapelessOreRecipeSerializer(ShapelessOreRecipe recipe) {
             this.recipe = recipe;
         }
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
-            int width = ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "width");
-            int height = ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "height");
-
-            out.writeInt(width);
-            out.writeInt(height);
-
-            // Write mirrored
-            out.writeBoolean(ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "mirrored"));
-
-            // Write input
+            out.writeInt(recipe.getInput().size());
             for (Object o : recipe.getInput()) {
                 if (o instanceof ItemStack) {
                     ItemStack itemStack = (ItemStack) o;
@@ -141,13 +125,13 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
                     }
                 }
             }
+
         }
 
         @Override
         public String getRecipeType() {
-            return "shaped_ore";
+            return "shapeless_ore";
         }
     }
-
 
 }
