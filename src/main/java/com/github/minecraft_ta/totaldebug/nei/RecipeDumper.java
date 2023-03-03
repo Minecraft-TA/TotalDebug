@@ -7,6 +7,7 @@ import codechicken.nei.api.API;
 import codechicken.nei.config.DataDumper;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.integration.NotEnoughItemIntegration;
 import com.github.minecraft_ta.totaldebug.nei.serializer.AbstractRecipeHandlerSerializer;
 import com.github.minecraft_ta.totaldebug.nei.serializer.IRecipeSerializer;
@@ -102,7 +103,12 @@ public class RecipeDumper extends DataDumper {
                 }
             } catch (IOException e) {
                 e.printStackTrace();
+                TotalDebug.LOGGER.info(e.getMessage());
             }
+        }).exceptionally(throwable -> {
+            throwable.printStackTrace();
+            TotalDebug.LOGGER.info(throwable.getMessage());
+            return null;
         });
     }
 
@@ -126,7 +132,12 @@ public class RecipeDumper extends DataDumper {
             }
 
             oldItems.addAll(items);
-            recipes.putAll(loadRecipes(newItems, oldItems));
+
+            // Merge the new recipes into the list of existing recipes
+            Map<ItemStack, List<IRecipeSerializer>> recipeMap = loadRecipes(newItems, oldItems);
+            for (Map.Entry<ItemStack, List<IRecipeSerializer>> entry : recipeMap.entrySet()) {
+                recipes.get(entry.getKey()).addAll(entry.getValue());
+            }
         }
 
         return recipes;
