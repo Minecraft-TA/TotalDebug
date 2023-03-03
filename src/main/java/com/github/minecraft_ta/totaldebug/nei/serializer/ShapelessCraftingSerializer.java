@@ -45,6 +45,7 @@ public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+            out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.recipeItems.size());
             for (Object recipeItem : recipe.recipeItems) {
                 if (recipeItem instanceof ItemStack) {
@@ -87,6 +88,7 @@ public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+            out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.getInput().size());
             for (Object o : recipe.getInput()) {
                 if (o instanceof ItemStack) {

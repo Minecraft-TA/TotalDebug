@@ -53,6 +53,7 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+            out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.recipeWidth);
             out.writeInt(recipe.recipeHeight);
 
@@ -94,6 +95,8 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
 
         @Override
         public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+            out.writeInt(recipe.getRecipeOutput().stackSize);
+
             int width = ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "width");
             int height = ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "height");
 
