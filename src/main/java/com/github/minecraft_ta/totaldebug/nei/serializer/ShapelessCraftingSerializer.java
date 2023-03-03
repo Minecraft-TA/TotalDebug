@@ -6,6 +6,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.item.crafting.ShapelessRecipes;
+import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.oredict.ShapelessOreRecipe;
 
 import java.io.DataOutputStream;
@@ -117,6 +118,13 @@ public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer
             for (Object o : recipe.getInput()) {
                 if (o instanceof ItemStack) {
                     ItemStack itemStack = (ItemStack) o;
+
+                    // Edge case when the item uses blocks as they get oredict WILDCARD_VALUE as the metadata
+                    if (itemStack.getItemDamage() == OreDictionary.WILDCARD_VALUE) {
+                        itemStack = ItemStack.copyItemStack(itemStack);
+                        itemStack.setItemDamage(0);
+                    }
+
                     if (!items.contains(itemStack))
                         newItems.add(itemStack);
                 } else if (o instanceof List) {
