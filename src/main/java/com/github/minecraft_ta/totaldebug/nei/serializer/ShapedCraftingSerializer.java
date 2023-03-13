@@ -7,6 +7,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.item.crafting.ShapedRecipes;
+import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.oredict.ShapedOreRecipe;
 
 import java.io.DataOutputStream;
@@ -52,7 +53,7 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
         }
 
         @Override
-        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup, Map<Fluid, Integer> fluidLookup) throws IOException {
             out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.recipeWidth);
             out.writeInt(recipe.recipeHeight);
@@ -94,7 +95,7 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
         }
 
         @Override
-        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup, Map<Fluid, Integer> fluidLookup) throws IOException {
             out.writeInt(recipe.getRecipeOutput().stackSize);
 
             int width = ReflectionHelper.getPrivateValue(ShapedOreRecipe.class, recipe, "width");

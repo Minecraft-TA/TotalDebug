@@ -20,6 +20,8 @@ import it.unimi.dsi.fastutil.objects.Object2IntOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.fluids.Fluid;
+import net.minecraftforge.fluids.FluidRegistry;
 
 import java.io.DataOutputStream;
 import java.io.File;
@@ -83,6 +85,14 @@ public class RecipeDumper extends DataDumper {
                     out.writeUTF(String.valueOf(entry.getKey().getTagCompound()));
                 }
 
+                // Write fluid lookup
+                Map<Fluid, Integer> fluidLookup = FluidRegistry.getRegisteredFluidIDsByFluid();
+                out.writeInt(fluidLookup.size());
+                for (Map.Entry<Fluid, Integer> entry : fluidLookup.entrySet()) {
+                    out.writeInt(entry.getValue());
+                    out.writeUTF(entry.getKey().getName());
+                }
+
                 // Write the recipes
                 out.writeInt(itemStackListMap.size());
 
@@ -98,13 +108,17 @@ public class RecipeDumper extends DataDumper {
                         out.writeUTF(iRecipe.getRecipeType());
 
                         // Write the recipe
-                        iRecipe.writeRecipe(out, itemStackLookup);
+                        iRecipe.writeRecipe(out, itemStackLookup, fluidLookup);
                     }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
                 TotalDebug.LOGGER.info(e.getMessage());
             }
+
+            TotalDebug.LOGGER.info("Recipe dump complete!");
+            // Reset the recipe serializers
+            RecipeHandlerSerializerFactory.reset();
         }).exceptionally(throwable -> {
             throwable.printStackTrace();
             TotalDebug.LOGGER.info(throwable.getMessage());

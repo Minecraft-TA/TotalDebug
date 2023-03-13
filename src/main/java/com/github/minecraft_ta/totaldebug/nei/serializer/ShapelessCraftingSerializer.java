@@ -6,6 +6,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.item.crafting.ShapelessRecipes;
+import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.oredict.ShapelessOreRecipe;
 
@@ -45,7 +46,7 @@ public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer
         }
 
         @Override
-        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup, Map<Fluid, Integer> fluidLookup) throws IOException {
             out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.recipeItems.size());
             for (Object recipeItem : recipe.recipeItems) {
@@ -88,7 +89,7 @@ public class ShapelessCraftingSerializer extends AbstractRecipeHandlerSerializer
         }
 
         @Override
-        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup) throws IOException {
+        public void writeRecipe(DataOutputStream out, Object2IntMap<ItemStack> itemStackLookup, Map<Fluid, Integer> fluidLookup) throws IOException {
             out.writeInt(recipe.getRecipeOutput().stackSize);
             out.writeInt(recipe.getInput().size());
             for (Object o : recipe.getInput()) {
