@@ -16,14 +16,17 @@ public class GTRecipeSerializer extends AbstractRecipeHandlerSerializer {
     @Override
     boolean loadRecipesImpl(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems) {
         for (GT_Recipe.GT_Recipe_Map recipeMap : GT_Recipe.GT_Recipe_Map.sMappings) {
+            if (!recipeMap.mNEIAllowed) continue;
             for (GT_Recipe recipe : recipeMap.mRecipeList) {
-                GregtechRecipe serializer = new GregtechRecipe(recipe, recipeMap.mUnlocalizedName);
-                ItemStack[] outputs = recipe.mOutputs;
-                for (ItemStack output : outputs) {
-                    if (output == null) continue;
-                    recipes.computeIfAbsent(output, itemStack -> new ArrayList<>()).add(serializer);
+                if (recipe.mEnabled) {
+                    GregtechRecipe serializer = new GregtechRecipe(recipe, recipeMap.mUnlocalizedName);
+                    ItemStack[] outputs = recipe.mOutputs;
+                    for (ItemStack output : outputs) {
+                        if (output == null) continue;
+                        recipes.computeIfAbsent(output, itemStack -> new ArrayList<>()).add(serializer);
+                    }
+                    serializer.discoverItems(items, newItems);
                 }
-                serializer.discoverItems(items, newItems);
             }
         }
         return true;
