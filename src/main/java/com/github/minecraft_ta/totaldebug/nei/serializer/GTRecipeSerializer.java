@@ -45,16 +45,22 @@ public class GTRecipeSerializer extends AbstractRecipeHandlerSerializer {
             ItemStack[] inputs = recipe.mInputs;
             out.writeInt(inputs.length);
             for (ItemStack input : inputs) {
-                if (input == null) continue; // Empty slots should not play a role in the recipe I guess
-                out.writeInt(itemStackLookup.getInt(input));
-                out.writeInt(input.stackSize);
+                if (input == null) {
+                    out.writeInt(-1);
+                } else {
+                    out.writeInt(itemStackLookup.getInt(input));
+                    out.writeInt(input.stackSize);
+                }
             }
             ItemStack[] outputs = recipe.mOutputs;
             out.writeInt(outputs.length);
             for (ItemStack output : outputs) {
-                if (output == null) continue;
-                out.writeInt(itemStackLookup.getInt(output));
-                out.writeInt(output.stackSize);
+                if (output == null) {
+                    out.writeInt(-1);
+                } else {
+                    out.writeInt(itemStackLookup.getInt(output));
+                    out.writeInt(output.stackSize);
+                }
             }
 
             // Fluids
