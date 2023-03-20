@@ -123,6 +123,7 @@ public class RecipeDumper extends DataDumper {
         }).exceptionally(throwable -> {
             throwable.printStackTrace();
             TotalDebug.LOGGER.info(throwable.getMessage());
+            RecipeHandlerSerializerFactory.reset();
             return null;
         });
     }
