@@ -14,7 +14,8 @@ import java.util.*;
 public class GTRecipeSerializer extends AbstractRecipeHandlerSerializer {
 
     @Override
-    boolean loadRecipesImpl(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems) {
+    public Map<ItemStack, List<IRecipeSerializer>> serializeRecipes(ICraftingHandler handler, Collection<ItemStack> items) {
+        Map<ItemStack, List<IRecipeSerializer>> recipes = new HashMap<>();
         for (GT_Recipe.GT_Recipe_Map recipeMap : GT_Recipe.GT_Recipe_Map.sMappings) {
             if (!recipeMap.mNEIAllowed) continue;
             for (GT_Recipe recipe : recipeMap.mRecipeList) {
@@ -25,11 +26,10 @@ public class GTRecipeSerializer extends AbstractRecipeHandlerSerializer {
                         if (output == null) continue;
                         recipes.computeIfAbsent(output, itemStack -> new ArrayList<>()).add(serializer);
                     }
-                    serializer.discoverItems(items, newItems);
                 }
             }
         }
-        return true;
+        return recipes;
     }
 
 

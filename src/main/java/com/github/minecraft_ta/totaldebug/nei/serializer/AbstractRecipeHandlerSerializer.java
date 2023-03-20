@@ -1,36 +1,53 @@
 package com.github.minecraft_ta.totaldebug.nei.serializer;
 
 import codechicken.nei.recipe.ICraftingHandler;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.item.ItemStack;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class AbstractRecipeHandlerSerializer {
-
     private boolean finished = false;
+    private final ReentrantLock lock = new ReentrantLock();
 
-    public void loadRecipes(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems) {
-        if (!this.finished) {
-            this.finished = loadRecipesImpl(handler, items, recipes, newItems);
+    /**
+     * Serializes all recipes for the given handler using the given items.
+     *
+     * @param handler The handler to serialize recipes for
+     * @param items   The items to serialize recipes
+     * @return A map of all recipes for the given items
+     */
+    public abstract Map<ItemStack, List<IRecipeSerializer>> serializeRecipes(ICraftingHandler handler, Collection<ItemStack> items);
+
+    public Map<ItemStack, List<IRecipeSerializer>> loadRecipes(ICraftingHandler handler, Collection<ItemStack> items) {
+        this.lock.lock();
+        try {
+            if (!this.finished) {
+                Map<ItemStack, List<IRecipeSerializer>> recipes = this.serializeRecipes(handler, items);
+                this.finished = true;
+                return recipes;
+            }
+        } finally {
+            this.lock.unlock();
         }
+        return Collections.emptyMap();
+    }
+
+    public Set<ItemStack> discoverItems(List<IRecipeSerializer> serializers, Collection<ItemStack> items) {
+        Set<ItemStack> newItems = new ObjectOpenHashSet<>();
+        for (IRecipeSerializer serializer : serializers) {
+            serializer.discoverItems(items, newItems);
+        }
+        return newItems;
+    }
+
+    public boolean isFinished() {
+        return this.finished;
     }
 
     public void reset() {
         this.finished = false;
     }
-
-    /**
-     * Serializes all recipes for the given handler using the given items.
-     *
-     * @param handler  The handler to serialize recipes for
-     * @param items    The items to serialize recipes
-     * @param recipes  The map to add the recipes to
-     * @param newItems Newly discovered items for further processing
-     * @return True if all recipes have been serialized, false if more processing is required
-     */
-    abstract boolean loadRecipesImpl(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems);
 
 }

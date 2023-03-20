@@ -6,7 +6,6 @@ import codechicken.nei.NEIClientUtils;
 import codechicken.nei.api.API;
 import codechicken.nei.config.DataDumper;
 import codechicken.nei.recipe.GuiCraftingRecipe;
-import codechicken.nei.recipe.ICraftingHandler;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.integration.NotEnoughItemIntegration;
 import com.github.minecraft_ta.totaldebug.nei.serializer.AbstractRecipeHandlerSerializer;
@@ -15,10 +14,7 @@ import com.github.minecraft_ta.totaldebug.nei.serializer.RecipeHandlerSerializer
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import it.unimi.dsi.fastutil.Hash;
-import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenCustomHashMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectOpenCustomHashSet;
+import it.unimi.dsi.fastutil.objects.*;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
@@ -69,8 +65,7 @@ public class RecipeDumper extends DataDumper {
             for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : itemStackListMap.entrySet()) {
                 itemStackLookup.put(itemStackListEntry.getKey(), i++);
                 // Remove ItemStacks that have no recipes
-                if (itemStackListEntry.getValue().isEmpty())
-                    itemStackListMap.remove(itemStackListEntry.getKey());
+                if (itemStackListEntry.getValue().isEmpty()) itemStackListMap.remove(itemStackListEntry.getKey());
             }
 
             File outputFile = new File(CommonUtils.getMinecraftDir(), "dumps/recipe-export.bin");
@@ -160,33 +155,48 @@ public class RecipeDumper extends DataDumper {
 
 
     private Map<ItemStack, List<IRecipeSerializer>> loadRecipes(Collection<ItemStack> items, Set<ItemStack> oldItems) {
-        Map<ItemStack, List<IRecipeSerializer>> recipes = new Object2ObjectOpenCustomHashMap<>(STRATEGY);
-        Set<ItemStack> newItems = new ObjectOpenCustomHashSet<>(STRATEGY);
+        Object2ObjectMap<ItemStack, List<IRecipeSerializer>> allRecipes = Object2ObjectMaps.synchronize(new Object2ObjectOpenCustomHashMap<>(STRATEGY));
+        ObjectSet<ItemStack> allItems = ObjectSets.synchronize(new ObjectOpenCustomHashSet<>(STRATEGY));
 
-        for (ICraftingHandler craftinghandler : GuiCraftingRecipe.craftinghandlers) {
-            AbstractRecipeHandlerSerializer recipeHandlerSerializer = RecipeHandlerSerializerFactory.getRecipeHandlerSerializer(craftinghandler.getClass());
-            if (recipeHandlerSerializer != null) {
-                recipeHandlerSerializer.loadRecipes(craftinghandler, items, recipes, newItems);
+        // Load recipes and discover new items in parallel
+        GuiCraftingRecipe.craftinghandlers.parallelStream().forEach(recipeHandler -> {
+            AbstractRecipeHandlerSerializer handlerSerializer = RecipeHandlerSerializerFactory.getRecipeHandlerSerializer(recipeHandler.getClass());
+            if (handlerSerializer != null && !handlerSerializer.isFinished()) {
+                Map<ItemStack, List<IRecipeSerializer>> recipes = handlerSerializer.loadRecipes(recipeHandler, items);
+
+                Set<ItemStack> newItems = new ObjectOpenCustomHashSet<>(STRATEGY);
+                for (List<IRecipeSerializer> value : recipes.values()) {
+                    newItems.addAll(handlerSerializer.discoverItems(value, oldItems));
+                }
+
+                // Merge the new recipes into the list of existing recipes
+                mergeRecipes(allRecipes, recipes);
+                allItems.addAll(newItems);
             }
-        }
+        });
 
         // Get potential recipes for the new items
-        if (!newItems.isEmpty()) {
+        if (!allItems.isEmpty()) {
             // Add to recipes for the lookup table later
-            for (ItemStack newItem : newItems) {
-                recipes.computeIfAbsent(newItem, k -> new ArrayList<>());
+            for (ItemStack newItem : allItems) {
+                allRecipes.computeIfAbsent(newItem, k -> new ArrayList<>());
             }
 
             oldItems.addAll(items);
 
             // Merge the new recipes into the list of existing recipes
-            Map<ItemStack, List<IRecipeSerializer>> recipeMap = loadRecipes(newItems, oldItems);
-            for (Map.Entry<ItemStack, List<IRecipeSerializer>> entry : recipeMap.entrySet()) {
-                recipes.get(entry.getKey()).addAll(entry.getValue());
-            }
+            mergeRecipes(allRecipes, loadRecipes(allItems, oldItems));
         }
+        return allRecipes;
+    }
 
-        return recipes;
+    private void mergeRecipes(Map<ItemStack, List<IRecipeSerializer>> allRecipes, Map<ItemStack, List<IRecipeSerializer>> recipes) {
+        for (Map.Entry<ItemStack, List<IRecipeSerializer>> entry : recipes.entrySet()) {
+            allRecipes.merge(entry.getKey(), entry.getValue(), (oldRecipes, newRecipes) -> {
+                oldRecipes.addAll(newRecipes);
+                return oldRecipes;
+            });
+        }
     }
 
     @Override

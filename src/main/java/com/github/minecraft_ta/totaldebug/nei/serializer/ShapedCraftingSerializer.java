@@ -22,8 +22,9 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
      * {@inheritDoc}
      */
     @Override
-    boolean loadRecipesImpl(ICraftingHandler handler, Collection<ItemStack> items, Map<ItemStack, List<IRecipeSerializer>> recipes, Set<ItemStack> newItems) {
-        // We only need to do this once
+    public Map<ItemStack, List<IRecipeSerializer>> serializeRecipes(ICraftingHandler handler, Collection<ItemStack> items) {
+        Map<ItemStack, List<IRecipeSerializer>> recipes = new HashMap<>();
+
         for (Object o : CraftingManager.getInstance().getRecipeList()) {
             if (o instanceof IRecipe) {
                 IRecipe recipe = (IRecipe) o;
@@ -35,14 +36,12 @@ public class ShapedCraftingSerializer extends AbstractRecipeHandlerSerializer {
                 }
                 if (serializer != null) {
                     recipes.computeIfAbsent(recipe.getRecipeOutput(), itemStack -> new ArrayList<>()).add(serializer);
-                    serializer.discoverItems(items, newItems);
                 }
             }
         }
 
-        return true;
+        return recipes;
     }
-
 
     static class ShapedRecipeSerializer implements IRecipeSerializer {
 
