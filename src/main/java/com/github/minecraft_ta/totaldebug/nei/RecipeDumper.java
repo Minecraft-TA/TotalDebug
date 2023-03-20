@@ -79,10 +79,11 @@ public class RecipeDumper extends DataDumper {
                 out.writeInt(itemStackLookup.size());
                 for (Map.Entry<ItemStack, Integer> entry : itemStackLookup.entrySet()) {
                     out.writeInt(entry.getValue());
-                    out.writeUTF(entry.getKey().getUnlocalizedName());
-                    out.writeUTF(entry.getKey().getDisplayName());
-                    out.writeInt(entry.getKey().getItemDamage());
-                    out.writeUTF(String.valueOf(entry.getKey().getTagCompound()));
+                    ItemStack stack = entry.getKey();
+                    writeUnlocalizedName(out, stack);
+                    writeDisplayName(out, stack);
+                    out.writeInt(stack.getItemDamage());
+                    out.writeUTF(String.valueOf(stack.getTagCompound()));
                 }
 
                 // Write fluid lookup
@@ -124,6 +125,36 @@ public class RecipeDumper extends DataDumper {
             TotalDebug.LOGGER.info(throwable.getMessage());
             return null;
         });
+    }
+
+    private void writeUnlocalizedName(DataOutputStream out, ItemStack stack) throws IOException {
+        try {
+            out.writeUTF(stack.getUnlocalizedName());
+        } catch (Exception e) {
+            // Try to write itemstack with damage 0 and no nbt instead
+            try {
+                TotalDebug.LOGGER.error("Failed to get unlocalized name for itemstack " + stack, e);
+                out.writeUTF(new ItemStack(stack.getItem(), 1, 0).getUnlocalizedName());
+            } catch (Exception e1) {
+                TotalDebug.LOGGER.error("Failed to get unlocalized name for itemstack " + stack, e1);
+                out.writeUTF("null");
+            }
+        }
+    }
+
+    private void writeDisplayName(DataOutputStream out, ItemStack stack) throws IOException {
+        try {
+            out.writeUTF(stack.getDisplayName());
+        } catch (Exception e) {
+            // Try to write itemstack with damage 0 and no nbt instead
+            try {
+                TotalDebug.LOGGER.error("Failed to get display name for itemstack " + stack, e);
+                out.writeUTF(new ItemStack(stack.getItem(), 1, 0).getDisplayName());
+            } catch (Exception e1) {
+                TotalDebug.LOGGER.error("Failed to get display name for itemstack " + stack, e1);
+                writeUnlocalizedName(out, stack);
+            }
+        }
     }
 
 
