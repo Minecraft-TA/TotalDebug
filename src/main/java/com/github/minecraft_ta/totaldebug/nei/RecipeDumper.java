@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.nei;
 
 import codechicken.core.CommonUtils;
+import codechicken.lib.vec.Rectangle4i;
 import codechicken.nei.ItemList;
 import codechicken.nei.NEIClientUtils;
 import codechicken.nei.api.API;
@@ -8,6 +9,7 @@ import codechicken.nei.config.DataDumper;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.integration.NotEnoughItemIntegration;
+import com.github.minecraft_ta.totaldebug.nei.imageexport.ItemStackDumper;
 import com.github.minecraft_ta.totaldebug.nei.serializer.AbstractRecipeHandlerSerializer;
 import com.github.minecraft_ta.totaldebug.nei.serializer.IRecipeSerializer;
 import com.github.minecraft_ta.totaldebug.nei.serializer.RecipeHandlerSerializerFactory;
@@ -15,6 +17,7 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import it.unimi.dsi.fastutil.Hash;
 import it.unimi.dsi.fastutil.objects.*;
+import net.minecraft.client.Minecraft;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
@@ -41,6 +44,8 @@ public class RecipeDumper extends DataDumper {
     };
     private boolean initialized;
 
+    private static final int[] resolutions = new int[]{16, 32, 48, 64, 128, 256};
+
     public RecipeDumper(String name) {
         super(name);
     }
@@ -57,15 +62,20 @@ public class RecipeDumper extends DataDumper {
 
     private void dumpRecipes() {
         CompletableFuture.runAsync(() -> {
-            Map<ItemStack, List<IRecipeSerializer>> itemStackListMap = loadRecipes(ItemList.items, new ObjectOpenCustomHashSet<>(STRATEGY));
+            Map<ItemStack, List<IRecipeSerializer>> recipes = loadRecipes(ItemList.items, new ObjectOpenCustomHashSet<>(STRATEGY));
 
             // Create a lookup map for the itemstacks
             Object2IntMap<ItemStack> itemStackLookup = new Object2IntOpenCustomHashMap<>(STRATEGY);
             int i = 0;
-            for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : itemStackListMap.entrySet()) {
+            for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : recipes.entrySet()) {
                 itemStackLookup.put(itemStackListEntry.getKey(), i++);
                 // Remove ItemStacks that have no recipes
-                if (itemStackListEntry.getValue().isEmpty()) itemStackListMap.remove(itemStackListEntry.getKey());
+                if (itemStackListEntry.getValue().isEmpty()) recipes.remove(itemStackListEntry.getKey());
+            }
+
+            // Export images for the itemstacks if the user wants to
+            if (getMode() == 1) {
+                Minecraft.getMinecraft().displayGuiScreen(new ItemStackDumper(this, new ArrayList<>(itemStackLookup.keySet()), getRes()));
             }
 
             File outputFile = new File(CommonUtils.getMinecraftDir(), "dumps/recipe-export.bin");
@@ -90,9 +100,9 @@ public class RecipeDumper extends DataDumper {
                 }
 
                 // Write the recipes
-                out.writeInt(itemStackListMap.size());
+                out.writeInt(recipes.size());
 
-                for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : itemStackListMap.entrySet()) {
+                for (Map.Entry<ItemStack, List<IRecipeSerializer>> itemStackListEntry : recipes.entrySet()) {
                     // Write the itemstack id
                     out.writeInt(itemStackLookup.getInt(itemStackListEntry.getKey()));
 
@@ -205,11 +215,47 @@ public class RecipeDumper extends DataDumper {
     }
 
     @Override
+    public void draw(int mousex, int mousey, float frame) {
+        super.draw(mousex, mousey, frame);
+        if (getMode() == 1) {
+            int res = getRes();
+            drawButton(mousex, mousey, resButtonSize(), res + "x" + res);
+        }
+    }
+
+    @Override
+    public String modeButtonText() {
+        return translateN(name + ".mode." + getMode());
+    }
+
+    @Override
     public void mouseClicked(int mousex, int mousey, int button) {
         if (dumpButtonSize().contains(mousex, mousey)) {
             NEIClientUtils.playClickSound();
             dumpRecipes();
+        } else if (modeCount() > 1 && modeButtonSize().contains(mousex, mousey)) {
+            NEIClientUtils.playClickSound();
+            getTag().setIntValue((getMode() + 1) % modeCount());
+        } else if (getMode() == 1 && resButtonSize().contains(mousex, mousey)) {
+            NEIClientUtils.playClickSound();
+            getTag(name + ".res").setIntValue((renderTag(name + ".res").getIntValue(0) + 1) % resolutions.length);
         }
+    }
+
+    public int getRes() {
+        int i = renderTag(name + ".res").getIntValue(0);
+        if (i >= resolutions.length || i < 0) renderTag().setIntValue(i = 0);
+        return resolutions[i];
+    }
+
+    public Rectangle4i resButtonSize() {
+        int width = 50;
+        return new Rectangle4i(modeButtonSize().x - width - 6, 0, width, 20);
+    }
+
+    @Override
+    public int modeCount() {
+        return 2;
     }
 
     @SubscribeEvent

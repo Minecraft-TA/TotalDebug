@@ -35,3 +35,8 @@ companion_app.download_start=Downloading companion app version: %s
 companion_app.open_file=Opening file: %s
 companion_app.dumping_minecraft_classes=Dumping minecraft classes...
 companion_app.start_indexing=Indexing classes...
+
+#nei
+tools.dump.recipes=Dump Recipes
+tools.dump.recipes.mode.0=Recipes
+tools.dump.recipes.mode.1=Images + Recipes
