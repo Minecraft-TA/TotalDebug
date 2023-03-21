@@ -155,8 +155,8 @@ public class RecipeDumper extends DataDumper {
 
 
     private Map<ItemStack, List<IRecipeSerializer>> loadRecipes(Collection<ItemStack> items, Set<ItemStack> oldItems) {
-        Object2ObjectMap<ItemStack, List<IRecipeSerializer>> allRecipes = Object2ObjectMaps.synchronize(new Object2ObjectOpenCustomHashMap<>(STRATEGY));
-        ObjectSet<ItemStack> allItems = ObjectSets.synchronize(new ObjectOpenCustomHashSet<>(STRATEGY));
+        Object2ObjectMap<ItemStack, List<IRecipeSerializer>> allRecipes = new Object2ObjectOpenCustomHashMap<>(STRATEGY);
+        ObjectSet<ItemStack> allItems = new ObjectOpenCustomHashSet<>(STRATEGY);
 
         // Load recipes and discover new items in parallel
         GuiCraftingRecipe.craftinghandlers.parallelStream().forEach(recipeHandler -> {
@@ -170,8 +170,13 @@ public class RecipeDumper extends DataDumper {
                 }
 
                 // Merge the new recipes into the list of existing recipes
-                mergeRecipes(allRecipes, recipes);
-                allItems.addAll(newItems);
+                synchronized (allRecipes) {
+                    mergeRecipes(allRecipes, recipes);
+                }
+
+                synchronized (allItems) {
+                    allItems.addAll(newItems);
+                }
             }
         });
 
