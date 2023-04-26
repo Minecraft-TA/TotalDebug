@@ -114,7 +114,7 @@ public class CommonProxy {
         }
     }
 
-    private static class PlayerLeaveHandler {
+    public static class PlayerLeaveHandler {
         @SubscribeEvent
         public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
             ScriptRunner.stopAllScripts(event.player);
