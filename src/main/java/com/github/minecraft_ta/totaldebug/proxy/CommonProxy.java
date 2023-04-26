@@ -1,8 +1,7 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
-import com.github.minecraft_ta.totaldebug.block.TickBlock;
-import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.block.TickBlock;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.chunkGrid.ChunkGridManagerClient;
@@ -15,6 +14,7 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ChunkGridRequestInfo
 import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
+import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.IFMLSidedHandler;
@@ -26,7 +26,7 @@ import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.common.registry.GameRegistry;
 import cpw.mods.fml.relauncher.Side;
-import net.minecraftforge.common.MinecraftForge;
+import cpw.mods.fml.relauncher.SideOnly;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -34,8 +34,8 @@ import java.util.List;
 
 public class CommonProxy {
 
-    private final ChunkGridManagerServer chunkGridManagerServer = new ChunkGridManagerServer();
-    private final ChunkGridManagerClient chunkGridManagerClient = new ChunkGridManagerClient();
+    private ChunkGridManagerServer chunkGridManagerServer;
+    private ChunkGridManagerClient chunkGridManagerClient;
 
     protected final List<Runnable> preTickTasks = new ArrayList<>();
     protected final List<Runnable> postTickTasks = new ArrayList<>();
@@ -70,10 +70,15 @@ public class CommonProxy {
     }
 
     public ChunkGridManagerServer getChunkGridManagerServer() {
+        if (this.chunkGridManagerServer == null)
+            this.chunkGridManagerServer = new ChunkGridManagerServer();
         return this.chunkGridManagerServer;
     }
 
+    @SideOnly(Side.CLIENT)
     public ChunkGridManagerClient getChunkGridManagerClient() {
+        if (this.chunkGridManagerClient == null)
+            this.chunkGridManagerClient = new ChunkGridManagerClient();
         return this.chunkGridManagerClient;
     }
 
