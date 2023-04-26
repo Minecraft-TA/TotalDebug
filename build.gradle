@@ -70,7 +70,7 @@ dependencies {
     implementation 'io.github.classgraph:classgraph:4.8.146'
     implementation "org.bitbucket.mstrobel:procyon-compilertools:0.6.0"
     implementation "com.github.tth05:jindex:0.0.45"
-    implementation "com.github.GTNewHorizons:NotEnoughItems:2.3.5-GTNH:dev"
+    implementation "com.github.GTNewHorizons:NotEnoughItems:2.3.45-GTNH"
     implementation "net.industrial-craft:industrialcraft-2:2.2.828-experimental:dev"
     implementation "com.github.GTNewHorizons:GT5-Unofficial:5.09.41.145:dev"
 
