@@ -3,12 +3,11 @@ package com.github.minecraft_ta.totaldebug.util.compiler;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
 import com.google.common.collect.Lists;
-import com.strobel.compilerservices.UnsafeAccess;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.lang3.SystemUtils;
-import sun.misc.Unsafe;
+import org.jetbrains.annotations.NotNull;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -19,6 +18,8 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.CodeSource;
+import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +27,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class InMemoryJavaCompiler {
+
+    private static final ScriptClassLoader SCRIPT_CLASS_LOADER = new ScriptClassLoader();
 
     private static final IClassTransformer TRANSFORMER = new RuntimeMappingsTransformer(true);
     private static final boolean DEOBFUSCATED_ENVIRONMENT = (Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment");
@@ -57,7 +60,7 @@ public class InMemoryJavaCompiler {
                 String className = classNames[i];
 
                 byte[] bytes = DEOBFUSCATED_ENVIRONMENT ? outputObject.getByteCode() : TRANSFORMER.transform(className, className, outputObject.getByteCode());
-                loadedClasses.add(((Unsafe) UnsafeAccess.unsafe()).defineClass(className, bytes, 0, bytes.length, InMemoryJavaCompiler.class.getClassLoader(), null));
+                loadedClasses.add(SCRIPT_CLASS_LOADER.defineClass0(className, bytes, 0, bytes.length));
             }
 
             return loadedClasses;
@@ -69,11 +72,15 @@ public class InMemoryJavaCompiler {
     public static String constructClassPathArgument() {
         try {
             return Stream.concat(
-                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream().filter(url -> !url.toString().contains("forge-") && !url.toString().endsWith("/1.7.10.jar")),
+                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
+                            .filter(url -> {
+                                String str = url.toString();
+                                return !str.contains("forge-") && !str.endsWith("/1.7.10.jar") && !(str.contains("1.7.10") && str.contains("minecraft"));
+                            }),
                     Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
             ).map(url -> {
                 try {
-                    return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name());
+                    return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
                 } catch (UnsupportedEncodingException ignored) {
                     return null;
                 }
@@ -91,6 +98,18 @@ public class InMemoryJavaCompiler {
 
         public InMemoryCompilationFailedException(Throwable cause) {
             super(cause);
+        }
+    }
+
+    private static class ScriptClassLoader extends SecureClassLoader {
+
+        public ScriptClassLoader() {
+            super(InMemoryJavaCompiler.class.getClassLoader());
+        }
+
+        @NotNull
+        public Class<?> defineClass0(String name, byte[] b, int off, int len) {
+            return super.defineClass(name, b, off, len, (CodeSource) null);
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totaldebug.util.mappings;
 
+import com.github.minecraft_ta.totaldebug.util.unchecked.Unchecked;
+import com.github.minecraft_ta.totaldebug.util.unchecked.UncheckedBiConsumer;
+import com.github.minecraft_ta.totaldebug.util.unchecked.UncheckedSupplier;
 import org.apache.commons.compress.utils.IOUtils;
 
 import java.io.BufferedInputStream;
@@ -8,7 +11,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
@@ -17,7 +19,7 @@ import java.util.zip.ZipOutputStream;
 
 public class ZipUtils {
 
-    public static void readAllFiles(Path path, Predicate<String> entryFilter, BiConsumer<String, UncheckedSupplier<byte[]>> consumer) {
+    public static void readAllFiles(Path path, Predicate<String> entryFilter, UncheckedBiConsumer<String, UncheckedSupplier<byte[]>> consumer) {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (ZipInputStream inputStream = new ZipInputStream(new BufferedInputStream(Files.newInputStream(path), 64 * 1024))) {
             ZipEntry entry;
@@ -32,7 +34,7 @@ public class ZipUtils {
                 });
             }
         } catch (Throwable t) {
-            UncheckedSupplier.propagate(t);
+            Unchecked.propagate(t);
         }
     }
 
@@ -41,23 +43,19 @@ public class ZipUtils {
             CRC32 crc32 = new CRC32();
             writer.accept(outputStream, crc32);
         } catch (Throwable t) {
-            UncheckedSupplier.propagate(t);
+            Unchecked.propagate(t);
         }
     }
 
-    public static void writeStoredEntry(ZipOutputStream outputStream, CRC32 crc, String name, byte[] data) {
+    public static void writeStoredEntry(ZipOutputStream outputStream, CRC32 crc, String name, byte[] data) throws IOException {
         ZipEntry entry = new ZipEntry(name);
-        try {
-            entry.setMethod(ZipEntry.STORED);
-            entry.setSize(data.length);
-            crc.reset();
-            crc.update(data);
-            entry.setCrc(crc.getValue());
-            outputStream.putNextEntry(entry);
-            outputStream.write(data);
-            outputStream.closeEntry();
-        } catch (IOException ignored) {
-            ignored.printStackTrace();
-        }
+        entry.setMethod(ZipEntry.STORED);
+        entry.setSize(data.length);
+        crc.reset();
+        crc.update(data);
+        entry.setCrc(crc.getValue());
+        outputStream.putNextEntry(entry);
+        outputStream.write(data);
+        outputStream.closeEntry();
     }
 }

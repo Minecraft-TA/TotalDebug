@@ -233,7 +233,7 @@ public class CompanionApp {
      */
     public boolean isRunning() {
         return this.companionAppProcess != null && this.companionAppProcess.isAlive();
-        //return true;
+//        return true;
     }
 
     public Client getClient() {

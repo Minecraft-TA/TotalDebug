@@ -1,8 +1,9 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.unchecked;
 
 import java.util.function.Supplier;
 
-interface UncheckedSupplier<T> extends Supplier<T> {
+@FunctionalInterface
+public interface UncheckedSupplier<T> extends Supplier<T> {
 
     T uncheckedGet() throws Throwable;
 
@@ -11,12 +12,8 @@ interface UncheckedSupplier<T> extends Supplier<T> {
         try {
             return uncheckedGet();
         } catch (Throwable e) {
-            propagate(e);
+            Unchecked.propagate(e);
             throw new IllegalStateException("unreachable");
         }
-    }
-
-    static <T extends Throwable> void propagate(Throwable e) throws T {
-        throw (T) e;
     }
 }

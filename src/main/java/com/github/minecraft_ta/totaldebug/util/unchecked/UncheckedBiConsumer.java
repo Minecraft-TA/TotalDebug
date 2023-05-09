@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.unchecked;
 
 import java.util.function.BiConsumer;
 
@@ -12,7 +12,7 @@ public interface UncheckedBiConsumer<T, U> extends BiConsumer<T, U> {
         try {
             uncheckedAccept(t, u);
         } catch (Throwable throwable) {
-            UncheckedSupplier.propagate(throwable);
+            Unchecked.propagate(throwable);
         }
     }
 }
