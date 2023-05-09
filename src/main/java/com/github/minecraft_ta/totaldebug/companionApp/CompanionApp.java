@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.companionApp;
 
+import com.github.minecraft_ta.totaldebug.Tags;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.CompanionAppReadyMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.FocusWindowMessage;
@@ -434,7 +435,7 @@ public class CompanionApp {
                 loadNewestCompanionAppVersion();
 
                 TotalDebug.LOGGER.info("Successfully loaded meta file. TotalDebug: {}, Companion: {}->{}",
-                        TotalDebug.VERSION, this.currentCompanionAppVersion, this.newestCompatibleCompanionAppVersion);
+                        Tags.VERSION, this.currentCompanionAppVersion, this.newestCompatibleCompanionAppVersion);
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Unable to read meta file", e);
                 try {
@@ -499,7 +500,7 @@ public class CompanionApp {
                 byte[] responseData = outputStream.toByteArray();
 
                 JsonArray jsonArray = GSON.fromJson(new String(responseData, StandardCharsets.UTF_8), JsonArray.class);
-                String totalDebugVersion = "v" + TotalDebug.VERSION;
+                String totalDebugVersion = "v" + Tags.VERSION;
 
                 //find newest matching version
                 for (int i = 0; i < jsonArray.size(); i++) {

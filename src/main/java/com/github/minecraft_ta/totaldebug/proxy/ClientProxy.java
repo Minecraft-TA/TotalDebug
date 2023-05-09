@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.proxy;
 
-import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import com.github.minecraft_ta.totaldebug.KeyBindings;
 import com.github.minecraft_ta.totaldebug.block.tile.TickBlockTile;
 import com.github.minecraft_ta.totaldebug.command.decompile.DecompileCommand;
@@ -11,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.handler.KeyInputHandler;
 import com.github.minecraft_ta.totaldebug.handler.PacketLogger;
 import com.github.minecraft_ta.totaldebug.handler.TabOverlayRenderHandler;
 import com.github.minecraft_ta.totaldebug.render.TickBlockTileRenderer;
+import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
 import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -20,7 +20,6 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraftforge.client.ClientCommandHandler;
-import net.minecraftforge.client.model.AdvancedModelLoader;
 import net.minecraftforge.common.MinecraftForge;
 
 import java.nio.file.Path;

@@ -1,10 +1,10 @@
 [
   {
-    "modid": "total_debug",
-    "name": "TotalDebug",
+    "modid": "${modId}",
+    "name": "${modName}",
     "description": "",
-    "version": "${version}",
-    "mcversion": "1.12.2",
+    "version": "${modVersion}",
+    "mcversion": "1.7.10",
     "url": "",
     "updateUrl": "",
     "authorList": ["tth05", "Pelotrio"],

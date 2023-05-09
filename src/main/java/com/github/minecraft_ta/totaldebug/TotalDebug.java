@@ -17,18 +17,14 @@ import net.minecraftforge.common.config.Configuration;
 import org.apache.logging.log4j.Logger;
 
 @Mod(
-        modid = TotalDebug.MOD_ID,
-        name = TotalDebug.MOD_NAME,
-        version = TotalDebug.VERSION,
+        modid = Tags.MODID,
+        name = Tags.MODNAME,
+        version = Tags.VERSION,
         guiFactory = "com.github.minecraft_ta.totaldebug.gui.config.ModGuiFactory"
 )
 public class TotalDebug {
 
-    public static final String MOD_ID = "total_debug";
-    public static final String MOD_NAME = "TotalDebug";
-    public static final String VERSION = "1.8.0";
-
-    @Mod.Instance(MOD_ID)
+    @Mod.Instance(Tags.MODID)
     public static TotalDebug INSTANCE;
 
     @SidedProxy(clientSide = "com.github.minecraft_ta.totaldebug.proxy.ClientProxy", serverSide = "com.github.minecraft_ta.totaldebug.proxy.ServerProxy")
@@ -36,7 +32,7 @@ public class TotalDebug {
 
     public static Logger LOGGER;
 
-    public final SimpleNetworkWrapper network = NetworkRegistry.INSTANCE.newSimpleChannel(MOD_ID);
+    public final SimpleNetworkWrapper network = NetworkRegistry.INSTANCE.newSimpleChannel(Tags.MODID);
     public final TotalDebugConfig config = new TotalDebugConfig();
 
     @Mod.EventHandler
@@ -56,13 +52,13 @@ public class TotalDebug {
         ScriptRunner.stopAllScripts();
     }
 
-    @GameRegistry.ObjectHolder(MOD_ID)
+    @GameRegistry.ObjectHolder(Tags.MODID)
     public static class Blocks {
 
         public static final TickBlock TICK_BLOCK = null;
     }
 
-    @GameRegistry.ObjectHolder(MOD_ID)
+    @GameRegistry.ObjectHolder(Tags.MODID)
     public static class Items {
 
         public static final ItemBlock TICK_BLOCK_ITEM = null;

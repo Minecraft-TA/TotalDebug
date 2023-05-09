@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.config;
 
+import com.github.minecraft_ta.totaldebug.Tags;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.network.PacketBlockMessage;
 import cpw.mods.fml.client.config.IConfigElement;
@@ -37,7 +38,7 @@ public class TotalDebugConfig {
 
     @SubscribeEvent
     public void onConfigChange(ConfigChangedEvent.OnConfigChangedEvent event) {
-        if (event.modID.equals(TotalDebug.MOD_ID)) {
+        if (event.modID.equals(Tags.MODID)) {
             load();
             syncBlockedPackets();
         }

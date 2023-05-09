@@ -1,0 +1,16 @@
+// Add any additional repositories for your dependencies here
+
+repositories {
+//    maven {
+//        url "https://dvs1.progwml6.com/files/maven"
+//    }
+    maven {
+        url "https://packagecloud.io/tth05/repo/maven2"
+    }
+    maven {
+        url 'https://jitpack.io'
+        mavenContent {
+            includeGroup("com.github.tth05")
+        }
+    }
+}
