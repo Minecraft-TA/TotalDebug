@@ -34,7 +34,7 @@
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
-    shadowImplementation("com.github.tth05:SCNet:d683b47")
+    shadowImplementation("com.github.tth05:SCNet:0fd4fa4")
     shadowImplementation("io.github.classgraph:classgraph:4.8.146")
     shadowImplementation("org.bitbucket.mstrobel:procyon-compilertools:0.6.0")
     shadowImplementation("com.github.tth05:jindex:0.0.45")
