@@ -28,10 +28,12 @@ import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.ChatStyle;
 import net.minecraft.util.EnumChatFormatting;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 
 import javax.annotation.Nullable;
@@ -152,15 +154,19 @@ public class CompanionApp {
         ICommandSender sender = Minecraft.getMinecraft().thePlayer;
 
         if (!isRunning()) {
-            this.metafile.loadNewestCompanionAppVersion();
+            if (!Metafile.areVersionsCompatible("v" + Tags.VERSION, this.metafile.currentCompanionAppVersion)) {
+                this.metafile.loadNewestCompanionAppVersion();
+            } else {
+                // If the current versions are compatible, it's fine if we download the new version after the next
+                // restart of the app. Therefore, we can do the update check asynchronously
+                CompletableFuture.runAsync(this.metafile::loadNewestCompanionAppVersion);
+            }
 
             Path exePath = this.appDir.resolve("TotalDebugCompanion.jar");
 
             if (!Files.exists(exePath) ||
                 !this.metafile.currentCompanionAppVersion.equals(this.metafile.newestCompatibleCompanionAppVersion)) {
                 downloadCompanionApp(this.metafile.newestCompatibleCompanionAppVersion);
-                this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
-                this.metafile.write();
             }
 
             if (!Files.exists(TotalDebug.PROXY.getMinecraftClassDumpPath())) {
@@ -313,7 +319,7 @@ public class CompanionApp {
         long writtenBytes = 0;
         Set<Integer> percentages = new HashSet<>();
 
-        //download and unzip on the fly
+        // Download and unzip on the fly
         try (ZipInputStream zipInputStream = new ZipInputStream(Channels.newInputStream(Channels.newChannel(entity.getContent())))) {
             for (ZipEntry entry = zipInputStream.getNextEntry(); entry != null; entry = zipInputStream.getNextEntry()) {
                 Path toPath = this.appDir.resolve(entry.getName());
@@ -326,7 +332,7 @@ public class CompanionApp {
                         writtenBytes += entry.getCompressedSize();
                     }
 
-                    //Send progress update
+                    // Send progress update
                     int percentage = (int) (writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize);
                     if (!percentages.contains(percentage)) {
                         Minecraft.getMinecraft().thePlayer.addChatMessage(
@@ -337,10 +343,13 @@ public class CompanionApp {
                 }
             }
 
-            //fake 100% message because we won't exactly reach that
+            // Fake 100% message because we won't exactly reach that
             Minecraft.getMinecraft().thePlayer.addChatMessage(
                     new ChatComponentText(100 + "%")
                             .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
+
+            this.metafile.currentCompanionAppVersion = this.metafile.newestCompatibleCompanionAppVersion;
+            this.metafile.write();
 
             TotalDebug.LOGGER.info("Successfully downloaded companion app version {}", version);
         } catch (IOException e) {
@@ -489,8 +498,7 @@ public class CompanionApp {
          * </ul>
          */
         private void loadNewestCompanionAppVersion() {
-            try {
-                HttpClient client = HttpClients.createDefault();
+            try (CloseableHttpClient client = HttpClients.createDefault()) {
                 HttpResponse response = client.execute(new HttpGet("https://api.github.com/repos/Minecraft-TA/TotalDebugCompanion/releases"));
                 HttpEntity entity = response.getEntity();
 
@@ -508,8 +516,7 @@ public class CompanionApp {
                     String version = jsonObject.get("tag_name").getAsString();
 
                     //don't compare build number
-                    if (version.substring(0, version.lastIndexOf('.'))
-                            .equals(totalDebugVersion.substring(0, totalDebugVersion.lastIndexOf('.')))) {
+                    if (areVersionsCompatible(totalDebugVersion, version)) {
                         TotalDebug.LOGGER.info("Found matching companion app version {}", version);
                         this.newestCompatibleCompanionAppVersion = version;
                         this.newestCompanionAppVersionSize = jsonObject.getAsJsonArray("assets").get(0)
@@ -527,6 +534,23 @@ public class CompanionApp {
                         .getAsJsonObject().getAsJsonPrimitive("size").getAsLong();
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Could not determine newest companion app version. Auto-update or downloading might not work", e);
+            }
+        }
+
+        private static boolean areVersionsCompatible(String totalDebugVersion, String companionAppVersion) {
+            if (totalDebugVersion.startsWith("v"))
+                totalDebugVersion = totalDebugVersion.substring(1);
+            if (companionAppVersion.startsWith("v"))
+                companionAppVersion = companionAppVersion.substring(1);
+
+            String[] totalDebugVersionSplit = StringUtils.split(totalDebugVersion, '.');
+            String[] companionAppVersionSplit = StringUtils.split(companionAppVersion, '.');
+
+            try {
+                return Integer.parseInt(companionAppVersionSplit[0]) >= Integer.parseInt(totalDebugVersionSplit[0])
+                       && Integer.parseInt(companionAppVersionSplit[1]) >= Integer.parseInt(totalDebugVersionSplit[1]);
+            } catch (NumberFormatException e) {
+                throw new RuntimeException(String.format("Invalid version format, '%s' and '%s'", totalDebugVersion, companionAppVersion), e);
             }
         }
     }

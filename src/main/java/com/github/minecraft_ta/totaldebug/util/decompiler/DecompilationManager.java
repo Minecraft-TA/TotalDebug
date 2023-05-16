@@ -68,8 +68,7 @@ public class DecompilationManager {
                 companionApp.getClient().getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(filePath, targetMemberType, targetMemberIdentifier));
             }
         }).exceptionally(throwable -> {
-            TotalDebug.LOGGER.error("Unable to decompile class {}", clazz.getName());
-            throwable.printStackTrace();
+            TotalDebug.LOGGER.error("Unable to decompile class {}", clazz.getName(), throwable);
             return null;
         });
     }
