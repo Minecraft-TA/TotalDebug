@@ -31,7 +31,6 @@ import net.minecraft.util.EnumChatFormatting;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -154,7 +153,7 @@ public class CompanionApp {
         ICommandSender sender = Minecraft.getMinecraft().thePlayer;
 
         if (!isRunning()) {
-            if (!Metafile.areVersionsCompatible("v" + Tags.VERSION, this.metafile.currentCompanionAppVersion)) {
+            if (!Metafile.areVersionsCompatible(Tags.VERSION, this.metafile.currentCompanionAppVersion)) {
                 this.metafile.loadNewestCompanionAppVersion();
             } else {
                 // If the current versions are compatible, it's fine if we download the new version after the next
@@ -305,9 +304,8 @@ public class CompanionApp {
                         .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GRAY))
         );
 
-        HttpClient client = HttpClients.createDefault();
         HttpResponse response;
-        try {
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
             response = client.execute(new HttpGet("https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/" + version + "/TotalDebugCompanion.zip"));
         } catch (IOException e) {
             TotalDebug.LOGGER.error("Unable to reach github. Does this release exist? " + version, e);
@@ -508,15 +506,14 @@ public class CompanionApp {
                 byte[] responseData = outputStream.toByteArray();
 
                 JsonArray jsonArray = GSON.fromJson(new String(responseData, StandardCharsets.UTF_8), JsonArray.class);
-                String totalDebugVersion = "v" + Tags.VERSION;
 
-                //find newest matching version
+                // Find newest matching version
                 for (int i = 0; i < jsonArray.size(); i++) {
                     JsonObject jsonObject = jsonArray.get(i).getAsJsonObject();
                     String version = jsonObject.get("tag_name").getAsString();
 
-                    //don't compare build number
-                    if (areVersionsCompatible(totalDebugVersion, version)) {
+                    // Don't compare build number
+                    if (areVersionsCompatible(Tags.VERSION, version)) {
                         TotalDebug.LOGGER.info("Found matching companion app version {}", version);
                         this.newestCompatibleCompanionAppVersion = version;
                         this.newestCompanionAppVersionSize = jsonObject.getAsJsonArray("assets").get(0)
@@ -525,7 +522,7 @@ public class CompanionApp {
                     }
                 }
 
-                //return newest version if no matching version was found
+                // Return newest version if no matching version was found
                 String newestVersion = jsonArray.get(0).getAsJsonObject().get("tag_name").getAsString();
                 TotalDebug.LOGGER.info("No matching companion app version found. Falling back to newest available {}", newestVersion);
                 this.newestCompatibleCompanionAppVersion = newestVersion;
@@ -538,11 +535,6 @@ public class CompanionApp {
         }
 
         private static boolean areVersionsCompatible(String totalDebugVersion, String companionAppVersion) {
-            if (totalDebugVersion.startsWith("v"))
-                totalDebugVersion = totalDebugVersion.substring(1);
-            if (companionAppVersion.startsWith("v"))
-                companionAppVersion = companionAppVersion.substring(1);
-
             String[] totalDebugVersionSplit = StringUtils.split(totalDebugVersion, '.');
             String[] companionAppVersionSplit = StringUtils.split(companionAppVersion, '.');
 
