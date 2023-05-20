@@ -14,6 +14,7 @@ import cpw.mods.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.item.ItemBlock;
 import net.minecraftforge.common.config.Configuration;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 @Mod(
@@ -30,7 +31,7 @@ public class TotalDebug {
     @SidedProxy(clientSide = "com.github.minecraft_ta.totaldebug.proxy.ClientProxy", serverSide = "com.github.minecraft_ta.totaldebug.proxy.ServerProxy")
     public static CommonProxy PROXY;
 
-    public static Logger LOGGER;
+    public static Logger LOGGER = LogManager.getLogger("TotalDebug");
 
     public final SimpleNetworkWrapper network = NetworkRegistry.INSTANCE.newSimpleChannel(Tags.MODID);
     public final TotalDebugConfig config = new TotalDebugConfig();
@@ -38,7 +39,6 @@ public class TotalDebug {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         this.config.init(new Configuration(event.getSuggestedConfigurationFile()));
-        LOGGER = event.getModLog();
         PROXY.preInit(event);
     }
 
