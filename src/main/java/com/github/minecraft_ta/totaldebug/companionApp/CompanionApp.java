@@ -307,38 +307,37 @@ public class CompanionApp {
         HttpResponse response;
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             response = client.execute(new HttpGet("https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/" + version + "/TotalDebugCompanion.zip"));
-        } catch (IOException e) {
-            TotalDebug.LOGGER.error("Unable to reach github. Does this release exist? " + version, e);
-            return;
-        }
 
-        HttpEntity entity = response.getEntity();
+            HttpEntity entity = response.getEntity();
 
-        long writtenBytes = 0;
-        Set<Integer> percentages = new HashSet<>();
+            long writtenBytes = 0;
+            Set<Integer> percentages = new HashSet<>();
 
-        // Download and unzip on the fly
-        try (ZipInputStream zipInputStream = new ZipInputStream(Channels.newInputStream(Channels.newChannel(entity.getContent())))) {
-            for (ZipEntry entry = zipInputStream.getNextEntry(); entry != null; entry = zipInputStream.getNextEntry()) {
-                Path toPath = this.appDir.resolve(entry.getName());
-                if (entry.isDirectory()) { //create directory
-                    if (!Files.exists(toPath))
-                        Files.createDirectory(toPath);
-                } else { //transfer file to file system
-                    try (FileChannel fileChannel = FileChannel.open(toPath, StandardOpenOption.WRITE, StandardOpenOption.CREATE)) {
-                        fileChannel.transferFrom(Channels.newChannel(zipInputStream), 0, Long.MAX_VALUE);
-                        writtenBytes += entry.getCompressedSize();
-                    }
+            // Download and unzip on the fly
+            try (ZipInputStream zipInputStream = new ZipInputStream(Channels.newInputStream(Channels.newChannel(entity.getContent())))) {
+                for (ZipEntry entry = zipInputStream.getNextEntry(); entry != null; entry = zipInputStream.getNextEntry()) {
+                    Path toPath = this.appDir.resolve(entry.getName());
+                    if (entry.isDirectory()) { //create directory
+                        if (!Files.exists(toPath))
+                            Files.createDirectory(toPath);
+                    } else { //transfer file to file system
+                        try (FileChannel fileChannel = FileChannel.open(toPath, StandardOpenOption.WRITE, StandardOpenOption.CREATE)) {
+                            fileChannel.transferFrom(Channels.newChannel(zipInputStream), 0, Long.MAX_VALUE);
+                            writtenBytes += entry.getCompressedSize();
+                        }
 
-                    // Send progress update
-                    int percentage = (int) (writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize);
-                    if (!percentages.contains(percentage)) {
-                        Minecraft.getMinecraft().thePlayer.addChatMessage(
-                                new ChatComponentText((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
-                                        .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
-                        percentages.add(percentage);
+                        // Send progress update
+                        int percentage = (int) (writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize);
+                        if (!percentages.contains(percentage)) {
+                            Minecraft.getMinecraft().thePlayer.addChatMessage(
+                                    new ChatComponentText((writtenBytes * 100 / this.metafile.newestCompanionAppVersionSize) + "%")
+                                            .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
+                            percentages.add(percentage);
+                        }
                     }
                 }
+            } catch (IOException e) {
+                TotalDebug.LOGGER.error("Unable to download and unzip file", e);
             }
 
             // Fake 100% message because we won't exactly reach that
