@@ -235,7 +235,7 @@ if (enableModernJavaSyntax.toBoolean()) {
         if (it.name in ["compileMcLauncherJava", "compilePatchedMcJava"]) {
             return
         }
-        sourceCompatibility = 17 // for the IDE support
+        sourceCompatibility = 8 // for the IDE support
         options.release.set(8)
 
         javaCompiler.set(javaToolchains.compilerFor {

@@ -350,7 +350,7 @@ public class CompanionApp {
 
             TotalDebug.LOGGER.info("Successfully downloaded companion app version {}", version);
         } catch (IOException e) {
-            TotalDebug.LOGGER.error("Unable to download and unzip file", e);
+            TotalDebug.LOGGER.error("Unable to reach github. Does this release exist? " + version, e);
         }
     }
 
@@ -534,6 +534,11 @@ public class CompanionApp {
         }
 
         private static boolean areVersionsCompatible(String totalDebugVersion, String companionAppVersion) {
+            if (totalDebugVersion.contains("-")) // Dev environment
+                totalDebugVersion = totalDebugVersion.substring(0, totalDebugVersion.indexOf("-"));
+            if (companionAppVersion.startsWith("v")) // Migration
+                companionAppVersion = companionAppVersion.substring(1);
+
             String[] totalDebugVersionSplit = StringUtils.split(totalDebugVersion, '.');
             String[] companionAppVersionSplit = StringUtils.split(companionAppVersion, '.');
 
