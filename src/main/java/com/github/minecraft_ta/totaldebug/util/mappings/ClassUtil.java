@@ -13,6 +13,9 @@ import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Opcodes;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
@@ -37,6 +40,8 @@ import java.util.zip.CRC32;
 import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
+
+    private static final BrokenClassVisitor BROKEN_CLASS_VISITOR = new BrokenClassVisitor();
 
     private static final List<String> TRANSFORMER_BLACKLIST = Arrays.asList(
             "cpw.mods.fml.common.asm.transformers.TerminalTransformer",
@@ -190,6 +195,7 @@ public class ClassUtil {
             classIndex.destroy();
 
             TotalDebug.LOGGER.info("Completed indexing classes in {}ms", (System.nanoTime() - time) / 1_000_000);
+
         } catch (Exception e) {
             Unchecked.propagate(e);
         } finally {
@@ -213,6 +219,11 @@ public class ClassUtil {
             if (bytes == null)
                 return;
         }
+
+        // See comment on BrokenClassVisitor on why this exists
+        new ClassReader(bytes).accept(BROKEN_CLASS_VISITOR, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES | ClassReader.SKIP_CODE);
+        if (BROKEN_CLASS_VISITOR.isBroken())
+            return;
 
         ZipUtils.writeStoredEntry(outputStream, crc32, name, bytes);
     }
@@ -354,5 +365,28 @@ public class ClassUtil {
     @SafeVarargs
     private static <T> Stream<T> concatStreams(Stream<T>... streams) {
         return Arrays.stream(streams).reduce(Stream::concat).orElseGet(Stream::empty);
+    }
+
+    /**
+     * Removes broken classes, that are valid. Currently, this filters two classes from lwjgl3ify that have themselves
+     * as their super class. These are org/lwjglx/PointerBuffer (org/lwjglx/PointerBuffer.class) and
+     * org/lwjglx/openal/OpenALException (org/lwjgl/openal/OpenALException.class).
+     */
+    private static final class BrokenClassVisitor extends ClassVisitor {
+
+        private boolean broken;
+
+        public BrokenClassVisitor() {
+            super(Opcodes.ASM9);
+        }
+
+        @Override
+        public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+            broken = name.equals(superName);
+        }
+
+        public boolean isBroken() {
+            return broken;
+        }
     }
 }
