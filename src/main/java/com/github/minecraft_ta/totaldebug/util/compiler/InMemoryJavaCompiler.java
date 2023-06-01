@@ -18,6 +18,7 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.security.SecureClassLoader;
 import java.util.ArrayList;
@@ -72,19 +73,22 @@ public class InMemoryJavaCompiler {
     public static String constructClassPathArgument() {
         try {
             return Stream.concat(
-                    ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream()
-                            .filter(url -> {
-                                String str = url.toString();
-                                return !str.contains("forge-") && !str.endsWith("/1.7.10.jar") && !(str.contains("1.7.10") && str.contains("minecraft"));
-                            }),
-                    Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
-            ).map(url -> {
-                try {
-                    return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
-                } catch (UnsupportedEncodingException ignored) {
-                    return null;
-                }
-            }).filter(Objects::nonNull).collect(Collectors.joining(SystemUtils.IS_OS_UNIX ? ":" : ";"));
+                            ((LaunchClassLoader) InMemoryJavaCompiler.class.getClassLoader()).getSources().stream(),
+                            Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
+                    ).map(url -> {
+                        try {
+                            return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
+                        } catch (UnsupportedEncodingException ignored) {
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .filter(url -> {
+                        String str = Paths.get(url).getFileName().toString();
+                        return !str.equals("1.7.10.jar") && (!str.contains("minecraft") || str.equals("minecraft-class-dump.jar"));
+                    })
+                    .collect(Collectors.joining(SystemUtils.IS_OS_UNIX ? ":" : ";"));
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
         }
