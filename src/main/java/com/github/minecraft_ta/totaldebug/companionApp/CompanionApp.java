@@ -530,6 +530,7 @@ public class CompanionApp {
                         .getAsJsonObject().getAsJsonPrimitive("size").getAsLong();
             } catch (IOException e) {
                 TotalDebug.LOGGER.error("Could not determine newest companion app version. Auto-update or downloading might not work", e);
+                this.newestCompatibleCompanionAppVersion = this.currentCompanionAppVersion;
             }
         }
 
