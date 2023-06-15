@@ -48,7 +48,11 @@ public class ClassUtil {
             "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",
             "cpw.mods.fml.common.asm.transformers.SideTransformer",
             "cofh.asm.CoFHAccessTransformer",
-            "codechicken"
+            "codechicken",
+            "me.eigenraven.lwjgl3ify.core",
+            "net.minecraftforge.classloading.FluidIdTransformer",
+            "io.github.legacymoddingmc.unimixins.compat.asm",
+            "appeng.transformer"
     );
     private static final LaunchClassLoader LAUNCH_CLASS_LOADER = ((LaunchClassLoader) ClassUtil.class.getClassLoader());
     private static final List<IClassTransformer> LAUNCH_CLASS_LOADER_TRANSFORMERS;
