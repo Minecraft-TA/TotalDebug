@@ -51,7 +51,7 @@ public class SearchReferenceCommand extends CommandBase {
             throw new CommandException("commands.total_debug.searchreference.usage");
         }
 
-        if (!args[1].matches("^([\\w/$]+\\.)?\\w[\\w/$();]+$")) {
+        if (!args[1].matches("^([\\w/$]+\\.)?" + "[\\w<>]+" + "\\([\\w/$;]*\\)" + "[\\w/$;]+$")) {
             throw new CommandException("commands.total_debug.searchreference.usage_examples");
         }
 
