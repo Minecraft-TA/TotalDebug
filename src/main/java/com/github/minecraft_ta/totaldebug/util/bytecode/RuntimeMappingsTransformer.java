@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.bytecode.asm6.ClassRemapper;
+import cpw.mods.fml.common.asm.transformers.deobf.FMLRemappingAdapter;
 import net.minecraft.launchwrapper.IClassTransformer;
 import org.apache.commons.io.IOUtils;
 import org.objectweb.asm.ClassReader;
@@ -39,7 +40,7 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         ClassReader reader = new ClassReader(basicClass);
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-        ClassVisitor classVisitor = new ClassRemapper(writer, this) {
+        ClassVisitor classVisitor = new FMLRemappingAdapter(new ClassRemapper(writer, this) {
             @Override
             public void visitInnerClass(String name, String outerName, String innerName, int access) {
                 //This fixes inner class names, for some reason `name` is de-obfuscated but `innerName` is not
@@ -54,9 +55,9 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
                 // Remove empty signatures
                 return super.visitField(access, name, desc, signature != null && signature.isEmpty() ? null : signature, value);
             }
-        };
+        });
         //Skip debug symbols for minecraft classes to allow Procyon to generate proper variable names
-        reader.accept(classVisitor, transformedName.startsWith("net.minecraft") ? ClassReader.SKIP_DEBUG : 0);
+        reader.accept(classVisitor, ClassReader.EXPAND_FRAMES | (transformedName.startsWith("net.minecraft") ? ClassReader.SKIP_DEBUG : 0));
         return writer.toByteArray();
     }
 

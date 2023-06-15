@@ -479,7 +479,7 @@ public class CompanionApp {
 
         /**
          * Performs a github API request to find the newest compatible version with the
-         * current {@link TotalDebug#VERSION} and sets {@link #newestCompatibleCompanionAppVersion}. Compatible means,
+         * current {@link Tags#VERSION} and sets {@link #newestCompatibleCompanionAppVersion}. Compatible means,
          * that major and minor versions match. This also gets the release file size for the found version and sets
          * {@link #newestCompanionAppVersionSize}
          * <br><br>

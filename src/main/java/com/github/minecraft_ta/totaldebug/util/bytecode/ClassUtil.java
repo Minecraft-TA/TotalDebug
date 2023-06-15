@@ -43,6 +43,10 @@ public class ClassUtil {
 
     private static final BrokenClassVisitor BROKEN_CLASS_VISITOR = new BrokenClassVisitor();
 
+    /**
+     * Most of these were hand-picked based on profiles, they're usually not important for what we're doing, but cost
+     * a lot of performance.
+     */
     private static final List<String> TRANSFORMER_BLACKLIST = Arrays.asList(
             "cpw.mods.fml.common.asm.transformers.TerminalTransformer",
             "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",
@@ -52,7 +56,19 @@ public class ClassUtil {
             "me.eigenraven.lwjgl3ify.core",
             "net.minecraftforge.classloading.FluidIdTransformer",
             "io.github.legacymoddingmc.unimixins.compat.asm",
-            "appeng.transformer"
+            "appeng.transformer",
+            "invtweaks.forge.asm",
+            "cpw.mods.fml.common.asm.transformers.DeobfuscationTransformer",
+            "DummyCore.ASM",
+            "li.cil.oc.common.asm.ClassTransformer",
+            "fastcraft.J",
+            "alkalus.main.asm",
+            "com.github.vfyjxf.nee.asm.NEEClassTransformer",
+            "net.glease.tc4tweak.asm.TC4Transformer",
+            "net.glease.tc4tweak.asm.TC4Transformer",
+            "com.github.vfyjxf.nee.asm.NEEClassTransformer",
+            // TODO: Optionally add this in when decompiling to make mixins visible in decompiled files
+            "org.spongepowered.asm.mixin.transformer.Proxy"
     );
     private static final LaunchClassLoader LAUNCH_CLASS_LOADER = ((LaunchClassLoader) ClassUtil.class.getClassLoader());
     private static final List<IClassTransformer> LAUNCH_CLASS_LOADER_TRANSFORMERS;
