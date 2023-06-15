@@ -13,6 +13,7 @@ import net.minecraft.util.ChatStyle;
 import net.minecraft.util.EnumChatFormatting;
 
 import javax.annotation.Nonnull;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -39,15 +40,26 @@ public class SearchReferenceCommand extends CommandBase {
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) {
-        String searchTarget;
-        if (args.length < 2 || ((searchTarget = args[0].toLowerCase()) != null && !searchTarget.equals("field") && !searchTarget.equals("method"))) {
+        if (args.length < 2 || !Arrays.asList("field", "method", "cancel").contains(args[0].toLowerCase())) {
             throw new CommandException("commands.total_debug.searchreference.usage");
+        }
+
+        String subCommand = args[0].toLowerCase();
+        if (subCommand.equals("cancel")) {
+            if (this.search != null) {
+                this.search.cancelIfRunning();
+                this.search = null;
+            }
+
+            sender.addChatMessage(new ChatComponentTranslation("commands.total_debug.searchreference.cancel_success")
+                    .setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
+            return;
         }
 
         boolean usesOwner = args.length > 2;
         if ((usesOwner && !args[1].matches("^([\\w/$]+)?$")) ||
             !args[usesOwner ? 2 : 1].matches("^[\\w<>]+" + "(\\([\\w/$;]*\\)" + "[\\w/$;]+)?$") ||
-            (searchTarget.equals("method") && !args[usesOwner ? 2 : 1].contains("("))) {
+            (subCommand.equals("method") && !args[usesOwner ? 2 : 1].contains("("))) {
             throw new CommandException("commands.total_debug.searchreference.usage_examples");
         }
 
@@ -61,7 +73,7 @@ public class SearchReferenceCommand extends CommandBase {
 
         long startTime = System.nanoTime() / 1_000_000;
 
-        switch (searchTarget) {
+        switch (subCommand) {
             case "field":
                 this.search = BytecodeReferenceSearch.forField(owner, toMatch);
                 break;
@@ -124,7 +136,7 @@ public class SearchReferenceCommand extends CommandBase {
     }
 
     @Override
-    public List addTabCompletionOptions(ICommandSender sender, String[] args) {
+    public List<String> addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length == 1) {
             return getListOfStringsMatchingLastWord(args, "method", "field", "cancel");
         }
