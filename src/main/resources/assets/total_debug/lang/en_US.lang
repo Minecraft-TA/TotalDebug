@@ -24,6 +24,7 @@ commands.total_debug.searchreference.cancel_success=Successfully cancelled the c
 commands.total_debug.searchreference.result_count=Results: %d
 commands.total_debug.searchreference.time=Took: %dms
 commands.total_debug.searchreference.classes_count=Classes scanned: %d
+commands.total_debug.searchreference.progress=Scanning... (%d/%d)
 commands.total_debug.searchreference.click_to_open=*Click* to decompile the class
 
 #companion app

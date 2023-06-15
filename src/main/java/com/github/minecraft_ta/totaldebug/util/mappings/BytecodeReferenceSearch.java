@@ -8,59 +8,118 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
-import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class BytecodeReferenceSearcher {
+public class BytecodeReferenceSearch {
 
-    private static boolean RUNNING = false;
+    private final String owner;
+    private final String signature;
+    private final boolean searchMethod;
 
-    /**
-     * @param searchMethod true if you want to search for methods; false otherwise
-     */
-    @Nullable
-    public static CompletableFuture<Pair<Collection<String>, Integer>> findReferences(String owner, String signature, boolean searchMethod) {
-        if (RUNNING)
-            return null;
+    private Consumer<Pair<Collection<String>, Integer>> resultHandler;
+    private Consumer<Throwable> throwableHandler;
+    private BiConsumer<Integer, Integer> progressHandler;
+    private Runnable cancellationHandler;
+    private boolean running;
+    private boolean cancelled;
 
-        RUNNING = true;
+    public BytecodeReferenceSearch(String owner, String signature, boolean searchMethod) {
+        this.owner = owner;
+        this.signature = signature;
+        this.searchMethod = searchMethod;
+    }
 
-        return CompletableFuture.supplyAsync(() -> {
+    public BytecodeReferenceSearch withResultHandler(Consumer<Pair<Collection<String>, Integer>> resultHandler) {
+        this.resultHandler = resultHandler;
+        return this;
+    }
+
+    public BytecodeReferenceSearch withProgressHandler(BiConsumer<Integer, Integer> progressHandler) {
+        this.progressHandler = progressHandler;
+        return this;
+    }
+
+    public BytecodeReferenceSearch withCancellationHandler(Runnable cancellationHandler) {
+        this.cancellationHandler = cancellationHandler;
+        return this;
+    }
+
+    public BytecodeReferenceSearch withThrowableHandler(Consumer<Throwable> throwableHandler) {
+        this.throwableHandler = throwableHandler;
+        return this;
+    }
+
+    public void cancelIfRunning() {
+        this.cancelled = true;
+    }
+
+    public BytecodeReferenceSearch run() {
+        if (this.running)
+            throw new IllegalStateException("Already running");
+
+        CompletableFuture.supplyAsync(() -> {
             try {
                 List<Class<?>> allClasses = getFilteredClassesList();
 
                 if (allClasses.isEmpty()) {
-                    return Pair.of(Collections.emptyList(), 0);
+                    this.resultHandler.accept(Pair.of(Collections.emptyList(), 0));
+                    return null;
                 }
+
+                long progressUpdateSize = allClasses.size() / 5;
+                AtomicInteger progress = new AtomicInteger(0);
+
+                this.progressHandler.accept(0, allClasses.size());
 
                 Set<String> results = new HashSet<>(ForkJoinUtils.parallelMap(allClasses, (input) -> {
                     List<String> subResults = new ArrayList<>();
                     ReferenceVisitor context = new ReferenceVisitor(subResults, owner, signature, searchMethod);
 
-                    for (Class<?> clazz : input) {
+                    for (int i = 0, uncommitedProgress = 0, inputSize = input.size(); i < inputSize && !this.cancelled; i++, uncommitedProgress++) {
+                        Class<?> clazz = input.get(i);
                         byte[] bytes = ClassUtil.getBytecodeFromLaunchClassLoader(clazz.getName());
                         if (bytes == null)
                             continue;
                         new ClassReader(bytes).accept(context, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
+
+                        if ((i & 0x80) == 0x80) {
+                            int p = progress.getAndAdd(uncommitedProgress);
+                            if ((p + uncommitedProgress) / progressUpdateSize != p / progressUpdateSize && this.progressHandler != null) {
+                                //noinspection SynchronizeOnNonFinalField
+                                synchronized (this.progressHandler) {
+                                    this.progressHandler.accept(p, allClasses.size());
+                                }
+                            }
+
+                            uncommitedProgress = 0;
+                        }
                     }
 
                     return subResults;
                 }));
 
-
-                return Pair.of(results, allClasses.size());
+                if (this.cancelled) {
+                    this.cancellationHandler.run();
+                } else {
+                    this.progressHandler.accept(allClasses.size(), allClasses.size());
+                    this.resultHandler.accept(Pair.of(results, allClasses.size()));
+                }
             } catch (Throwable e) {
-                e.printStackTrace();
-                return Pair.of(Collections.emptyList(), 0);
+                this.throwableHandler.accept(e);
             } finally {
-                RUNNING = false;
+                this.running = false;
             }
+            return null;
         });
+        return this;
     }
 
     private static List<Class<?>> getFilteredClassesList() {
@@ -95,7 +154,7 @@ public class BytecodeReferenceSearcher {
         private String currentClassName;
 
         public ReferenceVisitor(List<String> results, String owner, String signatureToMatch, boolean method) {
-            super(Opcodes.ASM5, null);
+            super(Opcodes.ASM9, null);
             this.results = results;
             this.owner = owner;
             this.signatureToMatch = signatureToMatch;
