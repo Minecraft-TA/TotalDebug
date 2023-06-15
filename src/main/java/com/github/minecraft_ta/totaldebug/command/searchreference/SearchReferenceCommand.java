@@ -3,7 +3,7 @@ package com.github.minecraft_ta.totaldebug.command.searchreference;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.companionApp.CompanionApp;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
-import com.github.minecraft_ta.totaldebug.util.mappings.BytecodeReferenceSearch;
+import com.github.minecraft_ta.totaldebug.util.bytecode.BytecodeReferenceSearch;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
@@ -39,26 +39,41 @@ public class SearchReferenceCommand extends CommandBase {
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) {
-        if (args.length < 2 || (!args[0].equalsIgnoreCase("field") && !args[0].equalsIgnoreCase("method"))) {
+        String searchTarget;
+        if (args.length < 2 || ((searchTarget = args[0].toLowerCase()) != null && !searchTarget.equals("field") && !searchTarget.equals("method"))) {
             throw new CommandException("commands.total_debug.searchreference.usage");
         }
 
-        if (!args[1].matches("^([\\w/$]+\\.)?" + "[\\w<>]+" + "\\([\\w/$;]*\\)" + "[\\w/$;]+$")) {
+        boolean usesOwner = args.length > 2;
+        if ((usesOwner && !args[1].matches("^([\\w/$]+)?$")) ||
+            !args[usesOwner ? 2 : 1].matches("^[\\w<>]+" + "(\\([\\w/$;]*\\)" + "[\\w/$;]+)?$") ||
+            (searchTarget.equals("method") && !args[usesOwner ? 2 : 1].contains("("))) {
             throw new CommandException("commands.total_debug.searchreference.usage_examples");
         }
 
         boolean searchMethod = args[0].equalsIgnoreCase("method");
 
-        int dotIndex = args[1].indexOf('.');
-        String owner = dotIndex == -1 ? null : args[1].substring(0, dotIndex);
-        String toMatch = dotIndex == -1 ? args[1] : args[1].substring(dotIndex + 1);
+        String owner = usesOwner ? args[1] : null;
+        String toMatch = usesOwner ? args[2] : args[1];
 
         if (this.search != null)
             this.search.cancelIfRunning();
 
         long startTime = System.nanoTime() / 1_000_000;
 
-        this.search = new BytecodeReferenceSearch(owner, toMatch, searchMethod)
+        switch (searchTarget) {
+            case "field":
+                this.search = BytecodeReferenceSearch.forField(owner, toMatch);
+                break;
+            case "method":
+                int index = toMatch.indexOf('(');
+                this.search = BytecodeReferenceSearch.forMethod(owner, toMatch.substring(0, index), toMatch.substring(index));
+                break;
+            default:
+                throw new IllegalStateException();
+        }
+
+        this.search
                 .withResultHandler(result -> {
                     int scanTime = (int) (System.nanoTime() / 1_000_000 - startTime);
 
@@ -75,8 +90,8 @@ public class SearchReferenceCommand extends CommandBase {
                         sender.addChatMessage(new ChatComponentText("-------------------").setChatStyle(new ChatStyle().setColor(EnumChatFormatting.GOLD)));
 
                         int i = 0;
-                        for (String s : result.getLeft()) {
-                            sender.addChatMessage(new ChatComponentText(s)
+                        for (BytecodeReferenceSearch.ReferenceLocation loc : result.getLeft()) {
+                            sender.addChatMessage(new ChatComponentText(loc.toString())
                                     .setChatStyle(new ChatStyle().setColor(i % 2 == 0 ? EnumChatFormatting.WHITE : EnumChatFormatting.GRAY)));
                             //.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentTranslation("commands.total_debug.searchreference.click_to_open")))
                             //.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/decompile class " + result.split("#")[0].replace('/', '.')))));

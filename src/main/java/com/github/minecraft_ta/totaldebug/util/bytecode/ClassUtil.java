@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
@@ -360,10 +360,12 @@ public class ClassUtil {
             return null;
 
         String resourcePath = resource.toString();
-        if (!resourcePath.startsWith("jar"))
-            throw new IllegalStateException("Resource not from jar");
-
-        return resourcePath.substring(resourcePath.lastIndexOf('!') + 2);
+        if (resourcePath.startsWith("jar"))
+            return resourcePath.substring(resourcePath.lastIndexOf('!') + 2);
+        else if (resourcePath.startsWith("jrt"))
+            return resourcePath.substring(StringUtils.ordinalIndexOf(resourcePath, "/", 2));
+        else
+            throw new RuntimeException("Invalid resource origin");
     }
 
     @SafeVarargs

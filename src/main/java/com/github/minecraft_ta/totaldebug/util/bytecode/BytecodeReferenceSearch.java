@@ -1,13 +1,13 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.util.ForkJoinUtils;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import it.unimi.dsi.fastutil.objects.ObjectList;
 import org.apache.commons.lang3.tuple.Pair;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.*;
 
+import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -20,24 +20,20 @@ import java.util.stream.Collectors;
 
 public class BytecodeReferenceSearch {
 
-    private final String owner;
-    private final String signature;
-    private final boolean searchMethod;
+    private final InsnMatcher matcher;
 
-    private Consumer<Pair<Collection<String>, Integer>> resultHandler;
+    private Consumer<Pair<Collection<ReferenceLocation>, Integer>> resultHandler;
     private Consumer<Throwable> throwableHandler;
     private BiConsumer<Integer, Integer> progressHandler;
     private Runnable cancellationHandler;
     private boolean running;
     private boolean cancelled;
 
-    public BytecodeReferenceSearch(String owner, String signature, boolean searchMethod) {
-        this.owner = owner;
-        this.signature = signature;
-        this.searchMethod = searchMethod;
+    private BytecodeReferenceSearch(InsnMatcher matcher) {
+        this.matcher = matcher;
     }
 
-    public BytecodeReferenceSearch withResultHandler(Consumer<Pair<Collection<String>, Integer>> resultHandler) {
+    public BytecodeReferenceSearch withResultHandler(Consumer<Pair<Collection<ReferenceLocation>, Integer>> resultHandler) {
         this.resultHandler = resultHandler;
         return this;
     }
@@ -79,9 +75,9 @@ public class BytecodeReferenceSearch {
 
                 this.progressHandler.accept(0, allClasses.size());
 
-                Set<String> results = new HashSet<>(ForkJoinUtils.parallelMap(allClasses, (input) -> {
-                    List<String> subResults = new ArrayList<>();
-                    ReferenceVisitor context = new ReferenceVisitor(subResults, owner, signature, searchMethod);
+                Set<ReferenceLocation> results = new HashSet<>(ForkJoinUtils.parallelMap(allClasses, (input) -> {
+                    List<ReferenceLocation> subResults = new ArrayList<>();
+                    ReferenceVisitor context = new ReferenceVisitor(subResults, matcher);
 
                     for (int i = 0, uncommitedProgress = 0, inputSize = input.size(); i < inputSize && !this.cancelled; i++, uncommitedProgress++) {
                         Class<?> clazz = input.get(i);
@@ -122,6 +118,58 @@ public class BytecodeReferenceSearch {
         return this;
     }
 
+    public static BytecodeReferenceSearch forMethod(@Nullable String owner, String name, String desc) {
+        return new BytecodeReferenceSearch(new InsnMatcher() {
+            @Override
+            public boolean matchMethodInsn(String iname, String idesc) {
+                return iname.endsWith(name) && idesc.equals(desc);
+            }
+
+            @Override
+            public boolean matchMemberOwner(String iowner) {
+                return owner == null || iowner.endsWith(owner);
+            }
+        });
+    }
+
+    public static BytecodeReferenceSearch forField(@Nullable String owner, String name) {
+        return new BytecodeReferenceSearch(new InsnMatcher() {
+            @Override
+            public boolean matchFieldInsn(String iname, String idesc) {
+                return iname.endsWith(name);
+            }
+
+            @Override
+            public boolean matchMemberOwner(String iowner) {
+                return owner == null || iowner.endsWith(owner);
+            }
+        });
+    }
+
+    public static BytecodeReferenceSearch forClass(String clazz) {
+        return new BytecodeReferenceSearch(new InsnMatcher() {
+            @Override
+            public boolean matchMethodInsn(String iname, String idesc) {
+                return true;
+            }
+
+            @Override
+            public boolean matchFieldInsn(String name, String desc) {
+                return true;
+            }
+
+            @Override
+            public boolean matchMemberOwner(String iowner) {
+                return iowner.endsWith(clazz);
+            }
+
+            @Override
+            public boolean matchLdcTypeInsn(String type) {
+                return type.endsWith(clazz);
+            }
+        });
+    }
+
     private static List<Class<?>> getFilteredClassesList() {
         List<String> packageBlacklist = Arrays.asList(
                 "com.google", "com.typesafe", "org.apache", "org.scala-lang", "org.jline",
@@ -144,21 +192,107 @@ public class BytecodeReferenceSearch {
         }
     }
 
+    public interface InsnMatcher {
+
+        default boolean matchMemberOwner(String owner) {
+            return false;
+        }
+
+        default boolean matchMethodInsn(String name, String desc) {
+            return false;
+        }
+
+        default boolean matchFieldInsn(String name, String desc) {
+            return false;
+        }
+
+        default boolean matchLdcTypeInsn(String type) {
+            return false;
+        }
+    }
+
+    public static final class ReferenceLocation {
+
+        private final String owner;
+        private final String enclosingMethod;
+
+        public ReferenceLocation(String owner, String enclosingMethod) {
+            this.owner = owner;
+            this.enclosingMethod = enclosingMethod;
+        }
+
+        public String getOwner() {
+            return owner;
+        }
+
+        public String getEnclosingMethod() {
+            return enclosingMethod;
+        }
+
+        @Override
+        public String toString() {
+            return this.owner + "#" + this.enclosingMethod;
+        }
+    }
+
     private static final class ReferenceVisitor extends ClassVisitor {
 
-        private final List<String> results;
-        private final String owner;
-        private final String signatureToMatch;
-        private final boolean method;
+        private final List<ReferenceLocation> results;
+        private final InsnMatcher matcher;
 
         private String currentClassName;
+        private String enclosingMethodName;
 
-        public ReferenceVisitor(List<String> results, String owner, String signatureToMatch, boolean method) {
+        private final MethodVisitor methodVisitor = new MethodVisitor(Opcodes.ASM9, null) {
+            @Override
+            public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
+                if (!matcher.matchMethodInsn(name, desc))
+                    return;
+
+                boolean valid;
+                if (matcher.matchMemberOwner(owner)) {
+                    valid = true;
+                } else { //Try finding actual owner of method
+                    String actualOwner = findOwnerOf(owner, name, desc, true);
+                    valid = actualOwner != null && matcher.matchMemberOwner(actualOwner);
+                }
+
+                if (valid)
+                    ReferenceVisitor.this.results.add(new ReferenceLocation(currentClassName, enclosingMethodName));
+            }
+
+            @Override
+            public void visitFieldInsn(int opcode, String owner, String name, String desc) {
+                if (!matcher.matchFieldInsn(name, desc))
+                    return;
+
+                boolean valid;
+                if (matcher.matchMemberOwner(owner)) {
+                    valid = true;
+                } else { //Try finding actual owner of method
+                    String actualOwner = findOwnerOf(owner, name, desc, false);
+                    valid = actualOwner != null && matcher.matchMemberOwner(actualOwner);
+                }
+
+                if (valid)
+                    ReferenceVisitor.this.results.add(new ReferenceLocation(currentClassName, enclosingMethodName));
+            }
+
+            @Override
+            public void visitLdcInsn(Object value) {
+                if (!(value instanceof Type) || ((Type) value).getSort() != Type.OBJECT)
+                    return;
+
+                String name = ((Type) value).getInternalName();
+                if (matcher.matchLdcTypeInsn(name))
+                    ReferenceVisitor.this.results.add(new ReferenceLocation(currentClassName, enclosingMethodName));
+            }
+        };
+
+        public ReferenceVisitor(List<ReferenceLocation> results, InsnMatcher matcher) {
             super(Opcodes.ASM9, null);
             this.results = results;
-            this.owner = owner;
-            this.signatureToMatch = signatureToMatch;
-            this.method = method;
+            this.matcher = matcher;
         }
 
         @Override
@@ -169,58 +303,18 @@ public class BytecodeReferenceSearch {
 
         @Override
         public MethodVisitor visitMethod(int access, String enclosingMethodName, String desc, String signature, String[] exceptions) {
-            return new MethodVisitor(Opcodes.ASM5, null) {
-                @Override
-                public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-                    if (!method || !(name + desc).endsWith(ReferenceVisitor.this.signatureToMatch))
-                        return;
-                    if (ReferenceVisitor.this.owner == null) {
-                        ReferenceVisitor.this.results.add(ReferenceVisitor.this.currentClassName + "#" + enclosingMethodName);
-                        return;
-                    }
-
-                    boolean valid;
-                    if (owner.endsWith(ReferenceVisitor.this.owner)) {
-                        valid = true;
-                    } else { //Try finding actual owner of method
-                        String actualOwner = findOwnerOf(owner, name, desc, true);
-                        valid = actualOwner != null && actualOwner.endsWith(ReferenceVisitor.this.owner);
-                    }
-
-                    if (valid)
-                        ReferenceVisitor.this.results.add(ReferenceVisitor.this.currentClassName + "#" + enclosingMethodName);
-                }
-
-                @Override
-                public void visitFieldInsn(int opcode, String owner, String name, String desc) {
-                    if (method || !name.endsWith(ReferenceVisitor.this.signatureToMatch))
-                        return;
-
-                    if (ReferenceVisitor.this.owner == null) {
-                        ReferenceVisitor.this.results.add(ReferenceVisitor.this.currentClassName + "#" + enclosingMethodName);
-                        return;
-                    }
-
-                    boolean valid;
-                    if (owner.endsWith(ReferenceVisitor.this.owner)) {
-                        valid = true;
-                    } else { //Try finding actual owner of field
-                        String actualOwner = findOwnerOf(owner, name, desc, false);
-                        valid = actualOwner != null && actualOwner.endsWith(ReferenceVisitor.this.owner);
-                    }
-
-                    if (valid)
-                        ReferenceVisitor.this.results.add(ReferenceVisitor.this.currentClassName + "#" + enclosingMethodName);
-                }
-            };
+            this.enclosingMethodName = enclosingMethodName;
+            return methodVisitor;
         }
 
+        private ObjectList<Class<?>> tempInterfacesList = new ObjectArrayList<>();
         private String findOwnerOf(String currentOwner, String name, String desc, boolean method) {
             try {
-                List<Class<?>> interfaces = new ArrayList<>();
                 Class<?> clazz = Class.forName(currentOwner.replace('/', '.'));
-                if (method)
-                    interfaces.addAll(Arrays.asList(clazz.getInterfaces()));
+                if (method) {
+                    tempInterfacesList.clear();
+                    tempInterfacesList.addElements(0, clazz.getInterfaces());
+                }
 
                 Function<Class<?>, String> checkClass = (c) -> {
                     if (method) {
@@ -245,10 +339,10 @@ public class BytecodeReferenceSearch {
                     if (result != null)
                         return result;
                     if (method)
-                        interfaces.addAll(Arrays.asList(clazz.getInterfaces()));
+                        tempInterfacesList.addElements(tempInterfacesList.size(), clazz.getInterfaces());
                 }
 
-                for (Class<?> i : interfaces) {
+                for (Class<?> i : tempInterfacesList) {
                     String result = checkClass.apply(i);
                     if (result != null)
                         return result;
@@ -260,15 +354,16 @@ public class BytecodeReferenceSearch {
             }
         }
 
+        private final StringBuilder tempDescBuilder = new StringBuilder(40);
         private String getMethodDesc(Method declaredMethod) {
-            StringBuilder descBuilder = new StringBuilder("(");
-            for (Class<?> parameterType : declaredMethod.getParameterTypes()) {
-                appendDescType(descBuilder, parameterType.getName());
-            }
+            tempDescBuilder.setLength(0);
+            tempDescBuilder.append('(');
+            for (Class<?> parameterType : declaredMethod.getParameterTypes())
+                appendDescType(tempDescBuilder, parameterType.getName());
 
-            descBuilder.append(")");
-            appendDescType(descBuilder, declaredMethod.getReturnType().getName());
-            return descBuilder.toString().replace('.', '/');
+            tempDescBuilder.append(")");
+            appendDescType(tempDescBuilder, declaredMethod.getReturnType().getName());
+            return tempDescBuilder.toString().replace('.', '/');
         }
 
         private void appendDescType(StringBuilder builder, String type) {

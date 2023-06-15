@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totaldebug.network.script;
 
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.companionApp.script.ScriptRunner;
-import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
+import com.github.minecraft_ta.totaldebug.util.bytecode.ClassUtil;
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;

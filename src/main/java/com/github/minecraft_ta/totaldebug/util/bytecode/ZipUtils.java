@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.util.unchecked.Unchecked;
 import com.github.minecraft_ta.totaldebug.util.unchecked.UncheckedBiConsumer;

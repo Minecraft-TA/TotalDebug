@@ -14,7 +14,7 @@ import com.github.minecraft_ta.totaldebug.companionApp.messages.script.RunScript
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.script.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.companionApp.messages.search.OpenSearchResultsMessage;
-import com.github.minecraft_ta.totaldebug.util.mappings.ClassUtil;
+import com.github.minecraft_ta.totaldebug.util.bytecode.ClassUtil;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IDisconnectedListener;
 import com.google.common.collect.Lists;

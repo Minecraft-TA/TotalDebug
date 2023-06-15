@@ -1,7 +1,7 @@
-package com.github.minecraft_ta.totaldebug.util.mappings;
+package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.mappings.asm6.ClassRemapper;
+import com.github.minecraft_ta.totaldebug.util.bytecode.asm6.ClassRemapper;
 import net.minecraft.launchwrapper.IClassTransformer;
 import org.apache.commons.io.IOUtils;
 import org.objectweb.asm.ClassReader;

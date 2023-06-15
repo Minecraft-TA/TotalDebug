@@ -26,7 +26,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 // THE POSSIBILITY OF SUCH DAMAGE.
 
-package com.github.minecraft_ta.totaldebug.util.mappings.asm6;
+package com.github.minecraft_ta.totaldebug.util.bytecode.asm6;
 
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.Opcodes;

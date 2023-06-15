@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.util.compiler;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
+import com.github.minecraft_ta.totaldebug.util.bytecode.RuntimeMappingsTransformer;
 import com.google.common.collect.Lists;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.Launch;

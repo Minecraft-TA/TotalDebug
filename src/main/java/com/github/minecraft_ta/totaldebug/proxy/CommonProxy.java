@@ -15,7 +15,7 @@ import com.github.minecraft_ta.totaldebug.network.chunkGrid.ReceiveDataStateMess
 import com.github.minecraft_ta.totaldebug.network.script.RunScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.network.script.StopScriptOnServerMessage;
 import com.github.minecraft_ta.totaldebug.util.decompiler.DecompilationManager;
-import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
+import com.github.minecraft_ta.totaldebug.util.bytecode.RuntimeMappingsTransformer;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.IFMLSidedHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;

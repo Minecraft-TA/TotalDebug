@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.util;
 
-import com.github.minecraft_ta.totaldebug.util.mappings.RuntimeMappingsTransformer;
+import com.github.minecraft_ta.totaldebug.util.bytecode.RuntimeMappingsTransformer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
