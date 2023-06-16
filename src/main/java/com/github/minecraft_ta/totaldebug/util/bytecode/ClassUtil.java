@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.util.compiler.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.util.unchecked.Unchecked;
 import com.github.minecraft_ta.totaldebug.util.unchecked.UncheckedSupplier;
 import com.github.tth05.jindex.ClassIndex;
+import cpw.mods.fml.common.asm.transformers.DeobfuscationTransformer;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
@@ -14,8 +15,6 @@ import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.Opcodes;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
@@ -34,6 +33,7 @@ import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
@@ -41,47 +41,30 @@ import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
 
-    private static final BrokenClassVisitor BROKEN_CLASS_VISITOR = new BrokenClassVisitor();
-
-    /**
-     * Most of these were hand-picked based on profiles, they're usually not important for what we're doing, but cost
-     * a lot of performance.
-     */
-    private static final List<String> TRANSFORMER_BLACKLIST = Arrays.asList(
-            "cpw.mods.fml.common.asm.transformers.TerminalTransformer",
-            "cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer",
-            "cpw.mods.fml.common.asm.transformers.SideTransformer",
-            "cofh.asm.CoFHAccessTransformer",
-            "codechicken",
-            "me.eigenraven.lwjgl3ify.core",
-            "net.minecraftforge.classloading.FluidIdTransformer",
-            "io.github.legacymoddingmc.unimixins.compat.asm",
-            "appeng.transformer",
-            "invtweaks.forge.asm",
-            "cpw.mods.fml.common.asm.transformers.DeobfuscationTransformer",
-            "DummyCore.ASM",
-            "li.cil.oc.common.asm.ClassTransformer",
-            "fastcraft.J",
-            "alkalus.main.asm",
-            "com.github.vfyjxf.nee.asm.NEEClassTransformer",
-            "net.glease.tc4tweak.asm.TC4Transformer",
-            "net.glease.tc4tweak.asm.TC4Transformer",
-            "com.github.vfyjxf.nee.asm.NEEClassTransformer",
-            // TODO: Optionally add this in when decompiling to make mixins visible in decompiled files
-            "org.spongepowered.asm.mixin.transformer.Proxy"
+    private static final List<String> MINIMAL_TRANSFORMER_WHITELIST = Arrays.asList(
+            "net.minecraftforge.transformers.ForgeAccessTransformer",
+            "cpw.mods.fml.common.asm.transformers.AccessTransformer",
+            "cpw.mods.fml.common.asm.transformers.ItemStackTransformer",
+            "cpw.mods.fml.common.asm.transformers.MarkerTransformer",
+            "cpw.mods.fml.common.asm.transformers.PatchingTransformer",
+            "com.github.minecraft_ta.totaldebug.util.bytecode.RuntimeMappingsTransformer"
     );
     private static final LaunchClassLoader LAUNCH_CLASS_LOADER = ((LaunchClassLoader) ClassUtil.class.getClassLoader());
-    private static final List<IClassTransformer> LAUNCH_CLASS_LOADER_TRANSFORMERS;
+    private static final List<IClassTransformer> ALL_TRANSFORMERS;
+    private static final List<IClassTransformer> MINIMAL_TRANSFORMERS;
     private static final Method UNTRANSFORM_NAME_METHOD;
     private static final Method TRANSFORM_NAME_METHOD;
     private static final Map<String, byte[]> LAUNCH_CLASS_LOADER_RESOURCE_CACHE;
     static {
         try {
-            LAUNCH_CLASS_LOADER_TRANSFORMERS = LAUNCH_CLASS_LOADER.getTransformers().stream()
-                    .filter(t -> TRANSFORMER_BLACKLIST.stream()
-                            .noneMatch(s -> t.getClass().getName().startsWith(s)))
+            ALL_TRANSFORMERS = LAUNCH_CLASS_LOADER.getTransformers().stream()
+                    .filter(t -> !(t instanceof DeobfuscationTransformer))
+                    .collect(Collectors.toCollection(CopyOnWriteArrayList::new));
+            ALL_TRANSFORMERS.add(new RuntimeMappingsTransformer());
+            MINIMAL_TRANSFORMERS = ALL_TRANSFORMERS.stream()
+                    .filter(t -> MINIMAL_TRANSFORMER_WHITELIST.contains(t.getClass().getName()))
                     .collect(Collectors.toList());
-            LAUNCH_CLASS_LOADER_TRANSFORMERS.add(new RuntimeMappingsTransformer());
+
             UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
             TRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("transformName", String.class);
@@ -234,15 +217,18 @@ public class ClassUtil {
 
         byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
         if (bytes == null) {
-            bytes = runTransformers(untransformedName, name, fallbackResourceSupplier.get());
+            bytes = runTransformers(untransformedName, name, fallbackResourceSupplier.get(), false);
 
             if (bytes == null)
                 return;
         }
 
-        // See comment on BrokenClassVisitor on why this exists
-        new ClassReader(bytes).accept(BROKEN_CLASS_VISITOR, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES | ClassReader.SKIP_CODE);
-        if (BROKEN_CLASS_VISITOR.isBroken())
+
+        // Removes broken classes, that are valid. Currently, this filters two classes from lwjgl3ify that have themselves
+        // as their super class. These are org/lwjglx/PointerBuffer (org/lwjglx/PointerBuffer.class) and
+        // org/lwjglx/openal/OpenALException (org/lwjgl/openal/OpenALException.class).
+        ClassReader reader = new ClassReader(bytes);
+        if (reader.getClassName().equals(reader.getSuperName()))
             return;
 
         ZipUtils.writeStoredEntry(outputStream, crc32, name, bytes);
@@ -265,6 +251,11 @@ public class ClassUtil {
 
     @Nullable
     public static byte[] getBytecodeFromLaunchClassLoader(String name, boolean loadIfAbsent) {
+        return getBytecodeFromLaunchClassLoader(name, loadIfAbsent, false);
+    }
+
+    @Nullable
+    public static byte[] getBytecodeFromLaunchClassLoader(String name, boolean loadIfAbsent, boolean minimalTransformers) {
         try {
             String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
             String transformedName = getTransformedName(name);
@@ -272,7 +263,7 @@ public class ClassUtil {
             if (!loadIfAbsent) {
                 if (bytes == null)
                     return null;
-                return runTransformers(untransformedName, transformedName, bytes);
+                return runTransformers(untransformedName, transformedName, bytes, minimalTransformers);
             }
 
             try {
@@ -287,22 +278,35 @@ public class ClassUtil {
             if (bytes == null)
                 return null;
 
-            bytes = runTransformers(untransformedName, transformedName, bytes);
+            bytes = runTransformers(untransformedName, transformedName, bytes, minimalTransformers);
             return bytes;
         } catch (Throwable e) {
             return null;
         }
     }
 
-    public static byte[] runTransformers(String untransformedName, String transformedName, byte[] bytes) {
+    public static byte[] runTransformers(String untransformedName, String transformedName, byte[] bytes, boolean minimalTransformers) {
         if (untransformedName.startsWith("java"))
             return bytes;
 
-        for (IClassTransformer transformer : LAUNCH_CLASS_LOADER_TRANSFORMERS) {
+        List<IClassTransformer> transformers = minimalTransformers ? MINIMAL_TRANSFORMERS : ALL_TRANSFORMERS;
+        for (IClassTransformer transformer : transformers) {
             try {
                 bytes = transformer.transform(untransformedName, transformedName, bytes);
             } catch (Throwable e) {
-                TotalDebug.LOGGER.error(String.format("Transformer %s failed for class %s, %s", transformer, untransformedName, transformedName), e);
+                // Mixin issues we can safely ignore
+                if (e.getClass().getName().equals("org.spongepowered.asm.mixin.transformer.throwables.IllegalClassLoadError"))
+                    continue;
+
+                TotalDebug.LOGGER.error(String.format(
+                                "Transformer %s (%s) failed for class %s, %s. Disabling...",
+                                transformer, MINIMAL_TRANSFORMERS.contains(transformer) ? "minimal" : "other",
+                                untransformedName, transformedName),
+                        e
+                );
+                // Minimal transformers should not fail :)
+                if (!minimalTransformers)
+                    ALL_TRANSFORMERS.remove(transformer);
             }
         }
         return bytes;
@@ -387,28 +391,5 @@ public class ClassUtil {
     @SafeVarargs
     private static <T> Stream<T> concatStreams(Stream<T>... streams) {
         return Arrays.stream(streams).reduce(Stream::concat).orElseGet(Stream::empty);
-    }
-
-    /**
-     * Removes broken classes, that are valid. Currently, this filters two classes from lwjgl3ify that have themselves
-     * as their super class. These are org/lwjglx/PointerBuffer (org/lwjglx/PointerBuffer.class) and
-     * org/lwjglx/openal/OpenALException (org/lwjgl/openal/OpenALException.class).
-     */
-    private static final class BrokenClassVisitor extends ClassVisitor {
-
-        private boolean broken;
-
-        public BrokenClassVisitor() {
-            super(Opcodes.ASM9);
-        }
-
-        @Override
-        public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-            broken = name.equals(superName);
-        }
-
-        public boolean isBroken() {
-            return broken;
-        }
     }
 }

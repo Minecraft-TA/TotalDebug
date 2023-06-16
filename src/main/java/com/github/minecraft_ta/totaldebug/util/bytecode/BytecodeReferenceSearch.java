@@ -81,7 +81,7 @@ public class BytecodeReferenceSearch {
 
                     for (int i = 0, uncommitedProgress = 0, inputSize = input.size(); i < inputSize && !this.cancelled; i++, uncommitedProgress++) {
                         Class<?> clazz = input.get(i);
-                        byte[] bytes = ClassUtil.getBytecodeFromLaunchClassLoader(clazz.getName());
+                        byte[] bytes = ClassUtil.getBytecodeFromLaunchClassLoader(clazz.getName(), true, true);
                         if (bytes == null)
                             continue;
                         new ClassReader(bytes).accept(context, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
