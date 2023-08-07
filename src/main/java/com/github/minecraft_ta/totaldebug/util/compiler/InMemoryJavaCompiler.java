@@ -86,7 +86,10 @@ public class InMemoryJavaCompiler {
                     .distinct()
                     .filter(url -> {
                         String str = Paths.get(url).getFileName().toString();
-                        return !str.startsWith("forge-") && !str.equals("1.7.10.jar") && (!str.contains("minecraft") || str.equals("minecraft-class-dump.jar"));
+                        return !str.startsWith("forge-") && !str.equals("1.7.10.jar")
+                               // This jar has a Class-Path manifest attribute which causes unwanted jars to be added to the classpath
+                               && !str.equals("lwjgl3ify-forgePatches.jar")
+                               && (!str.contains("minecraft") || str.equals("minecraft-class-dump.jar"));
                     })
                     .collect(Collectors.joining(SystemUtils.IS_OS_UNIX ? ":" : ";"));
         } catch (MalformedURLException e) {
