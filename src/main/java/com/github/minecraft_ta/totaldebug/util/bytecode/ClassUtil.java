@@ -41,6 +41,7 @@ import java.util.zip.ZipOutputStream;
 
 public class ClassUtil {
 
+    private static final boolean LOG_TRANSFORMER_ERRORS = Boolean.getBoolean("totaldebug.logTransformerErrors");
     private static final List<String> MINIMAL_TRANSFORMER_WHITELIST = Arrays.asList(
             "net.minecraftforge.transformers.ForgeAccessTransformer",
             "cpw.mods.fml.common.asm.transformers.AccessTransformer",
@@ -95,11 +96,15 @@ public class ClassUtil {
                     .disableNestedJarScanning()
                     .disableRuntimeInvisibleAnnotations()
                     .ignoreClassVisibility()
-                    .acceptJars("1.7.10*.jar", "forge*.jar", "*minecraft*.jar").scan()) {
+                    .acceptJars("1.7.10*.jar", "forge*.jar", "*minecraft*.jar")
+                    .scan()) {
                 ZipUtils.openForWriting(outputPath, (outputStream, crc) -> {
                     // Get minecraft classes using classpath scan
                     for (ClassInfo classInfo : scanResult.getAllClasses()) {
                         String name = getTransformedName(classInfo.getName());
+                        if (!name.startsWith("net.minecraft") && !name.startsWith("cpw.mods"))
+                            continue;
+
                         writeTransformedClassToZip(outputStream, classInfo.getName(), name, crc, () -> {
                             try (InputStream stream = classInfo.getResource().open()) {
                                 return IOUtils.toByteArray(stream);
@@ -213,8 +218,6 @@ public class ClassUtil {
     }
 
     private static void writeTransformedClassToZip(ZipOutputStream outputStream, String untransformedName, String name, CRC32 crc32, UncheckedSupplier<byte[]> fallbackResourceSupplier) throws IOException {
-        name = name.replace('.', '/') + ".class";
-
         byte[] bytes = getBytecodeFromLaunchClassLoader(name, false);
         if (bytes == null) {
             bytes = runTransformers(untransformedName, name, fallbackResourceSupplier.get(), false);
@@ -223,7 +226,6 @@ public class ClassUtil {
                 return;
         }
 
-
         // Removes broken classes, that are valid. Currently, this filters two classes from lwjgl3ify that have themselves
         // as their super class. These are org/lwjglx/PointerBuffer (org/lwjglx/PointerBuffer.class) and
         // org/lwjglx/openal/OpenALException (org/lwjgl/openal/OpenALException.class).
@@ -231,7 +233,7 @@ public class ClassUtil {
         if (reader.getClassName().equals(reader.getSuperName()))
             return;
 
-        ZipUtils.writeStoredEntry(outputStream, crc32, name, bytes);
+        ZipUtils.writeStoredEntry(outputStream, crc32, name.replace('.', '/') + ".class", bytes);
     }
 
     public static Map<String, Class<?>> getCachedClassesFromLaunchClassLoader() {
@@ -298,15 +300,14 @@ public class ClassUtil {
                 if (e.getClass().getName().equals("org.spongepowered.asm.mixin.transformer.throwables.IllegalClassLoadError"))
                     continue;
 
-                TotalDebug.LOGGER.error(String.format(
-                                "Transformer %s (%s) failed for class %s, %s. Disabling...",
-                                transformer, MINIMAL_TRANSFORMERS.contains(transformer) ? "minimal" : "other",
-                                untransformedName, transformedName),
-                        e
-                );
-                // Minimal transformers should not fail :)
-                if (!minimalTransformers)
-                    ALL_TRANSFORMERS.remove(transformer);
+                if (LOG_TRANSFORMER_ERRORS) {
+                    TotalDebug.LOGGER.error(String.format(
+                                    "Transformer %s (%s) failed for class %s, %s. Disabling...",
+                                    transformer, MINIMAL_TRANSFORMERS.contains(transformer) ? "minimal" : "other",
+                                    untransformedName, transformedName),
+                            e
+                    );
+                }
             }
         }
         return bytes;

@@ -1,14 +1,11 @@
 package com.github.minecraft_ta.totaldebug.util.bytecode;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.util.bytecode.asm6.ClassRemapper;
 import cpw.mods.fml.common.asm.transformers.deobf.FMLRemappingAdapter;
 import net.minecraft.launchwrapper.IClassTransformer;
 import org.apache.commons.io.IOUtils;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.*;
+import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 
 import java.io.IOException;
@@ -40,22 +37,8 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         ClassReader reader = new ClassReader(basicClass);
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-        ClassVisitor classVisitor = new FMLRemappingAdapter(new ClassRemapper(writer, this) {
-            @Override
-            public void visitInnerClass(String name, String outerName, String innerName, int access) {
-                //This fixes inner class names, for some reason `name` is de-obfuscated but `innerName` is not
-                int dollarIndex = name.lastIndexOf('$');
-                if (innerName != null && dollarIndex != -1)
-                    innerName = name.substring(dollarIndex + 1);
-                super.visitInnerClass(name, outerName, innerName, access);
-            }
+        ClassVisitor classVisitor = new ASM9FMLRemappingAdapter(writer);
 
-            @Override
-            public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
-                // Remove empty signatures
-                return super.visitField(access, name, desc, signature != null && signature.isEmpty() ? null : signature, value);
-            }
-        });
         //Skip debug symbols for minecraft classes to allow Procyon to generate proper variable names
         reader.accept(classVisitor, ClassReader.EXPAND_FRAMES | (transformedName.startsWith("net.minecraft") ? ClassReader.SKIP_DEBUG : 0));
         return writer.toByteArray();
@@ -164,5 +147,74 @@ public class RuntimeMappingsTransformer extends Remapper implements IClassTransf
     private static String[] splitAfterLastSlash(String s) {
         int index = s.lastIndexOf('/');
         return new String[]{s.substring(0, index), s.substring(index + 1)};
+    }
+
+    /**
+     * Removes API checks for Opcodes > ASM5 because FMLRemappingAdapter uses ASM5 internally.
+     */
+    private class ASM9FMLRemappingAdapter extends FMLRemappingAdapter {
+
+        public ASM9FMLRemappingAdapter(ClassWriter writer) {
+            super(new ClassRemapper(writer, RuntimeMappingsTransformer.this) {
+                @Override
+                public void visitInnerClass(String name, String outerName, String innerName, int access) {
+                    //This fixes inner class names, for some reason `name` is de-obfuscated but `innerName` is not
+                    int dollarIndex = name.lastIndexOf('$');
+                    if (innerName != null && dollarIndex != -1)
+                        innerName = name.substring(dollarIndex + 1);
+                    super.visitInnerClass(name, outerName, innerName, access);
+                }
+
+                @Override
+                public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+                    // Remove empty signatures
+                    return super.visitField(access, name, desc, signature != null && signature.isEmpty() ? null : signature, value);
+                }
+            });
+        }
+
+        @Override
+        public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+            if ((access & Opcodes.ACC_RECORD) != 0) {
+                if (cv != null)
+                    cv.visit(version, access, name, signature, superName, interfaces);
+                return;
+            }
+
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
+
+        @Override
+        public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+            return super.visitField(access, name, desc, signature, value);
+        }
+
+        @Override
+        public ModuleVisitor visitModule(String name, int access, String version) {
+            return cv != null ? cv.visitModule(name, access, version) : null;
+        }
+
+        @Override
+        public void visitNestHost(String nestHost) {
+            if (this.cv != null)
+                this.cv.visitNestHost(nestHost);
+        }
+
+        @Override
+        public void visitNestMember(String nestMember) {
+            if (this.cv != null)
+                this.cv.visitNestMember(nestMember);
+        }
+
+        @Override
+        public void visitPermittedSubclass(String permittedSubclass) {
+            if (this.cv != null)
+                this.cv.visitPermittedSubclass(permittedSubclass);
+        }
+
+        @Override
+        public RecordComponentVisitor visitRecordComponent(String name, String descriptor, String signature) {
+            return this.cv != null ? this.cv.visitRecordComponent(name, descriptor, signature) : null;
+        }
     }
 }
