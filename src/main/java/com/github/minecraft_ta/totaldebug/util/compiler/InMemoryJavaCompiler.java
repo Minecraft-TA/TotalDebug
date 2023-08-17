@@ -13,11 +13,9 @@ import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.security.SecureClassLoader;
@@ -77,20 +75,23 @@ public class InMemoryJavaCompiler {
                             Stream.of(TotalDebug.PROXY.getMinecraftClassDumpPath().toUri().toURL())
                     ).map(url -> {
                         try {
-                            return URLDecoder.decode(url.getFile(), StandardCharsets.UTF_8.name()).substring(1);
-                        } catch (UnsupportedEncodingException ignored) {
+                            return url.toURI();
+                        } catch (URISyntaxException ignored) {
+                            TotalDebug.LOGGER.error("Failed to convert URL to URI: " + url);
                             return null;
                         }
                     })
                     .filter(Objects::nonNull)
+                    .map(Paths::get)
                     .distinct()
-                    .filter(url -> {
-                        String str = Paths.get(url).getFileName().toString();
+                    .filter(path -> {
+                        String str = path.getFileName().toString();
                         return !str.startsWith("forge-") && !str.equals("1.7.10.jar")
                                // This jar has a Class-Path manifest attribute which causes unwanted jars to be added to the classpath
                                && !str.equals("lwjgl3ify-forgePatches.jar")
                                && (!str.contains("minecraft") || str.equals("minecraft-class-dump.jar"));
                     })
+                    .map(Path::toString)
                     .collect(Collectors.joining(SystemUtils.IS_OS_UNIX ? ":" : ";"));
         } catch (MalformedURLException e) {
             throw new RuntimeException(e);
