@@ -39,7 +39,7 @@ public class ScriptRunner {
         boolean isAllowedToRun = !isServerSide ||
                                  (TotalDebug.INSTANCE.config.enableScripts &&
                                   (!TotalDebug.INSTANCE.config.enableScriptsOnlyForOp) ||
-                                  owner.canCommandSenderUseCommand(4, "dummy"));
+                                  owner.canCommandSenderUseCommand(FMLCommonHandler.instance().getMinecraftServerInstance().getOpPermissionLevel(), "dummy"));
 
         CompletableFuture.supplyAsync(() -> {
             if (!isAllowedToRun)
