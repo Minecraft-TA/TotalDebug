@@ -11,6 +11,7 @@ import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
 import net.minecraft.launchwrapper.IClassTransformer;
+import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -50,7 +51,6 @@ public class ClassUtil {
             "cpw.mods.fml.common.asm.transformers.PatchingTransformer",
             "com.github.minecraft_ta.totaldebug.util.bytecode.RuntimeMappingsTransformer"
     );
-    private static final LaunchClassLoader LAUNCH_CLASS_LOADER = ((LaunchClassLoader) ClassUtil.class.getClassLoader());
     private static final List<IClassTransformer> ALL_TRANSFORMERS;
     private static final List<IClassTransformer> MINIMAL_TRANSFORMERS;
     private static final Method UNTRANSFORM_NAME_METHOD;
@@ -58,7 +58,7 @@ public class ClassUtil {
     private static final Map<String, byte[]> LAUNCH_CLASS_LOADER_RESOURCE_CACHE;
     static {
         try {
-            ALL_TRANSFORMERS = LAUNCH_CLASS_LOADER.getTransformers().stream()
+            ALL_TRANSFORMERS = Launch.classLoader.getTransformers().stream()
                     .filter(t -> !(t instanceof DeobfuscationTransformer))
                     .collect(Collectors.toCollection(CopyOnWriteArrayList::new));
             ALL_TRANSFORMERS.add(new RuntimeMappingsTransformer());
@@ -66,14 +66,14 @@ public class ClassUtil {
                     .filter(t -> MINIMAL_TRANSFORMER_WHITELIST.contains(t.getClass().getName()))
                     .collect(Collectors.toList());
 
-            UNTRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("untransformName", String.class);
+            UNTRANSFORM_NAME_METHOD = Launch.classLoader.getClass().getDeclaredMethod("untransformName", String.class);
             UNTRANSFORM_NAME_METHOD.setAccessible(true);
-            TRANSFORM_NAME_METHOD = LAUNCH_CLASS_LOADER.getClass().getDeclaredMethod("transformName", String.class);
+            TRANSFORM_NAME_METHOD = Launch.classLoader.getClass().getDeclaredMethod("transformName", String.class);
             TRANSFORM_NAME_METHOD.setAccessible(true);
 
-            Field resourceCacheField = LAUNCH_CLASS_LOADER.getClass().getDeclaredField("resourceCache");
+            Field resourceCacheField = Launch.classLoader.getClass().getDeclaredField("resourceCache");
             resourceCacheField.setAccessible(true);
-            LAUNCH_CLASS_LOADER_RESOURCE_CACHE = (Map<String, byte[]>) resourceCacheField.get(LAUNCH_CLASS_LOADER);
+            LAUNCH_CLASS_LOADER_RESOURCE_CACHE = (Map<String, byte[]>) resourceCacheField.get(Launch.classLoader);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -240,7 +240,7 @@ public class ClassUtil {
         try {
             Field f = LaunchClassLoader.class.getDeclaredField("cachedClasses");
             f.setAccessible(true);
-            return (Map<String, Class<?>>) f.get(LAUNCH_CLASS_LOADER);
+            return (Map<String, Class<?>>) f.get(Launch.classLoader);
         } catch (Throwable e) {
             throw new IllegalStateException(e);
         }
@@ -259,7 +259,7 @@ public class ClassUtil {
     @Nullable
     public static byte[] getBytecodeFromLaunchClassLoader(String name, boolean loadIfAbsent, boolean minimalTransformers) {
         try {
-            String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
+            String untransformedName = (String) UNTRANSFORM_NAME_METHOD.invoke(Launch.classLoader, name);
             String transformedName = getTransformedName(name);
             byte[] bytes = LAUNCH_CLASS_LOADER_RESOURCE_CACHE.get(untransformedName);
             if (!loadIfAbsent) {
@@ -270,11 +270,11 @@ public class ClassUtil {
 
             try {
                 if (bytes == null)
-                    bytes = LAUNCH_CLASS_LOADER.getClassBytes(untransformedName);
+                    bytes = Launch.classLoader.getClassBytes(untransformedName);
             } catch (IOException ignored) {}
             try {
                 if (bytes == null)
-                    bytes = getBytecode(Class.forName(name.replace('/', '.'), false, LAUNCH_CLASS_LOADER));
+                    bytes = getBytecode(Class.forName(name.replace('/', '.'), false, Launch.classLoader));
             } catch (ClassNotFoundException ignored) {}
 
             if (bytes == null)
@@ -315,7 +315,7 @@ public class ClassUtil {
 
     private static String getTransformedName(String name) {
         try {
-            return (String) TRANSFORM_NAME_METHOD.invoke(LAUNCH_CLASS_LOADER, name);
+            return (String) TRANSFORM_NAME_METHOD.invoke(Launch.classLoader, name);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
