@@ -1,9 +1,0 @@
-{
-  "variants": {
-    "normal": [
-      {
-        "model": "total_debug:tick_block"
-      }
-    ]
-  }
-}

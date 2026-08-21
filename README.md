@@ -1,20 +1,28 @@
-# Total Debug
-Forge mod providing useful utilities when automating to the extreme.
+# TotalDebug
 
-- Adds a block which shows how often per second it is ticked
-- Adds a minimap like chunk view, similar to CarpetClient
-- Allows you to run java code on your server or client while in-game
-- Allows you to view the decompiled classes of Blocks, Tile Entities and more while you're in-game.
-- Allows you to search for method and field references in every loaded class (e.g. find every block that accelerates 
-  tile entities)
-- Displays TPS and MSPT when you press tab
+TotalDebug is being ported to Minecraft 1.21.1 as a native NeoForge mod.
 
-Most of these features are accessible through the companion app for this mod, which can be
-found here: https://github.com/Minecraft-TA/TotalDebugCompanion
+This branch contains only the clean NeoForge foundation. No legacy features have been ported yet. The 1.12.2 implementation remains the main behavioral reference, with the 1.7.10 history available for older or divergent implementations.
 
-### Credits
+## Development
 
-Thanks to the [MinecraftForge](https://github.com/MinecraftForge/) and [ModerCoderPack](https://github.com/ModCoderPack)
-teams for creating the [forge](http://export.mcpbot.bspk.rs/stable/) and
-[searge](https://github.com/MinecraftForge/MCPConfig/blob/master/versions/release/1.12.2/joined.tsrg) mappings used in 
-this project.
+- Minecraft 1.21.1
+- NeoForge 21.1.248
+- Java 21
+- Mojang mappings with Parchment
+- Gradle 9.2.1 and ModDevGradle 2.0.144
+
+Build with:
+
+```powershell
+.\gradlew.bat build
+```
+
+Run a development client or dedicated server with:
+
+```powershell
+.\gradlew.bat runClient
+.\gradlew.bat runServer
+```
+
+The legacy companion application is maintained separately in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).
