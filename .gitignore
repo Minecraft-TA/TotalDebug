@@ -42,3 +42,7 @@ repo/
 
 ### Local agent settings ###
 .claude/
+
+### Local legacy reference sources ###
+legacy/1.7.10/src/
+legacy/1.12.2/src/

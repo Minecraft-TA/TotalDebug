@@ -2,7 +2,7 @@
 
 TotalDebug is being ported to Minecraft 1.21.1 as a native NeoForge mod.
 
-This branch contains only the clean NeoForge foundation. No legacy features have been ported yet. The 1.12.2 implementation remains the main behavioral reference, with the 1.7.10 history available for older or divergent implementations.
+This branch contains only the clean NeoForge foundation. No legacy features have been ported yet. Local searchable snapshots of the old implementations may live under `legacy/`; their source trees are excluded from Git and Gradle. The 1.7.10 implementation is more advanced for most TotalDebug features and is the primary functional reference. The 1.12.2 snapshot is useful for its newer Minecraft and Forge APIs.
 
 ## Development
 
