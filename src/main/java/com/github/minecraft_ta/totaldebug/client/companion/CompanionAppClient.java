@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.CompanionReadyMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.DecompileOrOpenMessage;
@@ -25,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
     public static final String SESSION_TOKEN_ENVIRONMENT_VARIABLE = "TOTALDEBUG_SESSION_TOKEN";
@@ -45,9 +46,9 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile CompletableFuture<Void> authenticated = new CompletableFuture<>();
     private volatile CompletableFuture<Void> ready = new CompletableFuture<>();
 
-    private volatile Consumer<DecompileOrOpenMessage> decompileRequestHandler = message -> TotalDebug.LOGGER.warn(
+    private volatile BiConsumer<String, SourceTarget> decompileRequestHandler = (binaryName, sourceTarget) -> TotalDebug.LOGGER.warn(
             "Ignoring companion decompile request for {} because no handler is installed",
-            message.name()
+            binaryName
     );
     private volatile String sessionToken;
     private volatile long negotiatedCapabilities;
@@ -78,16 +79,18 @@ public final class CompanionAppClient implements AutoCloseable {
         Runtime.getRuntime().addShutdownHook(new Thread(this::close, "TotalDebug companion shutdown"));
     }
 
-    public void setDecompileRequestHandler(Consumer<DecompileOrOpenMessage> handler) {
+    public void setDecompileRequestHandler(BiConsumer<String, SourceTarget> handler) {
         this.decompileRequestHandler = Objects.requireNonNull(handler, "handler");
     }
 
-    public synchronized void open(Path sourceFile, int targetType, String targetIdentifier) throws IOException {
+    public synchronized void open(Path sourceFile, SourceTarget sourceTarget) throws IOException {
+        Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
+        CompanionSourceTargetCodec.WireTarget wireTarget = CompanionSourceTargetCodec.encode(sourceTarget);
         this.client.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(
                 sourceFile.toAbsolutePath().normalize().toString(),
-                targetType,
-                targetIdentifier
+                wireTarget.javaElementType(),
+                wireTarget.identifier()
         ));
     }
 
@@ -138,7 +141,14 @@ public final class CompanionAppClient implements AutoCloseable {
                 failSession("Companion sent a reverse-decompile request without negotiating that capability", null);
                 return;
             }
-            this.decompileRequestHandler.accept(message);
+            SourceTarget sourceTarget;
+            try {
+                sourceTarget = CompanionSourceTargetCodec.decode(message.targetType(), message.targetIdentifier());
+            } catch (IllegalArgumentException exception) {
+                failSession("Companion sent an invalid source target: " + exception.getMessage(), exception);
+                return;
+            }
+            this.decompileRequestHandler.accept(message.name(), sourceTarget);
         });
         this.client.addConnectionListener(new IConnectionListener() {
             @Override

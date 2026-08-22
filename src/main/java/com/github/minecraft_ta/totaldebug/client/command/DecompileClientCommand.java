@@ -1,6 +1,7 @@
-package com.github.minecraft_ta.totaldebug.client;
+package com.github.minecraft_ta.totaldebug.client.command;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -46,7 +47,7 @@ final class DecompileClientCommand {
             return 0;
         }
 
-        TotalDebugClientRuntime.decompilation().openClass(BuiltInRegistries.BLOCK.get(blockId).getClass());
+        TotalDebugClient.get().openClass(BuiltInRegistries.BLOCK.get(blockId).getClass());
         return 1;
     }
 }

@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client;
+package com.github.minecraft_ta.totaldebug.client.input;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;

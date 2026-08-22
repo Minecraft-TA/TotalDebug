@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client;
+package com.github.minecraft_ta.totaldebug.client.tick;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;

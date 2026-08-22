@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client;
+package com.github.minecraft_ta.totaldebug.client.decompile;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.bytecode.ClassLoaderBytecodeSource;
@@ -48,13 +48,12 @@ public final class ClientDecompilationService {
     }
 
     public CompletableFuture<Path> openClass(Class<?> targetClass) {
-        return openClass(targetClass, -1, "");
+        return open(new DecompilationRequest(targetClass, SourceTarget.wholeClass()));
     }
 
-    public CompletableFuture<Path> openClass(Class<?> targetClass, int targetType, String targetIdentifier) {
-        Objects.requireNonNull(targetClass, "targetClass");
-        Objects.requireNonNull(targetIdentifier, "targetIdentifier");
-        DecompilationRequest request = new DecompilationRequest(targetClass, targetType, targetIdentifier);
+    public CompletableFuture<Path> open(DecompilationRequest request) {
+        Objects.requireNonNull(request, "request");
+        Class<?> targetClass = request.targetClass();
 
         CompletableFuture<Path> task;
         synchronized (this.inFlightRequests) {
@@ -69,7 +68,7 @@ public final class ClientDecompilationService {
                 try {
                     Path sourceFile = decompile(targetClass);
                     if (TotalDebugConfig.CLIENT.useCompanionApp.get()) {
-                        this.companionApp.open(sourceFile, targetType, targetIdentifier);
+                        this.companionApp.open(sourceFile, request.sourceTarget());
                     }
                     return sourceFile;
                 } catch (IOException exception) {
@@ -107,11 +106,12 @@ public final class ClientDecompilationService {
         return task;
     }
 
-    public void openNamedClass(String binaryName, int targetType, String targetIdentifier) {
+    public void openNamedClass(String binaryName, SourceTarget sourceTarget) {
         Objects.requireNonNull(binaryName, "binaryName");
+        Objects.requireNonNull(sourceTarget, "sourceTarget");
         try {
             Class<?> targetClass = Class.forName(binaryName, false, TotalDebug.class.getClassLoader());
-            openClass(targetClass, targetType, targetIdentifier);
+            open(new DecompilationRequest(targetClass, sourceTarget));
         } catch (ClassNotFoundException | LinkageError failure) {
             TotalDebug.LOGGER.error("The companion requested unknown runtime class {}", binaryName, failure);
             showMessage(Component.literal("TotalDebug: unknown runtime class " + binaryName)
@@ -196,8 +196,5 @@ public final class ClientDecompilationService {
                 minecraft.player.displayClientMessage(message, false);
             }
         });
-    }
-
-    private record DecompilationRequest(Class<?> targetClass, int targetType, String targetIdentifier) {
     }
 }
