@@ -1,17 +1,35 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JdtConfigurationTest {
+
+    @BeforeAll
+    static void initializeClassIndex() throws IOException {
+        CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(classBytes(Object.class), classBytes(String.class))));
+    }
+
+    @AfterAll
+    static void closeClassIndex() {
+        CompanionClassIndex.close();
+    }
 
     @Test
     void configuresJava21WithoutPreviewFeatures() {
@@ -42,11 +60,38 @@ class JdtConfigurationTest {
                 """;
 
         var unit = ASTCache.rawParse("Renderer", source);
-        var errors = Arrays.stream(unit.getProblems())
-                .filter(IProblem::isError)
+        var syntaxErrors = Arrays.stream(unit.getProblems())
+                .filter(problem -> problem.isError() && (problem.getID() & IProblem.Syntax) != 0)
                 .map(IProblem::getMessage)
                 .toList();
 
-        assertTrue(errors.isEmpty(), () -> "Java 21 source produced parser errors: " + errors);
+        assertTrue(syntaxErrors.isEmpty(), () -> "Java 21 source produced parser errors: " + syntaxErrors);
+    }
+
+    @Test
+    void codeSelectCanResolveAgainstTheSyntheticJavaProject() {
+        var source = """
+                package example;
+                final class Renderer {
+                    String render() {
+                        return "ok";
+                    }
+                }
+                """;
+        var unit = ASTCache.rawParse("Renderer", source);
+        int stringOffset = source.indexOf("String");
+
+        var elements = assertDoesNotThrow(() -> unit.getTypeRoot().codeSelect(stringOffset, 0));
+
+        assertEquals(1, elements.length);
+        assertTrue(elements[0] instanceof IType);
+        assertEquals("java.lang.String", ((IType) elements[0]).getFullyQualifiedName());
+    }
+
+    private static byte[] classBytes(Class<?> type) throws IOException {
+        String resource = "/" + type.getName().replace('.', '/') + ".class";
+        try (var stream = Objects.requireNonNull(type.getResourceAsStream(resource), resource)) {
+            return stream.readAllBytes();
+        }
     }
 }

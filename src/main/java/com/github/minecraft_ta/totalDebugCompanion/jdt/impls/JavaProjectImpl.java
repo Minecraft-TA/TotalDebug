@@ -33,7 +33,7 @@ public class JavaProjectImpl extends JavaProject {
 
     @Override
     public NameLookup newNameLookup(ICompilationUnit[] workingCopies, boolean excludeTestCode) throws JavaModelException {
-        return new NameLookupImpl();
+        return new NameLookupImpl(this);
     }
 
     @Override
@@ -63,6 +63,11 @@ public class JavaProjectImpl extends JavaProject {
 
     @Override
     public IClasspathEntry[] getResolvedClasspath() throws JavaModelException {
+        return new IClasspathEntry[0];
+    }
+
+    @Override
+    public IClasspathEntry[] getRawClasspath() throws JavaModelException {
         return new IClasspathEntry[0];
     }
 

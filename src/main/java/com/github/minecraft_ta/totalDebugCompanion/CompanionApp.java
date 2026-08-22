@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
@@ -59,6 +60,7 @@ public final class CompanionApp {
                 );
             }
 
+            CompanionClassIndex.open(configuration.indexFile());
             configureLookAndFeel();
             setupDataDirectories();
             prewarmJavaParser();
@@ -68,6 +70,7 @@ public final class CompanionApp {
             }
             stopUi();
             session.close();
+            CompanionClassIndex.close();
             System.exit(0);
         } catch (Throwable throwable) {
             throwable.printStackTrace(System.err);
@@ -75,6 +78,7 @@ public final class CompanionApp {
             if (session != null) {
                 session.close();
             }
+            CompanionClassIndex.close();
             System.exit(1);
         }
     }

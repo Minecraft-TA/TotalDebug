@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
@@ -8,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHe
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.FindImplementationsPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.IndexedMethod;
@@ -115,7 +115,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     switch (el) {
                         case SourceMethod sr -> {
                             var className = CodeUtils.splitTypeName(sr.getDeclaringType().getFullyQualifiedName());
-                            var declaringClass = SearchEverywherePopup.CLASS_INDEX.findClass(className[0], className[1]);
+                            var declaringClass = CompanionClassIndex.get().findClass(className[0], className[1]);
                             if (declaringClass == null) {
                                 System.err.println("Declaring class not found in index: " + className[0] + "." + className[1]);
                                 return;
@@ -140,7 +140,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                         }
                         case SourceType st -> {
                             var className = CodeUtils.splitTypeName(st.getFullyQualifiedName());
-                            var indexedClass = SearchEverywherePopup.CLASS_INDEX.findClass(className[0], className[1]);
+                            var indexedClass = CompanionClassIndex.get().findClass(className[0], className[1]);
                             if (indexedClass == null) {
                                 System.err.println("Class not found in index: " + st.getFullyQualifiedName());
                                 return;

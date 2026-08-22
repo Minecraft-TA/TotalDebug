@@ -2,11 +2,11 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
-import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.SearchOptions;
 
@@ -26,8 +26,6 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
-
-    public static final ClassIndex CLASS_INDEX = ClassIndex.fromFile(CompanionApp.getIndexFile().toString());
 
     private static final SearchEverywherePopup INSTANCE = new SearchEverywherePopup();
 
@@ -101,7 +99,7 @@ public class SearchEverywherePopup extends JFrame {
             }
 
             var classes = Arrays
-                    .stream(CLASS_INDEX.findClasses(query, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.IGNORE_CASE, 800)))
+                    .stream(CompanionClassIndex.get().findClasses(query, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.IGNORE_CASE, 800)))
                     // Down-rank inner classes
                     .sorted((a, b) -> a.getInnerClassType() != null ? b.getInnerClassType() != null ? 0 : 1 : b.getInnerClassType() != null ? -1 : 0)
                     .collect(Collectors.toList());

@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JIndexResolvedBinaryType;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.IndexedPackage;
 import com.github.tth05.jindex.SearchOptions;
@@ -12,6 +12,7 @@ import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.internal.core.IJavaElementRequestor;
 import org.eclipse.jdt.internal.core.NameLookup;
+import org.eclipse.jdt.internal.core.util.HashtableOfArrayToObject;
 import org.eclipse.jdt.internal.core.util.Util;
 
 import java.util.Arrays;
@@ -19,13 +20,13 @@ import java.util.HashMap;
 
 public class NameLookupImpl extends NameLookup {
 
-    public NameLookupImpl() {
-        super(null, null, null, null, new HashMap<>());
+    public NameLookupImpl(JavaProjectImpl javaProject) {
+        super(javaProject, new IPackageFragmentRoot[0], new HashtableOfArrayToObject(), null, new HashMap<>());
     }
 
     @Override
     public boolean isPackage(String[] pkgName) {
-        return SearchEverywherePopup.CLASS_INDEX.findPackage(Util.concatWith(pkgName, '/')) != null;
+        return CompanionClassIndex.get().findPackage(Util.concatWith(pkgName, '/')) != null;
     }
 
     @Override
@@ -34,7 +35,7 @@ public class NameLookupImpl extends NameLookup {
         if (packageName.equals("") && typeName.equals("BaseScript"))
             return JDTHacks.createNameLookupAnswer(new CompilationUnitImpl("BaseScript", BaseScript.getText()).getType("BaseScript"), null, null);
 
-        var foundClass = SearchEverywherePopup.CLASS_INDEX.findClass(packageName, typeName.replace('.', '$'));
+        var foundClass = CompanionClassIndex.get().findClass(packageName, typeName.replace('.', '$'));
         if (foundClass != null) {
             return JDTHacks.createNameLookupAnswer(new JIndexResolvedBinaryType(foundClass), null, null);
         }
@@ -45,7 +46,7 @@ public class NameLookupImpl extends NameLookup {
     public IPackageFragment[] findPackageFragments(String name, boolean partialMatch, boolean patternMatch) {
         if (patternMatch || partialMatch)
             throw new IllegalArgumentException();
-        var pkg = SearchEverywherePopup.CLASS_INDEX.findPackage(name);
+        var pkg = CompanionClassIndex.get().findPackage(name);
         if (pkg == null)
             return null;
         return new IPackageFragment[]{JDTHacks.createPackageFragment(pkg.getNameWithParentsDot())};
@@ -62,7 +63,7 @@ public class NameLookupImpl extends NameLookup {
             if (packageName.isBlank())
                 return;
 
-            var indexedPackage = SearchEverywherePopup.CLASS_INDEX.findPackage(packageName);
+            var indexedPackage = CompanionClassIndex.get().findPackage(packageName);
             if (indexedPackage == null)
                 return;
 
@@ -74,7 +75,7 @@ public class NameLookupImpl extends NameLookup {
             else
                 classes = Arrays.stream(indexedPackage.getClasses()).filter(c -> c.getName().equals(finalName)).toArray(IndexedClass[]::new);
         } else {
-            classes = SearchEverywherePopup.CLASS_INDEX.findClasses(name, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY, 5000));
+            classes = CompanionClassIndex.get().findClasses(name, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY, 5000));
         }
 
         for (IndexedClass foundClass : classes) {
@@ -92,7 +93,7 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public void seekPackageFragments(String name, boolean partialMatch, IJavaElementRequestor requestor, IPackageFragmentRoot[] moduleContext) {
-        for (IndexedPackage pkg : SearchEverywherePopup.CLASS_INDEX.findPackages(name)) {
+        for (IndexedPackage pkg : CompanionClassIndex.get().findPackages(name)) {
             requestor.acceptPackageFragment(JDTHacks.createPackageFragment(pkg.getNameWithParentsDot()));
         }
     }

@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.ClassFileImpl;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.tth05.jindex.IndexedClass;
 import org.eclipse.jdt.core.*;
@@ -80,7 +79,7 @@ public class JIndexResolvedBinaryType extends ResolvedBinaryType {
             return null;
         var typeStr = new String(enclosingTypeName);
         var parts = CodeUtils.splitTypeName(typeStr);
-        return new JIndexResolvedBinaryType(SearchEverywherePopup.CLASS_INDEX.findClass(parts[0], parts[1]));
+        return new JIndexResolvedBinaryType(CompanionClassIndex.get().findClass(parts[0], parts[1]));
     }
 
     @Override
