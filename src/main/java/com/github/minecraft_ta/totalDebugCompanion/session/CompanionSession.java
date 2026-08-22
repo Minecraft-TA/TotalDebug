@@ -29,6 +29,7 @@ import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -71,16 +72,17 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     static InetSocketAddress sessionAddress(int port) {
-        return new InetSocketAddress("127.0.0.1", port);
+        return new InetSocketAddress(CompanionLaunchContract.IPV4_LOOPBACK_HOST, port);
     }
 
     public Server server() {
         return this.server;
     }
 
-    public long awaitAuthentication(int timeoutSeconds) throws IOException {
+    public long awaitAuthentication(Duration timeout) throws IOException {
+        Objects.requireNonNull(timeout, "timeout");
         try {
-            return this.authentication.get(timeoutSeconds, TimeUnit.SECONDS);
+            return this.authentication.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for the Minecraft session handshake", exception);
@@ -88,7 +90,7 @@ public final class CompanionSession implements AutoCloseable {
             throw new IOException("Minecraft session handshake failed", exception.getCause());
         } catch (TimeoutException exception) {
             throw new IOException(
-                    "Minecraft did not authenticate within " + timeoutSeconds + " seconds",
+                    "Minecraft did not authenticate within " + timeout,
                     exception
             );
         }
@@ -122,16 +124,17 @@ public final class CompanionSession implements AutoCloseable {
         }
     }
 
-    void awaitAuthenticatedDisconnect(int timeoutSeconds) throws IOException {
+    void awaitAuthenticatedDisconnect(Duration timeout) throws IOException {
+        Objects.requireNonNull(timeout, "timeout");
         try {
-            this.authenticatedDisconnect.get(timeoutSeconds, TimeUnit.SECONDS);
+            this.authenticatedDisconnect.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for Minecraft to disconnect", exception);
         } catch (ExecutionException exception) {
             throw new IOException("Authenticated Minecraft session ended with an error", exception.getCause());
         } catch (TimeoutException exception) {
-            throw new IOException("Minecraft did not disconnect within " + timeoutSeconds + " seconds", exception);
+            throw new IOException("Minecraft did not disconnect within " + timeout, exception);
         }
     }
 
@@ -142,35 +145,76 @@ public final class CompanionSession implements AutoCloseable {
 
     private void registerMessages() {
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.READY, ReadyMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.DECOMPILE_OR_OPEN, DecompileOrOpenMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.OPEN_SEARCH_RESULTS, OpenSearchResultsMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.DECOMPILE_OR_OPEN,
+                DecompileOrOpenMessage.class,
+                DecompileOrOpenMessage::new
+        );
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.OPEN_SEARCH_RESULTS,
+                OpenSearchResultsMessage.class,
+                OpenSearchResultsMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.RECEIVE_DATA_STATE, ReceiveDataStateMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.CHUNK_GRID_DATA, ChunkGridDataMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.CHUNK_GRID_DATA,
+                ChunkGridDataMessage.class,
+                ChunkGridDataMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(
                 CompanionProtocol.CHUNK_GRID_REQUEST_INFO_UPDATE,
-                ChunkGridRequestInfoUpdateMessage.class
+                ChunkGridRequestInfoUpdateMessage.class,
+                ChunkGridRequestInfoUpdateMessage::new
         );
         this.server.getMessageProcessor().registerMessage(
                 CompanionProtocol.UPDATE_FOLLOW_PLAYER_STATE,
                 UpdateFollowPlayerStateMessage.class
         );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.SCRIPT_STATUS, ScriptStatusMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.SCRIPT_STATUS,
+                ScriptStatusMessage.class,
+                ScriptStatusMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.FOCUS_WINDOW,
+                FocusWindowMessage.class,
+                FocusWindowMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(
                 CompanionProtocol.PACKET_LOGGER_STATE_CHANGE,
                 PacketLoggerStateChangeMessage.class
         );
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.INCOMING_PACKETS, IncomingPacketsMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.OUTGOING_PACKETS, OutgoingPacketsMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.INCOMING_PACKETS,
+                IncomingPacketsMessage.class,
+                IncomingPacketsMessage::new
+        );
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.OUTGOING_PACKETS,
+                OutgoingPacketsMessage.class,
+                OutgoingPacketsMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.CLEAR_PACKETS, ClearPacketsMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.CHANNEL_LIST, ChannelListMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.CHANNEL_LIST,
+                ChannelListMessage.class,
+                ChannelListMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.SET_CHANNEL, SetChannelMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.PACKET_CONTENT, PacketContentMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.PACKET_CONTENT,
+                PacketContentMessage.class,
+                PacketContentMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.CAPTURE_PACKET, CapturePacketMessage.class);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.BLOCK_PACKET, BlockPacketMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.CLIENT_HELLO,
+                ClientHelloMessage.class,
+                ClientHelloMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.SERVER_HELLO, ServerHelloMessage.class);
     }
 

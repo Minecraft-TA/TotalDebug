@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.Cust
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SimpleMenuBarBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -32,10 +33,10 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Objects;
 
 public final class CompanionApp {
-    private static final int AUTHENTICATION_TIMEOUT_SECONDS = 60;
-
     public static Server SERVER;
     private static CompanionSession session;
     private static CompanionLaunchConfiguration configuration;
@@ -45,14 +46,19 @@ public final class CompanionApp {
     }
 
     public static void main(String[] args) {
+        System.exit(run(args, System.getenv(), CompanionTimeouts.DEFAULT));
+    }
+
+    static int run(String[] args, Map<String, String> environment, CompanionTimeouts timeouts) {
         try {
-            configuration = CompanionLaunchConfiguration.parse(args, System.getenv());
+            Objects.requireNonNull(timeouts, "timeouts");
+            configuration = CompanionLaunchConfiguration.parse(args, environment);
             validatePaths(configuration);
 
             session = new CompanionSession(configuration.consumeSessionToken());
             SERVER = session.server();
             session.bindAndPublish(configuration);
-            long capabilities = session.awaitAuthentication(AUTHENTICATION_TIMEOUT_SECONDS);
+            long capabilities = session.awaitAuthentication(timeouts.authentication());
             if ((capabilities & CompanionProtocol.CORE_CAPABILITIES) != CompanionProtocol.CORE_CAPABILITIES) {
                 throw new IOException(
                         "Minecraft did not negotiate all Companion core capabilities: 0x"
@@ -71,7 +77,7 @@ public final class CompanionApp {
             stopUi();
             session.close();
             CompanionClassIndex.close();
-            System.exit(0);
+            return 0;
         } catch (Throwable throwable) {
             throwable.printStackTrace(System.err);
             stopUiAfterFailure();
@@ -79,7 +85,7 @@ public final class CompanionApp {
                 session.close();
             }
             CompanionClassIndex.close();
-            System.exit(1);
+            return 1;
         }
     }
 

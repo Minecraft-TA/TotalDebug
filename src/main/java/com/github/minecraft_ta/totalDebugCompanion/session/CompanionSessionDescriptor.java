@@ -31,9 +31,9 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
         Files.deleteIfExists(target);
         Path staged = Files.createTempFile(parent, ".session-", ".tmp");
         try {
-            String contents = "protocol=" + this.protocolVersion + "\n"
-                    + "port=" + this.port + "\n"
-                    + "pid=" + this.processId + "\n";
+            String contents = CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY + "=" + this.protocolVersion + "\n"
+                    + CompanionLaunchContract.DESCRIPTOR_PORT_KEY + "=" + this.port + "\n"
+                    + CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY + "=" + this.processId + "\n";
             Files.writeString(staged, contents, StandardCharsets.UTF_8);
             Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
@@ -53,7 +53,9 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
             }
             String key = line.substring(0, separator);
             String value = line.substring(separator + 1);
-            if (!key.equals("protocol") && !key.equals("port") && !key.equals("pid")) {
+            if (!key.equals(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)
+                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)
+                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY)) {
                 throw new IOException("Unknown companion session descriptor field: " + key);
             }
             if (values.putIfAbsent(key, value) != null) {
@@ -65,9 +67,9 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
         }
         try {
             return new CompanionSessionDescriptor(
-                    Integer.parseInt(values.get("protocol")),
-                    Integer.parseInt(values.get("port")),
-                    Long.parseLong(values.get("pid"))
+                    Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)),
+                    Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)),
+                    Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY))
             );
         } catch (IllegalArgumentException exception) {
             throw new IOException("Companion session descriptor contains an invalid value", exception);

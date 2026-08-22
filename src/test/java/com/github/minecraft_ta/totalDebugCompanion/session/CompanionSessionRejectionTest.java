@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -40,15 +41,15 @@ class CompanionSessionRejectionTest {
         Path index = Files.writeString(this.temporaryDirectory.resolve("index"), "index");
         Path workspace = Files.createDirectory(this.temporaryDirectory.resolve("workspace"));
         Path sessionDirectory = Files.createDirectory(this.temporaryDirectory.resolve("session"));
-        Path descriptorFile = sessionDirectory.resolve("session.properties");
+        Path descriptorFile = sessionDirectory.resolve(CompanionLaunchContract.SESSION_DESCRIPTOR_FILE_NAME);
         CompanionLaunchConfiguration configuration = CompanionLaunchConfiguration.parse(
                 new String[]{
-                        "--data-directory", data.toString(),
-                        "--index-file", index.toString(),
-                        "--workspace-directory", workspace.toString(),
-                        "--session-descriptor", descriptorFile.toString()
+                        CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT, data.toString(),
+                        CompanionLaunchContract.INDEX_FILE_ARGUMENT, index.toString(),
+                        CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT, workspace.toString(),
+                        CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT, descriptorFile.toString()
                 },
-                Map.of(CompanionLaunchConfiguration.TOKEN_ENVIRONMENT_VARIABLE, "correct-token-value-1234567890abcdef")
+                Map.of(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, "correct-token-value-1234567890abcdef")
         );
 
         try (CompanionSession session = new CompanionSession("correct-token-value-1234567890abcdef");
@@ -77,7 +78,7 @@ class CompanionSessionRejectionTest {
             assertFalse(rejection.accepted);
             assertEquals("Authentication token rejected", rejection.reason);
             assertTrue(disconnected.await(2, TimeUnit.SECONDS));
-            assertThrows(IOException.class, () -> session.awaitAuthentication(1));
+            assertThrows(IOException.class, () -> session.awaitAuthentication(Duration.ofSeconds(1)));
         }
     }
 
@@ -87,16 +88,16 @@ class CompanionSessionRejectionTest {
         Path index = Files.writeString(this.temporaryDirectory.resolve("authenticated-index"), "index");
         Path workspace = Files.createDirectory(this.temporaryDirectory.resolve("authenticated-workspace"));
         Path sessionDirectory = Files.createDirectory(this.temporaryDirectory.resolve("authenticated-session"));
-        Path descriptorFile = sessionDirectory.resolve("session.properties");
+        Path descriptorFile = sessionDirectory.resolve(CompanionLaunchContract.SESSION_DESCRIPTOR_FILE_NAME);
         String token = "correct-token-value-1234567890abcdef";
         CompanionLaunchConfiguration configuration = CompanionLaunchConfiguration.parse(
                 new String[]{
-                        "--data-directory", data.toString(),
-                        "--index-file", index.toString(),
-                        "--workspace-directory", workspace.toString(),
-                        "--session-descriptor", descriptorFile.toString()
+                        CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT, data.toString(),
+                        CompanionLaunchContract.INDEX_FILE_ARGUMENT, index.toString(),
+                        CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT, workspace.toString(),
+                        CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT, descriptorFile.toString()
                 },
-                Map.of(CompanionLaunchConfiguration.TOKEN_ENVIRONMENT_VARIABLE, token)
+                Map.of(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, token)
         );
 
         try (CompanionSession session = new CompanionSession(token);
@@ -125,7 +126,7 @@ class CompanionSessionRejectionTest {
 
             client.close();
 
-            session.awaitAuthenticatedDisconnect(2);
+            session.awaitAuthenticatedDisconnect(Duration.ofSeconds(2));
             assertFalse(session.markUiReady());
         }
     }
@@ -134,7 +135,11 @@ class CompanionSessionRejectionTest {
         client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.RECOMMENDED_MAX_FRAME_SIZE);
         client.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.RECOMMENDED_MAX_STRING_LENGTH);
         client.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, TestClientHello.class);
-        client.getMessageProcessor().registerMessage(CompanionProtocol.SERVER_HELLO, TestServerHello.class);
+        client.getMessageProcessor().registerMessage(
+                CompanionProtocol.SERVER_HELLO,
+                TestServerHello.class,
+                TestServerHello::new
+        );
     }
 
     public static final class TestClientHello extends AbstractMessageOutgoing {
