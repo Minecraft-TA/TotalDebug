@@ -6,7 +6,7 @@ import java.net.URL;
 import java.util.Objects;
 
 /**
- * Reads class files from the target class loader and its runtime fallbacks.
+ * Reads class files through the target class's defining loader.
  *
  * <p>This returns the class-file resource supplied by the loader. It is enough
  * for the first decompile flow, but it does not claim to reproduce bytes after
