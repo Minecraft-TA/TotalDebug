@@ -105,7 +105,10 @@ public final class VineflowerDecompiler implements JavaDecompiler {
             ClassBytecodeSource bytecodeSource
     ) throws DecompilationException {
         Map<String, byte[]> classes = new LinkedHashMap<>();
-        classes.put(targetInternalName, targetBytes);
+        classes.put(
+                targetInternalName,
+                SyntheticLambdaDebugMetadata.removeGeneratedLocalNames(targetInternalName, targetBytes)
+        );
         Deque<String> pending = new ArrayDeque<>();
         pending.add(targetInternalName);
 
@@ -144,7 +147,10 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                             "No bytecode is available for nested class " + nestedClass.replace('/', '.')
                     );
                 }
-                classes.put(nestedClass, nestedBytes);
+                classes.put(
+                        nestedClass,
+                        SyntheticLambdaDebugMetadata.removeGeneratedLocalNames(nestedClass, nestedBytes)
+                );
                 pending.addLast(nestedClass);
             }
         }

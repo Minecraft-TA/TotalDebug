@@ -6,6 +6,7 @@ import net.minecraft.advancements.Advancement;
 import net.minecraft.test.GeneratedNamesFixture;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.BonemealableBlock;
+import net.minecraft.world.level.block.ChorusFlowerBlock;
 import net.minecraft.world.level.block.GrassBlock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -102,6 +103,18 @@ class VineflowerDecompilerTest {
         assertFalse(result.source().contains("p_100_"), result.source());
         assertFalse(result.source().contains("var3"), result.source());
         assertFalse(result.source().contains("var4"), result.source());
+    }
+
+    @Test
+    void renamesGeneratedMinecraftLambdaParametersConsistently(@TempDir Path outputDirectory) throws Exception {
+        DecompilationResult result = decompile(ChorusFlowerBlock.class);
+
+        assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
+        assertTrue(result.source().contains("instance -> instance.group("), result.source());
+        assertTrue(result.source().contains("chorusflowerblock -> chorusflowerblock.plant"), result.source());
+        assertFalse(result.source().contains("p_304498_"), result.source());
+        assertFalse(result.source().contains("p_344653_"), result.source());
+        assertCompiles(ChorusFlowerBlock.class.getName(), result.source(), outputDirectory);
     }
 
     @Test

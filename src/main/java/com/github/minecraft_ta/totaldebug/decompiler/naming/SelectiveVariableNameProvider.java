@@ -18,14 +18,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 final class SelectiveVariableNameProvider implements IVariableNameProvider {
     private static final String MINECRAFT_PACKAGE = "net/minecraft/";
-    private static final Pattern GENERATED_NAME = Pattern.compile(
-            "(?:p_\\d+_|var\\d+(?:_\\d+)?|arg\\d+|param\\d+|\\$\\$\\d+|☃.*)"
-    );
-
     private final StructMethod method;
     private final boolean minecraftMethod;
     private final Map<Integer, String> parchmentNames;
@@ -141,7 +136,7 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
     }
 
     private static boolean isGenerated(String name) {
-        return name == null || name.isBlank() || GENERATED_NAME.matcher(name).matches();
+        return GeneratedVariableNames.matches(name);
     }
 
     private static boolean hasMeaningfulName(List<String> names) {
