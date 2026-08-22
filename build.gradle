@@ -250,6 +250,12 @@ tasks.named('test', Test).configure {
     useJUnitPlatform()
 }
 
+tasks.register('benchmarkInitialIndex', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totaldebug.client.companion.InitialIndexBenchmark'
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }

@@ -31,7 +31,6 @@ import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 
 final class RuntimeClassIndex {
     private static final String INDEX_FILE_NAME = "index";
@@ -75,17 +74,17 @@ final class RuntimeClassIndex {
         long started = System.nanoTime();
         Path workspace = Files.createTempDirectory(this.dataDirectory, ".class-index-");
         try {
-            List<Path> indexInputs = prepareJarInputs(sources, workspace);
-            if (indexInputs.isEmpty()) {
+            PreparedIndexInputs indexInputs = prepareIndexInputs(sources, workspace);
+            if (indexInputs.jarFiles().isEmpty() && indexInputs.classFiles().isEmpty()) {
                 throw new IOException("No runtime class files were available for the companion class index");
             }
 
             Path stagedIndex = workspace.resolve(INDEX_FILE_NAME);
-            ClassIndex classIndex = ClassIndex.fromJars(indexInputs.stream().map(Path::toString).toList());
-            try {
+            try (ClassIndex classIndex = ClassIndex.fromSources(
+                    indexInputs.jarFiles().stream().map(Path::toString).toList(),
+                    indexInputs.classFiles()
+            )) {
                 classIndex.saveToFile(stagedIndex.toString());
-            } finally {
-                classIndex.destroy();
             }
             if (!Files.isRegularFile(stagedIndex)) {
                 throw new IOException("jindex did not create the staged companion class index");
@@ -97,8 +96,9 @@ final class RuntimeClassIndex {
             atomicReplace(stagedMetadata, metadataFile);
             this.ensuredSignature = signature;
             TotalDebug.LOGGER.info(
-                    "Built companion class index from {} JAR inputs in {} ms",
-                    indexInputs.size(),
+                    "Built companion class index from {} JAR inputs and {} direct class files in {} ms",
+                    indexInputs.jarFiles().size(),
+                    indexInputs.classFiles().size(),
                     (System.nanoTime() - started) / 1_000_000
             );
             return true;
@@ -113,19 +113,17 @@ final class RuntimeClassIndex {
         return this.dataDirectory.resolve(INDEX_FILE_NAME);
     }
 
-    private static List<Path> prepareJarInputs(List<Path> sources, Path workspace) throws IOException {
-        List<Path> inputs = new ArrayList<>();
+    static PreparedIndexInputs prepareIndexInputs(List<Path> sources, Path workspace) throws IOException {
+        List<Path> jarFiles = new ArrayList<>();
+        List<byte[]> classFiles = new ArrayList<>();
         int sourceNumber = 0;
         for (Path source : sources) {
             int currentSourceNumber = sourceNumber++;
             try {
                 if (Files.isDirectory(source)) {
-                    Path packedSource = workspace.resolve("source-" + currentSourceNumber + ".jar");
-                    if (packClassDirectory(source, packedSource)) {
-                        inputs.add(packedSource);
-                    }
+                    readClassDirectory(source, classFiles);
                 } else {
-                    prepareJarSource(source, workspace, currentSourceNumber, inputs);
+                    prepareJarSource(source, workspace, currentSourceNumber, jarFiles);
                 }
             } catch (IOException | RuntimeException exception) {
                 throw new IOException(
@@ -136,10 +134,8 @@ final class RuntimeClassIndex {
             }
         }
 
-        Path jdkClasses = workspace.resolve("jdk-classes.jar");
-        packJdkClasses(jdkClasses);
-        inputs.add(jdkClasses);
-        return inputs;
+        readJdkClasses(classFiles);
+        return new PreparedIndexInputs(List.copyOf(jarFiles), List.copyOf(classFiles));
     }
 
     static void prepareJarSource(
@@ -161,27 +157,17 @@ final class RuntimeClassIndex {
         extractNestedJars(indexInput, workspace.resolve("nested-" + sourceNumber), inputs);
     }
 
-    static boolean packClassDirectory(Path sourceDirectory, Path outputJar) throws IOException {
-        boolean wroteClass = false;
-        Set<String> entries = new LinkedHashSet<>();
-        try (OutputStream output = Files.newOutputStream(outputJar);
-             ZipOutputStream zip = new ZipOutputStream(output);
-             Stream<Path> paths = Files.walk(sourceDirectory)) {
+    static int readClassDirectory(Path sourceDirectory, List<byte[]> classFiles) throws IOException {
+        int initialSize = classFiles.size();
+        try (Stream<Path> paths = Files.walk(sourceDirectory)) {
             for (Path path : paths.filter(Files::isRegularFile).sorted().toList()) {
                 String entryName = sourceDirectory.relativize(path).toString().replace('\\', '/');
-                if (!isIndexableClassEntry(entryName) || !entries.add(entryName)) {
-                    continue;
+                if (isIndexableClassEntry(entryName)) {
+                    classFiles.add(Files.readAllBytes(path));
                 }
-                zip.putNextEntry(new ZipEntry(entryName));
-                Files.copy(path, zip);
-                zip.closeEntry();
-                wroteClass = true;
             }
         }
-        if (!wroteClass) {
-            Files.deleteIfExists(outputJar);
-        }
-        return wroteClass;
+        return classFiles.size() - initialSize;
     }
 
     private static void extractNestedJars(Path sourceJar, Path outputDirectory, List<Path> inputs) throws IOException {
@@ -200,13 +186,11 @@ final class RuntimeClassIndex {
         }
     }
 
-    private static void packJdkClasses(Path outputJar) throws IOException {
+    private static void readJdkClasses(List<byte[]> classFiles) throws IOException {
         Set<String> entries = new LinkedHashSet<>();
         FileSystem jrt = FileSystems.getFileSystem(URI.create("jrt:/"));
         Path modules = jrt.getPath("/modules");
-        try (OutputStream output = Files.newOutputStream(outputJar);
-             ZipOutputStream zip = new ZipOutputStream(output);
-             Stream<Path> modulePaths = Files.list(modules)) {
+        try (Stream<Path> modulePaths = Files.list(modules)) {
             for (Path module : modulePaths.sorted().toList()) {
                 try (Stream<Path> classes = Files.walk(module)) {
                     for (Path classFile : classes.filter(Files::isRegularFile).sorted().toList()) {
@@ -214,13 +198,14 @@ final class RuntimeClassIndex {
                         if (!isIndexableClassEntry(entryName) || !entries.add(entryName)) {
                             continue;
                         }
-                        zip.putNextEntry(new ZipEntry(entryName));
-                        Files.copy(classFile, zip);
-                        zip.closeEntry();
+                        classFiles.add(Files.readAllBytes(classFile));
                     }
                 }
             }
         }
+    }
+
+    record PreparedIndexInputs(List<Path> jarFiles, List<byte[]> classFiles) {
     }
 
     private static boolean isIndexableClassEntry(String entryName) {

@@ -68,6 +68,22 @@ class RuntimeClassIndexTest {
         }
     }
 
+    @Test
+    void readsClassDirectoriesAsDirectClassFiles() throws Exception {
+        Path firstClass = this.temporaryDirectory.resolve("example/First.class");
+        Path secondClass = this.temporaryDirectory.resolve("example/Second.class");
+        Files.createDirectories(firstClass.getParent());
+        Files.write(firstClass, new byte[]{1, 2, 3});
+        Files.write(secondClass, new byte[]{4, 5, 6});
+        Files.writeString(this.temporaryDirectory.resolve("example/ignored.txt"), "ignored");
+
+        List<byte[]> classes = new ArrayList<>();
+        assertEquals(2, RuntimeClassIndex.readClassDirectory(this.temporaryDirectory, classes));
+        assertEquals(2, classes.size());
+        assertArrayEquals(new byte[]{1, 2, 3}, classes.getFirst());
+        assertArrayEquals(new byte[]{4, 5, 6}, classes.getLast());
+    }
+
     private static String fingerprint(Path directory) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         RuntimeClassIndex.updateClassDirectoryDigest(digest, directory);
