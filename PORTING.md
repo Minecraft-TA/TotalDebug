@@ -25,13 +25,13 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet, ClassGraph, Procyon, and jindex are pinned and present in Jar-in-Jar metadata |
 | F3a | Named-class bytecode access | Complete | Class-loader resource bytes decompile both Java 21 test code and Minecraft's `Block` class |
 | F3b | Transformed bytes and class inventory | Research | Post-transform capture, loaded-class enumeration, JAR inventory, and compiler classpath remain separate proofs |
-| F4 | Companion application IPC and lifecycle | Not started | First core-flow dependency after the F3 gate |
-| F5 | Class decompilation | Not started | First core-flow target: decompile one named class and open it in the companion |
+| F4 | Companion application IPC and lifecycle | Complete | Companion 1.9.1 install/start/connect/ready/open flow passed live; SCNet fork `b763bf8` supplies caller-owned message factories across named modules |
+| F5 | Class decompilation | Complete | Minecraft `GrassBlock`, `Cow`, `RotatedPillarBlock`, `DoorBlock`, and `LeverBlock` were decompiled and opened in Companion during one live run |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
-| F7 | Persistent class index | Not started | Windows-only jindex is accepted initially |
+| F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic 6.7 MB index; Companion's jindex 0.0.45 loaded the fork-produced format; unchanged development classes are content-fingerprinted |
 | F8 | Java scripting | Not started | Requires permission, cancellation, compiler, and class-definition redesigns |
-| F9 | Decompile commands | Not started | Start with `class`; assess `eventlistener` separately |
-| F10 | Code-view keybind | Not started | Add after the named-class decompile flow works |
+| F9 | Core decompile command | Complete | `/decompile block <id>` has registry suggestions, rejects unknown IDs, and opened `LeverBlock.java` live; other legacy command targets remain future slices |
+| F10 | Code-view keybind | Complete | One F6 press resolves a looked-at block or entity and a hovered GUI item; live gates passed for block, cow, and multiple block items without repeat flooding |
 | F11 | Packet logger | Not started | Requires a separate packet-pipeline hook proof |
 | F12 | Packet blocker | Not started | Port with F11 |
 | F13 | Chunk grid | Not started | Rebuild against modern chunk tickets and dimension identifiers |
@@ -52,18 +52,23 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S2 | F2a retained NeoForge configuration | Config tests, `gradlew build`, generated client config inspection | Complete |
 | S3 | F2b typed networking foundation | Codec and receiver-lifecycle tests, `gradlew build`; connection smoke is deferred to the next runtime phase boundary | Complete |
 | S4 | F2c language resources and bundled core libraries | Resource validation, final JAR inspection, `gradlew build` | Complete |
+| S5 | F4 Companion distribution, SCNet IPC, and lifecycle | Installer and wire-format tests, SCNet fork tests, `gradlew build`, live connect/ready | Complete |
+| S6 | F7 runtime class index | jindex fork tests, Java 21 index round-trip, explicit 0.0.45 reader compatibility, live NeoForge index build | Complete |
+| S7 | F5/F9 named-class decompile and block command | Unit tests, `gradlew build`, live `/decompile block minecraft:lever` opening in Companion | Complete |
+| S8 | F10 F6 target flow | One-request-per-press behavior; live block, entity, and hovered block-item opens in Companion | Complete |
 
-## Core-flow target
+## Core-flow milestone
 
-The first end-to-end feature slice after F1-F3 is deliberately narrow:
+The first end-to-end milestone after F1-F3 is complete:
 
-1. Connect to the companion application.
-2. Obtain the bytecode for one explicitly named class.
-3. Decompile it to a source file.
-4. Tell the companion application to open the file.
-5. Expose the flow through the `class` decompile command.
+1. Build or validate the runtime class index required by Companion.
+2. Install, start, connect to, and wait for Companion 1.9.1.
+3. Obtain authoritative runtime bytes from the target class's defining loader.
+4. Decompile the class to the persistent source directory.
+5. Tell Companion to open the source file.
+6. Expose the flow through `/decompile block <id>` and F6 block/entity/item targeting.
 
-The look-at/hover keybind, additional command targets, search, indexing, and scripting follow only after this path works.
+Live reference search, additional command targets, and scripting remain separate future slices.
 
 ## Verification log
 
@@ -75,11 +80,16 @@ The look-at/hover keybind, additional command targets, search, indexing, and scr
 | 2026-08-22 | S3 | Typed payload codec and receiver-lifecycle tests passed; protocol is optional so client-only installs remain possible; no redundant game launch |
 | 2026-08-22 | S4 | All 14 tests and `gradlew build` passed; the final JAR contains the language JSON plus five nested library JARs and valid Jar-in-Jar metadata |
 | 2026-08-22 | F3a | Named-class byte lookup tests passed; Procyon successfully decompiled a Java 21 fixture and Minecraft's 1.21.1 `Block` class |
+| 2026-08-22 | S5 | SCNet fork `b763bf8` passed its tests and fixed named-module message construction through caller factories; Companion 1.9.1 accepted the live connection and ready handshake |
+| 2026-08-22 | S6 | JIndex fork `f314662` passed its clean build; its native loader works under NeoForge `union:` resources; an isolated jindex 0.0.45 process loaded a fork-produced index; NeoForge built 118 JAR inputs into the live index |
+| 2026-08-22 | S7 | `/decompile block minecraft:lever` decompiled the runtime `LeverBlock` bytes and Companion opened `LeverBlock.java` |
+| 2026-08-22 | S8 | A single run opened `GrassBlock.java`, `Cow.java`, `RotatedPillarBlock.java`, `DoorBlock.java`, and `LeverBlock.java`; one physical F6 press produced one request |
+| 2026-08-22 | Core flow | `gradlew clean build` passed 25 tests; the final mod JAR contains `SCNet-b763bf8.jar` and `JIndex-f314662.jar` |
 
 ## Foundation dependency decisions
 
-- Keep SCNet for the first companion-app restoration slice; its protocol can be reshaped because both ends are maintained together.
-- Keep Procyon 0.6.0 only until F5 compares its Java 21 output with Vineflower. The decompiler remains replaceable behind the F5 seam.
-- Keep ClassGraph for class discovery and completion work.
-- Keep jindex 0.0.45 for compatibility with the existing companion index format. Its bundled native library is Windows-only, so F7 remains explicitly platform-limited.
+- Keep SCNet and use fork commit `b763bf8`. The wire protocol is unchanged; caller-provided message factories make construction legal across named modules.
+- Keep Procyon 0.6.0 for the restored core flow. Its output is usable but emits generic-signature warnings on modern Minecraft classes; a focused Vineflower comparison remains a later decompiler-quality slice behind the existing seam.
+- Keep ClassGraph for later class discovery and completion work. It is not used to enumerate the NeoForge runtime because version 4.8.146 cannot enumerate the Java 21 module readers supplied by ModLauncher.
+- Use JIndex fork commit `f314662`. It loads its bundled native DLL from a resource stream under NeoForge and produces an index format proven readable by Companion's jindex 0.0.45. This slice remains Windows-only.
 - Use the JDK HTTP client when F4 restores companion downloads; Apache HttpClient is not retained.
