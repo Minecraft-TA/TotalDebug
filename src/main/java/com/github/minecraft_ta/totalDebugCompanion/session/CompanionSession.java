@@ -48,6 +48,7 @@ public final class CompanionSession implements AutoCloseable {
     private final Server server = new Server();
     private final SessionAuthenticator authenticator;
     private final CompletableFuture<Long> authentication = new CompletableFuture<>();
+    private final CompletableFuture<Void> authenticatedDisconnect = new CompletableFuture<>();
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
     private volatile long capabilities;
 
@@ -95,11 +96,40 @@ public final class CompanionSession implements AutoCloseable {
                 && (this.capabilities & capability) == capability;
     }
 
-    public void markUiReady() {
-        if (this.state.get() != State.AUTHENTICATED) {
+    public boolean markUiReady() {
+        State currentState = this.state.get();
+        if (currentState == State.CLOSED && this.authenticatedDisconnect.isDone()) {
+            return false;
+        }
+        if (currentState != State.AUTHENTICATED) {
             throw new IllegalStateException("Cannot send Ready before authentication succeeds");
         }
         this.server.getMessageProcessor().enqueueMessage(new ReadyMessage());
+        return true;
+    }
+
+    public void awaitAuthenticatedDisconnect() throws IOException {
+        try {
+            this.authenticatedDisconnect.get();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for Minecraft to disconnect", exception);
+        } catch (ExecutionException exception) {
+            throw new IOException("Authenticated Minecraft session ended with an error", exception.getCause());
+        }
+    }
+
+    void awaitAuthenticatedDisconnect(int timeoutSeconds) throws IOException {
+        try {
+            this.authenticatedDisconnect.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for Minecraft to disconnect", exception);
+        } catch (ExecutionException exception) {
+            throw new IOException("Authenticated Minecraft session ended with an error", exception.getCause());
+        } catch (TimeoutException exception) {
+            throw new IOException("Minecraft did not disconnect within " + timeoutSeconds + " seconds", exception);
+        }
     }
 
     private void configureTransport() {
@@ -197,6 +227,10 @@ public final class CompanionSession implements AutoCloseable {
                     CompanionSession.this.authentication.completeExceptionally(
                             new IOException("Minecraft disconnected before authenticating")
                     );
+                    return;
+                }
+                if (CompanionSession.this.state.compareAndSet(State.AUTHENTICATED, State.CLOSED)) {
+                    CompanionSession.this.authenticatedDisconnect.complete(null);
                 }
             }
 
@@ -217,7 +251,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageProcessor().enqueueMessage(response);
         if (!response.accepted()) {
             this.state.set(State.REJECTING);
-            scheduleClose(response.rejectionReason());
+            closeAfterRejection(response.rejectionReason(), false);
             return;
         }
         if (!this.state.compareAndSet(State.WAITING_FOR_HELLO, State.AUTHENTICATED)) {
@@ -254,19 +288,20 @@ public final class CompanionSession implements AutoCloseable {
             return;
         }
         this.server.getMessageProcessor().enqueueMessage(ServerHelloMessage.rejected(reason));
-        scheduleClose(reason);
+        closeAfterRejection(reason, previous == State.AUTHENTICATED);
     }
 
-    private void scheduleClose(String reason) {
-        Thread.startVirtualThread(() -> {
-            try {
-                Thread.sleep(150);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-            }
-            this.server.closeClient();
+    private void closeAfterRejection(String reason, boolean authenticatedSession) {
+        this.server.closeClientAfterPendingWrites().whenComplete((ignored, failure) -> {
             this.state.set(State.CLOSED);
-            this.authentication.completeExceptionally(new IOException(reason));
+            IOException exception = failure == null
+                    ? new IOException(reason)
+                    : new IOException(reason, failure);
+            if (authenticatedSession) {
+                this.authenticatedDisconnect.completeExceptionally(exception);
+            } else {
+                this.authentication.completeExceptionally(exception);
+            }
         });
     }
 

@@ -26,6 +26,7 @@ import javax.swing.plaf.BorderUIResource;
 import javax.swing.plaf.ColorUIResource;
 import java.awt.Color;
 import java.awt.Insets;
+import java.awt.Window;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
@@ -37,6 +38,7 @@ public final class CompanionApp {
     public static Server SERVER;
     private static CompanionSession session;
     private static CompanionLaunchConfiguration configuration;
+    private static volatile boolean uiStarted;
 
     private CompanionApp() {
     }
@@ -61,9 +63,15 @@ public final class CompanionApp {
             setupDataDirectories();
             prewarmJavaParser();
             startUi();
-            session.markUiReady();
+            if (session.markUiReady()) {
+                session.awaitAuthenticatedDisconnect();
+            }
+            stopUi();
+            session.close();
+            System.exit(0);
         } catch (Throwable throwable) {
             throwable.printStackTrace(System.err);
+            stopUiAfterFailure();
             if (session != null) {
                 session.close();
             }
@@ -135,11 +143,35 @@ public final class CompanionApp {
         UIManager.put("MenuBar.border", new SimpleMenuBarBorder());
 
         SwingUtilities.invokeAndWait(() -> {
+            uiStarted = true;
             MainWindow.INSTANCE.setSize(1280, 720);
             MainWindow.INSTANCE.setVisible(true);
             UIUtils.centerJFrame(MainWindow.INSTANCE);
             ToolTipManager.sharedInstance().setInitialDelay(200);
         });
+    }
+
+    private static void stopUi() throws InvocationTargetException, InterruptedException {
+        if (!uiStarted) {
+            return;
+        }
+        SwingUtilities.invokeAndWait(() -> {
+            for (Window window : Window.getWindows()) {
+                window.dispose();
+            }
+            uiStarted = false;
+        });
+    }
+
+    private static void stopUiAfterFailure() {
+        try {
+            stopUi();
+        } catch (InvocationTargetException | InterruptedException exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            exception.printStackTrace(System.err);
+        }
     }
 
     public static void focusWindow() {

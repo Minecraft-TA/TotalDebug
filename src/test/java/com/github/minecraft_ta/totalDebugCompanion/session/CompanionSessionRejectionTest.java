@@ -83,6 +83,55 @@ class CompanionSessionRejectionTest {
         }
     }
 
+    @Test
+    void authenticatedDisconnectEndsTheOwnedSession() throws Exception {
+        Path data = Files.createDirectory(this.temporaryDirectory.resolve("authenticated-data"));
+        Path index = Files.writeString(this.temporaryDirectory.resolve("authenticated-index"), "index");
+        Path workspace = Files.createDirectory(this.temporaryDirectory.resolve("authenticated-workspace"));
+        Path sessionDirectory = Files.createDirectory(this.temporaryDirectory.resolve("authenticated-session"));
+        Path descriptorFile = sessionDirectory.resolve("session.properties");
+        String token = "correct-token-value-1234567890abcdef";
+        CompanionLaunchConfiguration configuration = CompanionLaunchConfiguration.parse(
+                new String[]{
+                        "--data-directory", data.toString(),
+                        "--index-file", index.toString(),
+                        "--workspace-directory", workspace.toString(),
+                        "--session-descriptor", descriptorFile.toString()
+                },
+                Map.of(CompanionLaunchConfiguration.TOKEN_ENVIRONMENT_VARIABLE, token)
+        );
+
+        try (CompanionSession session = new CompanionSession(token);
+             Client client = new Client()) {
+            session.bindAndPublish(configuration);
+            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile);
+            configureClient(client);
+
+            CompletableFuture<TestServerHello> response = new CompletableFuture<>();
+            client.getMessageBus().listenAlways(TestServerHello.class, response::complete);
+            client.addConnectionListener(new IConnectionListener() {
+                @Override
+                public void onConnected() {
+                    client.getMessageProcessor().enqueueMessage(new TestClientHello(token));
+                }
+
+                @Override
+                public void onDisconnected() {
+                }
+            });
+
+            assertTrue(client.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), descriptor.port())));
+            TestServerHello accepted = response.get(2, TimeUnit.SECONDS);
+            assertTrue(accepted.accepted);
+            assertTrue(session.markUiReady());
+
+            client.close();
+
+            session.awaitAuthenticatedDisconnect(2);
+            assertFalse(session.markUiReady());
+        }
+    }
+
     private static void configureClient(Client client) {
         client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.RECOMMENDED_MAX_FRAME_SIZE);
         client.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.RECOMMENDED_MAX_STRING_LENGTH);
