@@ -18,9 +18,9 @@ public class JIndexResolvedBinaryType extends ResolvedBinaryType {
     private final JIndexBinaryType binaryType;
 
     public JIndexResolvedBinaryType(IndexedClass indexedClass) {
-        super(null, indexedClass.getName(), indexedClass.getNameWithPackage());
+        super(new ClassFileImpl(indexedClass), indexedClass.getName(), indexedClass.getNameWithPackage());
         this.binaryType = new JIndexBinaryType(indexedClass);
-        setParent(new ClassFileImpl(this, indexedClass));
+        ((ClassFileImpl) getParent()).setType(this);
     }
 
     @Override
@@ -48,7 +48,7 @@ public class JIndexResolvedBinaryType extends ResolvedBinaryType {
             info.boundsSignatures = typeParameterBoundSignatures;
             TypeParameter typeParameter = new TypeParameter(this, new String(Signature.getTypeVariable(typeParameterSignature))) {
                 @Override
-                public Object getElementInfo() {
+                public TypeParameterElementInfo getElementInfo() {
                     return info;
                 }
             };
@@ -64,7 +64,7 @@ public class JIndexResolvedBinaryType extends ResolvedBinaryType {
     }
 
     @Override
-    public Object getElementInfo() {
+    public JIndexBinaryType getElementInfo() {
         return this.binaryType;
     }
 

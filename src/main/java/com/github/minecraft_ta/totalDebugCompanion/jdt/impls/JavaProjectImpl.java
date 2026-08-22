@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IClassPathEntryStub;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.preferences.IEclipsePreferences;
@@ -18,9 +19,7 @@ public class JavaProjectImpl extends JavaProject {
     private static final Map<String, String> OPTIONS;
     static {
         OPTIONS = new HashMap<>();
-        OPTIONS.put("org.eclipse.jdt.core.compiler.compliance", "1.8");
-        OPTIONS.put("org.eclipse.jdt.core.compiler.source", "1.8");
-        OPTIONS.put("org.eclipse.jdt.core.compiler.codegen.targetPlatform", "1.8");
+        JdtConfiguration.applyJavaCompilerOptions(OPTIONS);
         OPTIONS.put(DefaultCodeFormatterConstants.FORMATTER_BLANK_LINES_BETWEEN_IMPORT_GROUPS, "1");
         OPTIONS.put(AssistOptions.OPTION_PerformVisibilityCheck, AssistOptions.ENABLED);
         OPTIONS.put(AssistOptions.OPTION_PerformForbiddenReferenceCheck, AssistOptions.ENABLED);

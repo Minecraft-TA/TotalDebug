@@ -2,9 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
@@ -34,24 +32,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
         root.setDividerSize(10);
         root.setDividerLocation(350);
         root.setOneTouchExpandable(true);
-
-        this.editorTabs.getModel().addChangeListener(e -> {
-            var selectedEditor = this.editorTabs.getSelectedEditor();
-
-            switch (selectedEditor) {
-                case ScriptView view -> {
-                    String name = view.getPath().getFileName().toString();
-                    CompanionApp.DISCORD_RPC_MANAGER.setState("Editing " + name, true);
-                }
-                case CodeView view -> {
-                    String fullName = view.getPath().getFileName().toString().replace(".java", "");
-                    String name = fullName.substring(fullName.lastIndexOf('.') + 1) + ".java";
-                    CompanionApp.DISCORD_RPC_MANAGER.setState("Reading " + name, true);
-                }
-                case PacketLoggerView ignored -> CompanionApp.DISCORD_RPC_MANAGER.setState("Packet Logger", true);
-                case null, default -> CompanionApp.DISCORD_RPC_MANAGER.setState("", true);
-            }
-        });
 
         try {
             var dividerField = root.getUI().getClass().getSuperclass().getDeclaredField("divider");

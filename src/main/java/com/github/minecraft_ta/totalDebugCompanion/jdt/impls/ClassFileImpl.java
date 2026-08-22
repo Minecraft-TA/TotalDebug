@@ -14,24 +14,28 @@ import org.eclipse.jdt.internal.compiler.env.IBinaryType;
 import org.eclipse.jdt.internal.core.*;
 import org.eclipse.jdt.internal.core.util.MementoTokenizer;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class ClassFileImpl extends Openable implements IOrdinaryClassFileStub {
 
-    private final JIndexResolvedBinaryType type;
+    private JIndexResolvedBinaryType type;
     private final IndexedClass indexedClass;
-    private final Object classFileInfo;
+    private final OpenableElementInfo classFileInfo;
 
-    public ClassFileImpl(JIndexResolvedBinaryType type, IndexedClass indexedClass) {
+    public ClassFileImpl(IndexedClass indexedClass) {
         super(JDTHacks.createPackageFragment(indexedClass.getPackage().getNameWithParentsDot()));
-        this.type = type;
         this.indexedClass = indexedClass;
         try {
-            this.classFileInfo = JDTHacks.createInstance(Class.forName("org.eclipse.jdt.internal.core.ClassFileInfo"), new Class[0]);
+            this.classFileInfo = (OpenableElementInfo) JDTHacks.createInstance(Class.forName("org.eclipse.jdt.internal.core.ClassFileInfo"), new Class[0]);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public void setType(JIndexResolvedBinaryType type) {
+        if (this.type != null)
+            throw new IllegalStateException("Class file type is already initialized");
+        this.type = type;
     }
 
     @Override
@@ -42,12 +46,12 @@ public class ClassFileImpl extends Openable implements IOrdinaryClassFileStub {
 
         Object fakeClassFile = JDTHacks.createInstance(ClassFile.class, new Class[]{PackageFragment.class, String.class}, null, null);
         JDTHacks.setField(fakeClassFile, "binaryType", type);
-        JDTHacks.invokeMethod(classFileInfo, "readBinaryChildren", new Class[]{ClassFile.class, HashMap.class, IBinaryType.class}, fakeClassFile, newElements, type.getElementInfo());
+        JDTHacks.invokeMethod(classFileInfo, "readBinaryChildren", new Class[]{ClassFile.class, Map.class, IBinaryType.class}, fakeClassFile, newElements, type.getElementInfo());
         return true;
     }
 
     @Override
-    protected Object createElementInfo() {
+    protected OpenableElementInfo createElementInfo() {
         return this.classFileInfo;
     }
 
@@ -63,6 +67,8 @@ public class ClassFileImpl extends Openable implements IOrdinaryClassFileStub {
 
     @Override
     public JIndexResolvedBinaryType getType() {
+        if (this.type == null)
+            throw new IllegalStateException("Class file type has not been initialized");
         return type;
     }
 

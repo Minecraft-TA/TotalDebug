@@ -49,7 +49,7 @@ public class JDTHacks {
     public static PackageFragment createPackageFragment(String name) {
         try {
             var instance = (PackageFragment) UNSAFE.allocateInstance(PackageFragment.class);
-            instance.names = Util.getTrimmedSimpleNames(name);
+            setField(instance, "names", Util.getTrimmedSimpleNames(name));
             setField(instance, "isValidPackageName", true);
             setField(JavaElement.class, instance, "project", DUMMY_JAVA_PROJECT);
             setField(JavaElement.class, instance, "parent", PACKAGE_FRAGMENT_ROOT);

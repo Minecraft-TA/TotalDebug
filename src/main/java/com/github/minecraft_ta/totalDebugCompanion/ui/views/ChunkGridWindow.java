@@ -160,7 +160,6 @@ public class ChunkGridWindow extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ReceiveDataStateMessage(false));
-                CompanionApp.DISCORD_RPC_MANAGER.loadLastState();
             }
         });
 
@@ -226,8 +225,6 @@ public class ChunkGridWindow extends JFrame {
         CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ReceiveDataStateMessage(true));
         CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(INSTANCE.getChunkGridRequestInfo()));
         CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new UpdateFollowPlayerStateMessage(UpdateFollowPlayerStateMessage.STATE_ONCE));
-
-        CompanionApp.DISCORD_RPC_MANAGER.setState("Chunk Grid", false);
 
         INSTANCE.setVisible(true);
         UIUtils.centerJFrame(INSTANCE);

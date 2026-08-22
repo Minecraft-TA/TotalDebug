@@ -6,14 +6,15 @@ import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.internal.compiler.env.IElementInfo;
 import org.eclipse.jdt.internal.core.CompilationUnit;
 import org.eclipse.jdt.internal.core.DefaultWorkingCopyOwner;
 
 public class InternalCompilationUnitImpl extends CompilationUnit {
 
-    private final Object elementInfo;
+    private final IElementInfo elementInfo;
 
-    public InternalCompilationUnitImpl(Object elementInfo, IndexedClass indexedClass) {
+    public InternalCompilationUnitImpl(IElementInfo elementInfo, IndexedClass indexedClass) {
         super(JDTHacks.createPackageFragment(indexedClass.getPackage().getNameWithParentsDot()), indexedClass.getName(), DefaultWorkingCopyOwner.PRIMARY);
         this.elementInfo = elementInfo;
     }
@@ -35,7 +36,7 @@ public class InternalCompilationUnitImpl extends CompilationUnit {
 
 
     @Override
-    public Object getElementInfo() throws JavaModelException {
+    public IElementInfo getElementInfo() throws JavaModelException {
         return this.elementInfo;
     }
 }

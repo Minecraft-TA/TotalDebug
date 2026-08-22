@@ -13,6 +13,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
@@ -532,7 +533,7 @@ public class CompletionProposalReplacementProvider {
         String[] keys = new String[chKeys.length];
         Arrays.fill(keys, String.valueOf(chKeys[0]));
 
-        final ASTParser parser = ASTParser.newParser(AST.JLS8);
+        final ASTParser parser = JdtConfiguration.createParser();
         parser.setProject(compilationUnit.getJavaProject());
         parser.setResolveBindings(true);
         parser.setStatementsRecovery(true);

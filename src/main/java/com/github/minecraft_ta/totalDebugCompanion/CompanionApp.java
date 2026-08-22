@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.messages.FocusWindowMessage;
@@ -18,12 +19,10 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMes
 import com.github.minecraft_ta.totalDebugCompanion.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SimpleMenuBarBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
-import com.github.minecraft_ta.totalDebugCompanion.util.DiscordRPCManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.scnet.IConnectedListener;
 import com.github.tth05.scnet.Server;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
@@ -42,7 +41,6 @@ import java.nio.file.Paths;
 public class CompanionApp {
 
     public static final Server SERVER = new Server();
-    public static final DiscordRPCManager DISCORD_RPC_MANAGER = new DiscordRPCManager();
     private static Path ROOT_PATH;
 
     public static void main(String[] args) {
@@ -129,7 +127,7 @@ public class CompanionApp {
         //This forces a lot of JDT class loading. By doing this here, we don't have to do it later when opening a file,
         // thus making the UI more responsive.
         new Thread(() -> {
-            ASTParser parser = ASTParser.newParser(AST.JLS8);
+            ASTParser parser = JdtConfiguration.createParser();
             parser.setSource(new CompilationUnitImpl("Test", "class Test{}"));
             parser.setResolveBindings(true);
             parser.setKind(ASTParser.K_COMPILATION_UNIT);

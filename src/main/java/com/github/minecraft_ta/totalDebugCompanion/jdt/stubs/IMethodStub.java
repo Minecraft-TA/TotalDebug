@@ -89,6 +89,11 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
+    default boolean isMainMethodCandidate() throws JavaModelException {
+        return false;
+    }
+
+    @Override
     default boolean isLambdaMethod() {
         return false;
     }

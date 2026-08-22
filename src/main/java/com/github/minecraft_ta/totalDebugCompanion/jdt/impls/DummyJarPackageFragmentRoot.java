@@ -4,12 +4,12 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.core.compiler.CharOperation;
+import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.internal.core.JarPackageFragmentRoot;
 import org.eclipse.jdt.internal.core.OpenableElementInfo;
-import org.eclipse.jdt.internal.core.util.HashtableOfArrayToObject;
 
-import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class DummyJarPackageFragmentRoot extends JarPackageFragmentRoot {
 
@@ -18,17 +18,16 @@ public class DummyJarPackageFragmentRoot extends JarPackageFragmentRoot {
     }
 
     @Override
-    protected Object createElementInfo() {
-        var info = super.createElementInfo();
-        var table = new HashtableOfArrayToObject();
-        // Empty package
-        table.put(CharOperation.NO_STRINGS, new ArrayList[]{EMPTY_LIST, EMPTY_LIST});
-        JDTHacks.setField(info, "rawPackageInfo", table);
-        return info;
-    }
-
-    @Override
     protected boolean computeChildren(OpenableElementInfo info, IResource underlyingResource) throws JavaModelException {
-        return true;
+        try {
+            var packageContentType = Class.forName("org.eclipse.jdt.internal.core.JarPackageFragmentRootInfo$PackageContent");
+            var emptyPackage = JDTHacks.createInstance(packageContentType, new Class[0]);
+            JDTHacks.setField(info, "rawPackageInfo", Map.of(List.of(), emptyPackage));
+            JDTHacks.setField(info, "overriddenClasses", Map.of());
+            info.setChildren(new IJavaElement[0]);
+            return true;
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("JDT package content type is unavailable", e);
+        }
     }
 }

@@ -9,6 +9,7 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.jdt.core.BufferChangedEvent;
 import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.internal.compiler.env.IElementInfo;
 import org.eclipse.jdt.internal.core.CompilationUnit;
 import org.eclipse.jdt.internal.core.DefaultWorkingCopyOwner;
 import org.eclipse.jdt.internal.core.JavaProject;
@@ -31,7 +32,7 @@ public class CompilationUnitImpl extends CompilationUnit {
     }
 
     @Override
-    protected IBuffer openBuffer(IProgressMonitor pm, Object info) throws JavaModelException {
+    protected IBuffer openBuffer(IProgressMonitor pm, IElementInfo info) throws JavaModelException {
         return getBuffer();
     }
 

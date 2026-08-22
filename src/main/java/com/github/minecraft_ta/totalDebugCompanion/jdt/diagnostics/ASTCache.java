@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import org.eclipse.jdt.core.dom.AST;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 
@@ -42,7 +42,7 @@ public class ASTCache {
     }
 
     public static CompilationUnit rawParse(String className, String contents) {
-        ASTParser parser = ASTParser.newParser(AST.JLS8);
+        ASTParser parser = JdtConfiguration.createParser();
         parser.setSource(new CompilationUnitImpl(className, contents));
         parser.setResolveBindings(true);
         parser.setStatementsRecovery(true);

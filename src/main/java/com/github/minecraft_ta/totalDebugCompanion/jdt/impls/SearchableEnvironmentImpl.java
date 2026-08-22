@@ -6,6 +6,7 @@ import org.eclipse.jdt.core.*;
 import org.eclipse.jdt.core.search.SearchPattern;
 import org.eclipse.jdt.internal.codeassist.ISearchRequestor;
 import org.eclipse.jdt.internal.compiler.ExtraFlags;
+import org.eclipse.jdt.internal.core.JavaProject;
 import org.eclipse.jdt.internal.core.SearchableEnvironment;
 
 import java.lang.reflect.InvocationTargetException;
@@ -32,7 +33,7 @@ class SearchableEnvironmentImpl extends SearchableEnvironment {
     private final JavaProjectImpl javaProject;
 
     public SearchableEnvironmentImpl(JavaProjectImpl javaProject) throws JavaModelException {
-        super(javaProject, (WorkingCopyOwner) null, true);
+        super(javaProject, (WorkingCopyOwner) null, true, JavaProject.NO_RELEASE);
         this.javaProject = javaProject;
     }
 
