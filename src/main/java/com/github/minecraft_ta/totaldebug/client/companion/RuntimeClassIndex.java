@@ -106,6 +106,10 @@ final class RuntimeClassIndex {
         }
     }
 
+    Path indexFile() {
+        return this.dataDirectory.resolve(INDEX_FILE_NAME);
+    }
+
     private static List<Path> discoverRuntimeSources() throws IOException {
         Set<Path> sources = new LinkedHashSet<>();
         Consumer<Path> addSource = path -> {
