@@ -52,6 +52,10 @@ public final class ClientDecompilationService {
     }
 
     public CompletableFuture<Path> open(DecompilationRequest request) {
+        return open(request, true);
+    }
+
+    private CompletableFuture<Path> open(DecompilationRequest request, boolean transferForeground) {
         Objects.requireNonNull(request, "request");
         Class<?> targetClass = request.targetClass();
 
@@ -68,7 +72,15 @@ public final class ClientDecompilationService {
                 try {
                     Path sourceFile = decompile(targetClass);
                     if (TotalDebugConfig.CLIENT.useCompanionApp.get()) {
-                        this.companionApp.open(sourceFile, request.sourceTarget());
+                        if (transferForeground) {
+                            this.companionApp.openAndFocus(
+                                    sourceFile,
+                                    request.sourceTarget(),
+                                    ClientDecompilationService::releaseGameInput
+                            );
+                        } else {
+                            this.companionApp.openInPlace(sourceFile, request.sourceTarget());
+                        }
                     }
                     return sourceFile;
                 } catch (IOException exception) {
@@ -111,7 +123,7 @@ public final class ClientDecompilationService {
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         try {
             Class<?> targetClass = Class.forName(binaryName, false, TotalDebug.class.getClassLoader());
-            open(new DecompilationRequest(targetClass, sourceTarget));
+            open(new DecompilationRequest(targetClass, sourceTarget), false);
         } catch (ClassNotFoundException | LinkageError failure) {
             TotalDebug.LOGGER.error("The companion requested unknown runtime class {}", binaryName, failure);
             showMessage(Component.literal("TotalDebug: unknown runtime class " + binaryName)

@@ -22,7 +22,7 @@ class CompanionReleaseTest {
                 release.downloadUri()
         );
         assertEquals(
-                "c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a",
+                "7f09e350acb7dbcc8a8a994d6ba2a8340b7226e67ae6acf69ba9ee61babf7157",
                 release.sha256()
         );
     }

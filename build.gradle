@@ -210,6 +210,8 @@ def generateParchmentParameterIndex = tasks.register(
 sourceSets.main.resources.srcDir(generatedParchmentResources)
 
 dependencies {
+    compileOnly 'net.java.dev.jna:jna:5.14.0'
+
     def embeddedLibraries = [
             "com.github.tth05:SCNet:${scnet_version}",
             "io.github.classgraph:classgraph:${classgraph_version}",

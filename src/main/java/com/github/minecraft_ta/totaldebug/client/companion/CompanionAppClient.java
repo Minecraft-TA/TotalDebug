@@ -44,6 +44,7 @@ public final class CompanionAppClient implements AutoCloseable {
     private final CompanionAppInstaller installer;
     private final RuntimeClassIndex runtimeClassIndex;
     private final CompanionTimeouts timeouts;
+    private final CompanionForegroundHandoff foregroundHandoff;
     private final Client client = new Client();
     private volatile CompletableFuture<Void> authenticated = new CompletableFuture<>();
     private volatile CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -73,10 +74,26 @@ public final class CompanionAppClient implements AutoCloseable {
     private Path sessionDescriptorFile;
 
     public CompanionAppClient(Path totalDebugDirectory) {
-        this(totalDebugDirectory, CompanionTimeouts.DEFAULT);
+        this(
+                totalDebugDirectory,
+                CompanionTimeouts.DEFAULT,
+                new CompanionForegroundHandoff(WindowsForegroundPermission.currentPlatform())
+        );
     }
 
     CompanionAppClient(Path totalDebugDirectory, CompanionTimeouts timeouts) {
+        this(
+                totalDebugDirectory,
+                timeouts,
+                new CompanionForegroundHandoff(WindowsForegroundPermission.currentPlatform())
+        );
+    }
+
+    CompanionAppClient(
+            Path totalDebugDirectory,
+            CompanionTimeouts timeouts,
+            CompanionForegroundHandoff foregroundHandoff
+    ) {
         Path root = Objects.requireNonNull(totalDebugDirectory, "totalDebugDirectory").toAbsolutePath().normalize();
         Path workspace = root.getParent();
         if (workspace == null) {
@@ -90,6 +107,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.installer = new CompanionAppInstaller(this.appDirectory);
         this.runtimeClassIndex = new RuntimeClassIndex(this.dataDirectory);
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
+        this.foregroundHandoff = Objects.requireNonNull(foregroundHandoff, "foregroundHandoff");
 
         configureTransport();
         registerProtocol();
@@ -128,9 +146,37 @@ public final class CompanionAppClient implements AutoCloseable {
         this.client.getMessageProcessor().enqueueMessage(new ScriptStatusMessage(scriptId, type, message));
     }
 
-    public synchronized void open(Path sourceFile, SourceTarget sourceTarget) throws IOException {
+    public synchronized void openAndFocus(
+            Path sourceFile,
+            SourceTarget sourceTarget,
+            Runnable beforeTransfer
+    ) throws IOException {
+        Objects.requireNonNull(beforeTransfer, "beforeTransfer");
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
+        transferForeground(beforeTransfer, () -> enqueueOpen(sourceFile, sourceTarget));
+    }
+
+    public synchronized void openInPlace(Path sourceFile, SourceTarget sourceTarget) throws IOException {
+        Objects.requireNonNull(sourceTarget, "sourceTarget");
+        ensureConnectedAndReady();
+        enqueueOpen(sourceFile, sourceTarget);
+    }
+
+    public synchronized void focus(Runnable beforeFocus) throws IOException {
+        Objects.requireNonNull(beforeFocus, "beforeFocus");
+        ensureConnectedAndReady();
+        transferForeground(
+                beforeFocus,
+                () -> this.client.getMessageProcessor().enqueueMessage(new FocusWindowMessage())
+        );
+    }
+
+    public Path dataDirectory() {
+        return this.dataDirectory;
+    }
+
+    private void enqueueOpen(Path sourceFile, SourceTarget sourceTarget) {
         CompanionSourceTargetCodec.WireTarget wireTarget = CompanionSourceTargetCodec.encode(sourceTarget);
         this.client.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(
                 sourceFile.toAbsolutePath().normalize().toString(),
@@ -139,15 +185,12 @@ public final class CompanionAppClient implements AutoCloseable {
         ));
     }
 
-    public synchronized void focus(Runnable beforeFocus) throws IOException {
-        Objects.requireNonNull(beforeFocus, "beforeFocus");
-        ensureConnectedAndReady();
-        beforeFocus.run();
-        this.client.getMessageProcessor().enqueueMessage(new FocusWindowMessage());
-    }
-
-    public Path dataDirectory() {
-        return this.dataDirectory;
+    private void transferForeground(Runnable beforeTransfer, Runnable sendRequest) throws IOException {
+        Process companionProcess = this.process;
+        if (companionProcess == null || !companionProcess.isAlive()) {
+            throw new IOException("The authenticated Companion child is no longer running");
+        }
+        this.foregroundHandoff.transfer(companionProcess.pid(), beforeTransfer, sendRequest);
     }
 
     private void configureTransport() {
