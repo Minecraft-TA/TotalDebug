@@ -1,3 +1,86 @@
+import groovy.json.JsonSlurper
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+import java.util.zip.ZipFile
+
+abstract class GenerateParchmentParameterIndex extends DefaultTask {
+    private static final int MAGIC = 0x5444504E
+    private static final int FORMAT_VERSION = 1
+
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getParchmentArchive()
+
+    @Input
+    abstract Property<String> getMinecraftVersion()
+
+    @Input
+    abstract Property<String> getMappingsVersion()
+
+    @OutputFile
+    abstract RegularFileProperty getOutputFile()
+
+    @TaskAction
+    void generate() {
+        def archive = new ZipFile(parchmentArchive.get().asFile)
+        def data
+        try {
+            def entry = archive.getEntry('parchment.json')
+            if (entry == null) {
+                throw new GradleException("Parchment archive does not contain parchment.json")
+            }
+            data = archive.getInputStream(entry).withReader('UTF-8') { reader ->
+                new JsonSlurper().parse(reader)
+            }
+        } finally {
+            archive.close()
+        }
+
+        def methods = data.classes.collectMany { mappedClass ->
+            (mappedClass.methods ?: []).findAll { method -> method.parameters }
+                    .collect { method ->
+                        [
+                                owner     : mappedClass.name,
+                                name      : method.name,
+                                descriptor: method.descriptor,
+                                parameters: method.parameters.sort { parameter -> parameter.index },
+                        ]
+                    }
+        }.sort { left, right ->
+            left.owner <=> right.owner ?:
+                    left.name <=> right.name ?:
+                    left.descriptor <=> right.descriptor
+        }
+
+        def output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.withDataOutputStream { stream ->
+            stream.writeInt(MAGIC)
+            stream.writeInt(FORMAT_VERSION)
+            stream.writeUTF(minecraftVersion.get())
+            stream.writeUTF(mappingsVersion.get())
+            stream.writeInt(methods.size())
+            methods.each { method ->
+                stream.writeUTF(method.owner)
+                stream.writeUTF(method.name)
+                stream.writeUTF(method.descriptor)
+                stream.writeInt(method.parameters.size())
+                method.parameters.each { parameter ->
+                    stream.writeInt(parameter.index as int)
+                    stream.writeUTF(parameter.name)
+                }
+            }
+        }
+    }
+}
+
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.144'
@@ -17,6 +100,13 @@ java {
 
 repositories {
     mavenCentral()
+    maven {
+        name = 'Parchment'
+        url = uri('https://maven.parchmentmc.org')
+        content {
+            includeGroup 'org.parchmentmc.data'
+        }
+    }
     maven {
         name = 'tth05'
         url = uri('https://packagecloud.io/tth05/repo/maven2')
@@ -59,6 +149,28 @@ neoForge {
     addModdingDependenciesTo sourceSets.test
 }
 
+def generatedParchmentResources = layout.buildDirectory.dir('generated/resources/parchment')
+def generateParchmentParameterIndex = tasks.register(
+        'generateParchmentParameterIndex',
+        GenerateParchmentParameterIndex
+) {
+    parchmentArchive.fileProvider(configurations.named('parchmentData').flatMap { configuration ->
+        configuration.elements.map { files ->
+            if (files.size() != 1) {
+                throw new GradleException("Expected one Parchment data artifact, found ${files.size()}")
+            }
+            files.iterator().next().asFile
+        }
+    })
+    minecraftVersion = project.parchment_minecraft_version
+    mappingsVersion = project.parchment_mappings_version
+    outputFile = generatedParchmentResources.map {
+        it.file('totaldebug/parchment-parameters.bin')
+    }
+}
+
+sourceSets.main.resources.srcDir(generatedParchmentResources)
+
 dependencies {
     def embeddedLibraries = [
             "com.github.tth05:SCNet:${scnet_version}",
@@ -75,6 +187,10 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('processResources').configure {
+    dependsOn generateParchmentParameterIndex
 }
 
 tasks.named('jar', Jar).configure {

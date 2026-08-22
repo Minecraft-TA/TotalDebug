@@ -2,7 +2,10 @@ package com.github.minecraft_ta.totaldebug.decompiler;
 
 import com.github.minecraft_ta.totaldebug.bytecode.ClassLoaderBytecodeSource;
 import com.github.minecraft_ta.totaldebug.decompiler.fixture.ModernJavaFixture;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.test.GeneratedNamesFixture;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BonemealableBlock;
 import net.minecraft.world.level.block.GrassBlock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,6 +41,7 @@ class VineflowerDecompilerTest {
         assertTrue(result.source().contains("->"), result.source());
         assertTrue(result.source().contains("stream()"), result.source());
         assertTrue(result.source().contains("class Nested"), result.source());
+        assertTrue(result.source().contains("inspect(Object value)"), result.source());
         assertCompiles(ModernJavaFixture.class.getName(), result.source(), outputDirectory);
     }
 
@@ -59,7 +63,45 @@ class VineflowerDecompilerTest {
         assertTrue(result.source().contains("performBonemeal"), result.source());
         assertTrue(result.source().contains("for (int i = 0; i < 128; i++)"), result.source());
         assertTrue(result.source().contains("for (int j = 0; j < i / 16; j++)"), result.source());
+        assertTrue(result.source().contains("GrassBlock(Properties properties)"), result.source());
+        assertTrue(result.source().contains(
+                "performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, BlockState state)"
+        ), result.source());
+        assertFalse(result.source().contains("p_221270_"), result.source());
         assertFalse(result.source().contains("$VF: Couldn't be decompiled"), result.source());
+    }
+
+    @Test
+    void appliesParchmentNamesToAbstractMinecraftMethods() throws Exception {
+        DecompilationResult result = decompile(BonemealableBlock.class);
+
+        assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
+        assertTrue(result.source().contains(
+                "performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, BlockState state)"
+        ), result.source());
+    }
+
+    @Test
+    void preservesExistingParchmentNames() throws Exception {
+        DecompilationResult result = decompile(Advancement.class);
+
+        assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
+        assertTrue(result.source().contains("write(RegistryFriendlyByteBuf buffer)"), result.source());
+        assertTrue(result.source().contains("validate(ProblemReporter reporter, Provider lootData)"), result.source());
+        assertFalse(result.source().contains("RegistryFriendlyByteBuf registryfriendlybytebuf"), result.source());
+    }
+
+    @Test
+    void givesGeneratedMinecraftVariablesJadStyleNames() throws Exception {
+        DecompilationResult result = decompile(GeneratedNamesFixture.class);
+
+        assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
+        assertTrue(result.source().contains("format(String s, int i)"), result.source());
+        assertTrue(result.source().contains("String s1 = s"), result.source());
+        assertTrue(result.source().contains("for (int j = 0; j < i; j++)"), result.source());
+        assertFalse(result.source().contains("p_100_"), result.source());
+        assertFalse(result.source().contains("var3"), result.source());
+        assertFalse(result.source().contains("var4"), result.source());
     }
 
     @Test
