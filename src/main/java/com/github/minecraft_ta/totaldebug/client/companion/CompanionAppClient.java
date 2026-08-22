@@ -61,6 +61,7 @@ public final class CompanionAppClient implements AutoCloseable {
             scriptId
     );
     private volatile Runnable sessionClosedHandler = () -> { };
+    private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile String sessionToken;
     private volatile long negotiatedCapabilities;
     private volatile boolean closing;
@@ -111,6 +112,10 @@ public final class CompanionAppClient implements AutoCloseable {
         this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
     }
 
+    public void setProgressListener(Consumer<CompanionStartupProgress> listener) {
+        this.progressListener = Objects.requireNonNull(listener, "listener");
+    }
+
     public void sendScriptStatus(int scriptId, ScriptStatusType type, String message) {
         if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             TotalDebug.LOGGER.debug(
@@ -134,8 +139,10 @@ public final class CompanionAppClient implements AutoCloseable {
         ));
     }
 
-    public synchronized void focus() throws IOException {
+    public synchronized void focus(Runnable beforeFocus) throws IOException {
+        Objects.requireNonNull(beforeFocus, "beforeFocus");
         ensureConnectedAndReady();
+        beforeFocus.run();
         this.client.getMessageProcessor().enqueueMessage(new FocusWindowMessage());
     }
 
@@ -294,23 +301,29 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void ensureConnectedAndReady() throws IOException {
-        this.runtimeClassIndex.ensurePresent();
-        CompletableFuture<Void> readiness = this.ready;
-        if (this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
-            return;
-        }
-        if (this.process != null) {
-            if (this.process.isAlive()) {
-                throw new IOException(
-                        "The active Companion child lost its authenticated transport; see " + this.processLog
-                );
-            }
-            resetExitedSession();
-        }
-
         try {
+            boolean indexBuilt = this.runtimeClassIndex.ensurePresent(
+                    () -> reportProgress(CompanionStartupProgress.indexing())
+            );
+            CompletableFuture<Void> readiness = this.ready;
+            if (this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
+                if (indexBuilt) {
+                    reportProgress(CompanionStartupProgress.ready());
+                }
+                return;
+            }
+            if (this.process != null) {
+                if (this.process.isAlive()) {
+                    throw new IOException(
+                            "The active Companion child lost its authenticated transport; see " + this.processLog
+                    );
+                }
+                resetExitedSession();
+            }
+
             CompanionSessionDescriptor descriptor = startInstalledCompanion();
             InetSocketAddress address = sessionAddress(descriptor.port());
+            reportProgress(CompanionStartupProgress.connecting());
             if (!this.client.connect(address)) {
                 throw new IOException("Unable to connect to the exact Companion child at " + address);
             }
@@ -318,7 +331,9 @@ public final class CompanionAppClient implements AutoCloseable {
             readiness = this.ready;
             await(authentication, this.timeouts.handshake(), "Companion session handshake");
             await(readiness, this.timeouts.readiness(), "Companion UI readiness");
+            reportProgress(CompanionStartupProgress.ready());
         } catch (IOException exception) {
+            reportProgress(CompanionStartupProgress.failed(exception.getMessage()));
             this.client.close();
             if (this.process != null && this.process.isAlive()) {
                 this.process.destroy();
@@ -334,7 +349,7 @@ public final class CompanionAppClient implements AutoCloseable {
     private CompanionSessionDescriptor startInstalledCompanion() throws IOException {
         CompanionInstallation installation;
         try {
-            installation = this.installer.resolveOrInstall();
+            installation = this.installer.resolveOrInstall(this::reportProgress);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while installing the companion app", exception);
@@ -373,6 +388,7 @@ public final class CompanionAppClient implements AutoCloseable {
         processBuilder.environment().put(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, this.sessionToken);
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(this.processLog.toFile());
+        reportProgress(CompanionStartupProgress.starting());
         this.process = processBuilder.start();
         TotalDebug.LOGGER.info(
                 "Started per-process TotalDebugCompanion session {} from {} with Minecraft Java {}; output is written to {}",
@@ -383,6 +399,10 @@ public final class CompanionAppClient implements AutoCloseable {
         );
 
         return awaitDescriptor(this.sessionDescriptorFile);
+    }
+
+    private void reportProgress(CompanionStartupProgress progress) {
+        this.progressListener.accept(progress);
     }
 
     private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile) throws IOException {

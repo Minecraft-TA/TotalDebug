@@ -18,14 +18,11 @@ final class OpenCodeOperation {
             return;
         }
 
-        this.actions.releaseGameInput();
         this.actions.focusCompanion();
     }
 
     interface Actions {
         void openClass(Class<?> targetClass);
-
-        void releaseGameInput();
 
         void focusCompanion();
     }

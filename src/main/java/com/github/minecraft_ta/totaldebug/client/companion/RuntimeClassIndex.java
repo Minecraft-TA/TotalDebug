@@ -47,7 +47,8 @@ final class RuntimeClassIndex {
                 .normalize();
     }
 
-    synchronized void ensurePresent() throws IOException {
+    synchronized boolean ensurePresent(Runnable beforeBuild) throws IOException {
+        Objects.requireNonNull(beforeBuild, "beforeBuild");
         List<Path> sources = RuntimeSourceInventory.discover(
                 TotalDebug.class,
                 Block.class,
@@ -56,7 +57,7 @@ final class RuntimeClassIndex {
         );
         String signature = calculateSignature(sources);
         if (signature.equals(this.ensuredSignature)) {
-            return;
+            return false;
         }
 
         Files.createDirectories(this.dataDirectory);
@@ -66,9 +67,10 @@ final class RuntimeClassIndex {
                 && Files.isRegularFile(metadataFile)
                 && signature.equals(Files.readString(metadataFile, StandardCharsets.UTF_8))) {
             this.ensuredSignature = signature;
-            return;
+            return false;
         }
 
+        beforeBuild.run();
         TotalDebug.LOGGER.info("Building companion class index from {} runtime sources", sources.size());
         long started = System.nanoTime();
         Path workspace = Files.createTempDirectory(this.dataDirectory, ".class-index-");
@@ -99,6 +101,7 @@ final class RuntimeClassIndex {
                     indexInputs.size(),
                     (System.nanoTime() - started) / 1_000_000
             );
+            return true;
         } catch (RuntimeException exception) {
             throw new IOException("Unable to build the companion class index", exception);
         } finally {

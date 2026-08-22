@@ -26,7 +26,7 @@ class OpenCodeOperationTest {
         new OpenCodeOperation(actions).openOrFocus(Optional.empty());
 
         assertEquals(List.of(), actions.openedClasses);
-        assertEquals(List.of("release input", "focus Companion"), actions.focusEvents);
+        assertEquals(List.of("focus Companion"), actions.focusEvents);
         assertEquals(1, actions.focusCount);
     }
 
@@ -38,11 +38,6 @@ class OpenCodeOperationTest {
         @Override
         public void openClass(Class<?> targetClass) {
             this.openedClasses.add(targetClass);
-        }
-
-        @Override
-        public void releaseGameInput() {
-            this.focusEvents.add("release input");
         }
 
         @Override

@@ -2,18 +2,21 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
@@ -39,6 +42,12 @@ public final class CompanionAppInstaller {
     }
 
     public CompanionInstallation resolveOrInstall() throws IOException, InterruptedException {
+        return resolveOrInstall(progress -> { });
+    }
+
+    CompanionInstallation resolveOrInstall(Consumer<CompanionStartupProgress> progressListener)
+            throws IOException, InterruptedException {
+        Objects.requireNonNull(progressListener, "progressListener");
         String developmentJar = System.getProperty(DEV_JAR_PROPERTY);
         boolean hasDevelopmentJar = developmentJar != null && !developmentJar.isBlank();
         if (hasDevelopmentJar) {
@@ -54,7 +63,7 @@ public final class CompanionAppInstaller {
         Path installationDirectory = this.appDirectory.resolve(this.release.version());
         Path jarPath = installationDirectory.resolve(this.release.artifactFileName());
         if (!Files.isRegularFile(jarPath) || !this.release.sha256().equals(sha256(jarPath))) {
-            installDistribution(jarPath);
+            installDistribution(jarPath, progressListener);
         }
 
         requireRegularFile(jarPath, "Companion JAR");
@@ -70,11 +79,14 @@ public final class CompanionAppInstaller {
         return new CompanionInstallation(jarPath);
     }
 
-    private void installDistribution(Path jarPath) throws IOException, InterruptedException {
+    private void installDistribution(
+            Path jarPath,
+            Consumer<CompanionStartupProgress> progressListener
+    ) throws IOException, InterruptedException {
         Files.createDirectories(jarPath.getParent());
         Path stagedJar = Files.createTempFile(jarPath.getParent(), ".companion-", ".jar");
         try {
-            downloadDistribution(stagedJar);
+            downloadDistribution(stagedJar, progressListener);
             Files.move(
                     stagedJar,
                     jarPath,
@@ -86,7 +98,10 @@ public final class CompanionAppInstaller {
         }
     }
 
-    private void downloadDistribution(Path destination) throws IOException, InterruptedException {
+    private void downloadDistribution(
+            Path destination,
+            Consumer<CompanionStartupProgress> progressListener
+    ) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(this.release.downloadUri())
                 .header("User-Agent", "TotalDebugCompanionInstaller/" + this.release.version())
                 .GET()
@@ -97,9 +112,37 @@ public final class CompanionAppInstaller {
             throw new IOException("Companion download returned HTTP " + response.statusCode());
         }
 
+        long totalBytes = response.headers().firstValueAsLong("Content-Length")
+                .orElse(CompanionStartupProgress.UNKNOWN_TOTAL);
+        progressListener.accept(CompanionStartupProgress.downloading(this.release.version(), 0L, totalBytes));
+        long[] lastReportedPercentage = {0L};
         MessageDigest digest = sha256Digest();
-        try (InputStream body = response.body(); DigestInputStream verifiedBody = new DigestInputStream(body, digest)) {
-            Files.copy(verifiedBody, destination, StandardCopyOption.REPLACE_EXISTING);
+        try (InputStream body = response.body();
+             DigestInputStream verifiedBody = new DigestInputStream(body, digest);
+             OutputStream output = Files.newOutputStream(
+                     destination,
+                     StandardOpenOption.WRITE,
+                     StandardOpenOption.TRUNCATE_EXISTING
+             )) {
+            copyDownload(
+                    verifiedBody,
+                    output,
+                    downloadedBytes -> {
+                        if (totalBytes <= 0L) {
+                            return;
+                        }
+                        long percentage = Math.min(100L, (long) (downloadedBytes * 100.0D / totalBytes));
+                        if (percentage <= lastReportedPercentage[0]) {
+                            return;
+                        }
+                        lastReportedPercentage[0] = percentage;
+                        progressListener.accept(CompanionStartupProgress.downloading(
+                                this.release.version(),
+                                downloadedBytes,
+                                totalBytes
+                        ));
+                    }
+            );
         }
 
         String actualHash = HexFormat.of().formatHex(digest.digest());
@@ -110,6 +153,18 @@ public final class CompanionAppInstaller {
                             + ", got "
                             + actualHash
             );
+        }
+    }
+
+    static void copyDownload(InputStream input, OutputStream output, java.util.function.LongConsumer progress)
+            throws IOException {
+        byte[] buffer = new byte[16 * 1024];
+        long downloadedBytes = 0L;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            output.write(buffer, 0, read);
+            downloadedBytes += read;
+            progress.accept(downloadedBytes);
         }
     }
 

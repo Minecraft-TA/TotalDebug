@@ -27,8 +27,10 @@
   "companion_app.connecting": "Connecting to companion app...",
   "companion_app.connection_success": "Connected to the companion app.",
   "companion_app.connection_fail": "Could not connect to the companion app.",
-  "companion_app.download_start": "Downloading companion app version %s...",
+  "companion_app.download_start": "Downloading %s...",
+  "companion_app.download_progress": "Downloading %s... %s%%",
   "companion_app.open_file": "Opening %s...",
   "companion_app.dumping_minecraft_classes": "Dumping Minecraft classes...",
-  "companion_app.start_indexing": "Indexing classes..."
+  "companion_app.start_indexing": "Indexing classes...",
+  "companion_app.toast.title": "TotalDebug Companion"
 }

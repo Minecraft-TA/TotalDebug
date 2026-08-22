@@ -128,7 +128,7 @@ public final class ClientDecompilationService {
 
         CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
             try {
-                this.companionApp.focus();
+                this.companionApp.focus(ClientDecompilationService::releaseGameInput);
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
@@ -140,6 +140,11 @@ public final class ClientDecompilationService {
             return null;
         });
         return task;
+    }
+
+    private static void releaseGameInput() {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.submit(minecraft.mouseHandler::releaseMouse).join();
     }
 
     private Path decompile(Class<?> targetClass) throws IOException {
