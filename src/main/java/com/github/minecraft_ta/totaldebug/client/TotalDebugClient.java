@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totaldebug.client.decompile.ClientDecompilationSe
 import com.github.minecraft_ta.totaldebug.client.decompile.DecompilationRequest;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
+import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
@@ -18,6 +20,7 @@ public final class TotalDebugClient {
     private final ClientDecompilationService decompilation;
     private final OpenCodeOperation openCode;
     private final CodeViewInput codeViewInput;
+    private final ClientScriptService scripts;
 
     private TotalDebugClient(Path gameDirectory) {
         Path totalDebugDirectory = gameDirectory
@@ -38,7 +41,11 @@ public final class TotalDebugClient {
             }
         });
         this.codeViewInput = new CodeViewInput(this::openOrFocus);
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks());
         companionApp.setDecompileRequestHandler(this.decompilation::openNamedClass);
+        companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
+        companionApp.setStopScriptHandler(this.scripts::stopScript);
+        companionApp.setSessionClosedHandler(this.scripts::close);
     }
 
     public static synchronized void initialize(Minecraft minecraft) {
@@ -67,5 +74,9 @@ public final class TotalDebugClient {
 
     public CodeViewInput codeViewInput() {
         return this.codeViewInput;
+    }
+
+    public void stopAllScripts() {
+        this.scripts.stopAll();
     }
 }

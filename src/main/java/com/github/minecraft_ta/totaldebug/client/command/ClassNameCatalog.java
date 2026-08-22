@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.command;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.client.decompile.RuntimeClassSources;
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ScanResult;
 import net.minecraft.world.level.block.Block;
@@ -51,7 +51,7 @@ final class ClassNameCatalog {
     }
 
     static ClassNameCatalog scanRuntime() throws IOException {
-        var sources = RuntimeClassSources.discover(TotalDebug.class, Block.class, ClassGraph.class);
+        var sources = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
         List<String> classNames;
         try (ScanResult scan = new ClassGraph()
                 .overrideClasspath(sources)

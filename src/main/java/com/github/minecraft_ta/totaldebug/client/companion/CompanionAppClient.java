@@ -6,7 +6,11 @@ import com.github.minecraft_ta.totaldebug.client.companion.message.ClientHelloMe
 import com.github.minecraft_ta.totaldebug.client.companion.message.CompanionReadyMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
@@ -27,6 +31,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
@@ -46,6 +52,15 @@ public final class CompanionAppClient implements AutoCloseable {
             "Ignoring companion decompile request for {} because no handler is installed",
             binaryName
     );
+    private volatile Consumer<RunScriptMessage> scriptRequestHandler = message -> TotalDebug.LOGGER.warn(
+            "Ignoring companion script request {} because no handler is installed",
+            message.scriptId()
+    );
+    private volatile IntConsumer stopScriptHandler = scriptId -> TotalDebug.LOGGER.warn(
+            "Ignoring companion stop-script request {} because no handler is installed",
+            scriptId
+    );
+    private volatile Runnable sessionClosedHandler = () -> { };
     private volatile String sessionToken;
     private volatile long negotiatedCapabilities;
     private volatile boolean closing;
@@ -84,6 +99,30 @@ public final class CompanionAppClient implements AutoCloseable {
         this.decompileRequestHandler = Objects.requireNonNull(handler, "handler");
     }
 
+    public void setScriptRequestHandler(Consumer<RunScriptMessage> handler) {
+        this.scriptRequestHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setStopScriptHandler(IntConsumer handler) {
+        this.stopScriptHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void setSessionClosedHandler(Runnable handler) {
+        this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendScriptStatus(int scriptId, ScriptStatusType type, String message) {
+        if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+            TotalDebug.LOGGER.debug(
+                    "Discarding script status {} for script {} because script execution is not negotiated",
+                    type,
+                    scriptId
+            );
+            return;
+        }
+        this.client.getMessageProcessor().enqueueMessage(new ScriptStatusMessage(scriptId, type, message));
+    }
+
     public synchronized void open(Path sourceFile, SourceTarget sourceTarget) throws IOException {
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
@@ -120,6 +159,20 @@ public final class CompanionAppClient implements AutoCloseable {
                 DecompileOrOpenMessage.class,
                 DecompileOrOpenMessage::new
         );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.RUN_SCRIPT,
+                RunScriptMessage.class,
+                RunScriptMessage::new
+        );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.SCRIPT_STATUS,
+                ScriptStatusMessage.class
+        );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.STOP_SCRIPT,
+                StopScriptMessage.class,
+                StopScriptMessage::new
+        );
         this.client.getMessageProcessor().registerMessage(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class);
         this.client.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class);
         this.client.getMessageProcessor().registerMessage(
@@ -151,6 +204,20 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             this.decompileRequestHandler.accept(message.name(), sourceTarget);
         });
+        this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
+            if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                failSession("Companion sent a script request without negotiating that capability", null);
+                return;
+            }
+            this.scriptRequestHandler.accept(message);
+        });
+        this.client.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
+            if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                failSession("Companion sent a stop-script request without negotiating that capability", null);
+                return;
+            }
+            this.stopScriptHandler.accept(message.scriptId());
+        });
         this.client.addConnectionListener(new IConnectionListener() {
             @Override
             public void onConnected() {
@@ -163,12 +230,13 @@ public final class CompanionAppClient implements AutoCloseable {
                 CompanionAppClient.this.client.getMessageProcessor().enqueueMessage(new ClientHelloMessage(
                         CompanionProtocol.VERSION,
                         token,
-                        CompanionProtocol.CORE_CAPABILITIES
+                        CompanionProtocol.REQUESTED_CAPABILITIES
                 ));
             }
 
             @Override
             public void onDisconnected() {
+                notifySessionClosed();
                 CompletableFuture<Void> readiness = CompanionAppClient.this.ready;
                 if (!CompanionAppClient.this.closing
                         && CompanionAppClient.this.transportExpected
@@ -377,6 +445,14 @@ public final class CompanionAppClient implements AutoCloseable {
         this.client.close();
     }
 
+    private void notifySessionClosed() {
+        try {
+            this.sessionClosedHandler.run();
+        } catch (RuntimeException exception) {
+            TotalDebug.LOGGER.warn("The Companion session-close handler failed", exception);
+        }
+    }
+
     private void resetExitedSession() throws IOException {
         this.transportExpected = false;
         this.client.close();
@@ -413,6 +489,7 @@ public final class CompanionAppClient implements AutoCloseable {
     @Override
     public synchronized void close() {
         this.closing = true;
+        notifySessionClosed();
         this.client.close();
         if (this.process != null && this.process.isAlive()) {
             this.process.destroy();

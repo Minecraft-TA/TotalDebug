@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.tick;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.client.TotalDebugClient;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.neoforged.api.distmarker.Dist;
@@ -26,6 +27,7 @@ final class ClientTickTaskEvents {
 
     @SubscribeEvent
     static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        TotalDebugClient.get().stopAllScripts();
         TotalDebug.get().tickTasks().clear(TickDomain.CLIENT);
     }
 }

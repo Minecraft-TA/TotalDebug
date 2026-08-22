@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.client.decompile.RuntimeClassSources;
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.tth05.jindex.ClassIndex;
 import io.github.classgraph.ClassGraph;
 import net.minecraft.world.level.block.Block;
@@ -48,7 +48,7 @@ final class RuntimeClassIndex {
     }
 
     synchronized void ensurePresent() throws IOException {
-        List<Path> sources = RuntimeClassSources.discover(
+        List<Path> sources = RuntimeSourceInventory.discover(
                 TotalDebug.class,
                 Block.class,
                 ClassGraph.class,

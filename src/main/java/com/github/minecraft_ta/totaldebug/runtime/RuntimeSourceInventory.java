@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.client.decompile;
+package com.github.minecraft_ta.totaldebug.runtime;
 
 import net.neoforged.fml.ModList;
 
@@ -17,8 +17,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
 
-public final class RuntimeClassSources {
-    private RuntimeClassSources() {
+/** Discovers physical JARs and class directories visible to the running game. */
+public final class RuntimeSourceInventory {
+    private RuntimeSourceInventory() {
     }
 
     public static List<Path> discover(Class<?>... anchors) throws IOException {
