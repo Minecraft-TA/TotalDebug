@@ -15,20 +15,20 @@ public class BaseScript {
     private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s(.*?);");
 
     private static final String BASE_SCRIPT_IMPORTS = """
-            import cpw.mods.fml.common.FMLCommonHandler;
-            import net.minecraft.entity.player.EntityPlayerMP;
+            import net.minecraft.network.chat.Component;
             import net.minecraft.server.MinecraftServer;
-            import net.minecraft.util.ChatComponentText;
-            import net.minecraft.world.World;
-            import net.minecraft.world.WorldServer;
-            import net.minecraftforge.common.DimensionManager;
+            import net.minecraft.server.level.ServerLevel;
+            import net.minecraft.server.level.ServerPlayer;
+            import net.neoforged.neoforge.server.ServerLifecycleHooks;
             
             import java.io.StringWriter;
             import java.lang.reflect.Constructor;
             import java.lang.reflect.Field;
             import java.lang.reflect.Method;
+            import java.util.ArrayList;
             import java.util.Arrays;
             import java.util.List;
+            import java.util.Objects;
             """;
 
     //language=Java
@@ -39,23 +39,28 @@ public class BaseScript {
                 */
                         
                 public MinecraftServer getServer() {
-                    return FMLCommonHandler.instance().getMinecraftServerInstance();
+                    return Objects.requireNonNull(
+                        ServerLifecycleHooks.getCurrentServer(),
+                        "No Minecraft server is running in this JVM"
+                    );
                 }
                         
                 public void sendToAllPlayers(String message) {
-                    getServerPlayers().forEach(p -> p.addChatMessage(new ChatComponentText(message)));
+                    getServerPlayers().forEach(player -> player.sendSystemMessage(Component.literal(message)));
                 }
                         
-                public World getServerOverworld() {
-                    return DimensionManager.getWorld(0);
+                public ServerLevel getServerOverworld() {
+                    return getServer().overworld();
                 }
                         
-                public List<WorldServer> getServerWorlds() {
-                    return Arrays.asList(getServer().worldServers);
+                public List<ServerLevel> getServerWorlds() {
+                    List<ServerLevel> levels = new ArrayList<>();
+                    getServer().getAllLevels().forEach(levels::add);
+                    return List.copyOf(levels);
                 }
                         
-                public List<EntityPlayerMP> getServerPlayers() {
-                    return getServer().getConfigurationManager().playerEntityList;
+                public List<ServerPlayer> getServerPlayers() {
+                    return getServer().getPlayerList().getPlayers();
                 }
                            \s
                 /*

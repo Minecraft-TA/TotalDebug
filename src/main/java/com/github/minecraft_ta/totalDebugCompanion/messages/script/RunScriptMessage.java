@@ -30,9 +30,9 @@ public class RunScriptMessage extends AbstractMessageOutgoing {
     }
 
     public enum ExecutionEnvironment {
-        THREAD(TextUtils.htmlPrimarySecondaryString("Thread", " - ", "Run on a separate thread"), null),
-        PRE_TICK(TextUtils.htmlPrimarySecondaryString("Pre Tick", " - ", "Run on main thread, pre game loop tick"), Icons.WARNING),
-        POST_TICK(TextUtils.htmlPrimarySecondaryString("Post Tick", " - ", "Run on main thread, post game loop tick"), Icons.WARNING);
+        THREAD(TextUtils.htmlPrimarySecondaryString("Thread", " - ", "Run separately; Stop is cooperative"), null),
+        PRE_TICK(TextUtils.htmlPrimarySecondaryString("Pre Tick", " - ", "Run on the main thread; cannot be force-stopped"), Icons.WARNING),
+        POST_TICK(TextUtils.htmlPrimarySecondaryString("Post Tick", " - ", "Run on the main thread; cannot be force-stopped"), Icons.WARNING);
 
         private final String label;
         private final Icon icon;

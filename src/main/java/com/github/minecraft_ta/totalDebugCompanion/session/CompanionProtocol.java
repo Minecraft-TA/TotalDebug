@@ -37,7 +37,7 @@ public final class CompanionProtocol {
     public static final long CORE_CAPABILITIES = CAPABILITY_CODE_VIEW
             | CAPABILITY_FOCUS_WINDOW
             | CAPABILITY_REVERSE_DECOMPILE;
-    public static final long SUPPORTED_CAPABILITIES = CORE_CAPABILITIES;
+    public static final long SUPPORTED_CAPABILITIES = CORE_CAPABILITIES | CAPABILITY_SCRIPT_EXECUTION;
 
     private CompanionProtocol() {
     }
