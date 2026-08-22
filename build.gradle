@@ -27,9 +27,6 @@ sourceSets.main.resources {
 }
 
 repositories {
-    if (providers.gradleProperty('useMavenLocal').orNull == 'true') {
-        mavenLocal()
-    }
     mavenCentral()
     maven {
         name = 'tth05 package repository'
@@ -38,6 +35,9 @@ repositories {
             includeGroup 'com.github.tth05'
         }
     }
+    // SCNet and JIndex stable releases are published here during local development.
+    // Keep this last so the remote release repository remains authoritative.
+    mavenLocal()
 }
 
 base {
