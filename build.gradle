@@ -7,14 +7,16 @@ group = "com.github.minecraft_ta"
 version = providers.gradleProperty('releaseVersion').orElse('2.0.0-SNAPSHOT').get()
 
 repositories {
+    if (providers.gradleProperty('useMavenLocal').orNull == 'true') {
+        mavenLocal()
+    }
     mavenCentral()
-    maven { url = uri('https://jitpack.io') }
     maven { url = uri('https://packagecloud.io/tth05/repo/maven2') }
 }
 
 dependencies {
-    implementation("com.github.tth05:jindex:0.0.45")
-    implementation("com.github.tth05:SCNet:d683b47")
+    implementation("com.github.tth05:jindex:${jindex_version}")
+    implementation("com.github.tth05:SCNet:${scnet_version}")
 
     implementation('com.formdev:flatlaf:3.7.2')
     implementation('com.formdev:flatlaf-intellij-themes:3.7.2')
