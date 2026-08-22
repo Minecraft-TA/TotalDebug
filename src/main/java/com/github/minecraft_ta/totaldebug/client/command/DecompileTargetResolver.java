@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.command;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -13,17 +14,21 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
 final class DecompileTargetResolver implements DecompileClientCommand.TargetResolver {
     private final ClassLoader classLoader;
     private final Function<EntityType<?>, Class<?>> entityClassResolver;
 
-    DecompileTargetResolver(
+    private DecompileTargetResolver(
             ClassLoader classLoader,
             Function<EntityType<?>, Class<?>> entityClassResolver
     ) {
@@ -32,14 +37,17 @@ final class DecompileTargetResolver implements DecompileClientCommand.TargetReso
     }
 
     static DecompileTargetResolver runtime() {
-        return new DecompileTargetResolver(TotalDebug.class.getClassLoader(), entityType -> {
-            Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level == null) {
-                return null;
-            }
-            Entity entity = entityType.create(minecraft.level);
-            return entity == null ? null : entity.getClass();
-        });
+        return new DecompileTargetResolver(
+                TotalDebug.class.getClassLoader(),
+                entityType -> {
+                    Minecraft minecraft = Minecraft.getInstance();
+                    if (minecraft.level == null) {
+                        return null;
+                    }
+                    Entity entity = entityType.create(minecraft.level);
+                    return entity == null ? null : entity.getClass();
+                }
+        );
     }
 
     @Override
@@ -112,6 +120,11 @@ final class DecompileTargetResolver implements DecompileClientCommand.TargetReso
     }
 
     @Override
+    public CompletableFuture<List<String>> suggestedClasses(String input) {
+        return RuntimeClassNames.CATALOG.thenApply(catalog -> catalog.suggest(input));
+    }
+
+    @Override
     public Optional<Class<?>> namedClass(String binaryName) {
         try {
             return Optional.of(Class.forName(binaryName, false, this.classLoader));
@@ -125,5 +138,25 @@ final class DecompileTargetResolver implements DecompileClientCommand.TargetReso
             return Optional.empty();
         }
         return Optional.ofNullable(registry.get(id));
+    }
+
+    private static final class RuntimeClassNames {
+        private static final CompletableFuture<ClassNameCatalog> CATALOG = CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        return ClassNameCatalog.scanRuntime();
+                    } catch (IOException exception) {
+                        throw new CompletionException(exception);
+                    }
+                },
+                Util.backgroundExecutor()
+        ).whenComplete((catalog, exception) -> {
+            if (exception != null) {
+                TotalDebug.LOGGER.error("Unable to build the runtime class-name catalog", exception);
+            }
+        });
+
+        private RuntimeClassNames() {
+        }
     }
 }

@@ -24,13 +24,13 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F2b | Minecraft networking | Complete | Optional protocol v1 registration, bounded typed companion-forward payload, and receiver lifecycle are tested; remaining payloads stay feature-owned |
 | F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet 2.0.0, ClassGraph 4.8.193, Vineflower 1.12.0, and JIndex 1.0.0 resolve from versioned coordinates and are present in Jar-in-Jar metadata |
 | F3a | Named-class bytecode access | Complete | Defining-loader bytes, including nested target classes, decompile Java 21 test code and Minecraft classes through Vineflower's in-memory API |
-| F3b | Transformed bytes and class inventory | Research | Post-transform capture, loaded-class enumeration, JAR inventory, and compiler classpath remain separate proofs |
+| F3b | Transformed bytes and class inventory | In progress | The command now builds one lazy non-loading class-name inventory from explicit NeoForge runtime sources plus the Java 21 runtime; post-transform capture, loaded-class enumeration, and compiler classpath remain separate proofs |
 | F4 | Companion application IPC and lifecycle | Complete | Companion 2.0 is Java 21 jar-only; each game process launches and authenticates its exact IPv4-loopback child through protocol v2; cold launch, handshake, ready, and open passed live |
 | F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic index; JIndex 1.0.0 now guards native lifetime, retained child objects, and concurrent close while keeping the runtime format working |
 | F8 | Java scripting | Not started | Requires permission, cancellation, compiler, and class-definition redesigns |
-| F9 | Core decompile command | Runtime gate pending | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization; all five subcommands are covered by a focused command test and a 45-test clean build; the four new target kinds need one live smoke |
+| F9 | Core decompile command | Runtime gate pending | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization and have cached package-aware completion; focused tests and a 46-test build pass; the new target kinds and completion need one live smoke |
 | F10 | Code-view keybind | Complete | One F6 press resolves a looked-at block or entity and a hovered GUI item; live gates passed for block, cow, and multiple block items without repeat flooding |
 | F11 | Packet logger | Not started | Requires a separate packet-pipeline hook proof |
 | F12 | Packet blocker | Not started | Port with F11 |
@@ -77,7 +77,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S12 | Behavior-neutral client cleanup | Unit tests, package/lifecycle review, `gradlew build`, no extra game launch | Complete |
 | S13 | Explicit construction and launch policy | SCNet, Companion, and TotalDebug clean builds on Java 21; received-message factory tests; mirrored launch-contract tests; generated release metadata and final JAR inspection | Complete |
 | S14 | Project metadata cleanup | Static project resources, two development runs, wrapper metadata, 44 tests, and final JAR inspection | Complete |
-| S15 | F9 command target expansion | Command-tree and resolution-policy tests, `gradlew clean build`, then one live item/entity/block-entity/class smoke | Build complete; live gate pending |
+| S15 | F9 command target expansion | Command-tree, completion, and resolution-policy tests, `gradlew build`, then one live item/entity/block-entity/class smoke | Build complete; live gate pending |
 
 ## Core-flow milestone
 
@@ -90,7 +90,7 @@ The original end-to-end milestone after F1-F3 and its modernized Companion 2.0 c
 5. Tell Companion to open the source file.
 6. Expose the flow through `/decompile block|item|entity|blockentity <id>`, `/decompile class <binary-name>`, and F6 block/entity/item targeting.
 
-Live reference search, class-name completion, and scripting remain separate future slices.
+Live reference search, transformed byte capture, and scripting remain separate future slices.
 
 ## Verification log
 
@@ -117,12 +117,12 @@ Live reference search, class-name completion, and scripting remain separate futu
 | 2026-08-22 | M9 restart | Closing the authenticated Companion ended its owned process; the next F6 launched a new session with a new PID, reused the warm runtime index, and opened `GrassBlock.java` in about two seconds |
 | 2026-08-22 | S13 | SCNet passed 59 tests and published Java 21 classfiles to Maven Local; Companion passed 15 tests and reproducibly built SHA-256 `c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a`; TotalDebug passed 44 tests and embedded the matching release manifest plus SCNet 2.0.0, JIndex 1.0.0, Vineflower 1.12.0 slim, and ClassGraph 4.8.193 |
 | 2026-08-22 | S14 | Removed the MDK template and generated-resource paths, unused data/GameTest runs, empty test roots, and default logging noise; `gradlew clean build` passed 44 tests and the final JAR contains the expected manifest version, NeoForge metadata, Companion checksum, and four Jar-in-Jar libraries |
-| 2026-08-22 | S15 | Added exact-registry block, item, entity, and block-entity command targets plus non-initializing binary-class lookup; focused tests and `gradlew clean build` passed all 45 tests; no game was launched, so one consolidated live gate remains |
+| 2026-08-22 | S15 | Added exact-registry block, item, entity, and block-entity targets, non-initializing binary-class lookup, and one-level package/class completion backed by a lazy cached runtime inventory; focused tests and `gradlew build` passed all 46 tests; the user's active client held the generated NeoForge JARs open, so the final clean and consolidated live gate remain |
 
 ## Foundation dependency decisions
 
 - Keep SCNet as the transport and publish the hardened 2.0.0 artifact under `com.github.tth05`. TotalDebug owns authentication, capabilities, and application message semantics.
 - Use Vineflower 1.12.0 slim as the only production decompiler. The adapter supplies defining-loader bytes directly through `IContextSource`, captures warning/error diagnostics through `IFernflowerLogger`, rejects missing or partial output, and fixes the incorrect `GrassBlock.performBonemeal` loop reconstruction observed with Procyon.
-- Keep ClassGraph for later class discovery and completion work. It is not used to enumerate the NeoForge runtime because version 4.8.146 cannot enumerate the Java 21 module readers supplied by ModLauncher.
+- Use ClassGraph 4.8.193 once per process for class-name metadata over the explicit runtime source list already used by the Companion index. Read Java 21 module names directly from the `jrt:/` filesystem. This avoids relying on ModLauncher's module-reader discovery and avoids the legacy scan on every Tab press.
 - Use JIndex 1.0.0 under `com.github.tth05`. It loads its bundled native DLL from a resource stream under NeoForge, protects native lifetime across root and child wrappers, and remains Windows-only.
 - Use the JDK HTTP client when F4 restores companion downloads; Apache HttpClient is not retained.

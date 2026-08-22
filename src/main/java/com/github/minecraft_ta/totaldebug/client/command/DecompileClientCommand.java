@@ -18,7 +18,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -68,6 +70,8 @@ final class DecompileClientCommand {
         ));
         root.then(Commands.literal("class")
                 .then(Commands.argument("class", StringArgumentType.word())
+                        .suggests((context, builder) -> resolver.suggestedClasses(builder.getRemaining())
+                                .thenCompose(suggestions -> SharedSuggestionProvider.suggest(suggestions, builder)))
                         .executes(context -> open(
                                 context,
                                 "class",
@@ -128,6 +132,8 @@ final class DecompileClientCommand {
         Collection<ResourceLocation> blockEntityIds();
 
         Optional<Class<?>> blockEntity(ResourceLocation id);
+
+        CompletableFuture<List<String>> suggestedClasses(String input);
 
         Optional<Class<?>> namedClass(String binaryName);
     }

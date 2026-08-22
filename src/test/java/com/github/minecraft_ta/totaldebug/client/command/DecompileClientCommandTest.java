@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +35,14 @@ class DecompileClientCommandTest {
         assertEquals(1, dispatcher.execute("decompile entity minecraft:cow", null));
         assertEquals(1, dispatcher.execute("decompile blockentity minecraft:chest", null));
         assertEquals(1, dispatcher.execute("decompile class net.minecraft.world.level.block.Block", null));
+
+        var suggestions = dispatcher.getCompletionSuggestions(
+                dispatcher.parse("decompile class net.mine", null)
+        ).get();
+        assertEquals(
+                List.of("net.minecraft"),
+                suggestions.getList().stream().map(suggestion -> suggestion.getText()).toList()
+        );
 
         assertEquals(
                 List.of(BlockTarget.class, ItemTarget.class, EntityTarget.class, BlockEntityTarget.class, NamedTarget.class),
@@ -96,6 +105,12 @@ class DecompileClientCommandTest {
         public Optional<Class<?>> blockEntity(ResourceLocation id) {
             this.requests.add("blockentity:" + id);
             return Optional.of(BlockEntityTarget.class);
+        }
+
+        @Override
+        public CompletableFuture<List<String>> suggestedClasses(String input) {
+            assertEquals("net.mine", input);
+            return CompletableFuture.completedFuture(List.of("net.minecraft"));
         }
 
         @Override

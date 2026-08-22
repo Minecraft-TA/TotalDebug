@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.client.decompile.RuntimeClassSources;
 import com.github.tth05.jindex.ClassIndex;
 import io.github.classgraph.ClassGraph;
 import net.minecraft.world.level.block.Block;
@@ -10,10 +11,7 @@ import net.neoforged.fml.loading.FMLLoader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.module.ResolvedModule;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystem;
@@ -21,7 +19,6 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.CodeSource;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -29,10 +26,8 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -53,7 +48,12 @@ final class RuntimeClassIndex {
     }
 
     synchronized void ensurePresent() throws IOException {
-        List<Path> sources = discoverRuntimeSources();
+        List<Path> sources = RuntimeClassSources.discover(
+                TotalDebug.class,
+                Block.class,
+                ClassGraph.class,
+                ClassIndex.class
+        );
         String signature = calculateSignature(sources);
         if (signature.equals(this.ensuredSignature)) {
             return;
@@ -108,89 +108,6 @@ final class RuntimeClassIndex {
 
     Path indexFile() {
         return this.dataDirectory.resolve(INDEX_FILE_NAME);
-    }
-
-    private static List<Path> discoverRuntimeSources() throws IOException {
-        Set<Path> sources = new LinkedHashSet<>();
-        Consumer<Path> addSource = path -> {
-            if (path != null) {
-                sources.add(path.toAbsolutePath().normalize());
-            }
-        };
-
-        ModList.get().forEachModFile(modFile -> addSource.accept(modFile.getFilePath()));
-        addModuleLayerSources(sources, TotalDebug.class.getModule().getLayer(), new LinkedHashSet<>());
-        addJavaClasspathSources(sources);
-        addCodeSource(sources, TotalDebug.class);
-        addCodeSource(sources, Block.class);
-        addCodeSource(sources, ClassGraph.class);
-        addCodeSource(sources, ClassIndex.class);
-
-        List<Path> existingSources = new ArrayList<>();
-        for (Path source : sources) {
-            if (!Files.exists(source)) {
-                throw new IOException("Runtime class source does not exist: " + source);
-            }
-            if (Files.isDirectory(source) || isJar(source)) {
-                existingSources.add(source);
-            }
-        }
-        existingSources.sort(Comparator.comparing(Path::toString));
-        return List.copyOf(existingSources);
-    }
-
-    private static void addModuleLayerSources(
-            Set<Path> sources,
-            ModuleLayer layer,
-            Set<ModuleLayer> visitedLayers
-    ) throws IOException {
-        if (layer == null || !visitedLayers.add(layer)) {
-            return;
-        }
-        for (ResolvedModule module : layer.configuration().modules()) {
-            URI location = module.reference().location().orElse(null);
-            if (location == null || "jrt".equalsIgnoreCase(location.getScheme())) {
-                continue;
-            }
-            if (!"file".equalsIgnoreCase(location.getScheme())) {
-                continue;
-            }
-            try {
-                sources.add(Path.of(location).toAbsolutePath().normalize());
-            } catch (IllegalArgumentException exception) {
-                throw new IOException("Invalid module location for " + module.name() + ": " + location, exception);
-            }
-        }
-        for (ModuleLayer parent : layer.parents()) {
-            addModuleLayerSources(sources, parent, visitedLayers);
-        }
-    }
-
-    private static void addJavaClasspathSources(Set<Path> sources) {
-        String classpath = System.getProperty("java.class.path", "");
-        if (classpath.isBlank()) {
-            return;
-        }
-        for (String entry : classpath.split(java.io.File.pathSeparator)) {
-            if (!entry.isBlank()) {
-                sources.add(Path.of(entry).toAbsolutePath().normalize());
-            }
-        }
-    }
-
-    private static void addCodeSource(Set<Path> sources, Class<?> anchor) throws IOException {
-        CodeSource codeSource = anchor.getProtectionDomain() == null
-                ? null
-                : anchor.getProtectionDomain().getCodeSource();
-        URL location = codeSource == null ? null : codeSource.getLocation();
-        if (location == null || !"file".equalsIgnoreCase(location.getProtocol())) {
-            return;
-        }
-        try {
-            sources.add(Path.of(location.toURI()).toAbsolutePath().normalize());
-        } catch (URISyntaxException | IllegalArgumentException exception) {
-            throw new IOException("Invalid code-source location for " + anchor.getName() + ": " + location, exception);
-        }
     }
 
     private static List<Path> prepareJarInputs(List<Path> sources, Path workspace) throws IOException {
@@ -339,11 +256,6 @@ final class RuntimeClassIndex {
             }
         }
         digest.update((byte) 0);
-    }
-
-    private static boolean isJar(Path path) {
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return Files.isRegularFile(path) && (name.endsWith(".jar") || name.endsWith(".zip"));
     }
 
     private static void atomicReplace(Path source, Path destination) throws IOException {
