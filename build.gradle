@@ -7,11 +7,11 @@ group = "com.github.minecraft_ta"
 version = providers.gradleProperty('releaseVersion').orElse('2.0.0-SNAPSHOT').get()
 
 repositories {
-    if (providers.gradleProperty('useMavenLocal').orNull == 'true') {
-        mavenLocal()
-    }
     mavenCentral()
     maven { url = uri('https://packagecloud.io/tth05/repo/maven2') }
+    // SCNet and JIndex stable releases are published here during local development.
+    // Keep this last so the remote release repository remains authoritative.
+    mavenLocal()
 }
 
 dependencies {
