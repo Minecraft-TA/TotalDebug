@@ -165,10 +165,10 @@ public final class CompanionAppClient implements AutoCloseable {
         this.processLog = logsDirectory.resolve(
                 "companion-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH.mm.ss")) + ".log"
         );
+        Path javaExecutable = CompanionJavaRuntime.resolveCurrentExecutable();
 
         ProcessBuilder processBuilder = new ProcessBuilder(
-                installation.javaExecutable().toString(),
-                "--enable-preview",
+                javaExecutable.toString(),
                 "-jar",
                 installation.companionJar().toString(),
                 this.dataDirectory.toString()
@@ -177,8 +177,9 @@ public final class CompanionAppClient implements AutoCloseable {
         processBuilder.redirectOutput(this.processLog.toFile());
         this.process = processBuilder.start();
         TotalDebug.LOGGER.info(
-                "Started TotalDebugCompanion from {}; output is written to {}",
+                "Started TotalDebugCompanion from {} with Minecraft Java {}; output is written to {}",
                 installation.companionJar(),
+                javaExecutable,
                 this.processLog
         );
     }

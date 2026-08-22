@@ -12,24 +12,20 @@ import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
-    public static final String DEV_JAVA_PROPERTY = "totaldebug.companionJava";
-    public static final String COMPANION_VERSION = "1.9.1";
+    public static final String COMPANION_VERSION = "2.0.0";
     public static final String DISTRIBUTION_SHA256 =
-            "824d77c95133eeda01b2a27044fe3df7f33c8f425105be5932675f35677faa55";
+            "97853c91a22ec43762b82255fe9ea5c24203136c5d9fa6c1d58c21325a1077d8";
 
     private static final URI DISTRIBUTION_URI = URI.create(
             "https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/"
                     + COMPANION_VERSION
-                    + "/TotalDebugCompanion.zip"
+                    + "/TotalDebugCompanion.jar"
     );
 
     private final Path appDirectory;
@@ -51,20 +47,11 @@ public final class CompanionAppInstaller {
 
     public CompanionInstallation resolveOrInstall() throws IOException, InterruptedException {
         String developmentJar = System.getProperty(DEV_JAR_PROPERTY);
-        String developmentJava = System.getProperty(DEV_JAVA_PROPERTY);
         boolean hasDevelopmentJar = developmentJar != null && !developmentJar.isBlank();
-        boolean hasDevelopmentJava = developmentJava != null && !developmentJava.isBlank();
-        if (hasDevelopmentJar != hasDevelopmentJava) {
-            throw new IOException(
-                    DEV_JAR_PROPERTY + " and " + DEV_JAVA_PROPERTY + " must be configured together"
-            );
-        }
         if (hasDevelopmentJar) {
             Path jarPath = Path.of(developmentJar).toAbsolutePath().normalize();
-            Path javaExecutable = Path.of(developmentJava).toAbsolutePath().normalize();
             requireRegularFile(jarPath, "Configured companion development JAR");
-            requireRegularFile(javaExecutable, "Configured companion development Java executable");
-            return new CompanionInstallation(javaExecutable, jarPath);
+            return new CompanionInstallation(jarPath);
         }
 
         if (!isWindows()) {
@@ -73,45 +60,40 @@ public final class CompanionAppInstaller {
 
         Path installationDirectory = this.appDirectory.resolve(COMPANION_VERSION);
         Path jarPath = installationDirectory.resolve("TotalDebugCompanion.jar");
-        Path javaExecutable = distributionJavaExecutable(installationDirectory);
-        boolean jarExists = Files.isRegularFile(jarPath);
-        boolean javaExists = Files.isRegularFile(javaExecutable);
-
-        if (jarExists != javaExists) {
-            throw new IOException("Companion installation is incomplete at " + installationDirectory);
-        }
-        if (!jarExists) {
-            installDistribution(installationDirectory);
+        if (!Files.isRegularFile(jarPath) || !DISTRIBUTION_SHA256.equals(sha256(jarPath))) {
+            installDistribution(jarPath);
         }
 
         requireRegularFile(jarPath, "Companion JAR");
-        requireRegularFile(javaExecutable, "Companion Java executable");
-        return new CompanionInstallation(javaExecutable, jarPath);
+        String installedHash = sha256(jarPath);
+        if (!DISTRIBUTION_SHA256.equals(installedHash)) {
+            throw new IOException(
+                    "Installed companion checksum mismatch: expected "
+                            + DISTRIBUTION_SHA256
+                            + ", got "
+                            + installedHash
+            );
+        }
+        return new CompanionInstallation(jarPath);
     }
 
-    private void installDistribution(Path installationDirectory) throws IOException, InterruptedException {
-        Files.createDirectories(this.appDirectory);
-        Path archive = Files.createTempFile(this.appDirectory, ".companion-", ".zip");
-        Path stagingDirectory = Files.createTempDirectory(this.appDirectory, ".companion-install-");
+    private void installDistribution(Path jarPath) throws IOException, InterruptedException {
+        Files.createDirectories(jarPath.getParent());
+        Path stagedJar = Files.createTempFile(jarPath.getParent(), ".companion-", ".jar");
         try {
-            downloadDistribution(archive);
-            try (InputStream input = Files.newInputStream(archive)) {
-                extractZip(input, stagingDirectory);
-            }
-
-            requireRegularFile(stagingDirectory.resolve("TotalDebugCompanion.jar"), "Downloaded companion JAR");
-            requireRegularFile(
-                    distributionJavaExecutable(stagingDirectory),
-                    "Downloaded companion Java executable"
+            downloadDistribution(stagedJar);
+            Files.move(
+                    stagedJar,
+                    jarPath,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
             );
-            Files.move(stagingDirectory, installationDirectory);
         } finally {
-            Files.deleteIfExists(archive);
-            deleteTreeIfExists(stagingDirectory);
+            Files.deleteIfExists(stagedJar);
         }
     }
 
-    private void downloadDistribution(Path archive) throws IOException, InterruptedException {
+    private void downloadDistribution(Path destination) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(DISTRIBUTION_URI)
                 .header("User-Agent", "TotalDebug/2.0")
                 .GET()
@@ -122,9 +104,9 @@ public final class CompanionAppInstaller {
             throw new IOException("Companion download returned HTTP " + response.statusCode());
         }
 
-        MessageDigest digest = sha256();
+        MessageDigest digest = sha256Digest();
         try (InputStream body = response.body(); DigestInputStream verifiedBody = new DigestInputStream(body, digest)) {
-            Files.copy(verifiedBody, archive, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(verifiedBody, destination, StandardCopyOption.REPLACE_EXISTING);
         }
 
         String actualHash = HexFormat.of().formatHex(digest.digest());
@@ -138,53 +120,23 @@ public final class CompanionAppInstaller {
         }
     }
 
-    static void extractZip(InputStream input, Path destination) throws IOException {
-        Objects.requireNonNull(input, "input");
-        Path normalizedDestination = Objects.requireNonNull(destination, "destination").toAbsolutePath().normalize();
-        Files.createDirectories(normalizedDestination);
-
-        try (ZipInputStream zipInput = new ZipInputStream(input)) {
-            for (ZipEntry entry = zipInput.getNextEntry(); entry != null; entry = zipInput.getNextEntry()) {
-                Path output = normalizedDestination.resolve(entry.getName()).normalize();
-                if (!output.startsWith(normalizedDestination)) {
-                    throw new IOException("Companion archive contains an unsafe path: " + entry.getName());
-                }
-
-                if (entry.isDirectory()) {
-                    Files.createDirectories(output);
-                } else {
-                    Files.createDirectories(output.getParent());
-                    Files.copy(zipInput, output, StandardCopyOption.REPLACE_EXISTING);
-                }
-                zipInput.closeEntry();
-            }
-        }
-    }
-
-    private static Path distributionJavaExecutable(Path installationDirectory) {
-        return installationDirectory.resolve("bin").resolve("java.exe");
-    }
-
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
     }
 
-    private static MessageDigest sha256() {
+    static String sha256(Path path) throws IOException {
+        MessageDigest digest = sha256Digest();
+        try (InputStream input = Files.newInputStream(path); DigestInputStream verified = new DigestInputStream(input, digest)) {
+            verified.transferTo(java.io.OutputStream.nullOutputStream());
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static MessageDigest sha256Digest() {
         try {
             return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("This JVM does not provide SHA-256", exception);
-        }
-    }
-
-    private static void deleteTreeIfExists(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
         }
     }
 
