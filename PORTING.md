@@ -16,7 +16,7 @@ This file is the audit ledger for the NeoForge port. A row is only marked comple
 | ID | Area | State | Current evidence / next gate |
 |---|---|---|---|
 | S0 | Clean NeoForge foundation | Complete | Single-module MDK; `gradlew build` passes; commits `7504de6`, `bcbd0f3` |
-| F1 | Mod core and tick task lifecycle | In progress | Implement version identity, client/server tick queues, lifecycle cleanup, and tests |
+| F1 | Mod core and tick task lifecycle | Complete | Version identity, isolated client/server pre/post queues, lifecycle cleanup, and unit tests |
 | F2a | Configuration | Not started | Add NeoForge client/server config specs for retained features |
 | F2b | Minecraft networking | Not started | Establish typed payload registration; payloads remain owned by their feature slices |
 | F2c | Core resources and libraries | Not started | Convert core language resources and verify bundled dependency metadata |
@@ -44,7 +44,7 @@ This file is the audit ledger for the NeoForge port. A row is only marked comple
 | Slice | Scope | Required verification | State |
 |---|---|---|---|
 | S0 | Clean NeoForge build and searchable legacy references | `gradlew build` | Complete |
-| S1 | F1 mod identity, sided tick lifecycle, and task queues | Unit tests, `gradlew build`, client launch, dedicated-server launch | In progress |
+| S1 | F1 mod identity, sided tick lifecycle, and task queues | Unit tests, `gradlew build`, client launch, dedicated-server launch | Complete |
 | S2 | F2a retained NeoForge configuration | Config tests, `gradlew build`, client/server config load | Planned |
 | S3 | F2b typed networking foundation | Codec/registration tests where practical, `gradlew build`, client/server connection | Planned |
 | S4 | F2c language resources and bundled core libraries | Resource validation, dependency report, final JAR inspection, `gradlew build` | Planned |
@@ -54,7 +54,7 @@ This file is the audit ledger for the NeoForge port. A row is only marked comple
 The first end-to-end feature slice after F1-F3 is deliberately narrow:
 
 1. Connect to the companion application.
-2. obtain the bytecode for one explicitly named class;
+2. Obtain the bytecode for one explicitly named class.
 3. decompile it to a source file;
 4. tell the companion application to open the file;
 5. expose the flow through the `class` decompile command.
@@ -66,3 +66,4 @@ The look-at/hover keybind, additional command targets, search, indexing, and scr
 | Date | Slice | Result |
 |---|---|---|
 | 2026-08-22 | S0 | `gradlew build` passed on Java 21; runtime client/server smoke checks remain to be recorded with S1 |
+| 2026-08-22 | S1 | 4 scheduler tests and `gradlew build` passed; client completed resource loading; dedicated server reached `Done` without client-class loading errors |
