@@ -27,7 +27,7 @@ final class ClientTickTaskEvents {
 
     @SubscribeEvent
     static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        TotalDebugClient.current().ifPresent(TotalDebugClient::stopAllScripts);
+        TotalDebugClient.current().ifPresent(TotalDebugClient::onServerDisconnect);
         TotalDebug.get().tickTasks().clear(TickDomain.CLIENT);
     }
 }

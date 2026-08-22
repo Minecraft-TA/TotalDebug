@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totaldebug.network;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -21,19 +23,34 @@ public final class TotalDebugNetwork {
     }
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar(PROTOCOL_VERSION)
-                .optional()
-                .playToClient(
-                        ForwardedCompanionPayload.TYPE,
-                        ForwardedCompanionPayload.STREAM_CODEC,
-                        (payload, context) -> {
-                            if (!this.forwardedCompanionPayloads.deliver(payload)) {
-                                TotalDebug.LOGGER.warn(
-                                        "Discarding forwarded companion message {} because the companion receiver is not active",
-                                        payload.messageId()
-                                );
-                            }
-                        }
-                );
+        PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION).optional();
+        registrar.playToClient(
+                ForwardedCompanionPayload.TYPE,
+                ForwardedCompanionPayload.STREAM_CODEC,
+                (payload, context) -> {
+                    if (!this.forwardedCompanionPayloads.deliver(payload)) {
+                        TotalDebug.LOGGER.warn(
+                                "Discarding forwarded companion message {} because the companion receiver is not active",
+                                payload.messageId()
+                        );
+                    }
+                }
+        );
+        registrar.playToServer(
+                RunServerScriptPayload.TYPE,
+                RunServerScriptPayload.STREAM_CODEC,
+                (payload, context) -> TotalDebug.get().serverScripts().runScript(
+                        (ServerPlayer) context.player(),
+                        payload
+                )
+        );
+        registrar.playToServer(
+                StopServerScriptPayload.TYPE,
+                StopServerScriptPayload.STREAM_CODEC,
+                (payload, context) -> TotalDebug.get().serverScripts().stopScript(
+                        (ServerPlayer) context.player(),
+                        payload.scriptId()
+                )
+        );
     }
 }

@@ -23,6 +23,7 @@ final class ServerTickTaskEvents {
 
     @SubscribeEvent
     static void onServerStopped(ServerStoppedEvent event) {
+        TotalDebug.get().serverScripts().stopAll();
         TotalDebug.get().tickTasks().clear(TickDomain.SERVER);
     }
 }

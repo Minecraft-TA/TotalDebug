@@ -30,7 +30,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic index; JIndex 1.0.0 now guards native lifetime, retained child objects, and concurrent close while keeping the runtime format working |
-| F8 | Java scripting | Client complete; server pending | Companion F8 UI, Java 21 in-memory compilation, a fresh child loader per run, THREAD/PRE_TICK/POST_TICK execution, status reporting, and honest cooperative cancellation passed live; server forwarding and permission enforcement remain a separate slice |
+| F8 | Java scripting | Complete | Client and server runs share the Java 21 compiler/runner; optional negotiated run/stop payloads, per-player server ownership, config/operator policy, bounded status forwarding, disconnect cleanup, and unsupported-server refusal are covered, and server execution passed live |
 | F9 | Core decompile command | Complete | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization and have cached package-aware completion; the expanded command and completion passed live |
 | F10 | Code-view keybind | Complete | One F6 press resolves a looked-at block or entity and a hovered GUI item; live gates passed for block, cow, and multiple block items without repeat flooding |
 | F11 | Packet logger | Not started | Requires a separate packet-pipeline hook proof |
@@ -80,6 +80,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S14 | Project metadata cleanup | Static project resources, two development runs, wrapper metadata, 44 tests, and final JAR inspection | Complete |
 | S15 | F9 command target expansion | Command-tree, completion, and resolution-policy tests, `gradlew build`, then one live item/entity/block-entity/class smoke | Complete |
 | S16 | F8a client-side Java scripting | Mirrored golden wire fixtures, compiler/classloader/runner tests, clean TotalDebug and Companion builds, then live THREAD/PRE_TICK/POST_TICK, diagnostics, cancellation, and server-rejection checks | Complete |
+| S17 | F8b server-side Java scripting | Optional payload codecs and channel gates, policy/status/disconnect tests, per-session ownership review, `gradlew test build`, then one live server-side run through Companion | Complete |
 
 ## Core-flow milestone
 
@@ -92,7 +93,7 @@ The original end-to-end milestone after F1-F3 and its modernized Companion 2.0 c
 5. Tell Companion to open the source file.
 6. Expose the flow through `/decompile block|item|entity|blockentity <id>`, `/decompile class <binary-name>`, and F6 block/entity/item targeting.
 
-Live reference search and server-side scripting remain future slices. Exact transformed-byte capture and process-wide loaded-class enumeration are deferred until they justify an authoritative launch-time capture component.
+Live reference search remains a future slice. Exact transformed-byte capture and process-wide loaded-class enumeration are deferred until they justify an authoritative launch-time capture component.
 
 ## Verification log
 
@@ -122,6 +123,7 @@ Live reference search and server-side scripting remain future slices. Exact tran
 | 2026-08-22 | S15 | Added exact-registry block, item, entity, and block-entity targets, non-initializing binary-class lookup, and one-level package/class completion backed by a lazy cached runtime inventory; focused tests and `gradlew build` passed all 46 tests; the user's active client held the generated NeoForge JARs open, so the final clean and consolidated live gate remain |
 | 2026-08-22 | S16 | The combined TotalDebug tree passed 65 tests and Companion passed 19 in clean builds. With the development Companion JAR, THREAD execution and log output, javac diagnostics, PRE_TICK and POST_TICK execution, cooperative Stop behavior, and explicit refusal of server-side execution passed live. The compiler resolved 115 runtime sources under Java 21; Minecraft's `net.minecraft.world.level.block` package was both exported and open to the unnamed script module. |
 | 2026-08-23 | S15 live | The expanded `/decompile` command and its class completion passed in the live client, closing the remaining F9 runtime gate. |
+| 2026-08-23 | S17 | Added bounded optional serverbound run/stop payloads, whitelisted clientbound status forwarding, local unsupported-server gating, per-session player runners, config/operator enforcement, and logout/server-stop cleanup. TotalDebug passed all 95 tests and `gradlew test build`; the user confirmed a server-side script run through Companion live. A concurrent live client held NeoForge's generated jars open, so the redundant `clean` task could not delete them. |
 
 ## Foundation dependency decisions
 

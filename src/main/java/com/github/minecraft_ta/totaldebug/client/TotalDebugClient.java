@@ -44,6 +44,7 @@ public final class TotalDebugClient {
         });
         this.codeViewInput = new CodeViewInput(this::openOrFocus);
         this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks());
+        TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
         companionApp.setDecompileRequestHandler(this.decompilation::openNamedClass);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
@@ -82,7 +83,7 @@ public final class TotalDebugClient {
         return this.codeViewInput;
     }
 
-    public void stopAllScripts() {
-        this.scripts.stopAll();
+    public void onServerDisconnect() {
+        this.scripts.onServerDisconnect();
     }
 }

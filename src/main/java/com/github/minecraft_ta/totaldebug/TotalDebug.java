@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug;
 import com.mojang.logging.LogUtils;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
+import com.github.minecraft_ta.totaldebug.server.script.ServerScriptService;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -21,6 +22,7 @@ public final class TotalDebug {
     private final String version;
     private final TickTaskScheduler tickTaskScheduler;
     private final TotalDebugNetwork network;
+    private final ServerScriptService serverScripts;
 
     public TotalDebug(IEventBus modEventBus, ModContainer modContainer) {
         if (instance != null) {
@@ -33,6 +35,7 @@ public final class TotalDebug {
                 .getVersion()
                 .toString();
         this.tickTaskScheduler = new TickTaskScheduler();
+        this.serverScripts = new ServerScriptService(this.tickTaskScheduler);
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
         TotalDebugConfig.register(modContainer);
 
@@ -56,5 +59,9 @@ public final class TotalDebug {
 
     public TotalDebugNetwork network() {
         return this.network;
+    }
+
+    public ServerScriptService serverScripts() {
+        return this.serverScripts;
     }
 }
