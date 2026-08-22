@@ -22,7 +22,8 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F2a | Configuration | Complete | Separate client/server specs; retained defaults and packet-class validation are tested |
 | F2b | Minecraft networking | Complete | Optional protocol v1 registration, bounded typed companion-forward payload, and receiver lifecycle are tested; remaining payloads stay feature-owned |
 | F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet, ClassGraph, Procyon, and jindex are pinned and present in Jar-in-Jar metadata |
-| F3 | Runtime class and bytecode access | Research | Prove loaded-class enumeration, runtime bytes, JAR inventory, and compiler classpath separately |
+| F3a | Named-class bytecode access | Complete | Class-loader resource bytes decompile both Java 21 test code and Minecraft's `Block` class |
+| F3b | Transformed bytes and class inventory | Research | Post-transform capture, loaded-class enumeration, JAR inventory, and compiler classpath remain separate proofs |
 | F4 | Companion application IPC and lifecycle | Not started | First core-flow dependency after the F3 gate |
 | F5 | Class decompilation | Not started | First core-flow target: decompile one named class and open it in the companion |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
@@ -72,6 +73,7 @@ The look-at/hover keybind, additional command targets, search, indexing, and scr
 | 2026-08-22 | S2 | 3 config tests and `gradlew build` passed; generated client TOML contains the retained client defaults |
 | 2026-08-22 | S3 | Typed payload codec and receiver-lifecycle tests passed; protocol is optional so client-only installs remain possible; no redundant game launch |
 | 2026-08-22 | S4 | All 14 tests and `gradlew build` passed; the final JAR contains the language JSON plus five nested library JARs and valid Jar-in-Jar metadata |
+| 2026-08-22 | F3a | Named-class byte lookup tests passed; Procyon successfully decompiled a Java 21 fixture and Minecraft's 1.21.1 `Block` class |
 
 ## Foundation dependency decisions
 
