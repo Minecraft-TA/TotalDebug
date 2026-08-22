@@ -13,6 +13,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 - Do not recreate the legacy sided-proxy hierarchy.
 - Do not carry runtime MCP/SRG remapping into the Mojmap runtime.
 - Do not probe unrelated fallback mechanisms to hide unknown behavior. Establish the authoritative mechanism, verify it, and fail explicitly when it is unavailable.
+- Defer exact post-transform byte capture and process-wide loaded-class enumeration. ModLauncher's public loaded-class method only answers one known name, while its internal bytecode method reruns transformation instead of returning the bytes already defined by the JVM. Revisit this only for an explicit runtime-transformed-source feature with authoritative launch-time capture.
 
 ## Progress matrix
 
@@ -24,7 +25,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F2b | Minecraft networking | Complete | Optional protocol v1 registration, bounded typed companion-forward payload, and receiver lifecycle are tested; remaining payloads stay feature-owned |
 | F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet 2.0.0, ClassGraph 4.8.193, Vineflower 1.12.0, and JIndex 1.0.0 resolve from versioned coordinates and are present in Jar-in-Jar metadata |
 | F3a | Named-class bytecode access | Complete | Defining-loader bytes, including nested target classes, decompile Java 21 test code and Minecraft classes through Vineflower's in-memory API |
-| F3b | Transformed bytes and class inventory | In progress | One explicit runtime-source inventory now powers the non-loading class-name catalog, Companion index, and live-script compiler classpath; the live client resolved 115 sources successfully; post-transform capture and loaded-class enumeration remain open |
+| F3b | Transformed bytes and class inventory | Deferred after inventory | The runtime-source inventory is complete and powers the class-name catalog, Companion index, and live-script compiler classpath; exact post-transform capture and process-wide loaded-class enumeration are deferred because the available no-agent hooks do not expose authoritative loaded bytes |
 | F4 | Companion application IPC and lifecycle | Complete | Companion 2.0 is Java 21 jar-only; each game process launches and authenticates its exact IPv4-loopback child through protocol v2; cold launch, handshake, ready, and open passed live |
 | F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
@@ -91,7 +92,7 @@ The original end-to-end milestone after F1-F3 and its modernized Companion 2.0 c
 5. Tell Companion to open the source file.
 6. Expose the flow through `/decompile block|item|entity|blockentity <id>`, `/decompile class <binary-name>`, and F6 block/entity/item targeting.
 
-Live reference search, transformed byte capture, and server-side scripting remain separate future slices.
+Live reference search and server-side scripting remain future slices. Exact transformed-byte capture and process-wide loaded-class enumeration are deferred until they justify an authoritative launch-time capture component.
 
 ## Verification log
 
