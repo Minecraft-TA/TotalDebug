@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
 
-    public static final ClassIndex CLASS_INDEX = ClassIndex.fromFile(CompanionApp.getRootPath().resolve("index").toAbsolutePath().normalize().toString());
+    public static final ClassIndex CLASS_INDEX = ClassIndex.fromFile(CompanionApp.getIndexFile().toString());
 
     private static final SearchEverywherePopup INSTANCE = new SearchEverywherePopup();
 

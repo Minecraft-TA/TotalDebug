@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridD
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.UpdateFollowPlayerStateMessage;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TextFieldWithInlineLabel;
 import com.github.minecraft_ta.totalDebugCompanion.util.*;
@@ -37,6 +38,9 @@ public class ChunkGridWindow extends JFrame {
     private boolean overlayModeEnabled;
 
     public ChunkGridWindow() {
+        if (!CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID)) {
+            throw new IllegalStateException("Chunk grid support was not negotiated for this session");
+        }
         setTitle("Chunk Grid");
         setLayout(new BorderLayout());
         add(this.chunkGridPanel, BorderLayout.CENTER);

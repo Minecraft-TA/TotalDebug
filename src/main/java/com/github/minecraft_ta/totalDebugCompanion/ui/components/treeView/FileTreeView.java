@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOr
 import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
 import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
@@ -15,10 +16,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 
 public class FileTreeView extends JScrollPane {
 
-    private static final Path MODS_PATH = CompanionApp.getRootPath().getParent().getParent().resolve("mods");
+    private static final Path MODS_PATH = CompanionApp.getWorkspaceDirectory().resolve("mods");
 
     public FileTreeView(EditorTabs tabs) {
         super();
@@ -43,7 +45,8 @@ public class FileTreeView extends JScrollPane {
                 return;
 
             if (item instanceof FileSystemFileItem fileItem) {
-                if (node.getParent().getUserObject().getName().equals("scripts")) {
+                if (node.getParent().getUserObject().getName().equals("scripts")
+                        && CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
                     var name = fileItem.getName().replace(".java", "");
 
                     tabs.focusOrCreateIfAbsent(ScriptView.class, sv -> sv.getTitle().equals(name + ".java"), () -> {
@@ -86,10 +89,18 @@ public class FileTreeView extends JScrollPane {
             }
         });
 
-        tree.addRootNodes(
-                tree.getItemFactory().createFileSystemDirectoryItem(CompanionApp.getRootPath().resolve("scripts"), true),
-                tree.getItemFactory().createFileSystemDirectoryItem(CompanionApp.getRootPath().resolve("decompiled-files"), true),
-                new DirectoryTreeItem("mods") {
+        List<DirectoryTreeItem> rootItems = new ArrayList<>();
+        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+            rootItems.add(tree.getItemFactory().createFileSystemDirectoryItem(
+                    CompanionApp.getRootPath().resolve("scripts"),
+                    true
+            ));
+        }
+        rootItems.add(tree.getItemFactory().createFileSystemDirectoryItem(
+                CompanionApp.getRootPath().resolve("decompiled-files"),
+                true
+        ));
+        rootItems.add(new DirectoryTreeItem("mods") {
                     @Override
                     public List<TreeItem> loadChildren() {
                         try {
@@ -102,8 +113,8 @@ public class FileTreeView extends JScrollPane {
                             throw new RuntimeException(e);
                         }
                     }
-                }
-        );
+                });
+        tree.addRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
 
         setViewportView(tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));

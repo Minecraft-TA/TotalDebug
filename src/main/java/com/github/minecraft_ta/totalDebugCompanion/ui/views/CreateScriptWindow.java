@@ -4,6 +4,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
@@ -21,6 +22,9 @@ import java.util.function.Supplier;
 public class CreateScriptWindow extends JFrame {
 
     public CreateScriptWindow(EditorTabs editorTabs) {
+        if (!CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+            throw new IllegalStateException("Script execution was not negotiated for this session");
+        }
         var header = new JPanel();
         header.add(new JLabel("New Script"));
 

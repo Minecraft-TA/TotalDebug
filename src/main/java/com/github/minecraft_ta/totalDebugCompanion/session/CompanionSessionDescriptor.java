@@ -1,0 +1,76 @@
+package com.github.minecraft_ta.totalDebugCompanion.session;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
+
+public record CompanionSessionDescriptor(int protocolVersion, int port, long processId) {
+    public CompanionSessionDescriptor {
+        if (protocolVersion < 1) {
+            throw new IllegalArgumentException("protocolVersion must be positive");
+        }
+        if (port < 1 || port > 65_535) {
+            throw new IllegalArgumentException("port must be between 1 and 65535");
+        }
+        if (processId < 1) {
+            throw new IllegalArgumentException("processId must be positive");
+        }
+    }
+
+    public void writeAtomically(Path descriptorFile) throws IOException {
+        Path target = descriptorFile.toAbsolutePath().normalize();
+        Path parent = target.getParent();
+        if (parent == null) {
+            throw new IOException("Session descriptor must have a parent directory: " + target);
+        }
+        Files.createDirectories(parent);
+        Files.deleteIfExists(target);
+        Path staged = Files.createTempFile(parent, ".session-", ".tmp");
+        try {
+            String contents = "protocol=" + this.protocolVersion + "\n"
+                    + "port=" + this.port + "\n"
+                    + "pid=" + this.processId + "\n";
+            Files.writeString(staged, contents, StandardCharsets.UTF_8);
+            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(staged);
+        }
+    }
+
+    public static CompanionSessionDescriptor read(Path descriptorFile) throws IOException {
+        Map<String, String> values = new HashMap<>();
+        for (String line : Files.readAllLines(descriptorFile, StandardCharsets.UTF_8)) {
+            if (line.isBlank()) {
+                continue;
+            }
+            int separator = line.indexOf('=');
+            if (separator < 1 || separator == line.length() - 1) {
+                throw new IOException("Malformed companion session descriptor line: " + line);
+            }
+            String key = line.substring(0, separator);
+            String value = line.substring(separator + 1);
+            if (!key.equals("protocol") && !key.equals("port") && !key.equals("pid")) {
+                throw new IOException("Unknown companion session descriptor field: " + key);
+            }
+            if (values.putIfAbsent(key, value) != null) {
+                throw new IOException("Duplicate companion session descriptor field: " + key);
+            }
+        }
+        if (values.size() != 3) {
+            throw new IOException("Companion session descriptor must contain protocol, port, and pid");
+        }
+        try {
+            return new CompanionSessionDescriptor(
+                    Integer.parseInt(values.get("protocol")),
+                    Integer.parseInt(values.get("port")),
+                    Long.parseLong(values.get("pid"))
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("Companion session descriptor contains an invalid value", exception);
+        }
+    }
+}

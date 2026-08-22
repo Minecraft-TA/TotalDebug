@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import javax.swing.SwingUtilities;
 
 public class DecompileOrOpenMessage extends AbstractMessage {
 
@@ -94,16 +95,18 @@ public class DecompileOrOpenMessage extends AbstractMessage {
             }
         }
 
-        var window = MainWindow.INSTANCE;
         var finalOffset = offset;
-        var codeView = window.getEditorTabs().focusOrCreateIfAbsent(
-                CodeView.class,
-                (cv) -> cv.getPath().equals(filePath),
-                () -> new CodeView(filePath, finalOffset)
-        ).join();
-        codeView.centerViewportOnOffset(offset);
-
-        UIUtils.focusWindow(window);
+        SwingUtilities.invokeLater(() -> {
+            var window = MainWindow.INSTANCE;
+            window.getEditorTabs().focusOrCreateIfAbsent(
+                    CodeView.class,
+                    (cv) -> cv.getPath().equals(filePath),
+                    () -> new CodeView(filePath, finalOffset)
+            ).thenAccept(codeView -> {
+                codeView.centerViewportOnOffset(finalOffset);
+                UIUtils.focusWindow(window);
+            });
+        });
     }
 
     private static Optional<MethodDeclaration> findTargetMethod(DecompileOrOpenMessage message, AbstractTypeDeclaration type) {

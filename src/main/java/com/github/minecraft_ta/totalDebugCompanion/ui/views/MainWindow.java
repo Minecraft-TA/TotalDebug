@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
@@ -54,31 +55,38 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
         var menuBar = new JMenuBar();
         var toolsMenu = new JMenu("Tools");
-        toolsMenu.add(new AbstractAction("Chunk Grid") {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                ChunkGridWindow.open();
-            }
-        });
-        toolsMenu.add(new AbstractAction("Packet Logger", Icons.UP_DOWN) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                editorTabs.focusOrCreateIfAbsent(PacketLoggerView.class, v -> true, PacketLoggerView::new);
-            }
-        });
+        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID)) {
+            toolsMenu.add(new AbstractAction("Chunk Grid") {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    ChunkGridWindow.open();
+                }
+            });
+        }
+        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER)) {
+            toolsMenu.add(new AbstractAction("Packet Logger", Icons.UP_DOWN) {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    editorTabs.focusOrCreateIfAbsent(PacketLoggerView.class, v -> true, PacketLoggerView::new);
+                }
+            });
+        }
+        if (toolsMenu.getItemCount() > 0) {
+            menuBar.add(toolsMenu);
+        }
 
-        var scriptMenu = new JMenu("Script");
-        scriptMenu.add(new AbstractAction("New Script", Icons.JAVA_FILE) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs);
-                window.setVisible(true);
-                UIUtils.centerJFrame(window);
-            }
-        });
-
-        menuBar.add(toolsMenu);
-        menuBar.add(scriptMenu);
+        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+            var scriptMenu = new JMenu("Script");
+            scriptMenu.add(new AbstractAction("New Script", Icons.JAVA_FILE) {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    var window = new CreateScriptWindow(editorTabs);
+                    window.setVisible(true);
+                    UIUtils.centerJFrame(window);
+                }
+            });
+            menuBar.add(scriptMenu);
+        }
 
         setJMenuBar(menuBar);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
