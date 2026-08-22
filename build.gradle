@@ -67,6 +67,15 @@ neoForge {
             client()
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            def companionDevelopmentJar = providers.gradleProperty('totaldebugCompanionJar')
+            def companionDevelopmentJava = providers.gradleProperty('totaldebugCompanionJava')
+            if (companionDevelopmentJar.isPresent() != companionDevelopmentJava.isPresent()) {
+                throw new GradleException('totaldebugCompanionJar and totaldebugCompanionJava must be configured together')
+            }
+            if (companionDevelopmentJar.isPresent()) {
+                systemProperty 'totaldebug.companionJar', file(companionDevelopmentJar.get()).absolutePath
+                systemProperty 'totaldebug.companionJava', file(companionDevelopmentJava.get()).absolutePath
+            }
         }
 
         server {
@@ -129,15 +138,18 @@ configurations {
 
 dependencies {
     def embeddedLibraries = [
-            "com.github.tth05:SCNet:${scnet_version}",
+            "com.github.Pelotrio:SCNet:${scnet_version}",
             "io.github.classgraph:classgraph:${classgraph_version}",
             "org.bitbucket.mstrobel:procyon-core:${procyon_version}",
             "org.bitbucket.mstrobel:procyon-compilertools:${procyon_version}",
-            "com.github.tth05:jindex:${jindex_version}",
+            "com.github.Pelotrio:JIndex:${jindex_version}",
     ]
     embeddedLibraries.each { library ->
         implementation library
         jarJar library
+        // Minecraft 1.21.1 only admits FML-aware artifacts to development runs automatically.
+        // These are plain Java libraries, so mirror the production Jar-in-Jar runtime explicitly.
+        additionalRuntimeClasspath library
     }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
