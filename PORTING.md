@@ -30,7 +30,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic index; JIndex 1.0.0 now guards native lifetime, retained child objects, and concurrent close while keeping the runtime format working |
 | F8 | Java scripting | Client complete; server pending | Companion F8 UI, Java 21 in-memory compilation, a fresh child loader per run, THREAD/PRE_TICK/POST_TICK execution, status reporting, and honest cooperative cancellation passed live; server forwarding and permission enforcement remain a separate slice |
-| F9 | Core decompile command | Runtime gate pending | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization and have cached package-aware completion; focused tests and a 46-test build pass; the new target kinds and completion need one live smoke |
+| F9 | Core decompile command | Complete | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization and have cached package-aware completion; the expanded command and completion passed live |
 | F10 | Code-view keybind | Complete | One F6 press resolves a looked-at block or entity and a hovered GUI item; live gates passed for block, cow, and multiple block items without repeat flooding |
 | F11 | Packet logger | Not started | Requires a separate packet-pipeline hook proof |
 | F12 | Packet blocker | Not started | Port with F11 |
@@ -77,7 +77,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S12 | Behavior-neutral client cleanup | Unit tests, package/lifecycle review, `gradlew build`, no extra game launch | Complete |
 | S13 | Explicit construction and launch policy | SCNet, Companion, and TotalDebug clean builds on Java 21; received-message factory tests; mirrored launch-contract tests; generated release metadata and final JAR inspection | Complete |
 | S14 | Project metadata cleanup | Static project resources, two development runs, wrapper metadata, 44 tests, and final JAR inspection | Complete |
-| S15 | F9 command target expansion | Command-tree, completion, and resolution-policy tests, `gradlew build`, then one live item/entity/block-entity/class smoke | Build complete; live gate pending |
+| S15 | F9 command target expansion | Command-tree, completion, and resolution-policy tests, `gradlew build`, then one live item/entity/block-entity/class smoke | Complete |
 | S16 | F8a client-side Java scripting | Mirrored golden wire fixtures, compiler/classloader/runner tests, clean TotalDebug and Companion builds, then live THREAD/PRE_TICK/POST_TICK, diagnostics, cancellation, and server-rejection checks | Complete |
 
 ## Core-flow milestone
@@ -120,6 +120,7 @@ Live reference search, transformed byte capture, and server-side scripting remai
 | 2026-08-22 | S14 | Removed the MDK template and generated-resource paths, unused data/GameTest runs, empty test roots, and default logging noise; `gradlew clean build` passed 44 tests and the final JAR contains the expected manifest version, NeoForge metadata, Companion checksum, and four Jar-in-Jar libraries |
 | 2026-08-22 | S15 | Added exact-registry block, item, entity, and block-entity targets, non-initializing binary-class lookup, and one-level package/class completion backed by a lazy cached runtime inventory; focused tests and `gradlew build` passed all 46 tests; the user's active client held the generated NeoForge JARs open, so the final clean and consolidated live gate remain |
 | 2026-08-22 | S16 | The combined TotalDebug tree passed 65 tests and Companion passed 19 in clean builds. With the development Companion JAR, THREAD execution and log output, javac diagnostics, PRE_TICK and POST_TICK execution, cooperative Stop behavior, and explicit refusal of server-side execution passed live. The compiler resolved 115 runtime sources under Java 21; Minecraft's `net.minecraft.world.level.block` package was both exported and open to the unnamed script module. |
+| 2026-08-23 | S15 live | The expanded `/decompile` command and its class completion passed in the live client, closing the remaining F9 runtime gate. |
 
 ## Foundation dependency decisions
 
