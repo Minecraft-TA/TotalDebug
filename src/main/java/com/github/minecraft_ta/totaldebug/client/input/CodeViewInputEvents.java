@@ -34,16 +34,22 @@ final class CodeViewInputEvents {
 
     @SubscribeEvent
     static void onClientTick(ClientTickEvent.Post event) {
-        TotalDebugClient.get().codeViewInput().onClientTick(Minecraft.getInstance(), OPEN_CODE_VIEW);
+        TotalDebugClient.current().ifPresent(client ->
+                client.codeViewInput().onClientTick(Minecraft.getInstance(), OPEN_CODE_VIEW)
+        );
     }
 
     @SubscribeEvent
     static void onScreenKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-        TotalDebugClient.get().codeViewInput().onScreenKeyPressed(Minecraft.getInstance(), OPEN_CODE_VIEW, event);
+        TotalDebugClient.current().ifPresent(client ->
+                client.codeViewInput().onScreenKeyPressed(Minecraft.getInstance(), OPEN_CODE_VIEW, event)
+        );
     }
 
     @SubscribeEvent
     static void onScreenKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-        TotalDebugClient.get().codeViewInput().onScreenKeyReleased(OPEN_CODE_VIEW, event);
+        TotalDebugClient.current().ifPresent(client ->
+                client.codeViewInput().onScreenKeyReleased(OPEN_CODE_VIEW, event)
+        );
     }
 }

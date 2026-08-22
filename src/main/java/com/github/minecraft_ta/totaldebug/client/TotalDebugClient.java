@@ -16,7 +16,7 @@ import java.util.Optional;
 
 /** Owns the client-only runtime assembled after Minecraft has reached client setup. */
 public final class TotalDebugClient {
-    private static TotalDebugClient instance;
+    private static volatile TotalDebugClient instance;
 
     private final ClientDecompilationService decompilation;
     private final OpenCodeOperation openCode;
@@ -64,6 +64,10 @@ public final class TotalDebugClient {
             throw new IllegalStateException("TotalDebug client has not been initialized yet");
         }
         return current;
+    }
+
+    public static Optional<TotalDebugClient> current() {
+        return Optional.ofNullable(instance);
     }
 
     public void openOrFocus(Optional<Class<?>> targetClass) {
