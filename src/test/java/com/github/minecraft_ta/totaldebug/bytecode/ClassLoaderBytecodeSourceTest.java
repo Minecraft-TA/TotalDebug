@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class ClassLoaderBytecodeSourceTest {
     @Test
@@ -18,6 +20,8 @@ class ClassLoaderBytecodeSourceTest {
         assertEquals(0xFE, Byte.toUnsignedInt(byBinaryName[1]));
         assertEquals(0xBA, Byte.toUnsignedInt(byBinaryName[2]));
         assertEquals(0xBE, Byte.toUnsignedInt(byBinaryName[3]));
+        assertSame(Fixture.class.getClassLoader(), source.definingClassLoader());
+        assertNotNull(source.findClassResource(Fixture.class.getName()));
     }
 
     @Test

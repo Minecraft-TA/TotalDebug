@@ -2,8 +2,7 @@ package com.github.minecraft_ta.totaldebug.bytecode;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.LinkedHashSet;
-import java.util.List;
+import java.net.URL;
 import java.util.Objects;
 
 /**
@@ -15,17 +14,11 @@ import java.util.Objects;
  */
 public final class ClassLoaderBytecodeSource implements ClassBytecodeSource {
     private final Class<?> targetClass;
-    private final List<ClassLoader> classLoaders;
+    private final ClassLoader definingClassLoader;
 
     private ClassLoaderBytecodeSource(Class<?> targetClass) {
         this.targetClass = Objects.requireNonNull(targetClass, "targetClass");
-
-        var loaders = new LinkedHashSet<ClassLoader>();
-        addIfPresent(loaders, targetClass.getClassLoader());
-        addIfPresent(loaders, Thread.currentThread().getContextClassLoader());
-        addIfPresent(loaders, ClassLoaderBytecodeSource.class.getClassLoader());
-        addIfPresent(loaders, ClassLoader.getSystemClassLoader());
-        this.classLoaders = List.copyOf(loaders);
+        this.definingClassLoader = targetClass.getClassLoader();
     }
 
     public static ClassLoaderBytecodeSource forClass(Class<?> targetClass) {
@@ -34,27 +27,23 @@ public final class ClassLoaderBytecodeSource implements ClassBytecodeSource {
 
     @Override
     public byte[] findClassBytes(String className) throws IOException {
-        String resourceName = toResourceName(className);
-
-        if (resourceName.equals(toResourceName(this.targetClass.getName()))) {
-            try (InputStream stream = this.targetClass.getResourceAsStream('/' + resourceName)) {
-                if (stream != null) {
-                    return stream.readAllBytes();
-                }
-            }
+        URL resource = findClassResource(className);
+        if (resource == null) {
+            return null;
         }
-
-        for (ClassLoader classLoader : this.classLoaders) {
-            try (InputStream stream = classLoader.getResourceAsStream(resourceName)) {
-                if (stream != null) {
-                    return stream.readAllBytes();
-                }
-            }
-        }
-
-        try (InputStream stream = ClassLoader.getSystemResourceAsStream(resourceName)) {
+        try (InputStream stream = resource.openStream()) {
             return stream == null ? null : stream.readAllBytes();
         }
+    }
+
+    public URL findClassResource(String className) {
+        String resourceName = toResourceName(className);
+        Class<?> resourceOwner = resolveClass(resourceName);
+        return resourceOwner == null ? null : resourceOwner.getResource('/' + resourceName);
+    }
+
+    public ClassLoader definingClassLoader() {
+        return this.definingClassLoader;
     }
 
     static String toResourceName(String className) {
@@ -69,9 +58,17 @@ public final class ClassLoaderBytecodeSource implements ClassBytecodeSource {
         return normalized.replace('.', '/') + ".class";
     }
 
-    private static void addIfPresent(LinkedHashSet<ClassLoader> classLoaders, ClassLoader classLoader) {
-        if (classLoader != null) {
-            classLoaders.add(classLoader);
+    private Class<?> resolveClass(String resourceName) {
+        String targetResourceName = toResourceName(this.targetClass.getName());
+        if (targetResourceName.equals(resourceName)) {
+            return this.targetClass;
+        }
+
+        String binaryName = resourceName.substring(0, resourceName.length() - ".class".length()).replace('/', '.');
+        try {
+            return Class.forName(binaryName, false, this.definingClassLoader);
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return null;
         }
     }
 }

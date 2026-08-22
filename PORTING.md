@@ -12,6 +12,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 - Restore the core workflow before optional diagnostics or integrations.
 - Do not recreate the legacy sided-proxy hierarchy.
 - Do not carry runtime MCP/SRG remapping into the Mojmap runtime.
+- Do not probe unrelated fallback mechanisms to hide unknown behavior. Establish the authoritative mechanism, verify it, and fail explicitly when it is unavailable.
 
 ## Progress matrix
 
