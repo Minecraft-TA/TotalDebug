@@ -1,11 +1,14 @@
 package com.github.minecraft_ta.totaldebug.decompiler;
 
 import com.github.minecraft_ta.totaldebug.bytecode.ClassBytecodeSource;
+import com.github.minecraft_ta.totaldebug.decompiler.naming.SelectiveVariableNamingPlugin;
 import org.jetbrains.java.decompiler.api.Decompiler;
+import org.jetbrains.java.decompiler.api.plugin.PluginSource;
 import org.jetbrains.java.decompiler.main.extern.IContextSource;
 import org.jetbrains.java.decompiler.main.extern.IFernflowerLogger;
 import org.jetbrains.java.decompiler.main.extern.IFernflowerPreferences;
 import org.jetbrains.java.decompiler.main.extern.IResultSaver;
+import org.jetbrains.java.decompiler.main.plugins.PluginSources;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Opcodes;
@@ -25,6 +28,14 @@ import java.util.jar.Manifest;
 
 public final class VineflowerDecompiler implements JavaDecompiler {
     private static final String PARTIAL_OUTPUT_MARKER = "$VF: Couldn't be decompiled";
+    private static final PluginSource NAMING_PLUGIN_SOURCE =
+            () -> List.of(new SelectiveVariableNamingPlugin());
+
+    static {
+        synchronized (PluginSources.PLUGIN_SOURCES) {
+            PluginSources.PLUGIN_SOURCES.add(NAMING_PLUGIN_SOURCE);
+        }
+    }
 
     @Override
     public DecompilationResult decompile(String binaryName, ClassBytecodeSource bytecodeSource)
