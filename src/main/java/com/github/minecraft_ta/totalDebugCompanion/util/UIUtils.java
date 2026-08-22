@@ -76,14 +76,7 @@ public class UIUtils {
     }
 
     public static void focusWindow(JFrame frame) {
-        frame.setVisible(true);
-        int state = frame.getExtendedState();
-        state &= ~JFrame.ICONIFIED;
-        frame.setExtendedState(state);
-        frame.setAlwaysOnTop(true);
-        frame.toFront();
-        frame.requestFocus();
-        frame.setAlwaysOnTop(false);
+        WindowsWindowActivator.activate(frame);
     }
 
     public static void centerJFrame(JFrame frame) {

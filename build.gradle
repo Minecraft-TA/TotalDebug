@@ -15,6 +15,7 @@ repositories {
 }
 
 dependencies {
+    implementation('net.java.dev.jna:jna:5.18.1')
     implementation("com.github.tth05:jindex:${jindex_version}")
     implementation("com.github.tth05:SCNet:${scnet_version}")
 
