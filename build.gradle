@@ -229,8 +229,14 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+def minimumNeoForgeVersion = project.neo_version.toString()
+
 tasks.named('processResources').configure {
     dependsOn generateParchmentParameterIndex
+    inputs.property('neo_version', minimumNeoForgeVersion)
+    filesMatching('META-INF/neoforge.mods.toml') {
+        filter { line -> line.replace('${neo_version}', minimumNeoForgeVersion) }
+    }
 }
 
 tasks.named('jar', Jar).configure {

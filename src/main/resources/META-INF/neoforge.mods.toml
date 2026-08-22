@@ -16,7 +16,7 @@ In-game debugging and diagnostics tools for Minecraft development and automation
 [[dependencies.total_debug]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.248,)"
+versionRange="[${neo_version},)"
 ordering="NONE"
 side="BOTH"
 
