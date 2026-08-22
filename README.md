@@ -27,10 +27,18 @@ Run a development client or dedicated server with:
 .\gradlew.bat runServer
 ```
 
-For Companion development, pass its fat JAR to the client run:
+When `../TotalDebugCompanion` exists, `runClient` builds its `shadowJar` and uses that JAR automatically. This keeps local Companion changes testable without publishing a release or changing its version.
+
+Pass an explicit JAR to override the sibling checkout:
 
 ```powershell
 .\gradlew.bat runClient -PtotaldebugCompanionJar=C:\path\to\TotalDebugCompanion.jar
+```
+
+To test the pinned published Companion instead, disable sibling discovery:
+
+```powershell
+.\gradlew.bat runClient -PtotaldebugUsePublishedCompanion=true
 ```
 
 The Companion application lives in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).

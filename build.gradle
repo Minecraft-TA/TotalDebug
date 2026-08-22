@@ -117,6 +117,23 @@ repositories {
     mavenLocal()
 }
 
+def explicitCompanionJar = providers.gradleProperty('totaldebugCompanionJar')
+def usePublishedCompanion = providers.gradleProperty('totaldebugUsePublishedCompanion')
+        .map { value -> value.toBoolean() }
+        .orElse(false)
+def siblingCompanionDirectory = layout.projectDirectory.dir('../TotalDebugCompanion')
+def siblingCompanionBuildFile = siblingCompanionDirectory.file('build.gradle')
+def siblingCompanionWrapper = siblingCompanionDirectory.file(
+        System.getProperty('os.name', '').toLowerCase(Locale.ROOT).startsWith('windows')
+                ? 'gradlew.bat'
+                : 'gradlew'
+)
+def siblingCompanionJar = siblingCompanionDirectory.file('build/libs/TotalDebugCompanion.jar')
+def useSiblingCompanion = !explicitCompanionJar.isPresent()
+        && !usePublishedCompanion.get()
+        && siblingCompanionBuildFile.asFile.isFile()
+        && siblingCompanionWrapper.asFile.isFile()
+
 neoForge {
     version = project.neo_version
 
@@ -128,9 +145,10 @@ neoForge {
     runs {
         client {
             client()
-            def companionJar = providers.gradleProperty('totaldebugCompanionJar')
-            if (companionJar.isPresent()) {
-                systemProperty 'totaldebug.companionJar', file(companionJar.get()).absolutePath
+            if (explicitCompanionJar.isPresent()) {
+                systemProperty 'totaldebug.companionJar', file(explicitCompanionJar.get()).absolutePath
+            } else if (useSiblingCompanion) {
+                systemProperty 'totaldebug.companionJar', siblingCompanionJar.asFile.absolutePath
             }
         }
 
@@ -147,6 +165,26 @@ neoForge {
     }
 
     addModdingDependenciesTo sourceSets.test
+}
+
+def buildSiblingCompanion = tasks.register('buildSiblingCompanion', Exec) {
+    group = 'development'
+    description = 'Builds the sibling TotalDebugCompanion JAR used by development clients.'
+    onlyIf { useSiblingCompanion }
+    workingDir siblingCompanionDirectory.asFile
+    commandLine siblingCompanionWrapper.asFile.absolutePath, 'shadowJar', '--console=plain'
+}
+
+tasks.named('prepareClientRun').configure {
+    if (useSiblingCompanion) {
+        dependsOn buildSiblingCompanion
+    }
+}
+
+tasks.named('runClient').configure {
+    if (useSiblingCompanion) {
+        dependsOn buildSiblingCompanion
+    }
 }
 
 def generatedParchmentResources = layout.buildDirectory.dir('generated/resources/parchment')
