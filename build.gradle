@@ -140,8 +140,7 @@ dependencies {
     def embeddedLibraries = [
             "com.github.Pelotrio:SCNet:${scnet_version}",
             "io.github.classgraph:classgraph:${classgraph_version}",
-            "org.bitbucket.mstrobel:procyon-core:${procyon_version}",
-            "org.bitbucket.mstrobel:procyon-compilertools:${procyon_version}",
+            "org.vineflower:vineflower:${vineflower_version}:slim",
             "com.github.Pelotrio:JIndex:${jindex_version}",
     ]
     embeddedLibraries.each { library ->

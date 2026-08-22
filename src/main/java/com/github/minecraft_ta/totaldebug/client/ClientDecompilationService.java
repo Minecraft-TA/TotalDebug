@@ -4,7 +4,10 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.bytecode.ClassLoaderBytecodeSource;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
-import com.github.minecraft_ta.totaldebug.decompiler.ProcyonDecompiler;
+import com.github.minecraft_ta.totaldebug.decompiler.DecompilationResult;
+import com.github.minecraft_ta.totaldebug.decompiler.DecompilerDiagnostic;
+import com.github.minecraft_ta.totaldebug.decompiler.JavaDecompiler;
+import com.github.minecraft_ta.totaldebug.decompiler.VineflowerDecompiler;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -25,6 +28,7 @@ import java.util.concurrent.Executors;
 
 public final class ClientDecompilationService {
     private final CompanionAppClient companionApp;
+    private final JavaDecompiler javaDecompiler;
     private final Path decompilationDirectory;
     private final Map<DecompilationRequest, CompletableFuture<Path>> inFlightRequests = new HashMap<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
@@ -34,7 +38,12 @@ public final class ClientDecompilationService {
     });
 
     public ClientDecompilationService(CompanionAppClient companionApp) {
+        this(companionApp, new VineflowerDecompiler());
+    }
+
+    ClientDecompilationService(CompanionAppClient companionApp, JavaDecompiler javaDecompiler) {
         this.companionApp = Objects.requireNonNull(companionApp, "companionApp");
+        this.javaDecompiler = Objects.requireNonNull(javaDecompiler, "javaDecompiler");
         this.decompilationDirectory = companionApp.dataDirectory().resolve("decompiled-files");
     }
 
@@ -148,11 +157,30 @@ public final class ClientDecompilationService {
                 resource,
                 definingLoader == null ? "bootstrap" : definingLoader
         );
-        String source = ProcyonDecompiler.decompile(targetClass, bytecodeSource);
+        DecompilationResult result = this.javaDecompiler.decompile(targetClass.getName(), bytecodeSource);
+        for (DecompilerDiagnostic diagnostic : result.diagnostics()) {
+            if (diagnostic.severity() == DecompilerDiagnostic.Severity.ERROR) {
+                TotalDebug.LOGGER.error(
+                        "Vineflower error while decompiling {}: {}",
+                        targetClass.getName(),
+                        diagnostic.message()
+                );
+            } else {
+                TotalDebug.LOGGER.warn(
+                        "Vineflower warning while decompiling {}: {}",
+                        targetClass.getName(),
+                        diagnostic.message()
+                );
+            }
+        }
+        if (!result.isComplete()) {
+            throw new IOException("Vineflower produced only partial source for " + targetClass.getName());
+        }
+
         Path output = this.decompilationDirectory.resolve(targetClass.getName() + ".java");
         Files.writeString(
                 output,
-                source,
+                result.source(),
                 StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING,

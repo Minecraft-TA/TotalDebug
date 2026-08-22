@@ -22,11 +22,11 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F1 | Mod core and tick task lifecycle | Complete | Version identity, isolated client/server pre/post queues, lifecycle cleanup, and unit tests |
 | F2a | Configuration | Complete | Separate client/server specs; retained defaults and packet-class validation are tested |
 | F2b | Minecraft networking | Complete | Optional protocol v1 registration, bounded typed companion-forward payload, and receiver lifecycle are tested; remaining payloads stay feature-owned |
-| F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet, ClassGraph, Procyon, and jindex are pinned and present in Jar-in-Jar metadata |
-| F3a | Named-class bytecode access | Complete | Class-loader resource bytes decompile both Java 21 test code and Minecraft's `Block` class |
+| F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet, ClassGraph, Vineflower, and jindex are pinned and present in Jar-in-Jar metadata |
+| F3a | Named-class bytecode access | Complete | Defining-loader bytes, including nested target classes, decompile Java 21 test code and Minecraft classes through Vineflower's in-memory API |
 | F3b | Transformed bytes and class inventory | Research | Post-transform capture, loaded-class enumeration, JAR inventory, and compiler classpath remain separate proofs |
 | F4 | Companion application IPC and lifecycle | Complete | Companion 1.9.1 install/start/connect/ready/open flow passed live; SCNet fork `b763bf8` supplies caller-owned message factories across named modules |
-| F5 | Class decompilation | Complete | Minecraft `GrassBlock`, `Cow`, `RotatedPillarBlock`, `DoorBlock`, and `LeverBlock` were decompiled and opened in Companion during one live run |
+| F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
 | F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic 6.7 MB index; Companion's jindex 0.0.45 loaded the fork-produced format; unchanged development classes are content-fingerprinted |
 | F8 | Java scripting | Not started | Requires permission, cancellation, compiler, and class-definition redesigns |
@@ -56,6 +56,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S6 | F7 runtime class index | jindex fork tests, Java 21 index round-trip, explicit 0.0.45 reader compatibility, live NeoForge index build | Complete |
 | S7 | F5/F9 named-class decompile and block command | Unit tests, `gradlew build`, live `/decompile block minecraft:lever` opening in Companion | Complete |
 | S8 | F10 F6 target flow | One-request-per-press behavior; live block, entity, and hovered block-item opens in Companion | Complete |
+| S9 | Java 21 decompiler modernization | In-memory Vineflower adapter, modern Java recompilation fixture, `Block` coverage, `GrassBlock` control-flow regression, `gradlew build` | Complete |
 
 ## Core-flow milestone
 
@@ -85,11 +86,12 @@ Live reference search, additional command targets, and scripting remain separate
 | 2026-08-22 | S7 | `/decompile block minecraft:lever` decompiled the runtime `LeverBlock` bytes and Companion opened `LeverBlock.java` |
 | 2026-08-22 | S8 | A single run opened `GrassBlock.java`, `Cow.java`, `RotatedPillarBlock.java`, `DoorBlock.java`, and `LeverBlock.java`; one physical F6 press produced one request |
 | 2026-08-22 | Core flow | `gradlew clean build` passed 25 tests; the final mod JAR contains `SCNet-b763bf8.jar` and `JIndex-f314662.jar` |
+| 2026-08-22 | S9 | Vineflower 1.12.0 slim replaced both Procyon artifacts; the in-memory adapter passed modern Java 21 recompilation, Minecraft `Block`, and `GrassBlock` bounded-loop regressions |
 
 ## Foundation dependency decisions
 
 - Keep SCNet and use fork commit `b763bf8`. The wire protocol is unchanged; caller-provided message factories make construction legal across named modules.
-- Keep Procyon 0.6.0 for the restored core flow. Its output is usable but emits generic-signature warnings on modern Minecraft classes; a focused Vineflower comparison remains a later decompiler-quality slice behind the existing seam.
+- Use Vineflower 1.12.0 slim as the only production decompiler. The adapter supplies defining-loader bytes directly through `IContextSource`, captures warning/error diagnostics through `IFernflowerLogger`, rejects missing or partial output, and fixes the incorrect `GrassBlock.performBonemeal` loop reconstruction observed with Procyon.
 - Keep ClassGraph for later class discovery and completion work. It is not used to enumerate the NeoForge runtime because version 4.8.146 cannot enumerate the Java 21 module readers supplied by ModLauncher.
 - Use JIndex fork commit `f314662`. It loads its bundled native DLL from a resource stream under NeoForge and produces an index format proven readable by Companion's jindex 0.0.45. This slice remains Windows-only.
 - Use the JDK HTTP client when F4 restores companion downloads; Apache HttpClient is not retained.
