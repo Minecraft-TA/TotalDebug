@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -23,7 +24,18 @@ class JdtConfigurationTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(classBytes(Object.class), classBytes(String.class))));
+        CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(
+                classBytes(Object.class),
+                classBytes(String.class),
+                classBytes(List.class),
+                classBytes(Class.class),
+                classBytes(Field.class),
+                classBytes(Throwable.class),
+                classBytes(Error.class),
+                classBytes(Exception.class),
+                classBytes(ReflectiveOperationException.class),
+                classBytes(NoSuchFieldException.class)
+        )));
     }
 
     @AfterAll
@@ -86,6 +98,49 @@ class JdtConfigurationTest {
         assertEquals(1, elements.length);
         assertTrue(elements[0] instanceof IType);
         assertEquals("java.lang.String", ((IType) elements[0]).getFullyQualifiedName());
+    }
+
+    @Test
+    void semanticDiagnosticsResolveIndexedJavaTypes() {
+        var source = """
+                import java.util.List;
+                final class Test {
+                    Object value = new Object();
+                    String text = "ok";
+                    List<String> values;
+                }
+                """;
+
+        var unit = ASTCache.rawParse("Test", source);
+        var errors = Arrays.stream(unit.getProblems())
+                .filter(IProblem::isError)
+                .map(IProblem::getMessage)
+                .toList();
+
+        assertTrue(errors.isEmpty(), () -> "Indexed Java types produced semantic errors: " + errors);
+    }
+
+    @Test
+    void semanticDiagnosticsSeeIndexedCheckedExceptions() {
+        var source = """
+                import java.lang.reflect.Field;
+                final class Test {
+                    Field find(Class<?> type) {
+                        try {
+                            return type.getDeclaredField("value");
+                        } catch (NoSuchFieldException exception) {
+                            return null;
+                        }
+                    }
+                }
+                """;
+
+        var errors = Arrays.stream(ASTCache.rawParse("Test", source).getProblems())
+                .filter(IProblem::isError)
+                .map(IProblem::getMessage)
+                .toList();
+
+        assertTrue(errors.isEmpty(), () -> "Indexed checked exceptions produced semantic errors: " + errors);
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {

@@ -21,12 +21,39 @@ import java.util.HashMap;
 public class NameLookupImpl extends NameLookup {
 
     public NameLookupImpl(JavaProjectImpl javaProject) {
-        super(javaProject, new IPackageFragmentRoot[0], new HashtableOfArrayToObject(), null, new HashMap<>());
+        super(
+                javaProject,
+                new IPackageFragmentRoot[]{JDTHacks.getSyntheticPackageFragmentRoot()},
+                new HashtableOfArrayToObject(),
+                null,
+                new HashMap<>()
+        );
     }
 
     @Override
     public boolean isPackage(String[] pkgName) {
         return CompanionClassIndex.get().findPackage(Util.concatWith(pkgName, '/')) != null;
+    }
+
+    @Override
+    public boolean isPackage(String[] pkgName, IPackageFragmentRoot[] moduleContext) {
+        if (moduleContext == null) {
+            return isPackage(pkgName);
+        }
+        for (IPackageFragmentRoot root : moduleContext) {
+            if (root.equals(JDTHacks.getSyntheticPackageFragmentRoot())) {
+                return isPackage(pkgName);
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public IPackageFragmentRoot[] findPackageFragementRoots(String[] pkgName) {
+        if (!isPackage(pkgName)) {
+            return null;
+        }
+        return new IPackageFragmentRoot[]{JDTHacks.getSyntheticPackageFragmentRoot()};
     }
 
     @Override

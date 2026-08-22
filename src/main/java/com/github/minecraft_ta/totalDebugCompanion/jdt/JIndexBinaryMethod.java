@@ -37,6 +37,28 @@ public class JIndexBinaryMethod implements IBinaryMethodStub {
     }
 
     @Override
+    public char[][] getExceptionTypeNames() {
+        var exceptions = this.indexedMethod.getExceptions();
+        int resolvedCount = 0;
+        for (var exception : exceptions) {
+            if (exception != null) {
+                resolvedCount++;
+            }
+        }
+        if (resolvedCount == 0) {
+            return null;
+        }
+        var names = new char[resolvedCount][];
+        int outputIndex = 0;
+        for (var exception : exceptions) {
+            if (exception != null) {
+                names[outputIndex++] = exception.getNameWithPackage().toCharArray();
+            }
+        }
+        return names;
+    }
+
+    @Override
     public boolean isClinit() {
         return JavaBinaryNames.isClinit(getSelector());
     }

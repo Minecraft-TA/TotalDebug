@@ -59,6 +59,10 @@ public class JDTHacks {
         }
     }
 
+    public static PackageFragmentRoot getSyntheticPackageFragmentRoot() {
+        return PACKAGE_FRAGMENT_ROOT;
+    }
+
     public static NameLookup.Answer createNameLookupAnswer(IType type, AccessRestriction res, IClasspathEntry entry) {
         return createInstance(NameLookup.Answer.class, new Class[]{IType.class, AccessRestriction.class, IClasspathEntry.class}, type, res, entry);
     }
