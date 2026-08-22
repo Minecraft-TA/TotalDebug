@@ -166,6 +166,10 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_name               : mod_name,
             mod_license            : mod_license,
             mod_version            : mod_version,
+            companion_release_version: companion_release_version,
+            companion_release_artifact: companion_release_artifact,
+            companion_release_download_uri: "https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/v${companion_release_version}/${companion_release_artifact}",
+            companion_release_sha256: companion_release_sha256,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

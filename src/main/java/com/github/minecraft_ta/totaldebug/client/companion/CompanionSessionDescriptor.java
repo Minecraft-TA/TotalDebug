@@ -33,9 +33,9 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
         }
 
         try {
-            int protocol = Integer.parseInt(values.get("protocol"));
-            int port = Integer.parseInt(values.get("port"));
-            long pid = Long.parseLong(values.get("pid"));
+            int protocol = Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY));
+            int port = Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PORT_KEY));
+            long pid = Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY));
             if (protocol < 1) {
                 throw new IOException("Invalid companion protocol version in session descriptor: " + protocol);
             }
@@ -52,6 +52,8 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
     }
 
     private static boolean isKnownKey(String key) {
-        return key.equals("protocol") || key.equals("port") || key.equals("pid");
+        return key.equals(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)
+                || key.equals(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)
+                || key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY);
     }
 }

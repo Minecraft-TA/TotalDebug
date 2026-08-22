@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -18,30 +17,24 @@ import java.util.Objects;
 
 public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
-    public static final String COMPANION_VERSION = "2.0.0";
-    public static final String DISTRIBUTION_SHA256 =
-            "fe56ffccfff7fabd1de076d24beb97f62a2734d1aa737cf2938db8dc47c806b3";
-
-    private static final URI DISTRIBUTION_URI = URI.create(
-            "https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/v"
-                    + COMPANION_VERSION
-                    + "/TotalDebugCompanion.jar"
-    );
 
     private final Path appDirectory;
+    private final CompanionRelease release;
     private final HttpClient httpClient;
 
     public CompanionAppInstaller(Path appDirectory) {
         this(
                 appDirectory,
+                CompanionRelease.loadBundled(),
                 HttpClient.newBuilder()
                         .followRedirects(HttpClient.Redirect.NORMAL)
                         .build()
         );
     }
 
-    CompanionAppInstaller(Path appDirectory, HttpClient httpClient) {
+    CompanionAppInstaller(Path appDirectory, CompanionRelease release, HttpClient httpClient) {
         this.appDirectory = Objects.requireNonNull(appDirectory, "appDirectory").toAbsolutePath().normalize();
+        this.release = Objects.requireNonNull(release, "release");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     }
 
@@ -55,21 +48,21 @@ public final class CompanionAppInstaller {
         }
 
         if (!isWindows()) {
-            throw new IOException("TotalDebugCompanion " + COMPANION_VERSION + " is distributed for Windows only");
+            throw new IOException("TotalDebugCompanion " + this.release.version() + " is distributed for Windows only");
         }
 
-        Path installationDirectory = this.appDirectory.resolve(COMPANION_VERSION);
-        Path jarPath = installationDirectory.resolve("TotalDebugCompanion.jar");
-        if (!Files.isRegularFile(jarPath) || !DISTRIBUTION_SHA256.equals(sha256(jarPath))) {
+        Path installationDirectory = this.appDirectory.resolve(this.release.version());
+        Path jarPath = installationDirectory.resolve(this.release.artifactFileName());
+        if (!Files.isRegularFile(jarPath) || !this.release.sha256().equals(sha256(jarPath))) {
             installDistribution(jarPath);
         }
 
         requireRegularFile(jarPath, "Companion JAR");
         String installedHash = sha256(jarPath);
-        if (!DISTRIBUTION_SHA256.equals(installedHash)) {
+        if (!this.release.sha256().equals(installedHash)) {
             throw new IOException(
                     "Installed companion checksum mismatch: expected "
-                            + DISTRIBUTION_SHA256
+                            + this.release.sha256()
                             + ", got "
                             + installedHash
             );
@@ -94,8 +87,8 @@ public final class CompanionAppInstaller {
     }
 
     private void downloadDistribution(Path destination) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(DISTRIBUTION_URI)
-                .header("User-Agent", "TotalDebug/2.0")
+        HttpRequest request = HttpRequest.newBuilder(this.release.downloadUri())
+                .header("User-Agent", "TotalDebugCompanionInstaller/" + this.release.version())
                 .GET()
                 .build();
         HttpResponse<InputStream> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
@@ -110,10 +103,10 @@ public final class CompanionAppInstaller {
         }
 
         String actualHash = HexFormat.of().formatHex(digest.digest());
-        if (!DISTRIBUTION_SHA256.equals(actualHash)) {
+        if (!this.release.sha256().equals(actualHash)) {
             throw new IOException(
                     "Companion archive checksum mismatch: expected "
-                            + DISTRIBUTION_SHA256
+                            + this.release.sha256()
                             + ", got "
                             + actualHash
             );

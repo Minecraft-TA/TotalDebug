@@ -16,6 +16,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
@@ -28,11 +29,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
-    public static final String SESSION_TOKEN_ENVIRONMENT_VARIABLE = "TOTALDEBUG_SESSION_TOKEN";
-
-    private static final int START_TIMEOUT_SECONDS = 60;
-    private static final int HANDSHAKE_TIMEOUT_SECONDS = 10;
-    private static final int READY_TIMEOUT_SECONDS = 60;
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
 
     private final Path workspaceDirectory;
@@ -41,6 +37,7 @@ public final class CompanionAppClient implements AutoCloseable {
     private final Path sessionsDirectory;
     private final CompanionAppInstaller installer;
     private final RuntimeClassIndex runtimeClassIndex;
+    private final CompanionTimeouts timeouts;
     private final Client client = new Client();
     private volatile CompletableFuture<Void> authenticated = new CompletableFuture<>();
     private volatile CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -60,6 +57,10 @@ public final class CompanionAppClient implements AutoCloseable {
     private Path sessionDescriptorFile;
 
     public CompanionAppClient(Path totalDebugDirectory) {
+        this(totalDebugDirectory, CompanionTimeouts.DEFAULT);
+    }
+
+    CompanionAppClient(Path totalDebugDirectory, CompanionTimeouts timeouts) {
         Path root = Objects.requireNonNull(totalDebugDirectory, "totalDebugDirectory").toAbsolutePath().normalize();
         Path workspace = root.getParent();
         if (workspace == null) {
@@ -72,6 +73,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.sessionsDirectory = root.resolve("sessions");
         this.installer = new CompanionAppInstaller(this.appDirectory);
         this.runtimeClassIndex = new RuntimeClassIndex(this.dataDirectory);
+        this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
 
         configureTransport();
         registerProtocol();
@@ -246,8 +248,8 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             CompletableFuture<Void> authentication = this.authenticated;
             readiness = this.ready;
-            await(authentication, HANDSHAKE_TIMEOUT_SECONDS, "Companion session handshake");
-            await(readiness, READY_TIMEOUT_SECONDS, "Companion UI readiness");
+            await(authentication, this.timeouts.handshake(), "Companion session handshake");
+            await(readiness, this.timeouts.readiness(), "Companion UI readiness");
         } catch (IOException exception) {
             this.client.close();
             if (this.process != null && this.process.isAlive()) {
@@ -258,7 +260,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     static InetSocketAddress sessionAddress(int port) {
-        return new InetSocketAddress("127.0.0.1", port);
+        return new InetSocketAddress(CompanionLaunchContract.IPV4_LOOPBACK_HOST, port);
     }
 
     private CompanionSessionDescriptor startInstalledCompanion() throws IOException {
@@ -275,7 +277,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.sessionDirectory = this.sessionsDirectory.resolve(UUID.randomUUID().toString());
         Files.createDirectory(this.sessionDirectory);
         String sessionId = this.sessionDirectory.getFileName().toString();
-        this.sessionDescriptorFile = this.sessionDirectory.resolve("session.properties");
+        this.sessionDescriptorFile = this.sessionDirectory.resolve(CompanionLaunchContract.SESSION_DESCRIPTOR_FILE_NAME);
         Files.deleteIfExists(this.sessionDescriptorFile);
         this.sessionToken = newSessionToken();
 
@@ -291,16 +293,16 @@ public final class CompanionAppClient implements AutoCloseable {
                 javaExecutable.toString(),
                 "-jar",
                 installation.companionJar().toString(),
-                "--data-directory",
+                CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT,
                 this.dataDirectory.toString(),
-                "--index-file",
+                CompanionLaunchContract.INDEX_FILE_ARGUMENT,
                 this.runtimeClassIndex.indexFile().toString(),
-                "--workspace-directory",
+                CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT,
                 this.workspaceDirectory.toString(),
-                "--session-descriptor",
+                CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT,
                 this.sessionDescriptorFile.toString()
         );
-        processBuilder.environment().put(SESSION_TOKEN_ENVIRONMENT_VARIABLE, this.sessionToken);
+        processBuilder.environment().put(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, this.sessionToken);
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(this.processLog.toFile());
         this.process = processBuilder.start();
@@ -316,8 +318,9 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile) throws IOException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(START_TIMEOUT_SECONDS);
-        while (System.nanoTime() < deadline) {
+        long startedAt = System.nanoTime();
+        long timeoutNanos = this.timeouts.processStart().toNanos();
+        while (System.nanoTime() - startedAt < timeoutNanos) {
             if (Files.isRegularFile(descriptorFile)) {
                 CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile);
                 if (descriptor.protocolVersion() != CompanionProtocol.VERSION) {
@@ -338,21 +341,21 @@ public final class CompanionAppClient implements AutoCloseable {
                 throw new IOException("Companion process exited before publishing its session descriptor; see " + this.processLog);
             }
             try {
-                Thread.sleep(50);
+                Thread.sleep(this.timeouts.descriptorPollInterval());
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while waiting for the Companion session descriptor", exception);
             }
         }
         throw new IOException(
-                "Companion did not publish its session descriptor within " + START_TIMEOUT_SECONDS
-                        + " seconds; see " + this.processLog
+                "Companion did not publish its session descriptor within " + this.timeouts.processStart()
+                        + "; see " + this.processLog
         );
     }
 
-    private static void await(CompletableFuture<Void> future, int timeoutSeconds, String operation) throws IOException {
+    private static void await(CompletableFuture<Void> future, Duration timeout, String operation) throws IOException {
         try {
-            future.get(timeoutSeconds, TimeUnit.SECONDS);
+            future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for " + operation, exception);
@@ -363,7 +366,7 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             throw new IOException(operation + " failed", cause);
         } catch (TimeoutException exception) {
-            throw new IOException(operation + " did not complete within " + timeoutSeconds + " seconds", exception);
+            throw new IOException(operation + " did not complete within " + timeout, exception);
         }
     }
 
