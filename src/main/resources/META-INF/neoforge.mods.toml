@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+issueTrackerURL="https://github.com/Minecraft-TA/TotalDebug/issues"
+
+[[mods]]
+modId="total_debug"
+version="${file.jarVersion}"
+displayName="TotalDebug"
+displayURL="https://github.com/Minecraft-TA/TotalDebug"
+authors="tth05, Pelotrio"
+description='''
+In-game debugging and diagnostics tools for Minecraft development and automation.
+'''
+
+[[dependencies.total_debug]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.248,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.total_debug]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"

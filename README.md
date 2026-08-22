@@ -1,8 +1,8 @@
 # TotalDebug
 
-TotalDebug is being ported to Minecraft 1.21.1 as a native NeoForge mod.
+TotalDebug is a Minecraft 1.21.1 NeoForge development mod. It can decompile a looked-at block or entity and a hovered item, then open the generated Java source in TotalDebugCompanion.
 
-This branch contains the clean NeoForge foundation and the F1/F2 core skeleton: lifecycle-owned tick tasks, retained configuration, typed networking, core language resources, and embedded libraries. User-facing legacy features have not been restored yet. See [PORTING.md](PORTING.md) for the auditable progress matrix and next gates.
+The current port restores the core F6 and `/decompile block` workflow. It uses Vineflower for decompilation, JIndex for the runtime class index, and SCNet for the authenticated per-process Companion connection. [PORTING.md](PORTING.md) records completed slices and remaining features.
 
 Local searchable snapshots of the old implementations may live under `legacy/`; their source trees are excluded from Git and Gradle. The 1.7.10 implementation is more advanced for most TotalDebug features and is the primary functional reference. The 1.12.2 snapshot is useful for its newer Minecraft and Forge APIs.
 
@@ -12,7 +12,7 @@ Local searchable snapshots of the old implementations may live under `legacy/`; 
 - NeoForge 21.1.248
 - Java 21
 - Mojang mappings with Parchment
-- Gradle 9.2.1 and ModDevGradle 2.0.144
+- Gradle 9.7.1 and ModDevGradle 2.0.144
 
 Build with:
 
@@ -27,4 +27,10 @@ Run a development client or dedicated server with:
 .\gradlew.bat runServer
 ```
 
-The legacy companion application is maintained separately in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).
+For Companion development, pass its fat JAR to the client run:
+
+```powershell
+.\gradlew.bat runClient -PtotaldebugCompanionJar=C:\path\to\TotalDebugCompanion.jar
+```
+
+The Companion application lives in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).

@@ -76,6 +76,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S11 | Per-process Companion protocol | Golden wire fixtures, descriptor/auth/version rejection tests, both application builds, then one live core-flow run | Complete |
 | S12 | Behavior-neutral client cleanup | Unit tests, package/lifecycle review, `gradlew build`, no extra game launch | Complete |
 | S13 | Explicit construction and launch policy | SCNet, Companion, and TotalDebug clean builds on Java 21; received-message factory tests; mirrored launch-contract tests; generated release metadata and final JAR inspection | Complete |
+| S14 | Project metadata cleanup | Static project resources, two development runs, wrapper metadata, 44 tests, and final JAR inspection | Complete |
 
 ## Core-flow milestone
 
@@ -114,6 +115,7 @@ Live reference search, additional command targets, and scripting remain separate
 | 2026-08-22 | M9 fixes | Live testing exposed NeoForge IPv6 preference versus Companion IPv4 loopback selection and JDT 3.46's stricter synthetic-project contract; both now have red-to-green regression tests, explicit contracts, clean builds, and no fallback path |
 | 2026-08-22 | M9 restart | Closing the authenticated Companion ended its owned process; the next F6 launched a new session with a new PID, reused the warm runtime index, and opened `GrassBlock.java` in about two seconds |
 | 2026-08-22 | S13 | SCNet passed 59 tests and published Java 21 classfiles to Maven Local; Companion passed 15 tests and reproducibly built SHA-256 `c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a`; TotalDebug passed 44 tests and embedded the matching release manifest plus SCNet 2.0.0, JIndex 1.0.0, Vineflower 1.12.0 slim, and ClassGraph 4.8.193 |
+| 2026-08-22 | S14 | Removed the MDK template and generated-resource paths, unused data/GameTest runs, empty test roots, and default logging noise; `gradlew clean build` passed 44 tests and the final JAR contains the expected manifest version, NeoForge metadata, Companion checksum, and four Jar-in-Jar libraries |
 
 ## Foundation dependency decisions
 

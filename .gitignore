@@ -1,49 +1,13 @@
-### Gradle ###
-.gradle
+.gradle/
 build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/**/build/
-
-### IntelliJ IDEA ###
 .idea/
-*.iws
 *.iml
-*.ipr
 out/
-!**/src/**/out/
-
 .run/
-
-### Eclipse ###
-.apt_generated
-.classpath
-.eclipse/
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/**/bin/
-
-### VS Code ###
-.vscode/
-
-### Mac OS ###
-.DS_Store
-
-### Minecraft Modding ###
 logs/
 run/
 run-*/
-!**/src/**/run/
-**/src/generated/**/.cache/
-repo/
-!**/src/**/repo/
-
-### Local agent settings ###
 .claude/
 
-### Local legacy reference sources ###
 legacy/1.7.10/src/
 legacy/1.12.2/src/
