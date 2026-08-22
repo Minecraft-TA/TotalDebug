@@ -13,24 +13,35 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 
 import java.util.Optional;
+import java.util.function.Function;
 
 final class CodeTargetResolver {
     private CodeTargetResolver() {
     }
 
     static Optional<Class<?>> resolveWorldTarget(Minecraft minecraft) {
-        if (minecraft.level == null || minecraft.hitResult == null) {
+        if (minecraft.level == null) {
             return Optional.empty();
         }
 
-        HitResult hitResult = minecraft.hitResult;
-        if (hitResult instanceof BlockHitResult blockHit) {
-            BlockPos position = blockHit.getBlockPos();
+        return resolveWorldTarget(minecraft.hitResult, position -> {
             BlockEntity blockEntity = minecraft.level.getBlockEntity(position);
             if (blockEntity != null) {
                 return Optional.of(blockEntity.getClass());
             }
             return Optional.of(minecraft.level.getBlockState(position).getBlock().getClass());
+        });
+    }
+
+    static Optional<Class<?>> resolveWorldTarget(
+            HitResult hitResult,
+            Function<BlockPos, Optional<Class<?>>> blockTarget
+    ) {
+        if (hitResult == null || hitResult.getType() == HitResult.Type.MISS) {
+            return Optional.empty();
+        }
+        if (hitResult instanceof BlockHitResult blockHit) {
+            return blockTarget.apply(blockHit.getBlockPos());
         }
         if (hitResult instanceof EntityHitResult entityHit) {
             return Optional.of(entityHit.getEntity().getClass());

@@ -12,12 +12,20 @@ final class OpenCodeOperation {
     }
 
     void openOrFocus(Optional<Class<?>> targetClass) {
-        Objects.requireNonNull(targetClass, "targetClass")
-                .ifPresentOrElse(this.actions::openClass, this.actions::focusCompanion);
+        Objects.requireNonNull(targetClass, "targetClass");
+        if (targetClass.isPresent()) {
+            this.actions.openClass(targetClass.get());
+            return;
+        }
+
+        this.actions.releaseGameInput();
+        this.actions.focusCompanion();
     }
 
     interface Actions {
         void openClass(Class<?> targetClass);
+
+        void releaseGameInput();
 
         void focusCompanion();
     }

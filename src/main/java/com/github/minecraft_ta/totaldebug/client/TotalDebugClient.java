@@ -36,6 +36,11 @@ public final class TotalDebugClient {
             }
 
             @Override
+            public void releaseGameInput() {
+                Minecraft.getInstance().mouseHandler.releaseMouse();
+            }
+
+            @Override
             public void focusCompanion() {
                 TotalDebugClient.this.decompilation.focusCompanion();
             }

@@ -26,11 +26,13 @@ class OpenCodeOperationTest {
         new OpenCodeOperation(actions).openOrFocus(Optional.empty());
 
         assertEquals(List.of(), actions.openedClasses);
+        assertEquals(List.of("release input", "focus Companion"), actions.focusEvents);
         assertEquals(1, actions.focusCount);
     }
 
     private static final class RecordingActions implements OpenCodeOperation.Actions {
         private final List<Class<?>> openedClasses = new ArrayList<>();
+        private final List<String> focusEvents = new ArrayList<>();
         private int focusCount;
 
         @Override
@@ -39,7 +41,13 @@ class OpenCodeOperationTest {
         }
 
         @Override
+        public void releaseGameInput() {
+            this.focusEvents.add("release input");
+        }
+
+        @Override
         public void focusCompanion() {
+            this.focusEvents.add("focus Companion");
             this.focusCount++;
         }
     }
