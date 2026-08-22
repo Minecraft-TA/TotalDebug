@@ -117,14 +117,22 @@ final class RuntimeClassIndex {
         List<Path> inputs = new ArrayList<>();
         int sourceNumber = 0;
         for (Path source : sources) {
-            if (Files.isDirectory(source)) {
-                Path packedSource = workspace.resolve("source-" + sourceNumber++ + ".jar");
-                if (packClassDirectory(source, packedSource)) {
-                    inputs.add(packedSource);
+            int currentSourceNumber = sourceNumber++;
+            try {
+                if (Files.isDirectory(source)) {
+                    Path packedSource = workspace.resolve("source-" + currentSourceNumber + ".jar");
+                    if (packClassDirectory(source, packedSource)) {
+                        inputs.add(packedSource);
+                    }
+                } else {
+                    prepareJarSource(source, workspace, currentSourceNumber, inputs);
                 }
-            } else {
-                inputs.add(source);
-                extractNestedJars(source, workspace.resolve("nested-" + sourceNumber++), inputs);
+            } catch (IOException | RuntimeException exception) {
+                throw new IOException(
+                        "Unable to prepare runtime class source " + source.toUri()
+                                + " using the " + source.getFileSystem().provider().getScheme() + " filesystem",
+                        exception
+                );
             }
         }
 
@@ -132,6 +140,25 @@ final class RuntimeClassIndex {
         packJdkClasses(jdkClasses);
         inputs.add(jdkClasses);
         return inputs;
+    }
+
+    static void prepareJarSource(
+            Path sourceJar,
+            Path workspace,
+            int sourceNumber,
+            List<Path> inputs
+    ) throws IOException {
+        Path indexInput = sourceJar;
+        if (sourceJar.getFileSystem() != FileSystems.getDefault()) {
+            indexInput = workspace.resolve("source-" + sourceNumber + ".jar");
+            try (InputStream input = Files.newInputStream(sourceJar);
+                 OutputStream output = Files.newOutputStream(indexInput)) {
+                input.transferTo(output);
+            }
+        }
+
+        inputs.add(indexInput);
+        extractNestedJars(indexInput, workspace.resolve("nested-" + sourceNumber), inputs);
     }
 
     static boolean packClassDirectory(Path sourceDirectory, Path outputJar) throws IOException {

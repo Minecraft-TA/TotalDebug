@@ -29,7 +29,7 @@ public final class CompanionProgressActionBar {
             case STARTING -> Component.translatable("companion_app.starting");
             case CONNECTING -> Component.translatable("companion_app.connecting");
             case READY -> Component.translatable("companion_app.connection_success");
-            case FAILED -> Component.translatable("companion_app.connection_fail").withStyle(ChatFormatting.RED);
+            case FAILED -> Component.translatable("companion_app.startup_fail").withStyle(ChatFormatting.RED);
         };
     }
 }

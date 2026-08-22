@@ -105,7 +105,7 @@ public final class ClientDecompilationService {
                     Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                             ? failure.getCause()
                             : failure;
-                    TotalDebug.LOGGER.error("Unable to decompile {}", targetClass.getName(), cause);
+                    TotalDebug.LOGGER.error("Unable to decompile or open {}", targetClass.getName(), cause);
                     String detail = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
                     showMessage(Component.literal("TotalDebug: " + detail).withStyle(ChatFormatting.RED));
                 }

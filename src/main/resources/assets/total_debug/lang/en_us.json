@@ -26,7 +26,7 @@
   "companion_app.starting": "Starting companion app...",
   "companion_app.connecting": "Connecting to companion app...",
   "companion_app.connection_success": "Connected to the companion app.",
-  "companion_app.connection_fail": "Could not connect to the companion app.",
+  "companion_app.startup_fail": "Companion startup failed. See chat for details.",
   "companion_app.download_start": "Downloading %s...",
   "companion_app.download_progress": "Downloading %s... %s%%",
   "companion_app.open_file": "Opening %s...",

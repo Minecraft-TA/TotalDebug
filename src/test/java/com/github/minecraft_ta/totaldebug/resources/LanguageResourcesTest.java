@@ -27,7 +27,7 @@ class LanguageResourcesTest {
             "companion_app.starting",
             "companion_app.connecting",
             "companion_app.connection_success",
-            "companion_app.connection_fail",
+            "companion_app.startup_fail",
             "companion_app.download_start",
             "companion_app.download_progress",
             "companion_app.open_file",

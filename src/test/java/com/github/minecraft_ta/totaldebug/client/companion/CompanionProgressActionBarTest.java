@@ -16,4 +16,14 @@ class CompanionProgressActionBarTest {
         assertEquals("companion_app.download_progress", contents.getKey());
         assertEquals(25, contents.getArgs()[1]);
     }
+
+    @Test
+    void failureMessageDescribesTheWholeStartupProcess() {
+        var message = CompanionProgressActionBar.messageFor(
+                CompanionStartupProgress.failed("index failed")
+        );
+
+        var contents = (TranslatableContents) message.getContents();
+        assertEquals("companion_app.startup_fail", contents.getKey());
+    }
 }
