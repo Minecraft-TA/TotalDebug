@@ -50,10 +50,10 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | M1 | Companion Java 21 runtime | Complete | Companion builds as a non-preview Java 21 fat JAR; the mod launches it with the exact current Minecraft Java after validating the executable, version, and required modules |
 | M2 | Decompiler engine | Complete | Vineflower 1.12.0 is the only engine; modern Java 21, nested-class, Minecraft `Block`, and `GrassBlock` control-flow fixtures pass with no fallback |
 | M3 | Companion editor stack | Complete | JDT 3.46 parses at JLS 21/compliance 21; FlatLaf 3.7.2, RSyntaxTextArea 4.0.1, Autocomplete 3.3.3, Gson 2.14.0, and Commons Compress 1.28.0 are pinned |
-| M4 | SCNet transport | Complete | SCNet 2.0.0 has bounded framing, partial read/write handling, selector wakeups, explicit lifecycle state, reconnect/close coverage, and 53 passing tests |
+| M4 | SCNet transport | Complete | SCNet 2.0.0 has bounded framing, partial read/write handling, selector wakeups, explicit lifecycle state, reconnect/close coverage, deterministic drain-before-close, and 59 passing tests |
 | M5 | JIndex native lifecycle | Complete | JIndex 1.0.0 serializes close against JNI calls, invalidates retained children exactly, pins Rust/native inputs, and passes Java plus Rust tests |
 | M6 | Versioned dependency supply | Complete locally | SCNet 2.0.0 and JIndex 1.0.0 are published to Maven Local and consumed through `com.github.tth05`; external Packagecloud publication waits for approval |
-| M7 | Companion session protocol | Complete | Loopback ephemeral endpoints, atomic descriptors, exact child PID checks, per-launch tokens, strict protocol/capability handshake, stable IDs, restart, and unsupported-feature gating are tested |
+| M7 | Companion session protocol | Complete | Loopback ephemeral endpoints, atomic descriptors, exact child PID checks, per-launch tokens, strict protocol/capability handshake, stable IDs, terminal disconnect ownership, deterministic rejection delivery, restart, and unsupported-feature gating are tested |
 | M8 | Client package/lifecycle cleanup | Complete | Client setup now assembles one explicit runtime; static NeoForge adapters delegate into lifecycle, tick, input, command, decompile, and Companion ownership; JDT element numbers exist only at the Companion wire boundary |
 | M9 | Modernized live acceptance | Pending | One user-driven game launch must cover cold start, warm reuse, block/entity/hovered-item F6, reverse navigation, reconnect, and exact failure reporting |
 
@@ -104,9 +104,10 @@ Live reference search, additional command targets, and scripting remain separate
 | 2026-08-22 | S8 | A single run opened `GrassBlock.java`, `Cow.java`, `RotatedPillarBlock.java`, `DoorBlock.java`, and `LeverBlock.java`; one physical F6 press produced one request |
 | 2026-08-22 | Core flow | `gradlew clean build` passed 25 tests; the final mod JAR contains `SCNet-b763bf8.jar` and `JIndex-f314662.jar` |
 | 2026-08-22 | S9 | Vineflower 1.12.0 slim replaced both Procyon artifacts; the in-memory adapter passed modern Java 21 recompilation, Minecraft `Block`, and `GrassBlock` bounded-loop regressions |
-| 2026-08-22 | S10 | Companion moved to Java 21/JDT 3.46 and jar-only packaging; SCNet passed 53 transport tests; JIndex passed 6 Java and 11 Rust tests; both applications built against Maven-local SCNet 2.0.0 and JIndex 1.0.0 |
-| 2026-08-22 | S11 | TotalDebug passed 34 tests and Companion passed 10; mirrored golden handshake bytes, atomic descriptors, exact PID checks, token/version rejection, wrong-token disconnect, capability gates, and sequential child restart are covered; the final Companion JAR hash is pinned |
+| 2026-08-22 | S10 | Companion moved to Java 21/JDT 3.46 and jar-only packaging; SCNet passed 59 transport tests; JIndex passed 6 Java and 11 Rust tests; both applications built against Maven-local SCNet 2.0.0 and JIndex 1.0.0 |
+| 2026-08-22 | S11 | TotalDebug passed 39 tests and Companion passed 11; mirrored golden handshake bytes, atomic descriptors, exact PID checks, token/version rejection delivered before EOF, terminal disconnect ownership, capability gates, and sequential child restart are covered; a clean Companion rebuild reproduced the pinned SHA-256 exactly |
 | 2026-08-22 | S12 | TotalDebug passed 39 tests and a warning-free clean build; F6 open-or-focus decisions and Companion source-target conversion have direct tests; the final JAR retains SCNet, ClassGraph, JIndex, and Vineflower Jar-in-Jar entries; no game was launched |
+| 2026-08-22 | Assembly | Clean builds passed for all four repositories; the mod JAR embeds SCNet 2.0.0, JIndex 1.0.0, Vineflower 1.12.0 slim, and ClassGraph 4.8.193; Companion is a 21.2 MB Java 21 JAR with no private JRE, Discord, or Procyon payload |
 
 ## Foundation dependency decisions
 
