@@ -28,7 +28,6 @@ import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 
 import javax.swing.SwingUtilities;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -61,7 +60,7 @@ public final class CompanionSession implements AutoCloseable {
 
     public void bindAndPublish(CompanionLaunchConfiguration configuration) throws IOException {
         Objects.requireNonNull(configuration, "configuration");
-        this.server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+        this.server.bind(sessionAddress(0));
         InetSocketAddress address = (InetSocketAddress) this.server.getLocalAddress();
         if (!address.getAddress().isLoopbackAddress()) {
             close();
@@ -69,6 +68,10 @@ public final class CompanionSession implements AutoCloseable {
         }
         new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid())
                 .writeAtomically(configuration.sessionDescriptor());
+    }
+
+    static InetSocketAddress sessionAddress(int port) {
+        return new InetSocketAddress("127.0.0.1", port);
     }
 
     public Server server() {

@@ -11,8 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -74,7 +72,7 @@ class CompanionSessionRejectionTest {
                 }
             });
 
-            assertTrue(client.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), descriptor.port())));
+            assertTrue(client.connect(CompanionSession.sessionAddress(descriptor.port())));
             TestServerHello rejection = response.get(2, TimeUnit.SECONDS);
             assertFalse(rejection.accepted);
             assertEquals("Authentication token rejected", rejection.reason);
@@ -120,7 +118,7 @@ class CompanionSessionRejectionTest {
                 }
             });
 
-            assertTrue(client.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), descriptor.port())));
+            assertTrue(client.connect(CompanionSession.sessionAddress(descriptor.port())));
             TestServerHello accepted = response.get(2, TimeUnit.SECONDS);
             assertTrue(accepted.accepted);
             assertTrue(session.markUiReady());
