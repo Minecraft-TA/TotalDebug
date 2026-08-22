@@ -32,8 +32,7 @@ class LanguageResourcesTest {
             "companion_app.download_progress",
             "companion_app.open_file",
             "companion_app.dumping_minecraft_classes",
-            "companion_app.start_indexing",
-            "companion_app.toast.title"
+            "companion_app.start_indexing"
     );
 
     @Test

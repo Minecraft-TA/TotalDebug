@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client;
 
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
-import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressToast;
+import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
 import com.github.minecraft_ta.totaldebug.client.decompile.ClientDecompilationService;
 import com.github.minecraft_ta.totaldebug.client.decompile.DecompilationRequest;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
@@ -29,7 +29,7 @@ public final class TotalDebugClient {
                 .toAbsolutePath()
                 .normalize();
         CompanionAppClient companionApp = new CompanionAppClient(totalDebugDirectory);
-        companionApp.setProgressListener(progress -> CompanionProgressToast.show(Minecraft.getInstance(), progress));
+        companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.decompilation = new ClientDecompilationService(companionApp);
         this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {
             @Override

@@ -31,6 +31,5 @@
   "companion_app.download_progress": "Downloading %s... %s%%",
   "companion_app.open_file": "Opening %s...",
   "companion_app.dumping_minecraft_classes": "Dumping Minecraft classes...",
-  "companion_app.start_indexing": "Indexing classes...",
-  "companion_app.toast.title": "TotalDebug Companion"
+  "companion_app.start_indexing": "Indexing classes..."
 }
