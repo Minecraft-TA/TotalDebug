@@ -104,6 +104,8 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    addModdingDependenciesTo sourceSets.test
 }
 
 // Sets up a dependency configuration called 'localRuntime'.

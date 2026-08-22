@@ -2,6 +2,8 @@
 
 This file is the audit ledger for the NeoForge port. A row is only marked complete when its implementation and listed verification gates are complete. Legacy sources under `legacy/` are references, not production source sets.
 
+Small commits use focused unit tests and `gradlew build`. Expensive client/server smoke runs happen once at a phase boundary or when a change touches runtime-only behavior, not after every foundation commit.
+
 ## Fixed decisions
 
 - Target Minecraft 1.21.1 and NeoForge 21.1.x in a single module.
@@ -17,7 +19,7 @@ This file is the audit ledger for the NeoForge port. A row is only marked comple
 |---|---|---|---|
 | S0 | Clean NeoForge foundation | Complete | Single-module MDK; `gradlew build` passes; commits `7504de6`, `bcbd0f3` |
 | F1 | Mod core and tick task lifecycle | Complete | Version identity, isolated client/server pre/post queues, lifecycle cleanup, and unit tests |
-| F2a | Configuration | Not started | Add NeoForge client/server config specs for retained features |
+| F2a | Configuration | Complete | Separate client/server specs; retained defaults and packet-class validation are tested |
 | F2b | Minecraft networking | Not started | Establish typed payload registration; payloads remain owned by their feature slices |
 | F2c | Core resources and libraries | Not started | Convert core language resources and verify bundled dependency metadata |
 | F3 | Runtime class and bytecode access | Research | Prove loaded-class enumeration, runtime bytes, JAR inventory, and compiler classpath separately |
@@ -45,7 +47,7 @@ This file is the audit ledger for the NeoForge port. A row is only marked comple
 |---|---|---|---|
 | S0 | Clean NeoForge build and searchable legacy references | `gradlew build` | Complete |
 | S1 | F1 mod identity, sided tick lifecycle, and task queues | Unit tests, `gradlew build`, client launch, dedicated-server launch | Complete |
-| S2 | F2a retained NeoForge configuration | Config tests, `gradlew build`, client/server config load | Planned |
+| S2 | F2a retained NeoForge configuration | Config tests, `gradlew build`, generated client config inspection | Complete |
 | S3 | F2b typed networking foundation | Codec/registration tests where practical, `gradlew build`, client/server connection | Planned |
 | S4 | F2c language resources and bundled core libraries | Resource validation, dependency report, final JAR inspection, `gradlew build` | Planned |
 
@@ -67,3 +69,4 @@ The look-at/hover keybind, additional command targets, search, indexing, and scr
 |---|---|---|
 | 2026-08-22 | S0 | `gradlew build` passed on Java 21; runtime client/server smoke checks remain to be recorded with S1 |
 | 2026-08-22 | S1 | 4 scheduler tests and `gradlew build` passed; client completed resource loading; dedicated server reached `Done` without client-class loading errors |
+| 2026-08-22 | S2 | 3 config tests and `gradlew build` passed; generated client TOML contains the retained client defaults |

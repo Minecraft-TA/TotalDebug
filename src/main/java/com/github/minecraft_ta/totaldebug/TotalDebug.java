@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug;
 
 import com.mojang.logging.LogUtils;
+import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -30,6 +31,7 @@ public final class TotalDebug {
                 .getVersion()
                 .toString();
         this.tickTaskScheduler = new TickTaskScheduler();
+        TotalDebugConfig.register(modContainer);
 
         LOGGER.info("Initializing TotalDebug {}", this.version);
     }
