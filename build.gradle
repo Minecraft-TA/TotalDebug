@@ -27,11 +27,10 @@ sourceSets.main.resources {
 }
 
 repositories {
-    mavenCentral()
-    maven {
-        name = 'JitPack'
-        url = uri('https://jitpack.io')
+    if (providers.gradleProperty('useMavenLocal').orNull == 'true') {
+        mavenLocal()
     }
+    mavenCentral()
     maven {
         name = 'tth05 package repository'
         url = uri('https://packagecloud.io/tth05/repo/maven2')
@@ -133,10 +132,10 @@ configurations {
 
 dependencies {
     def embeddedLibraries = [
-            "com.github.Pelotrio:SCNet:${scnet_version}",
+            "com.github.tth05:SCNet:${scnet_version}",
             "io.github.classgraph:classgraph:${classgraph_version}",
             "org.vineflower:vineflower:${vineflower_version}:slim",
-            "com.github.Pelotrio:JIndex:${jindex_version}",
+            "com.github.tth05:jindex:${jindex_version}",
     ]
     embeddedLibraries.each { library ->
         implementation library
