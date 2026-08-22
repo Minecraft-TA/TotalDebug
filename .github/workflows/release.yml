@@ -11,25 +11,20 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up JDK 17
-        uses: actions/setup-java@v1.4.4
+      - uses: actions/checkout@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
         with:
-          distribution: 'adopt'
-          java-version: '17'
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
       - name: Build with Gradle
-        run: ./gradlew.bat shadowJar runtime
-      - uses: papeloto/action-zip@v1.1
-        with:
-          files: build/image build/libs
-          dest: TotalDebugCompanion.zip
-          recursive: true
+        shell: pwsh
+        run: |
+          $releaseVersion = '${{ github.ref_name }}' -replace '^v', ''
+          ./gradlew.bat --no-daemon clean build "-PreleaseVersion=$releaseVersion"
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: TotalDebugCompanion.zip
+          files: build/libs/TotalDebugCompanion.jar
           fail_on_unmatched_files: true
-          body: |
-            Changes in this Release
-            - 1.7.10 release

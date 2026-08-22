@@ -1,11 +1,10 @@
 plugins {
     id 'java'
-    id 'application'
     id 'com.gradleup.shadow' version '9.6.1'
 }
 
 group = "com.github.minecraft_ta"
-version = "1.9.0"
+version = providers.gradleProperty('releaseVersion').orElse('2.0.0-SNAPSHOT').get()
 
 repositories {
     mavenCentral()
@@ -42,10 +41,6 @@ java {
     }
 }
 
-application {
-    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.CompanionApp'
-}
-
 tasks.withType(JavaCompile).configureEach {
     options.release = 21
     options.encoding = 'UTF-8'
@@ -65,7 +60,7 @@ tasks.named('shadowJar') {
     failOnDuplicateEntries = true
     exclude 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.SF'
     manifest {
-        attributes 'Main-Class': application.mainClass.get()
+        attributes 'Main-Class': 'com.github.minecraft_ta.totalDebugCompanion.CompanionApp'
     }
 }
 
