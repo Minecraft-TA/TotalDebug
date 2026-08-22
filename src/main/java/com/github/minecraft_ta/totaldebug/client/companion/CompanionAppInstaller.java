@@ -20,7 +20,7 @@ public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
     public static final String COMPANION_VERSION = "2.0.0";
     public static final String DISTRIBUTION_SHA256 =
-            "106a19a8785c2bb9b53c2055bc9a2f28a39dcb305c45f709bee9ece647a000da";
+            "b08ca610ed34db6543522102fea9316d3d1975521083f82886af7cd229db6fd0";
 
     private static final URI DISTRIBUTION_URI = URI.create(
             "https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/v"

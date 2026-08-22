@@ -12,7 +12,6 @@ import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -241,7 +240,7 @@ public final class CompanionAppClient implements AutoCloseable {
 
         try {
             CompanionSessionDescriptor descriptor = startInstalledCompanion();
-            InetSocketAddress address = new InetSocketAddress(InetAddress.getLoopbackAddress(), descriptor.port());
+            InetSocketAddress address = sessionAddress(descriptor.port());
             if (!this.client.connect(address)) {
                 throw new IOException("Unable to connect to the exact Companion child at " + address);
             }
@@ -256,6 +255,10 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             throw exception;
         }
+    }
+
+    static InetSocketAddress sessionAddress(int port) {
+        return new InetSocketAddress("127.0.0.1", port);
     }
 
     private CompanionSessionDescriptor startInstalledCompanion() throws IOException {
