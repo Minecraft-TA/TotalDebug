@@ -27,8 +27,6 @@ import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
 
-    private static final SearchEverywherePopup INSTANCE = new SearchEverywherePopup();
-
     private final JList<IndexedClass> resultList = new JList<>(new DefaultListModel<>());
     {
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -140,9 +138,9 @@ public class SearchEverywherePopup extends JFrame {
         searchTextField.registerKeyboardAction((e) -> resultList.setSelectedIndex(Math.max(0, resultList.getSelectedIndex() - 1)), KeyStroke.getKeyStroke("UP"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         searchTextField.registerKeyboardAction((e) -> resultList.setSelectedIndex(Math.min(resultList.getModel().getSize() - 1, resultList.getSelectedIndex() + 1)), KeyStroke.getKeyStroke("DOWN"), JComponent.WHEN_IN_FOCUSED_WINDOW);
     }
-    public SearchEverywherePopup() {
+    SearchEverywherePopup() {
         setLayout(new BorderLayout());
-        getRootPane().registerKeyboardAction(e -> INSTANCE.setVisible(false), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        getRootPane().registerKeyboardAction(e -> setVisible(false), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         getRootPane().registerKeyboardAction(e -> openClass(resultList.getSelectedIndex()), KeyStroke.getKeyStroke("ENTER"), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         add(this.searchTextField, BorderLayout.NORTH);
@@ -155,22 +153,22 @@ public class SearchEverywherePopup extends JFrame {
         addWindowFocusListener(new WindowAdapter() {
             @Override
             public void windowLostFocus(WindowEvent e) {
-                INSTANCE.setVisible(false);
+                setVisible(false);
             }
         });
     }
 
-    public static void open() {
-        if (INSTANCE.isVisible()) {
-            INSTANCE.toFront();
+    void open() {
+        if (isVisible()) {
+            toFront();
             return;
         }
 
-        INSTANCE.setVisible(true);
-        UIUtils.centerJFrame(INSTANCE);
+        setVisible(true);
+        UIUtils.centerJFrame(this);
 
-        INSTANCE.searchTextField.grabFocus();
-        INSTANCE.searchTextField.selectAll();
+        this.searchTextField.grabFocus();
+        this.searchTextField.selectAll();
     }
 
     private void openClass(int index) {

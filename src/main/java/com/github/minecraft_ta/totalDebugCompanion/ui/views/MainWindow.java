@@ -24,6 +24,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final EditorTabs editorTabs = new EditorTabs();
 
     private long lastShiftReleasedTime = 0;
+    private SearchEverywherePopup searchEverywherePopup;
 
     private MainWindow() {
         var root = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -110,7 +111,10 @@ public class MainWindow extends JFrame implements AWTEventListener {
         }
 
         this.lastShiftReleasedTime = 0;
-        SearchEverywherePopup.open();
+        if (this.searchEverywherePopup == null) {
+            this.searchEverywherePopup = new SearchEverywherePopup();
+        }
+        this.searchEverywherePopup.open();
     }
 
     public EditorTabs getEditorTabs() {
