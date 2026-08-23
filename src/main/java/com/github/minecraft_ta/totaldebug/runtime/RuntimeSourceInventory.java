@@ -6,18 +6,23 @@ import java.io.IOException;
 import java.lang.module.ResolvedModule;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
-/** Discovers physical JARs and class directories visible to the running game. */
+/** Discovers physical JARs and class directories in runtime ownership order. */
 public final class RuntimeSourceInventory {
     private RuntimeSourceInventory() {
     }
@@ -36,8 +41,12 @@ public final class RuntimeSourceInventory {
             addModuleLayerSources(sources, anchor.getModule().getLayer(), visitedLayers);
             addCodeSource(sources, anchor);
         }
-        addJavaClasspathSources(sources);
+        addJavaClasspathSources(sources, anchors);
 
+        return existingSources(sources);
+    }
+
+    static List<Path> existingSources(Set<Path> sources) throws IOException {
         List<Path> existingSources = new ArrayList<>();
         for (Path source : sources) {
             if (!Files.exists(source)) {
@@ -47,7 +56,6 @@ public final class RuntimeSourceInventory {
                 existingSources.add(source);
             }
         }
-        existingSources.sort(Comparator.comparing(Path::toString));
         return List.copyOf(existingSources);
     }
 
@@ -78,16 +86,80 @@ public final class RuntimeSourceInventory {
         }
     }
 
-    private static void addJavaClasspathSources(Set<Path> sources) {
+    private static void addJavaClasspathSources(Set<Path> sources, Class<?>... anchors) throws IOException {
         String classpath = System.getProperty("java.class.path", "");
         if (classpath.isBlank()) {
             return;
         }
+        List<Path> classpathSources = new ArrayList<>();
         for (String entry : classpath.split(java.io.File.pathSeparator)) {
             if (!entry.isBlank()) {
-                sources.add(Path.of(entry).toAbsolutePath().normalize());
+                classpathSources.add(Path.of(entry));
             }
         }
+        addClasspathSources(sources, classpathSources, anchors);
+    }
+
+    static void addClasspathSources(
+            Set<Path> sources,
+            List<Path> classpathSources,
+            Class<?>... anchors
+    ) throws IOException {
+        Set<String> anchorEntries = new HashSet<>();
+        Arrays.stream(anchors)
+                .map(anchor -> anchor.getName().replace('.', '/') + ".class")
+                .forEach(anchorEntries::add);
+        Set<String> ownedAnchorEntries = new HashSet<>();
+        for (Path source : sources) {
+            ownedAnchorEntries.addAll(containedEntries(source, anchorEntries));
+        }
+
+        for (Path source : classpathSources) {
+            Path normalized = source.toAbsolutePath().normalize();
+            if (sources.contains(normalized)) {
+                continue;
+            }
+            Set<String> containedAnchorEntries = containedEntries(normalized, anchorEntries);
+            if (containedAnchorEntries.stream().anyMatch(ownedAnchorEntries::contains)) {
+                continue;
+            }
+            sources.add(normalized);
+            ownedAnchorEntries.addAll(containedAnchorEntries);
+        }
+    }
+
+    private static Set<String> containedEntries(Path source, Set<String> candidates) throws IOException {
+        Set<String> contained = new HashSet<>();
+        if (Files.isDirectory(source)) {
+            for (String candidate : candidates) {
+                if (Files.isRegularFile(source.resolve(candidate))) {
+                    contained.add(candidate);
+                }
+            }
+            return contained;
+        }
+        if (!isJar(source)) {
+            return contained;
+        }
+        if (source.getFileSystem() == FileSystems.getDefault()) {
+            try (ZipFile zip = new ZipFile(source.toFile())) {
+                for (String candidate : candidates) {
+                    if (zip.getEntry(candidate) != null) {
+                        contained.add(candidate);
+                    }
+                }
+            }
+            return contained;
+        }
+        try (ZipInputStream input = new ZipInputStream(Files.newInputStream(source))) {
+            ZipEntry entry;
+            while ((entry = input.getNextEntry()) != null && contained.size() < candidates.size()) {
+                if (!entry.isDirectory() && candidates.contains(entry.getName())) {
+                    contained.add(entry.getName());
+                }
+            }
+        }
+        return contained;
     }
 
     private static void addCodeSource(Set<Path> sources, Class<?> anchor) throws IOException {

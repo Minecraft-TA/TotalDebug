@@ -41,6 +41,7 @@ public final class InMemoryJavaCompiler {
                 StandardCharsets.UTF_8
         ); InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(standardFileManager)) {
             List<String> options = new ArrayList<>();
+            options.add("-proc:none");
             if (!classpath.isBlank()) {
                 options.add("-classpath");
                 options.add(classpath);

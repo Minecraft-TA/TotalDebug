@@ -1,0 +1,50 @@
+package com.github.minecraft_ta.totaldebug.runtime;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class RuntimeSourceInventoryTest {
+    @TempDir
+    Path temporaryDirectory;
+
+    @Test
+    void preservesRuntimeDiscoveryPrecedence() throws Exception {
+        Path first = Files.createFile(this.temporaryDirectory.resolve("z-authoritative.jar"));
+        Path second = Files.createFile(this.temporaryDirectory.resolve("a-shadow.jar"));
+
+        List<Path> sources = RuntimeSourceInventory.existingSources(new LinkedHashSet<>(List.of(first, second)));
+
+        assertEquals(List.of(first, second), sources);
+    }
+
+    @Test
+    void excludesAClasspathDistributionThatShadowsAnAlreadyOwnedAnchor() throws Exception {
+        Path authoritative = jar("authoritative.jar", "java/lang/String.class");
+        Path shadow = jar("shadow.jar", "java/lang/String.class");
+        Path unique = jar("unique.jar", "example/Unique.class");
+        LinkedHashSet<Path> sources = new LinkedHashSet<>(List.of(authoritative));
+
+        RuntimeSourceInventory.addClasspathSources(sources, List.of(shadow, unique), String.class);
+
+        assertEquals(List.of(authoritative, unique), List.copyOf(sources));
+    }
+
+    private Path jar(String fileName, String entryName) throws Exception {
+        Path jar = this.temporaryDirectory.resolve(fileName);
+        try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(jar))) {
+            output.putNextEntry(new ZipEntry(entryName));
+            output.write(new byte[]{1});
+            output.closeEntry();
+        }
+        return jar;
+    }
+}
