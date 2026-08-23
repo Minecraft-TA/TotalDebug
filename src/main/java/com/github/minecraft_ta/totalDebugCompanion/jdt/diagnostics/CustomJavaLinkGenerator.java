@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -14,7 +15,6 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.event.HyperlinkEvent;
-import java.util.Arrays;
 
 public class CustomJavaLinkGenerator implements LinkGenerator {
 
@@ -29,19 +29,11 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     @Override
     public LinkGeneratorResult isLinkAtOffset(RSyntaxTextArea textArea, int offs) {
         try {
-            var fromCache = ASTCache.getFromCache(this.identifier);
-            if (fromCache == null)
-                return null;
-
-            var elements = fromCache.getTypeRoot().codeSelect(offs, 0);
-            if (elements == null || elements.length == 0)
-                return null;
-            if (elements.length > 1) {
-                System.err.println("Multiple elements found at offset " + offs + ": " + Arrays.toString(elements));
+            IJavaElement element = JavaSymbolResolver.selectElement(this.identifier, offs);
+            if (element == null) {
                 return null;
             }
-
-            return new LinkResult(textArea, elements[0], offs);
+            return new LinkResult(textArea, element, offs);
         } catch (JavaModelException e) {
             e.printStackTrace();
             return null;

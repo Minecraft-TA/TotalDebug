@@ -15,6 +15,7 @@ import org.eclipse.jdt.core.dom.*;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -64,12 +65,10 @@ public class DecompileOrOpenMessage extends AbstractMessage {
         if (message.targetType != -1) {
             var ast = ASTCache.rawParse(CU_NAME, CodeView.readCode(filePath));
             var firstType = ast.types().get(0);
-            if (!(firstType instanceof TypeDeclaration) && !(firstType instanceof EnumDeclaration)) {
+            if (!(firstType instanceof AbstractTypeDeclaration type)) {
                 System.err.println("Failed to get type declaration");
                 return;
             }
-
-            var type = (AbstractTypeDeclaration) firstType;
 
             if (message.targetType == IJavaElement.METHOD) {
                 var isDefaultConstructor = message.targetIdentifier.equals("()V");
@@ -119,13 +118,21 @@ public class DecompileOrOpenMessage extends AbstractMessage {
     }
 
     private static OptionalInt findTargetField(DecompileOrOpenMessage message, AbstractTypeDeclaration type) {
-        var declarations = type instanceof TypeDeclaration ? type.bodyDeclarations() : ((EnumDeclaration) type).enumConstants();
-        //noinspection unchecked
+        List<Object> declarations = new ArrayList<>(type.bodyDeclarations());
+        if (type instanceof EnumDeclaration enumDeclaration) {
+            declarations.addAll(enumDeclaration.enumConstants());
+        } else if (type instanceof RecordDeclaration recordDeclaration) {
+            declarations.addAll(recordDeclaration.recordComponents());
+        }
         return declarations.stream()
-                .filter(decl -> decl instanceof FieldDeclaration || decl instanceof EnumConstantDeclaration)
+                .filter(decl -> decl instanceof FieldDeclaration
+                        || decl instanceof EnumConstantDeclaration
+                        || decl instanceof SingleVariableDeclaration)
                 .filter(decl -> {
                     if (decl instanceof EnumConstantDeclaration enumConstant) {
                         return enumConstant.getName().getIdentifier().equals(message.targetIdentifier);
+                    } else if (decl instanceof SingleVariableDeclaration recordComponent) {
+                        return recordComponent.getName().getIdentifier().equals(message.targetIdentifier);
                     } else {
                         FieldDeclaration field = (FieldDeclaration) decl;
                         //noinspection unchecked
@@ -134,6 +141,8 @@ public class DecompileOrOpenMessage extends AbstractMessage {
                 }).mapToInt(decl -> {
                     if (decl instanceof EnumConstantDeclaration enumConstant)
                         return enumConstant.getStartPosition();
+                    else if (decl instanceof SingleVariableDeclaration recordComponent)
+                        return recordComponent.getStartPosition();
                     else
                         return ((FieldDeclaration) decl).getStartPosition();
                 }).findFirst();

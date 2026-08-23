@@ -2,8 +2,10 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
@@ -13,15 +15,16 @@ import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.IndexedMethod;
 import org.eclipse.jdt.core.JavaModelException;
-import org.eclipse.jdt.internal.core.SourceMethod;
-import org.eclipse.jdt.internal.core.SourceType;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.swing.*;
 import javax.swing.text.TextAction;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
-import java.util.Arrays;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 public class CodeViewPanel extends AbstractCodeViewPanel {
 
@@ -53,6 +56,38 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         this.editorPane.getActionMap().put(FindImplementationsAction.KEY, new FindImplementationsAction());
         this.editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl T"), FindImplementationsAction.KEY);
         this.editorPane.getCaret().addChangeListener(e -> FIND_IMPLEMENTATIONS_POPUP.setVisible(false));
+
+        var findUsagesAction = new FindUsagesAction();
+        this.editorPane.getActionMap().put(FindUsagesAction.KEY, findUsagesAction);
+        this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK),
+                FindUsagesAction.KEY
+        );
+        var popupMenu = this.editorPane.getPopupMenu();
+        popupMenu.addSeparator();
+        var findUsagesItem = popupMenu.add(findUsagesAction);
+        findUsagesItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK));
+        this.editorPane.addMouseListener(new MouseAdapter() {
+            private void moveCaretToPopup(MouseEvent event) {
+                if (!event.isPopupTrigger()) {
+                    return;
+                }
+                int offset = editorPane.viewToModel2D(event.getPoint());
+                if (offset >= 0) {
+                    editorPane.setCaretPosition(offset);
+                }
+            }
+
+            @Override
+            public void mousePressed(MouseEvent event) {
+                moveCaretToPopup(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                moveCaretToPopup(event);
+            }
+        });
 
         //Stop search thread if the tab is closed
         addHierarchyListener(e -> {
@@ -97,64 +132,82 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             var textArea = (RSyntaxTextArea) getTextComponent(event);
 
             try {
-                var fromCache = ASTCache.getFromCache(identifier);
-                if (fromCache == null)
-                    return;
-
                 var offset = textArea.getCaretPosition();
-                var elements = fromCache.getTypeRoot().codeSelect(offset, 0);
-                if (elements == null || elements.length == 0)
-                    return;
-                if (elements.length > 1) {
-                    System.err.println("Multiple elements found at offset " + offset + ": " + Arrays.toString(elements));
+                var resolution = JavaSymbolResolver.resolve(identifier, offset);
+                if (!resolution.isResolved()) {
+                    bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
                     return;
                 }
 
-                var el = elements[0];
-                if (el.getClass() == SourceMethod.class || el.getClass() == SourceType.class) {
-                    switch (el) {
-                        case SourceMethod sr -> {
-                            var className = CodeUtils.splitTypeName(sr.getDeclaringType().getFullyQualifiedName());
-                            var declaringClass = CompanionClassIndex.get().findClass(className[0], className[1]);
-                            if (declaringClass == null) {
-                                System.err.println("Declaring class not found in index: " + className[0] + "." + className[1]);
-                                return;
-                            }
-
-                            var targetMethodName = sr.getElementName();
-                            if (targetMethodName.equals(declaringClass.getName()))
-                                targetMethodName = "<init>";
-
-                            var targetDescriptor = CodeUtils.minimalizeMethodIdentifier(sr.getSignature(), false);
-                            for (IndexedMethod method : declaringClass.getMethods()) {
-                                var genericSig = method.getGenericSignatureString();
-                                if (method.getName().equals(targetMethodName) &&
-                                    CodeUtils.minimalizeMethodIdentifier(genericSig != null ? genericSig : method.getDescriptorString(), true).equals(targetDescriptor)) {
-                                    FIND_IMPLEMENTATIONS_POPUP.setItems(method);
-                                    FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
-                                    return;
-                                }
-                            }
-
-                            System.err.println("Method not found in declaring class: " + declaringClass + " " + sr.getSignature());
+                switch (resolution.symbol()) {
+                    case CodeSymbol.ClassSymbol type -> {
+                        var indexedClass = findIndexedClass(type.className());
+                        if (indexedClass == null) {
+                            bottomInformationBar.setFailureInfoText("Class is not present in the runtime index");
+                            return;
                         }
-                        case SourceType st -> {
-                            var className = CodeUtils.splitTypeName(st.getFullyQualifiedName());
-                            var indexedClass = CompanionClassIndex.get().findClass(className[0], className[1]);
-                            if (indexedClass == null) {
-                                System.err.println("Class not found in index: " + st.getFullyQualifiedName());
-                                return;
-                            }
-
-                            FIND_IMPLEMENTATIONS_POPUP.setItems(indexedClass);
-                            FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
-                        }
-                        default -> {}
+                        FIND_IMPLEMENTATIONS_POPUP.setItems(indexedClass);
+                        FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
                     }
+                    case CodeSymbol.MethodSymbol target -> showMethodImplementations(target);
+                    case CodeSymbol.FieldSymbol ignored ->
+                            bottomInformationBar.setDefaultInfoText("Fields do not have implementations");
                 }
             } catch (JavaModelException e) {
                 e.printStackTrace();
+                bottomInformationBar.setFailureInfoText("Unable to resolve the selected Java symbol");
             }
         }
+
+        private void showMethodImplementations(CodeSymbol.MethodSymbol target) {
+            var declaringClass = findIndexedClass(target.ownerClassName());
+            if (declaringClass == null) {
+                bottomInformationBar.setFailureInfoText("Declaring class is not present in the runtime index");
+                return;
+            }
+            for (IndexedMethod method : declaringClass.getMethods()) {
+                if (method.getName().equals(target.name())
+                        && method.getDescriptorString().equals(target.descriptor())) {
+                    FIND_IMPLEMENTATIONS_POPUP.setItems(method);
+                    FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
+                    return;
+                }
+            }
+            bottomInformationBar.setFailureInfoText("Method is not present in the runtime index");
+        }
+    }
+
+    private class FindUsagesAction extends AbstractAction {
+        private static final String KEY = "findUsages";
+
+        private FindUsagesAction() {
+            super("Find Usages");
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            try {
+                var resolution = JavaSymbolResolver.resolve(identifier, editorPane.getCaretPosition());
+                if (!resolution.isResolved()) {
+                    bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
+                    return;
+                }
+
+                CodeSymbol symbol = resolution.symbol();
+                MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
+                        UsagesView.class,
+                        view -> view.symbol().equals(symbol),
+                        () -> new UsagesView(symbol)
+                ).thenAccept(UsagesView::restartSearch);
+            } catch (JavaModelException exception) {
+                exception.printStackTrace();
+                bottomInformationBar.setFailureInfoText("Unable to resolve the selected Java symbol");
+            }
+        }
+    }
+
+    private static com.github.tth05.jindex.IndexedClass findIndexedClass(String binaryName) {
+        var className = CodeUtils.splitTypeName(binaryName);
+        return CompanionClassIndex.get().findClass(className[0], className[1]);
     }
 }

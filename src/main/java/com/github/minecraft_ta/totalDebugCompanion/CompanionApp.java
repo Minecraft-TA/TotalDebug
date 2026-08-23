@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
+import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
@@ -29,9 +30,11 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.awt.Window;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -39,6 +42,7 @@ public final class CompanionApp {
     public static Server SERVER;
     private static CompanionSession session;
     private static CompanionLaunchConfiguration configuration;
+    private static ReferenceSearchService referenceSearchService;
     private static volatile boolean uiStarted;
 
     private CompanionApp() {
@@ -52,7 +56,8 @@ public final class CompanionApp {
         try {
             Objects.requireNonNull(timeouts, "timeouts");
             configuration = CompanionLaunchConfiguration.parse(args, environment);
-            validatePaths(configuration);
+            List<Path> runtimeSources = validatePaths(configuration);
+            referenceSearchService = new ReferenceSearchService(runtimeSources);
             GlobalConfig.getInstance().loadFrom(configuration.dataDirectory());
 
             session = new CompanionSession(configuration.consumeSessionToken());
@@ -77,6 +82,7 @@ public final class CompanionApp {
             stopUi();
             GlobalConfig.getInstance().saveNow();
             session.close();
+            closeReferenceSearchService();
             CompanionClassIndex.close();
             return 0;
         } catch (Throwable throwable) {
@@ -86,17 +92,18 @@ public final class CompanionApp {
             if (session != null) {
                 session.close();
             }
+            closeReferenceSearchService();
             CompanionClassIndex.close();
             return 1;
         }
     }
 
-    private static void validatePaths(CompanionLaunchConfiguration launchConfiguration) throws IOException {
+    private static List<Path> validatePaths(CompanionLaunchConfiguration launchConfiguration) throws IOException {
         Files.createDirectories(launchConfiguration.dataDirectory());
         if (!Files.isRegularFile(launchConfiguration.indexFile())) {
             throw new IOException("Class index does not exist: " + launchConfiguration.indexFile());
         }
-        RuntimeSourceManifest.read(launchConfiguration.runtimeSourceManifest());
+        List<Path> runtimeSources = RuntimeSourceManifest.read(launchConfiguration.runtimeSourceManifest());
         if (!Files.isDirectory(launchConfiguration.workspaceDirectory())) {
             throw new IOException("Minecraft workspace does not exist: " + launchConfiguration.workspaceDirectory());
         }
@@ -104,6 +111,7 @@ public final class CompanionApp {
         if (descriptorParent == null || !Files.isDirectory(descriptorParent)) {
             throw new IOException("Session directory does not exist: " + descriptorParent);
         }
+        return runtimeSources;
     }
 
     /**
@@ -112,6 +120,13 @@ public final class CompanionApp {
      */
     static void configureWithoutSession(CompanionLaunchConfiguration launchConfiguration) {
         configuration = launchConfiguration;
+        try {
+            referenceSearchService = new ReferenceSearchService(
+                    RuntimeSourceManifest.read(launchConfiguration.runtimeSourceManifest())
+            );
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Unable to configure runtime reference search", exception);
+        }
     }
 
     static void configureLookAndFeel() {
@@ -229,6 +244,22 @@ public final class CompanionApp {
 
     public static Path getWorkspaceDirectory() {
         return requireConfiguration().workspaceDirectory();
+    }
+
+    public static ReferenceSearchService getReferenceSearchService() {
+        ReferenceSearchService service = referenceSearchService;
+        if (service == null) {
+            throw new IllegalStateException("Reference-search service is not initialized");
+        }
+        return service;
+    }
+
+    private static void closeReferenceSearchService() {
+        ReferenceSearchService service = referenceSearchService;
+        referenceSearchService = null;
+        if (service != null) {
+            service.close();
+        }
     }
 
     private static CompanionLaunchConfiguration requireConfiguration() {
