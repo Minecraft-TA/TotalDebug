@@ -16,6 +16,19 @@ public final class CompanionClassIndex {
         classIndex = ClassIndex.fromFile(Objects.requireNonNull(indexFile, "indexFile").toString());
     }
 
+    public static synchronized void replace(Path indexFile) {
+        ClassIndex replacement = ClassIndex.fromFile(Objects.requireNonNull(indexFile, "indexFile").toString());
+        ClassIndex previous = classIndex;
+        classIndex = replacement;
+        if (previous != null) {
+            previous.close();
+        }
+    }
+
+    public static boolean isOpen() {
+        return classIndex != null;
+    }
+
     static synchronized void initialize(ClassIndex index) {
         ensureUninitialized();
         classIndex = Objects.requireNonNull(index, "index");

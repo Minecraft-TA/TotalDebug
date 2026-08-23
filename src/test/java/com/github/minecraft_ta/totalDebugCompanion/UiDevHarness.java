@@ -2,9 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -21,7 +21,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -210,19 +209,16 @@ public final class UiDevHarness {
         );
         Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
 
-        // Literal argument names rather than the package-private CompanionLaunchContract constants;
-        // CompanionLaunchContractTest is what stops these drifting.
-        CompanionLaunchConfiguration configuration = CompanionLaunchConfiguration.parse(
-                new String[]{
-                        "--data-directory", root.toString(),
-                        "--index-file", indexFile.toString(),
-                        "--workspace-directory", workspace.toString(),
-                        "--session-descriptor", root.resolve("session.properties").toString()
-                },
-                Map.of("TOTALDEBUG_SESSION_TOKEN", "harness-token-that-is-long-enough-0123456789")
+        CompanionProfile profile = new CompanionProfile(
+                "ui-dev",
+                root,
+                indexFile,
+                workspace,
+                runtimeSources,
+                "ui-dev",
+                CompanionProtocol.SUPPORTED_CAPABILITIES
         );
-        CompanionApp.configureWithoutSession(configuration);
-        CompanionClassIndex.open(indexFile);
+        CompanionApp.configureWithoutSession(profile);
 
         GlobalConfig.getInstance().loadFrom(root);
         var positionalArguments = Arrays.stream(args).filter(argument -> !argument.startsWith("--")).toList();

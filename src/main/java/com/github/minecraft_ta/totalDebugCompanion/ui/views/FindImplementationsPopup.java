@@ -166,7 +166,7 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
             if (!checkConnection())
                 return;
 
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(indexedClass.getNameWithPackageDot()));
+            CompanionApp.send(new DecompileOrOpenMessage(indexedClass.getNameWithPackageDot()));
         }
 
         @Override
@@ -198,7 +198,7 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
             if (!checkConnection())
                 return;
 
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(
+            CompanionApp.send(new DecompileOrOpenMessage(
                     indexedMethod.getDeclaringClass().getNameWithPackageDot(),
                     IJavaElement.METHOD,
                     indexedMethod.getName() + indexedMethod.getDescriptorString())

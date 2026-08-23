@@ -174,6 +174,15 @@ public class LazyFileJTree extends JTree {
         });
     }
 
+    public void setRootNodes(DirectoryTreeItem... roots) {
+        LazyTreeNode hiddenRoot = (LazyTreeNode) getModel().getRoot();
+        hiddenRoot.removeAllChildren();
+        for (DirectoryTreeItem root : roots) {
+            hiddenRoot.add(new LazyTreeNode(root));
+        }
+        getModel().nodeStructureChanged(hiddenRoot);
+    }
+
     static int compareTreeItems(TreeItem first, TreeItem second) {
         int directoryOrder = Boolean.compare(second.isDirectory(), first.isDirectory());
         if (directoryOrder != 0) {

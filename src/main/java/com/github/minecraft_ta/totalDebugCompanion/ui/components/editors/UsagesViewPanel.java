@@ -261,7 +261,7 @@ public final class UsagesViewPanel extends JPanel {
             this.statusLabel.setText("Not connected to the game client");
             return;
         }
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(
+        CompanionApp.send(
                 ReferenceNavigationTarget.from(usage.location()).toMessage()
         );
     }

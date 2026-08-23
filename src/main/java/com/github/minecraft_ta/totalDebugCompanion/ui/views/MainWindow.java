@@ -25,6 +25,13 @@ public class MainWindow extends JFrame implements AWTEventListener {
     public static final MainWindow INSTANCE = new MainWindow();
 
     private final EditorTabs editorTabs = new EditorTabs();
+    private final FileTreeView fileTreeView;
+    private final JMenu toolsMenu = new JMenu("Tools");
+    private final JMenu scriptMenu = new JMenu("Script");
+    private final JLabel connectionState = new JLabel("Offline");
+    private final Action chunkGridAction;
+    private final Action packetLoggerAction;
+    private final Action newScriptAction;
 
     private long lastShiftReleasedTime = 0;
     private SearchEverywherePopup searchEverywherePopup;
@@ -42,7 +49,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
             }
         };
 
-        root.setLeftComponent(UIUtils.verticalLayout(new FileTreeViewHeader(), new FileTreeView(this.editorTabs)));
+        this.fileTreeView = new FileTreeView(this.editorTabs);
+        root.setLeftComponent(UIUtils.verticalLayout(new FileTreeViewHeader(), this.fileTreeView));
         root.setRightComponent(this.editorTabs);
         root.setBorder(BorderFactory.createEmptyBorder());
         root.setDividerSize(7);
@@ -62,39 +70,35 @@ public class MainWindow extends JFrame implements AWTEventListener {
         });
         menuBar.add(fileMenu);
 
-        var toolsMenu = new JMenu("Tools");
-        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID)) {
-            toolsMenu.add(new AbstractAction("Chunk Grid", Icons.OVERLAY_MODE) {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    ChunkGridWindow.open();
-                }
-            });
-        }
-        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER)) {
-            toolsMenu.add(new AbstractAction("Packet Logger", Icons.UP_DOWN) {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    editorTabs.focusOrCreateIfAbsent(PacketLoggerView.class, v -> true, PacketLoggerView::new);
-                }
-            });
-        }
-        if (toolsMenu.getItemCount() > 0) {
-            menuBar.add(toolsMenu);
-        }
+        this.chunkGridAction = new AbstractAction("Chunk Grid", Icons.OVERLAY_MODE) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                ChunkGridWindow.open();
+            }
+        };
+        this.packetLoggerAction = new AbstractAction("Packet Logger", Icons.UP_DOWN) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                editorTabs.focusOrCreateIfAbsent(PacketLoggerView.class, v -> true, PacketLoggerView::new);
+            }
+        };
+        this.toolsMenu.add(this.chunkGridAction);
+        this.toolsMenu.add(this.packetLoggerAction);
+        menuBar.add(this.toolsMenu);
 
-        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            var scriptMenu = new JMenu("Script");
-            scriptMenu.add(new AbstractAction("New Script", Icons.JAVA_FILE) {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    var window = new CreateScriptWindow(editorTabs);
-                    window.setVisible(true);
-                    UIUtils.centerJFrame(window);
-                }
-            });
-            menuBar.add(scriptMenu);
-        }
+        this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                var window = new CreateScriptWindow(editorTabs);
+                window.setVisible(true);
+                UIUtils.centerJFrame(window);
+            }
+        };
+        this.scriptMenu.add(this.newScriptAction);
+        menuBar.add(this.scriptMenu);
+        menuBar.add(Box.createHorizontalGlue());
+        this.connectionState.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 10));
+        menuBar.add(this.connectionState);
 
         setJMenuBar(menuBar);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -107,6 +111,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         setTitle("TotalDebug Companion");
         updateWindowIcon(ThemeManager.current());
         ThemeManager.addThemeChangeListener(this::updateWindowIcon);
+        refreshProfile();
 
         Toolkit.getDefaultToolkit().addAWTEventListener(this, AWTEvent.KEY_EVENT_MASK);
     }
@@ -130,6 +135,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
         }
 
         this.lastShiftReleasedTime = 0;
+        if (!CompanionApp.hasProfile()) {
+            return;
+        }
         if (this.searchEverywherePopup == null) {
             this.searchEverywherePopup = new SearchEverywherePopup();
         }
@@ -138,5 +146,26 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     public EditorTabs getEditorTabs() {
         return this.editorTabs;
+    }
+
+    public void refreshProfile() {
+        this.fileTreeView.reloadProfile();
+        refreshActions();
+    }
+
+    private void refreshActions() {
+        boolean chunkGrid = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID);
+        boolean packetLogger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER);
+        boolean scripts = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION);
+        this.toolsMenu.setVisible(chunkGrid || packetLogger);
+        this.chunkGridAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID));
+        this.packetLoggerAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER));
+        this.scriptMenu.setVisible(scripts);
+        this.newScriptAction.setEnabled(scripts);
+    }
+
+    public void setConnectionState(String state) {
+        this.connectionState.setText(state);
+        refreshActions();
     }
 }

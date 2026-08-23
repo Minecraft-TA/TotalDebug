@@ -99,7 +99,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                 }
 
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(className, targetMemberType, targetMemberIdentifier));
+                CompanionApp.send(new DecompileOrOpenMessage(className, targetMemberType, targetMemberIdentifier));
             } catch (JavaModelException e) {
                 e.printStackTrace();
             }

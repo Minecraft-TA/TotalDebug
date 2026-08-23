@@ -11,7 +11,6 @@ import java.util.Objects;
 public final class SessionAuthenticator {
     private final byte[] expectedToken;
     private final long supportedCapabilities;
-    private boolean completed;
 
     public SessionAuthenticator(String expectedToken, long supportedCapabilities) {
         this.expectedToken = Objects.requireNonNull(expectedToken, "expectedToken").getBytes(StandardCharsets.UTF_8);
@@ -20,13 +19,7 @@ public final class SessionAuthenticator {
 
     public synchronized ServerHelloMessage authenticate(ClientHelloMessage hello) {
         Objects.requireNonNull(hello, "hello");
-        if (this.completed) {
-            return ServerHelloMessage.rejected("Handshake already completed");
-        }
-        this.completed = true;
-
         if (hello.protocolVersion() != CompanionProtocol.VERSION) {
-            Arrays.fill(this.expectedToken, (byte) 0);
             return ServerHelloMessage.rejected(
                     "Unsupported protocol version: expected " + CompanionProtocol.VERSION
                             + ", got " + hello.protocolVersion()
@@ -34,7 +27,6 @@ public final class SessionAuthenticator {
         }
         byte[] receivedToken = hello.token().getBytes(StandardCharsets.UTF_8);
         boolean tokenMatches = MessageDigest.isEqual(this.expectedToken, receivedToken);
-        Arrays.fill(this.expectedToken, (byte) 0);
         Arrays.fill(receivedToken, (byte) 0);
         if (!tokenMatches) {
             return ServerHelloMessage.rejected("Authentication token rejected");

@@ -24,7 +24,7 @@ import java.util.function.Supplier;
 public class CreateScriptWindow extends JFrame {
 
     public CreateScriptWindow(EditorTabs editorTabs) {
-        if (!CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+        if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             throw new IllegalStateException("Script execution was not negotiated for this session");
         }
         var header = new JPanel();

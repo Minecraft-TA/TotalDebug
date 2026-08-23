@@ -19,7 +19,7 @@ public class ScriptView implements IEditorPanel {
     protected ScriptPanel scriptPanel;
 
     public ScriptView(String scriptName) {
-        if (!CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+        if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             throw new IllegalStateException("Script execution was not negotiated for this session");
         }
         this.path = CompanionApp.getRootPath().resolve("scripts").resolve(scriptName + ".java");

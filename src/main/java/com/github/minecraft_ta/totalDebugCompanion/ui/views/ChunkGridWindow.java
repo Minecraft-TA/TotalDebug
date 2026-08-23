@@ -66,7 +66,7 @@ public class ChunkGridWindow extends JFrame {
                 return;
             info.moveTo(minChunkX, minChunkZ);
             updateCoordinateTextFields(keepOffset);
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(info));
+            CompanionApp.send(new ChunkGridRequestInfoUpdateMessage(info));
         };
 
         CompanionApp.SERVER.getMessageBus().listenAlways(ChunkGridRequestInfoUpdateMessage.class, (m) -> {
@@ -117,12 +117,12 @@ public class ChunkGridWindow extends JFrame {
         this.dimensionTextField.setPreferredSize(new Dimension(42, (int) this.dimensionTextField.getPreferredSize().getHeight()));
         this.dimensionTextField.getDocument().addDocumentListener((DocumentChangeListener) e -> {
             getChunkGridRequestInfo().setDimension(TextUtils.asIntOrDefault(this.dimensionTextField.getText(), 0));
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(getChunkGridRequestInfo()));
+            CompanionApp.send(new ChunkGridRequestInfoUpdateMessage(getChunkGridRequestInfo()));
         });
         var centerOnPlayerButton = new FlatIconButton(Icons.TARGET, false);
         centerOnPlayerButton.setToolTipText("Center on player");
         centerOnPlayerButton.addActionListener(e -> {
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new UpdateFollowPlayerStateMessage(UpdateFollowPlayerStateMessage.STATE_ONCE));
+            CompanionApp.send(new UpdateFollowPlayerStateMessage(UpdateFollowPlayerStateMessage.STATE_ONCE));
         });
 
         this.bottomInputPanel.add(this.chunkXTextField);
@@ -149,7 +149,7 @@ public class ChunkGridWindow extends JFrame {
             this.dimensionTextField.setEnabled(e.getStateChange() == ItemEvent.DESELECTED);
             centerOnPlayerButton.setEnabled(e.getStateChange() == ItemEvent.DESELECTED);
 
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new UpdateFollowPlayerStateMessage(
+            CompanionApp.send(new UpdateFollowPlayerStateMessage(
                     e.getStateChange() == ItemEvent.DESELECTED ? UpdateFollowPlayerStateMessage.STATE_NONE : UpdateFollowPlayerStateMessage.STATE_FOLLOW
             ));
         });
@@ -168,7 +168,7 @@ public class ChunkGridWindow extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ReceiveDataStateMessage(false));
+                CompanionApp.send(new ReceiveDataStateMessage(false));
             }
         });
 
@@ -235,9 +235,9 @@ public class ChunkGridWindow extends JFrame {
         if (!CompanionApp.SERVER.isClientConnected())
             return;
 
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ReceiveDataStateMessage(true));
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(INSTANCE.getChunkGridRequestInfo()));
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new UpdateFollowPlayerStateMessage(UpdateFollowPlayerStateMessage.STATE_ONCE));
+        CompanionApp.send(new ReceiveDataStateMessage(true));
+        CompanionApp.send(new ChunkGridRequestInfoUpdateMessage(INSTANCE.getChunkGridRequestInfo()));
+        CompanionApp.send(new UpdateFollowPlayerStateMessage(UpdateFollowPlayerStateMessage.STATE_ONCE));
 
         INSTANCE.setVisible(true);
         UIUtils.centerJFrame(INSTANCE);
@@ -330,7 +330,7 @@ public class ChunkGridWindow extends JFrame {
 
                     this.prevCellX = cellX;
                     this.prevCellY = cellY;
-                    CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(ChunkGridPanel.this.chunkGridRequestInfo));
+                    CompanionApp.send(new ChunkGridRequestInfoUpdateMessage(ChunkGridPanel.this.chunkGridRequestInfo));
 
                     updateCoordinateTextFields(false);
                 }
@@ -410,7 +410,7 @@ public class ChunkGridWindow extends JFrame {
                     getHeight() / this.chunkRenderSize
             );
 
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChunkGridRequestInfoUpdateMessage(this.chunkGridRequestInfo));
+            CompanionApp.send(new ChunkGridRequestInfoUpdateMessage(this.chunkGridRequestInfo));
 
             generateCachedBackground();
         }

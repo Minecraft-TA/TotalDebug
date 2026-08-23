@@ -1,111 +1,55 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public final class CompanionLaunchConfiguration {
-    private final Path dataDirectory;
-    private final Path indexFile;
-    private final Path workspaceDirectory;
-    private final Path sessionDescriptor;
-    private String sessionToken;
-
-    private CompanionLaunchConfiguration(
-            Path dataDirectory,
-            Path indexFile,
-            Path workspaceDirectory,
-            Path sessionDescriptor,
-            String sessionToken
-    ) {
-        this.dataDirectory = normalize(dataDirectory);
-        this.indexFile = normalize(indexFile);
-        this.workspaceDirectory = normalize(workspaceDirectory);
-        this.sessionDescriptor = normalize(sessionDescriptor);
-        this.sessionToken = Objects.requireNonNull(sessionToken, "sessionToken");
+public record CompanionLaunchConfiguration(Path appHome) {
+    public CompanionLaunchConfiguration {
+        appHome = Objects.requireNonNull(appHome, "appHome").toAbsolutePath().normalize();
     }
 
     public static CompanionLaunchConfiguration parse(String[] arguments, Map<String, String> environment) {
         Objects.requireNonNull(arguments, "arguments");
         Objects.requireNonNull(environment, "environment");
-        if (arguments.length != 8) {
-            throw new IllegalArgumentException(
-                    "Expected explicit data, index, workspace, and session descriptor arguments"
-            );
+        if (arguments.length == 0) {
+            return new CompanionLaunchConfiguration(defaultAppHome(environment));
         }
-
-        Map<String, String> values = new LinkedHashMap<>();
-        for (int index = 0; index < arguments.length; index += 2) {
-            String name = arguments[index];
-            if (!isKnownArgument(name)) {
-                throw new IllegalArgumentException("Unknown Companion argument: " + name);
-            }
-            if (values.putIfAbsent(name, arguments[index + 1]) != null) {
-                throw new IllegalArgumentException("Duplicate Companion argument: " + name);
-            }
+        if (arguments.length != 2 || !CompanionLaunchContract.APP_HOME_ARGUMENT.equals(arguments[0])) {
+            throw new IllegalArgumentException("Expected no arguments or --app-home <path>");
         }
-        if (values.size() != 4) {
-            throw new IllegalArgumentException("All Companion session paths must be provided exactly once");
+        return new CompanionLaunchConfiguration(Path.of(arguments[1]));
+    }
+
+    public Path descriptorFile() {
+        return this.appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
+    }
+
+    public Path keyFile() {
+        return this.appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
+    }
+
+    public Path lockFile() {
+        return this.appHome.resolve(CompanionLaunchContract.INSTANCE_LOCK_FILE_NAME);
+    }
+
+    public Path profileFile() {
+        return this.appHome.resolve(CompanionLaunchContract.PROFILE_FILE_NAME);
+    }
+
+    private static Path defaultAppHome(Map<String, String> environment) {
+        String override = System.getProperty(CompanionLaunchContract.APP_HOME_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
         }
-
-        String token = environment.get(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE);
-        if (token == null || token.length() < 32) {
-            throw new IllegalArgumentException(
-                    "Missing or invalid " + CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE + " environment variable"
-            );
+        String localAppData = environment.get("LOCALAPPDATA");
+        if (localAppData != null && !localAppData.isBlank()) {
+            return Path.of(localAppData).resolve("TotalDebugCompanion");
         }
-
-        return new CompanionLaunchConfiguration(
-                Path.of(values.get(CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT)),
-                Path.of(values.get(CompanionLaunchContract.INDEX_FILE_ARGUMENT)),
-                Path.of(values.get(CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT)),
-                Path.of(values.get(CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT)),
-                token
-        );
-    }
-
-    private static boolean isKnownArgument(String argument) {
-        return argument.equals(CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT)
-                || argument.equals(CompanionLaunchContract.INDEX_FILE_ARGUMENT)
-                || argument.equals(CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT)
-                || argument.equals(CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT);
-    }
-
-    private static Path normalize(Path path) {
-        return Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
-    }
-
-    public Path dataDirectory() {
-        return this.dataDirectory;
-    }
-
-    public Path indexFile() {
-        return this.indexFile;
-    }
-
-    public Path runtimeSourceManifest() {
-        Path parent = this.sessionDescriptor.getParent();
-        if (parent == null) {
-            throw new IllegalStateException("Session descriptor has no parent directory");
+        String userHome = System.getProperty("user.home");
+        if (userHome == null || userHome.isBlank()) {
+            throw new IllegalArgumentException("No Companion app home is available");
         }
-        return parent.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME);
-    }
-
-    public Path workspaceDirectory() {
-        return this.workspaceDirectory;
-    }
-
-    public Path sessionDescriptor() {
-        return this.sessionDescriptor;
-    }
-
-    public synchronized String consumeSessionToken() {
-        if (this.sessionToken == null) {
-            throw new IllegalStateException("Companion session token was already consumed");
-        }
-        String token = this.sessionToken;
-        this.sessionToken = null;
-        return token;
+        return Path.of(userHome).resolve(".totaldebug-companion");
     }
 }

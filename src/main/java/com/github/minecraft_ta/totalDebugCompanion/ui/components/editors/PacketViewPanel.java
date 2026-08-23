@@ -26,7 +26,7 @@ public class PacketViewPanel extends JPanel {
         setLayout(new BorderLayout(0, 0));
 
         //Sends a packet to the game to get the packet content
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new CapturePacketMessage(packetView.getPacket(), false));
+        CompanionApp.send(new CapturePacketMessage(packetView.getPacket(), false));
 
         DefaultMutableTreeNode root = new DefaultMutableTreeNode();
         JTree tree = new JTree(root);
@@ -132,7 +132,7 @@ public class PacketViewPanel extends JPanel {
 
     public boolean canClose(String packetName) {
         CompanionApp.SERVER.getMessageBus().unregister(PacketContentMessage.class, this);
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new CapturePacketMessage(packetName, true));
+        CompanionApp.send(new CapturePacketMessage(packetName, true));
         return true;
     }
 

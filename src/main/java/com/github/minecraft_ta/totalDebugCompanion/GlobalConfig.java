@@ -19,13 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Application wide, user facing settings.
  *
- * <p>Values are held in memory and mirrored to a small JSON file inside the data directory the mod
- * hands us at launch. Writes are coalesced, so dragging a slider does not produce one file write per
+ * <p>Values are held in memory and mirrored to a small JSON file inside the per-user application
+ * directory. Writes are coalesced, so dragging a slider does not produce one file write per
  * pixel; {@link #saveNow()} flushes synchronously during shutdown.
  *
  * <p>A missing or corrupt settings file is never fatal - the defaults are used and the file is
- * rewritten on the next save. This process is launched by Minecraft, so a settings related crash
- * loop would be close to undiagnosable from the game side.
+ * rewritten on the next save.
  */
 public final class GlobalConfig {
 

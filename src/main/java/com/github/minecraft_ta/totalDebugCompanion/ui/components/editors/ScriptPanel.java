@@ -116,7 +116,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
         runButton.addActionListener(e -> runScript(false));
         runServerButton.addActionListener(e -> runScript(true));
-        stopButton.addActionListener(e -> CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new StopScriptMessage(this.scriptId)));
+        stopButton.addActionListener(e -> CompanionApp.send(new StopScriptMessage(this.scriptId)));
 
         headerBar.add(runButton);
         headerBar.add(runServerButton);
@@ -170,7 +170,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setRunButtonsState(false);
         this.bottomInformationBar.setProcessInfoText("Compiling...");
         String fullScript = BaseScript.mergeWithNormalScript(UIUtils.getText(this.editorPane));
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new RunScriptMessage(this.scriptId, fullScript, server, (RunScriptMessage.ExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem()));
+        CompanionApp.send(new RunScriptMessage(this.scriptId, fullScript, server, (RunScriptMessage.ExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem()));
     }
 
     private void setRunButtonsState(boolean state) {
@@ -228,7 +228,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private void setupSaveBehavior() {
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new StopScriptMessage(this.scriptId));
+                CompanionApp.send(new StopScriptMessage(this.scriptId));
                 saveScript();
             }
         });

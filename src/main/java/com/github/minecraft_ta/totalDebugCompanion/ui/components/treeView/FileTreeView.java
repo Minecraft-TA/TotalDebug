@@ -20,13 +20,12 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class FileTreeView extends JScrollPane {
-
-    private static final Path MODS_PATH = CompanionApp.getWorkspaceDirectory().resolve("mods");
+    private final LazyFileJTree tree;
 
     public FileTreeView(EditorTabs tabs) {
         super();
 
-        var tree = new LazyFileJTree() {
+        this.tree = new LazyFileJTree() {
             @Override
             protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
                 if (!(treeItem instanceof FileSystemFileItem))
@@ -41,13 +40,13 @@ public class FileTreeView extends JScrollPane {
             }
         };
 
-        tree.addMouseDoubleClickListener((node, item) -> {
+        this.tree.addMouseDoubleClickListener((node, item) -> {
             if (item.isDirectory())
                 return;
 
             if (item instanceof FileSystemFileItem fileItem) {
                 if (node.getParent().getUserObject().getName().equals("scripts")
-                        && CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                        && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
                     var name = fileItem.getName().replace(".java", "");
 
                     tabs.focusOrCreateIfAbsent(ScriptView.class, sv -> sv.getTitle().equals(name + ".java"), () -> {
@@ -68,11 +67,11 @@ public class FileTreeView extends JScrollPane {
                 while (!((node = node.getParent()).getUserObject() instanceof ZipFileRootItem)) {
                     fullName.insert(0, '.').insert(0, node.getUserObject().getName());
                 }
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(fullName.toString()));
+                CompanionApp.send(new DecompileOrOpenMessage(fullName.toString()));
             }
         });
 
-        tree.setItemFactory(new FileTreeItemFactory() {
+        this.tree.setItemFactory(new FileTreeItemFactory() {
             @Override
             public FileSystemFileItem createFileSystemFileItem(Path path) {
                 var item = super.createFileSystemFileItem(path);
@@ -87,41 +86,53 @@ public class FileTreeView extends JScrollPane {
             }
         });
 
+        reloadProfile();
+        setViewportView(this.tree);
+        setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
+    }
+
+    public void reloadProfile() {
+        if (!CompanionApp.hasProfile()) {
+            this.tree.setRootNodes();
+            return;
+        }
+
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
-        if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            var scripts = tree.getItemFactory().createFileSystemDirectoryItem(
+        if (CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(
                     CompanionApp.getRootPath().resolve("scripts"),
                     true
             );
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
-        var decompiledFiles = tree.getItemFactory().createFileSystemDirectoryItem(
+        var decompiledFiles = this.tree.getItemFactory().createFileSystemDirectoryItem(
                 CompanionApp.getRootPath().resolve("decompiled-files"),
                 true
         );
         decompiledFiles.setIcon(FileTreeIcons.forRootDirectory("decompiled-files"));
         rootItems.add(decompiledFiles);
+
+        Path modsPath = CompanionApp.getWorkspaceDirectory().resolve("mods");
         var mods = new DirectoryTreeItem("mods") {
-                    @Override
-                    public List<TreeItem> loadChildren() {
-                        try {
-                            return Files.walk(MODS_PATH, 1)
-                                    .skip(1)
-                                    .filter(p -> p.getFileName().toString().endsWith(".jar"))
-                                    .<TreeItem>map(ZipFileRootItem::new)
-                                    .toList();
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                };
+            @Override
+            public List<TreeItem> loadChildren() {
+                if (!Files.isDirectory(modsPath)) {
+                    return List.of();
+                }
+                try (var paths = Files.walk(modsPath, 1)) {
+                    return paths.skip(1)
+                            .filter(path -> path.getFileName().toString().endsWith(".jar"))
+                            .<TreeItem>map(ZipFileRootItem::new)
+                            .toList();
+                } catch (IOException exception) {
+                    throw new RuntimeException(exception);
+                }
+            }
+        };
         mods.setIcon(FileTreeIcons.forRootDirectory("mods"));
         rootItems.add(mods);
-        tree.addRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
-
-        setViewportView(tree);
-        setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
+        this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
     }
 
     @Override

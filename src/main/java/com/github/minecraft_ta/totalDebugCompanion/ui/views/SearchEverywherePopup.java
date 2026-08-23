@@ -177,7 +177,7 @@ public class SearchEverywherePopup extends JFrame {
         if (index < 0)
             return;
 
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(resultList.getModel().getElementAt(index).getNameWithPackageDot()));
+        CompanionApp.send(new DecompileOrOpenMessage(resultList.getModel().getElementAt(index).getNameWithPackageDot()));
         setVisible(false);
     }
 

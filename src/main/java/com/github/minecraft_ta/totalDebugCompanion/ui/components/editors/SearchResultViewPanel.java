@@ -47,7 +47,7 @@ public class SearchResultViewPanel extends JPanel {
                 var className = (String) resultTable.getValueAt(row, 0);
                 className = className.replace('/', '.');
 
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(className));
+                CompanionApp.send(new DecompileOrOpenMessage(className));
             }
         });
 

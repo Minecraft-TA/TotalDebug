@@ -62,7 +62,7 @@ public class PacketLoggerViewPanel extends JPanel {
         channelSelector.setMaximumSize(new Dimension(200, (int) channelSelector.getPreferredSize().getHeight()));
 
         //Sends a message to the game to request the channel list
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ChannelListMessage());
+        CompanionApp.send(new ChannelListMessage());
 
         //Adds a timer at the rop right corner of the panel to display how long the packet logger has been running
         JLabel timeLabel = new JLabel("00:00:00");
@@ -179,14 +179,14 @@ public class PacketLoggerViewPanel extends JPanel {
                 timer.stop();
             }
             int selectedIndex = packetSelector.getSelectedIndex();
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new PacketLoggerStateChangeMessage(selectedIndex == 0 && b, selectedIndex == 1 && b));
+            CompanionApp.send(new PacketLoggerStateChangeMessage(selectedIndex == 0 && b, selectedIndex == 1 && b));
         });
 
         //Add a listener to the clear button to send a message to the game to clear the packet map also clears the table
         clearButton.addActionListener(e -> {
             startTime = -1;
             timeLabel.setText("00:00:00");
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ClearPacketsMessage());
+            CompanionApp.send(new ClearPacketsMessage());
             ((DefaultTableModel) table.getModel()).setRowCount(0);
         });
 
@@ -194,7 +194,7 @@ public class PacketLoggerViewPanel extends JPanel {
         packetSelector.addActionListener(e -> {
             if (runButton.isToggled()) {
                 int selectedIndex = packetSelector.getSelectedIndex();
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new PacketLoggerStateChangeMessage(selectedIndex == 0, selectedIndex == 1));
+                CompanionApp.send(new PacketLoggerStateChangeMessage(selectedIndex == 0, selectedIndex == 1));
             }
             startTime = -1;
             timeLabel.setText("00:00:00");
@@ -203,8 +203,8 @@ public class PacketLoggerViewPanel extends JPanel {
 
         //Add a listener to the channel selector to send a message to the game to change the channel of the packets also clears the table
         channelSelector.addActionListener(e -> {
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new SetChannelMessage((String) channelSelector.getSelectedItem()));
-            CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ClearPacketsMessage());
+            CompanionApp.send(new SetChannelMessage((String) channelSelector.getSelectedItem()));
+            CompanionApp.send(new ClearPacketsMessage());
             ((DefaultTableModel) table.getModel()).setRowCount(0);
         });
 
@@ -226,7 +226,7 @@ public class PacketLoggerViewPanel extends JPanel {
             int row = table.getSelectedRow();
             if (row != -1) {
                 String packet = (String) table.getValueAt(row, 0);
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(packet));
+                CompanionApp.send(new DecompileOrOpenMessage(packet));
             }
         });
         popup.add(decompile);
@@ -252,7 +252,7 @@ public class PacketLoggerViewPanel extends JPanel {
             int row = table.getSelectedRow();
             if (row != -1) {
                 String packet = (String) table.getValueAt(row, 0);
-                CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new BlockPacketMessage(packet));
+                CompanionApp.send(new BlockPacketMessage(packet));
             }
         });
         popup.add(block);
@@ -302,9 +302,9 @@ public class PacketLoggerViewPanel extends JPanel {
     }
 
     public boolean canClose() {
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new PacketLoggerStateChangeMessage(false, false));
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new ClearPacketsMessage());
-        CompanionApp.SERVER.getMessageProcessor().enqueueMessage(new SetChannelMessage("All channels"));
+        CompanionApp.send(new PacketLoggerStateChangeMessage(false, false));
+        CompanionApp.send(new ClearPacketsMessage());
+        CompanionApp.send(new SetChannelMessage("All channels"));
         CompanionApp.SERVER.getMessageBus().unregister(IncomingPacketsMessage.class, this);
         CompanionApp.SERVER.getMessageBus().unregister(OutgoingPacketsMessage.class, this);
         CompanionApp.SERVER.getMessageBus().unregister(ChannelListMessage.class, this);

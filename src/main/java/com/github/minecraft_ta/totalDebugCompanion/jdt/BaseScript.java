@@ -184,9 +184,8 @@ public class BaseScript {
             }""".replace("    ", "\t");
 
     private static final String BASE_SCRIPT = BASE_SCRIPT_IMPORTS + BASE_SCRIPT_TEXT;
-    private static final Path PATH = CompanionApp.getRootPath().resolve("scripts").resolve("BaseScript.java");
-
     private static FileTime lastChanged;
+    private static Path cachedPath;
     private static String cachedContents;
 
     private BaseScript() {
@@ -199,8 +198,9 @@ public class BaseScript {
 
     public static void writeToFileIfNotExists() {
         try {
-            if (!Files.exists(PATH))
-                Files.writeString(PATH, BASE_SCRIPT);
+            Path path = path();
+            if (!Files.exists(path))
+                Files.writeString(path, BASE_SCRIPT);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -208,10 +208,12 @@ public class BaseScript {
 
     public static String getText() {
         try {
-            var lastModifiedTime = Files.getLastModifiedTime(PATH);
-            if (!lastModifiedTime.equals(lastChanged)) {
+            Path path = path();
+            var lastModifiedTime = Files.getLastModifiedTime(path);
+            if (!path.equals(cachedPath) || !lastModifiedTime.equals(lastChanged)) {
+                cachedPath = path;
                 lastChanged = lastModifiedTime;
-                cachedContents = Files.readString(PATH).replace("\r\n", "\n");
+                cachedContents = Files.readString(path).replace("\r\n", "\n");
             }
 
             return cachedContents;
@@ -219,6 +221,10 @@ public class BaseScript {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private static Path path() {
+        return CompanionApp.getRootPath().resolve("scripts").resolve("BaseScript.java");
     }
 
     private static Pair<String, String> extractImports(String code) {
