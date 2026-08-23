@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.messages.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
@@ -30,9 +29,9 @@ public class RunScriptMessage extends AbstractMessageOutgoing {
     }
 
     public enum ExecutionEnvironment {
-        THREAD(TextUtils.htmlPrimarySecondaryString("Thread", " - ", "Run separately; Stop is cooperative"), null),
-        PRE_TICK(TextUtils.htmlPrimarySecondaryString("Pre Tick", " - ", "Run on the main thread; cannot be force-stopped"), Icons.WARNING),
-        POST_TICK(TextUtils.htmlPrimarySecondaryString("Post Tick", " - ", "Run on the main thread; cannot be force-stopped"), Icons.WARNING);
+        THREAD("Thread", null),
+        PRE_TICK("Pre Tick", Icons.WARNING),
+        POST_TICK("Post Tick", Icons.WARNING);
 
         private final String label;
         private final Icon icon;
