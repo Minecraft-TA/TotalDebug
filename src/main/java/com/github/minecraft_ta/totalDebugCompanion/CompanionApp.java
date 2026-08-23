@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
-import com.formdev.flatlaf.FlatDarculaLaf;
+import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.fonts.inter.FlatInterFont;
+import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
@@ -10,7 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfig
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SimpleMenuBarBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.scnet.Server;
@@ -20,14 +22,10 @@ import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 
-import javax.swing.BorderFactory;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
-import javax.swing.plaf.BorderUIResource;
-import javax.swing.plaf.ColorUIResource;
-import java.awt.Color;
-import java.awt.Insets;
 import java.awt.Window;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -54,6 +52,7 @@ public final class CompanionApp {
             Objects.requireNonNull(timeouts, "timeouts");
             configuration = CompanionLaunchConfiguration.parse(args, environment);
             validatePaths(configuration);
+            GlobalConfig.getInstance().loadFrom(configuration.dataDirectory());
 
             session = new CompanionSession(configuration.consumeSessionToken());
             SERVER = session.server();
@@ -75,12 +74,14 @@ public final class CompanionApp {
                 session.awaitAuthenticatedDisconnect();
             }
             stopUi();
+            GlobalConfig.getInstance().saveNow();
             session.close();
             CompanionClassIndex.close();
             return 0;
         } catch (Throwable throwable) {
             throwable.printStackTrace(System.err);
             stopUiAfterFailure();
+            GlobalConfig.getInstance().saveNow();
             if (session != null) {
                 session.close();
             }
@@ -103,14 +104,42 @@ public final class CompanionApp {
         }
     }
 
-    private static void configureLookAndFeel() {
-        FlatDarculaLaf.setup();
+    /**
+     * Installs a launch configuration without a Minecraft session. Used by the UI dev harness, which
+     * needs the paths {@link #getRootPath()} exposes but has no mod to hand shake with.
+     */
+    static void configureWithoutSession(CompanionLaunchConfiguration launchConfiguration) {
+        configuration = launchConfiguration;
+    }
+
+    static void configureLookAndFeel() {
+        configureFonts();
+        // IntelliJ-style title bar with the menu bar embedded into it. Must be set before the first
+        // window is constructed.
+        if (FlatLaf.supportsNativeWindowDecorations()) {
+            JFrame.setDefaultLookAndFeelDecorated(true);
+            JDialog.setDefaultLookAndFeelDecorated(true);
+        }
+        ThemeManager.installInitialTheme();
         TokenMakerFactory.setDefaultInstance(new AbstractTokenMakerFactory() {
             @Override
             protected void initTokenMakerMap() {
                 putMapping(RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
             }
         });
+    }
+
+    /**
+     * Registers the fonts IntelliJ itself uses: Inter for the UI, JetBrains Mono for code. Must run
+     * before the look and feel is installed, since that is when the base font is resolved.
+     */
+    private static void configureFonts() {
+        FlatInterFont.installLazy();
+        FlatJetBrainsMonoFont.installLazy();
+        FlatLaf.setPreferredFontFamily(FlatInterFont.FAMILY);
+        FlatLaf.setPreferredLightFontFamily(FlatInterFont.FAMILY_LIGHT);
+        FlatLaf.setPreferredSemiboldFontFamily(FlatInterFont.FAMILY_SEMIBOLD);
+        FlatLaf.setPreferredMonospacedFontFamily(FlatJetBrainsMonoFont.FAMILY);
     }
 
     private static void setupDataDirectories() throws IOException {
@@ -134,24 +163,7 @@ public final class CompanionApp {
     }
 
     private static void startUi() throws InvocationTargetException, InterruptedException {
-        UIManager.put("SplitPaneDivider.style", "plain");
-        UIManager.put("Component.focusColor", new ColorUIResource(new Color(0, 0, 0, 0)));
-        UIManager.put("TabbedPane.tabInsets", new Insets(0, 10, 0, 10));
-        UIManager.put("TabbedPane.tabHeight", 25);
-        UIManager.put("Slider.focusedColor", new ColorUIResource(new Color(0, 0, 0, 0)));
-        UIManager.put(
-                "Table.focusSelectedCellHighlightBorder",
-                new BorderUIResource(BorderFactory.createEmptyBorder(0, 5, 0, 0))
-        );
-        UIManager.put(
-                "Table.focusCellHighlightBorder",
-                new BorderUIResource(BorderFactory.createEmptyBorder(0, 3, 0, 0))
-        );
-        UIManager.put("Tree.selectionBackground", new ColorUIResource(new Color(5 / 255f, 127 / 255f, 242 / 255f, 0.5f)));
-        UIManager.put("List.selectionBackground", new ColorUIResource(new Color(5 / 255f, 127 / 255f, 242 / 255f, 0.5f)));
-        UIManager.put("TitlePane.unifiedBackground", false);
-        UIManager.put("MenuBar.border", new SimpleMenuBarBorder());
-
+        // UI defaults live in CompanionDefaultsAddon so they are reapplied on every theme switch.
         SwingUtilities.invokeAndWait(() -> {
             uiStarted = true;
             MainWindow.INSTANCE.setSize(1280, 720);
@@ -189,6 +201,12 @@ public final class CompanionApp {
             throw new IllegalStateException("Companion window focus must run on the Swing event thread");
         }
         UIUtils.focusWindow(MainWindow.INSTANCE);
+    }
+
+    /** Flushes user settings before terminating from the main window's close action. */
+    public static void exit() {
+        GlobalConfig.getInstance().saveNow();
+        System.exit(0);
     }
 
     public static boolean hasCapability(long capability) {

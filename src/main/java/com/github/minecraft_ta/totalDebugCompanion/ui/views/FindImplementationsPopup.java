@@ -11,6 +11,7 @@ import com.github.tth05.jindex.IndexedMethod;
 import org.eclipse.jdt.core.IJavaElement;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
         setMinimumListWidth(400);
         addKeyEnterListener(InternalListItem::onAction);
 
-        ((JPanel) getContentPane()).setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, Color.GRAY.darker()));
+        ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
     }
 
     @Override

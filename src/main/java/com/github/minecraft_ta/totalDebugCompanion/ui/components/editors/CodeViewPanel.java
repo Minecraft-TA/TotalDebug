@@ -79,7 +79,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     protected void updateFonts() {
         super.updateFonts();
         SwingUtilities.invokeLater(() -> {
-            var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().<Float>getValue("fontSize"));
+            var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
             FIND_IMPLEMENTATIONS_POPUP.setFont(newFont);
         });
     }

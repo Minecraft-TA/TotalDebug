@@ -11,6 +11,8 @@ import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.SearchOptions;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import javax.swing.border.CompoundBorder;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
@@ -83,7 +85,7 @@ public class SearchEverywherePopup extends JFrame {
     private final JScrollPane resultListScrollPane = new JScrollPane(this.resultList);
     {
         resultListScrollPane.setPreferredSize(new Dimension(500, 500));
-        resultListScrollPane.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Color.GRAY));
+        resultListScrollPane.setBorder(DynamicMatteBorder.rule(1, 0, 0, 0));
     }
 
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
@@ -146,7 +148,7 @@ public class SearchEverywherePopup extends JFrame {
         add(this.searchTextField, BorderLayout.NORTH);
         add(this.resultListScrollPane, BorderLayout.CENTER);
 
-        ((JPanel) getContentPane()).setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, Color.GRAY.darker()));
+        ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
 
         setUndecorated(true);
         pack();
@@ -181,13 +183,13 @@ public class SearchEverywherePopup extends JFrame {
 
     private static JLabel primaryLabel(String primary) {
         var primaryLabel = new JLabel(primary);
-        primaryLabel.setForeground(new Color(187, 187, 187));
+        primaryLabel.setForeground(ThemeColors.text());
         return primaryLabel;
     }
 
     private static JLabel secondaryLabel(String secondary) {
         var secondaryLabel = new JLabel(secondary);
-        secondaryLabel.setForeground(new Color(150, 150, 150));
+        secondaryLabel.setForeground(ThemeColors.mutedText());
         return secondaryLabel;
     }
 }

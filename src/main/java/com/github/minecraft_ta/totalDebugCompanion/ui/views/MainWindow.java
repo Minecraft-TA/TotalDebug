@@ -7,6 +7,8 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.*;
@@ -14,6 +16,8 @@ import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.lang.reflect.Field;
 import java.util.function.Consumer;
 
@@ -55,6 +59,16 @@ public class MainWindow extends JFrame implements AWTEventListener {
         getContentPane().add(root);
 
         var menuBar = new JMenuBar();
+
+        var fileMenu = new JMenu("File");
+        fileMenu.add(new AbstractAction("Settings...") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                new SettingsWindow(MainWindow.this).setVisible(true);
+            }
+        });
+        menuBar.add(fileMenu);
+
         var toolsMenu = new JMenu("Tools");
         if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID)) {
             toolsMenu.add(new AbstractAction("Chunk Grid") {
@@ -90,10 +104,22 @@ public class MainWindow extends JFrame implements AWTEventListener {
         }
 
         setJMenuBar(menuBar);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent event) {
+                CompanionApp.exit();
+            }
+        });
         setTitle("TotalDebugCompanion");
+        updateWindowIcon(ThemeManager.current());
+        ThemeManager.addThemeChangeListener(this::updateWindowIcon);
 
         Toolkit.getDefaultToolkit().addAWTEventListener(this, AWTEvent.KEY_EVENT_MASK);
+    }
+
+    private void updateWindowIcon(CompanionTheme theme) {
+        setIconImages(Icons.createWindowIconImages(theme));
     }
 
     @Override

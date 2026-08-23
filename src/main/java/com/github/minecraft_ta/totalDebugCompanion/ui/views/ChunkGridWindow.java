@@ -10,9 +10,12 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.UpdateFoll
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TextFieldWithInlineLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.*;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Area;
@@ -42,6 +45,8 @@ public class ChunkGridWindow extends JFrame {
             throw new IllegalStateException("Chunk grid support was not negotiated for this session");
         }
         setTitle("Chunk Grid");
+        updateWindowIcon(ThemeManager.current());
+        ThemeManager.addThemeChangeListener(this::updateWindowIcon);
         setLayout(new BorderLayout());
         add(this.chunkGridPanel, BorderLayout.CENTER);
 
@@ -168,6 +173,10 @@ public class ChunkGridWindow extends JFrame {
         });
 
         pack();
+    }
+
+    private void updateWindowIcon(CompanionTheme theme) {
+        setIconImages(Icons.createWindowIconImages(theme));
     }
 
     private void toggleOverlayMode() {
@@ -530,7 +539,7 @@ public class ChunkGridWindow extends JFrame {
 
                 if (new Rectangle(getWidth() - 22, 2, 20, 20).contains(relativeMouseLocation)) {
                     FlatUIUtils.setRenderingHints(g);
-                    g.setColor(new Color(80, 80, 80));
+                    g.setColor(ThemeColors.border());
                     g.fillRoundRect(getWidth() - 22, 2, 20, 20, 5, 5);
                 }
 

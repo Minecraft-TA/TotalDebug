@@ -27,6 +27,10 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import javax.swing.border.CompoundBorder;
 import javax.swing.text.*;
 import java.awt.*;
@@ -77,7 +81,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             super.paintComponent(g);
             if (getBottomComponent() == null)
                 return;
-            g.setColor(Color.GRAY);
+            g.setColor(ThemeColors.border());
 
             var divider = getComponent(0);
             g.fillRect(divider.getX(), divider.getY(), getWidth(), 1);
@@ -107,8 +111,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         this.scriptView = scriptView;
 
         var headerBar = Box.createHorizontalBox();
-        headerBar.setBackground(Color.GRAY);
-        headerBar.setBorder(new CompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY), BorderFactory.createEmptyBorder(5, 0, 5, 0)));
+        headerBar.setBackground(ThemeColors.headerBackground());
+        headerBar.setBorder(new CompoundBorder(DynamicMatteBorder.rule(0, 0, 1, 0), BorderFactory.createEmptyBorder(5, 0, 5, 0)));
 
         runButton.addActionListener(e -> runScript(false));
         runServerButton.addActionListener(e -> runScript(true));
@@ -189,7 +193,6 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         logPanelTextPane.setParagraphAttributes(spacingAttributeSet, false);
         logPanelTextPane.setEditable(false);
         logPanelTextPane.setFont(JETBRAINS_MONO_FONT.deriveFont(12f));
-        logPanelTextPane.setBackground(new Color(69, 73, 74));
         logPanelTextPane.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 0));
 
         centerSplitPane.setTopComponent(((BorderLayout) getLayout()).getLayoutComponent(BorderLayout.CENTER));
@@ -199,10 +202,24 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     @Override
+    protected void applyTheme() {
+        super.applyTheme();
+        // applyTheme() is first called from the AbstractCodeViewPanel constructor, before this
+        // subclass's field initialisers have run.
+        if (this.logPanelTextPane == null) {
+            return;
+        }
+        EditorPalette palette = ThemeManager.palette();
+        this.logPanelTextPane.setBackground(palette.background());
+        this.logPanelTextPane.setForeground(palette.foreground());
+        this.logPanelTextPane.setCaretColor(palette.caret());
+    }
+
+    @Override
     protected void updateFonts() {
         super.updateFonts();
         SwingUtilities.invokeLater(() -> {
-            var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().<Float>getValue("fontSize"));
+            var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
             codeCompletionPopup.setFont(newFont);
             signatureHelpPopup.setFont(newFont);
         });

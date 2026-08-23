@@ -8,6 +8,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextFie
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import java.awt.*;
 import java.util.function.Consumer;
 
@@ -53,14 +55,14 @@ public class SearchHeaderBar extends JPanel {
         add(Box.createHorizontalGlue());
 
         setMaximumSize(new Dimension(10000, (int) getPreferredSize().getHeight()));
-        setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.GRAY));
+        setBorder(DynamicMatteBorder.rule(0, 0, 1, 0));
 
         SwingUtilities.invokeLater(textField::requestFocus);
     }
 
     private JSeparator createSeparator() {
         JSeparator separator = new JSeparator(JSeparator.VERTICAL);
-        separator.setForeground(Color.GRAY);
+        separator.setForeground(ThemeColors.border());
         separator.setMaximumSize(new Dimension(1, 100));
         return separator;
     }

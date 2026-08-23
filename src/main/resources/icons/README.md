@@ -1,0 +1,51 @@
+# Icons
+
+JetBrains' **New UI** (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0
+(see `INTELLIJ_LICENSE.txt`). They replaced the pre-New-UI 2021 icons this project previously
+vendored, which had colours baked in for a dark background only.
+
+Each icon ships as a light/dark pair, `<name>.svg` and `<name>_dark.svg`. That is FlatLaf's
+convention: a single `FlatSVGIcon` resolves the `_dark` sibling on its own when the active look and
+feel is dark, and re-resolves it when the theme changes - which is what lets the shared constants in
+`Icons.java` follow the theme. `IconThemeSwitchTest` guards all of this, including that no icon is
+missing its dark variant.
+
+Window icons are the exception because AWT requires raster `Image` instances. Windows call
+`Icons.createWindowIconImages` again on each theme change so the factory can rasterize the matching
+light or dark SVG.
+
+## Where they came from
+
+`lib/intellij.platform.ide.jar` in a JetBrains IDE install, under `expui/`. The file name here is the
+Companion's own name for the icon; the second column is the source path inside that jar.
+
+| here | expui | | here | expui |
+|---|---|---|---|---|
+| class | `nodes/class` | | search | `general/search` |
+| method | `nodes/method` | | matchCase | `inline/matchCase` |
+| field | `nodes/field` | | regex | `inline/regex` |
+| enum | `nodes/enum` | | close | `general/closeSmall` |
+| interface | `nodes/interface` | | closeHovered | `general/closeSmallHovered` |
+| constructor | `nodes/constructor` | | delete | `general/delete` |
+| constant | `nodes/constant` | | download | `general/download` |
+| property | `nodes/property` | | copy | `general/copy` |
+| variable | `nodes/variable` | | information | `general/informationDialog` |
+| javaFile | `fileTypes/java` | | success | `status/success` |
+| classFile | `fileTypes/javaClass` | | warning | `status/warning` |
+| jar | `fileTypes/archive` | | error | `status/error` |
+| text | `fileTypes/text` | | primitive | `debugger/dbPrimitive` |
+| run | `run/run` | | value | `debugger/value` |
+| stop | `run/stop` | | array | `json/array` |
+| pause | `run/pause` | | clock | `general/history` |
+| clear | `actions/clearCash` | | upDown | `diff/arrowLeftRight` |
+| runServer | `actions/deploy` | | overlayMode | `general/layout` |
+| arrow_right | `general/chevronRight` | | arrow_down | `general/chevronDown` |
+| previousOccurrence | `general/chevronUp` | | nextOccurrence | `general/chevronDown` |
+| target | `general/locate` | | decompile | `actions/preview` |
+| block | `general/remove` | | | |
+
+`decompile` and `block` have no exact New UI counterpart; those two are judgement calls and are the
+first place to look if an icon reads wrong.
+
+`process/step_1..8.svg` is the spinner driven by `AnimatedFlatSVGIcon`. It is still the older
+JetBrains asset and has no dark variant.

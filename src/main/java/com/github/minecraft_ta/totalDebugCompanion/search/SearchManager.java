@@ -13,11 +13,21 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.IntConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 public class SearchManager {
 
-    private static final DefaultHighlighter.DefaultHighlightPainter HIGHLIGHT_PAINTER = new DefaultHighlighter.DefaultHighlightPainter(new Color(74, 136, 199));
-    private static final DefaultHighlighter.DefaultHighlightPainter FOCUSED_HIGHLIGHT_PAINTER = new DefaultHighlighter.DefaultHighlightPainter(new Color(45, 83, 220));
+    /**
+     * Rebuilt per use rather than cached in a static field: a highlight painter captures its colour
+     * on construction, so a cached one would keep painting the old theme's accent after a switch.
+     */
+    private static DefaultHighlighter.DefaultHighlightPainter highlightPainter() {
+        return new DefaultHighlighter.DefaultHighlightPainter(ThemeColors.accent());
+    }
+
+    private static DefaultHighlighter.DefaultHighlightPainter focusedHighlightPainter() {
+        return new DefaultHighlighter.DefaultHighlightPainter(ThemeColors.accent().darker());
+    }
 
     private final RSyntaxTextArea textPane;
     private final List<IntConsumer> focusedIndexChangeListeners = new ArrayList<>();
@@ -170,7 +180,7 @@ public class SearchManager {
             var oldMatchPos = this.highlights.get(this.focusedMatchIndex);
             if (oldMatchPos.highlightReference != null)
                 textPane.getHighlighter().removeHighlight(oldMatchPos.highlightReference);
-            oldMatchPos.highlightReference = textPane.getHighlighter().addHighlight(oldMatchPos.start, oldMatchPos.end, HIGHLIGHT_PAINTER);
+            oldMatchPos.highlightReference = textPane.getHighlighter().addHighlight(oldMatchPos.start, oldMatchPos.end, highlightPainter());
 
             //Remove the focus highlighting
             if (this.focusedMatchReference != null)
@@ -184,7 +194,7 @@ public class SearchManager {
 
             //Add focus highlighting at new position
             var matchPos = this.highlights.get(this.focusedMatchIndex);
-            this.focusedMatchReference = textPane.getHighlighter().addHighlight(matchPos.start, matchPos.end, FOCUSED_HIGHLIGHT_PAINTER);
+            this.focusedMatchReference = textPane.getHighlighter().addHighlight(matchPos.start, matchPos.end, focusedHighlightPainter());
         } catch (BadLocationException ex) {
             ex.printStackTrace();
         }
@@ -194,7 +204,7 @@ public class SearchManager {
         textPane.getHighlighter().removeAllHighlights();
         highlights.forEach(p -> {
             try {
-                p.highlightReference = textPane.getHighlighter().addHighlight(p.start, p.end, HIGHLIGHT_PAINTER);
+                p.highlightReference = textPane.getHighlighter().addHighlight(p.start, p.end, highlightPainter());
             } catch (BadLocationException e) {
                 e.printStackTrace();
             }

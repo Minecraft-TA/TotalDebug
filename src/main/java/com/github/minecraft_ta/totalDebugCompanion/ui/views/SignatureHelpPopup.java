@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import java.awt.*;
 
 public class SignatureHelpPopup extends BasePopup {
@@ -13,7 +14,7 @@ public class SignatureHelpPopup extends BasePopup {
     public SignatureHelpPopup(Window owner) {
         super(owner);
         add(this.label, BorderLayout.CENTER);
-        ((JPanel) getContentPane()).setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, Color.GRAY.darker()));
+        ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
         pack();
     }
 

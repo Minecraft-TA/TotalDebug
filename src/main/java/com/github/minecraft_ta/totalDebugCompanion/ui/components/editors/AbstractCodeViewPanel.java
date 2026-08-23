@@ -1,10 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaLinkGenerator;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -20,19 +24,19 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyEvent;
 import java.beans.PropertyChangeListener;
-import java.io.IOException;
-import java.util.Objects;
+import java.util.function.Consumer;
 
 public class AbstractCodeViewPanel extends JPanel {
 
-    public static Font JETBRAINS_MONO_FONT = null;
+    /**
+     * JetBrains Mono, from the {@code flatlaf-fonts-jetbrains-mono} artifact rather than a TTF
+     * vendored in this repo. {@code install()} is idempotent, and is called here as well as during
+     * startup so the font resolves even when a panel is built outside the normal launch path.
+     */
+    public static final Font JETBRAINS_MONO_FONT;
     static {
-        try {
-            JETBRAINS_MONO_FONT = Font.createFont(Font.TRUETYPE_FONT, Objects.requireNonNull(CodeViewPanel.class.getResourceAsStream("/font/jetbrainsmono_regular.ttf"), "Unable to load font"));
-            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(JETBRAINS_MONO_FONT);
-        } catch (FontFormatException | IOException e) {
-            e.printStackTrace();
-        }
+        FlatJetBrainsMonoFont.install();
+        JETBRAINS_MONO_FONT = new Font(FlatJetBrainsMonoFont.FAMILY, Font.PLAIN, 14);
     }
 
     protected final RSyntaxTextArea editorPane = new RSyntaxTextArea() {
@@ -53,19 +57,11 @@ public class AbstractCodeViewPanel extends JPanel {
         this.identifier = identifier;
 
         this.editorScrollPane.getGutter().setBorder(new Gutter.GutterBorder(0, 5, 0, 0));
-        this.editorScrollPane.getGutter().setForeground(Color.GRAY);
-        this.editorScrollPane.getGutter().setBackground(UIManager.getColor("TextPane.background"));
         this.editorScrollPane.setBorder(BorderFactory.createEmptyBorder());
 
         this.editorPane.setAnimateBracketMatching(false);
         this.editorPane.setPaintMatchedBracketPair(true);
-        this.editorPane.setMatchedBracketBGColor(Color.GRAY);
         this.editorPane.setMatchedBracketBorderColor(null);
-        this.editorPane.setCurrentLineHighlightColor(Color.decode("#4e5052"));
-        this.editorPane.setBackground(UIManager.getColor("TextPane.background"));
-        this.editorPane.setForeground(UIManager.getColor("EditorPane.foreground"));
-        this.editorPane.setSelectionColor(UIManager.getColor("EditorPane.selectionBackground"));
-        this.editorPane.setHyperlinkForeground(Color.decode("#7cc0f7"));
         this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, this.bottomInformationBar));
         this.editorPane.addHyperlinkListener(e -> {}); //Empty listener to circumvent RSyntaxTextArea bug
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) e -> {
@@ -83,7 +79,7 @@ public class AbstractCodeViewPanel extends JPanel {
         });
 
         this.editorPane.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
-        CodeUtils.initJavaColors(this.editorPane.getSyntaxScheme());
+        applyTheme();
         try {
             var document = this.editorPane.getDocument();
             var field = document.getClass().getDeclaredField("tokenMaker");
@@ -99,13 +95,43 @@ public class AbstractCodeViewPanel extends JPanel {
         updateFonts();
 
         PropertyChangeListener fontSizeListener = event -> updateFonts();
-        GlobalConfig.getInstance().addPropertyChangeListener("fontSize", fontSizeListener);
+        GlobalConfig.getInstance().addEditorFontSizeListener(fontSizeListener);
+        // The editor resolves its own colours, so FlatLaf.updateUI() alone would leave it stale.
+        Consumer<CompanionTheme> themeListener = theme -> applyTheme();
+        ThemeManager.addThemeChangeListener(themeListener);
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
                 ASTCache.removeFromCache(identifier);
-                GlobalConfig.getInstance().removePropertyChangeListener("fontSize", fontSizeListener);
+                GlobalConfig.getInstance().removeEditorFontSizeListener(fontSizeListener);
+                ThemeManager.removeThemeChangeListener(themeListener);
             }
         });
+    }
+
+    /** Re-reads every colour this panel resolves itself. Safe to call repeatedly. */
+    protected void applyTheme() {
+        EditorPalette palette = ThemeManager.palette();
+
+        Gutter gutter = this.editorScrollPane.getGutter();
+        gutter.setForeground(palette.lineNumber());
+        gutter.setBackground(palette.background());
+        gutter.setBorderColor(palette.indentGuide());
+
+        this.editorPane.setBackground(palette.background());
+        this.editorPane.setForeground(palette.foreground());
+        this.editorPane.setCaretColor(palette.caret());
+        this.editorPane.setCurrentLineHighlightColor(palette.currentLine());
+        this.editorPane.setMatchedBracketBGColor(palette.matchedBracket());
+        this.editorPane.setHyperlinkForeground(palette.hyperlink());
+
+        Color selection = UIManager.getColor("EditorPane.selectionBackground");
+        if (selection != null) {
+            this.editorPane.setSelectionColor(selection);
+        }
+
+        CodeUtils.initJavaColors(this.editorPane.getSyntaxScheme(), palette);
+        this.editorPane.revalidate();
+        this.editorPane.repaint();
     }
 
     public void centerViewportOnOffset(int offset) {
@@ -149,7 +175,7 @@ public class AbstractCodeViewPanel extends JPanel {
     }
 
     protected void updateFonts() {
-        var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().<Float>getValue("fontSize"));
+        var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
         this.editorPane.setFractionalFontMetricsEnabled(true);
         this.editorPane.setFont(newFont);
 

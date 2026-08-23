@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -12,8 +13,6 @@ import java.util.function.Consumer;
 
 public class FlatIconButton extends JButton {
 
-    private final Color HOVER_COLOR = Color.GRAY.darker();
-    private final Color TOGGLED_COLOR = new Color(90, 90, 90);
     private final List<Consumer<Boolean>> toggleListeners = new ArrayList<>();
     private boolean state;
 
@@ -35,19 +34,19 @@ public class FlatIconButton extends JButton {
                     setContentAreaFilled(true);
                 }
 
-                setBackground(HOVER_COLOR);
+                setBackground(ThemeColors.hoverBackground());
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
                 setContentAreaFilled(true);
-                setBackground(!toggleable ? Color.GRAY.darker() : HOVER_COLOR);
+                setBackground(ThemeColors.hoverBackground());
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
                 if (toggleable && state)
-                    setBackground(TOGGLED_COLOR);
+                    setBackground(ThemeColors.toggledBackground());
                 setContentAreaFilled(false);
             }
         });
@@ -66,7 +65,7 @@ public class FlatIconButton extends JButton {
         this.state = b;
 
         if (state) {
-            ((FlatSVGIcon) getIcon()).setColorFilter(new FlatSVGIcon.ColorFilter((c) -> new Color(74, 136, 199)));
+            ((FlatSVGIcon) getIcon()).setColorFilter(new FlatSVGIcon.ColorFilter((c) -> ThemeColors.accent()));
         } else {
             ((FlatSVGIcon) getIcon()).setColorFilter(null);
         }

@@ -1,10 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
-import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import java.awt.*;
 
 public class BottomInformationBar extends JPanel {
@@ -15,19 +16,12 @@ public class BottomInformationBar extends JPanel {
         super();
         setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
 
+        // Font size lives in File > Settings; it is a global setting and every editor tab used to
+        // render its own copy of the slider.
         add(this.infoLabel);
         add(Box.createHorizontalGlue());
-        add(new JLabel("Font size: "));
 
-        JSlider slider = new JSlider(10, 30, GlobalConfig.getInstance().<Float>getValue("fontSize").intValue());
-        slider.setMaximumSize(new Dimension(30, (int) slider.getPreferredSize().getHeight()));
-        slider.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-        slider.addChangeListener(event -> {
-            GlobalConfig.getInstance().setValue("fontSize", (float) slider.getValue());
-        });
-        add(slider);
-
-        setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Color.GRAY));
+        setBorder(DynamicMatteBorder.rule(1, 0, 0, 0));
     }
 
     public void setDefaultInfoText(String text, Color color) {
@@ -57,6 +51,6 @@ public class BottomInformationBar extends JPanel {
 
     public void clearInfoText() {
         this.infoLabel.setIcon(null);
-        setDefaultInfoText("", new Color(187, 187, 187));
+        setDefaultInfoText("", ThemeColors.mutedText());
     }
 }

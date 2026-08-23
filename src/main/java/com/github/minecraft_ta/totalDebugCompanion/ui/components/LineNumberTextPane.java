@@ -4,6 +4,7 @@ import com.formdev.flatlaf.ui.FlatUIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import javax.swing.event.DocumentEvent;
 import java.awt.*;
 import java.util.function.Consumer;
@@ -55,7 +56,7 @@ public class LineNumberTextPane extends JTextPane {
 
         FlatUIUtils.setRenderingHints(g);
         g.setFont(currentFont);
-        g.setColor(Color.GRAY);
+        g.setColor(ThemeManager.palette().lineNumber());
         for (int i = 0; i < this.lineCount; i++) {
             var x = 4;
             var y = baseY + i * charHeight;

@@ -1,8 +1,21 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
+import com.formdev.flatlaf.extras.FlatSVGUtils;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+
+import java.awt.Image;
+import java.util.List;
 
 public class Icons {
+
+    private static final String WINDOW_ICON = "/icons/javaFile";
+
+    /** Window icons are raster images, so they must be rebuilt when the theme changes. */
+    public static List<Image> createWindowIconImages(CompanionTheme theme) {
+        String suffix = theme.dark() ? "_dark.svg" : ".svg";
+        return FlatSVGUtils.createWindowIconImages(WINDOW_ICON + suffix);
+    }
 
     public static final FlatSVGIcon JAVA_METHOD = new FlatSVGIcon("icons/method.svg");
     public static final FlatSVGIcon JAVA_CLASS = new FlatSVGIcon("icons/class.svg");

@@ -10,6 +10,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTa
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.*;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -34,7 +36,7 @@ public class CreateScriptWindow extends JFrame {
         var verifyInput = (Predicate<String>) (s) -> !s.isBlank() && !Files.exists(CompanionApp.getRootPath().resolve("scripts").resolve(s + ".java")) && s.matches("^[^\\d_]\\w*$");
         var setIconAndVerify = (Supplier<Boolean>) () -> {
             var result = verifyInput.test(textField.getText());
-            textField.setIconFilter(result ? null : new FlatSVGIcon.ColorFilter((c) -> Color.decode("#D05B64")));
+            textField.setIconFilter(result ? null : new FlatSVGIcon.ColorFilter((c) -> ThemeColors.error()));
             return result;
         };
         textField.getDocument().addDocumentListener((DocumentChangeListener) e -> setIconAndVerify.get());
@@ -55,7 +57,7 @@ public class CreateScriptWindow extends JFrame {
         setIconAndVerify.get();
 
         getContentPane().setLayout(new BorderLayout());
-        ((JPanel) getContentPane()).setBorder(BorderFactory.createMatteBorder(2, 2, 2, 2, Color.GRAY));
+        ((JPanel) getContentPane()).setBorder(new DynamicMatteBorder(2, 2, 2, 2, ThemeColors::border));
         getContentPane().add(header, BorderLayout.NORTH);
         getContentPane().add(textField, BorderLayout.CENTER);
 

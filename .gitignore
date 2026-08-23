@@ -4,3 +4,4 @@ out
 .gradle
 workspace
 jdt-language-server-latest
+*.hprof

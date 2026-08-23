@@ -22,6 +22,9 @@ dependencies {
     implementation('com.formdev:flatlaf:3.7.2')
     implementation('com.formdev:flatlaf-intellij-themes:3.7.2')
     implementation('com.formdev:flatlaf-extras:3.7.2')
+    // Version numbers here track the font release, not FlatLaf.
+    implementation('com.formdev:flatlaf-fonts-inter:4.1')
+    implementation('com.formdev:flatlaf-fonts-jetbrains-mono:2.304')
     implementation('com.fifesoft:rsyntaxtextarea:4.0.1')
     implementation('com.fifesoft:autocomplete:3.3.3')
 
@@ -73,4 +76,12 @@ tasks.named('build') {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// Brings the UI up without a Minecraft session so themes and icons can be eyeballed.
+tasks.register('uiHarness', JavaExec) {
+    group = 'application'
+    description = 'Runs the Companion UI without a Minecraft session (see UiDevHarness).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiDevHarness'
 }
