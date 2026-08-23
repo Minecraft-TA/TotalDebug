@@ -124,6 +124,33 @@ class RuntimeClassIndexTest {
         );
     }
 
+    @Test
+    void publishesAnImmutableSignatureKeyedIndex() throws Exception {
+        Path indexes = Files.createDirectories(this.temporaryDirectory.resolve("indexes"));
+        Path staged = Files.createDirectory(indexes.resolve(".staged"));
+        Path stagedIndex = Files.write(staged.resolve("index"), new byte[]{1, 2, 3});
+        Files.writeString(staged.resolve("index.meta"), "signature");
+        Path published = indexes.resolve("signature");
+
+        RuntimeClassIndex.publishIndex(stagedIndex, published, "signature");
+
+        assertArrayEquals(new byte[]{1, 2, 3}, Files.readAllBytes(published.resolve("index")));
+        assertEquals("signature", Files.readString(published.resolve("index.meta")));
+
+        Path identical = Files.createDirectory(indexes.resolve(".identical"));
+        Path identicalIndex = Files.write(identical.resolve("index"), new byte[]{1, 2, 3});
+        Files.writeString(identical.resolve("index.meta"), "signature");
+        RuntimeClassIndex.publishIndex(identicalIndex, published, "signature");
+
+        Path conflict = Files.createDirectory(indexes.resolve(".conflict"));
+        Path conflictingIndex = Files.write(conflict.resolve("index"), new byte[]{9});
+        Files.writeString(conflict.resolve("index.meta"), "other");
+        assertThrows(
+                java.io.IOException.class,
+                () -> RuntimeClassIndex.publishIndex(conflictingIndex, published, "signature")
+        );
+    }
+
     private Path stageRuntimeSources(String name, Path published, String fileName, byte[] content) throws Exception {
         Path staged = Files.createDirectories(this.temporaryDirectory.resolve(name));
         Files.write(staged.resolve(fileName), content);

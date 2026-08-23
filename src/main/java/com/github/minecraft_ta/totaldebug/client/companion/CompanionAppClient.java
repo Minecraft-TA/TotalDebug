@@ -17,15 +17,17 @@ import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -35,12 +37,13 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
-    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
-
     private final Path workspaceDirectory;
     private final Path dataDirectory;
     private final Path appDirectory;
-    private final Path sessionsDirectory;
+    private final Path appHome;
+    private final Path instanceDescriptorFile;
+    private final Path instanceKeyFile;
+    private final String profileId;
     private final CompanionAppInstaller installer;
     private final RuntimeClassIndex runtimeClassIndex;
     private final CompanionTimeouts timeouts;
@@ -68,10 +71,9 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile boolean closing;
     private volatile boolean transportExpected;
 
-    private Process process;
+    private Process launchedProcess;
     private Path processLog;
-    private Path sessionDirectory;
-    private Path sessionDescriptorFile;
+    private CompanionSessionDescriptor activeDescriptor;
 
     public CompanionAppClient(Path totalDebugDirectory) {
         this(
@@ -103,7 +105,10 @@ public final class CompanionAppClient implements AutoCloseable {
         this.workspaceDirectory = workspace;
         this.dataDirectory = root.resolve("data");
         this.appDirectory = root.resolve("companion-app");
-        this.sessionsDirectory = root.resolve("sessions");
+        this.appHome = CompanionAppHome.resolve();
+        this.instanceDescriptorFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
+        this.instanceKeyFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
+        this.profileId = profileId(this.workspaceDirectory);
         this.installer = new CompanionAppInstaller(this.appDirectory);
         this.runtimeClassIndex = new RuntimeClassIndex(this.dataDirectory);
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
@@ -186,11 +191,12 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void transferForeground(Runnable beforeTransfer, Runnable sendRequest) throws IOException {
-        Process companionProcess = this.process;
-        if (companionProcess == null || !companionProcess.isAlive()) {
-            throw new IOException("The authenticated Companion child is no longer running");
+        CompanionSessionDescriptor descriptor = this.activeDescriptor;
+        if (descriptor == null
+                || !ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
+            throw new IOException("Companion is no longer running");
         }
-        this.foregroundHandoff.transfer(companionProcess.pid(), beforeTransfer, sendRequest);
+        this.foregroundHandoff.transfer(descriptor.processId(), beforeTransfer, sendRequest);
     }
 
     private void configureTransport() {
@@ -280,7 +286,13 @@ public final class CompanionAppClient implements AutoCloseable {
                 CompanionAppClient.this.client.getMessageProcessor().enqueueMessage(new ClientHelloMessage(
                         CompanionProtocol.VERSION,
                         token,
-                        CompanionProtocol.REQUESTED_CAPABILITIES
+                        CompanionProtocol.REQUESTED_CAPABILITIES,
+                        CompanionAppClient.this.profileId,
+                        CompanionAppClient.this.dataDirectory.toString(),
+                        CompanionAppClient.this.runtimeClassIndex.indexFile().toString(),
+                        CompanionAppClient.this.workspaceDirectory.toString(),
+                        CompanionAppClient.this.runtimeClassIndex.runtimeSourceManifest().toString(),
+                        CompanionAppClient.this.runtimeClassIndex.signature()
                 ));
             }
 
@@ -355,20 +367,14 @@ public final class CompanionAppClient implements AutoCloseable {
                 }
                 return;
             }
-            if (this.process != null) {
-                if (this.process.isAlive()) {
-                    throw new IOException(
-                            "The active Companion child lost its authenticated transport; see " + this.processLog
-                    );
-                }
-                resetExitedSession();
-            }
-
-            CompanionSessionDescriptor descriptor = startInstalledCompanion();
+            resetConnection();
+            CompanionSessionDescriptor descriptor = discoverOrStartCompanion();
+            this.activeDescriptor = descriptor;
+            this.sessionToken = readInstanceKey();
             InetSocketAddress address = sessionAddress(descriptor.port());
             reportProgress(CompanionStartupProgress.connecting());
             if (!this.client.connect(address)) {
-                throw new IOException("Unable to connect to the exact Companion child at " + address);
+                throw new IOException("Unable to connect to Companion at " + address);
             }
             CompletableFuture<Void> authentication = this.authenticated;
             readiness = this.ready;
@@ -378,9 +384,6 @@ public final class CompanionAppClient implements AutoCloseable {
         } catch (IOException exception) {
             reportProgress(CompanionStartupProgress.failed(exception.getMessage()));
             this.client.close();
-            if (this.process != null && this.process.isAlive()) {
-                this.process.destroy();
-            }
             throw exception;
         }
     }
@@ -389,7 +392,14 @@ public final class CompanionAppClient implements AutoCloseable {
         return new InetSocketAddress(CompanionLaunchContract.IPV4_LOOPBACK_HOST, port);
     }
 
-    private CompanionSessionDescriptor startInstalledCompanion() throws IOException {
+    private CompanionSessionDescriptor discoverOrStartCompanion() throws IOException {
+        Files.createDirectories(this.appHome);
+        CompanionSessionDescriptor existing = readLiveDescriptor();
+        if (existing != null) {
+            TotalDebug.LOGGER.info("Connecting to TotalDebugCompanion process {}", existing.processId());
+            return existing;
+        }
+
         CompanionInstallation installation;
         try {
             installation = this.installer.resolveOrInstall(this::reportProgress);
@@ -397,55 +407,94 @@ public final class CompanionAppClient implements AutoCloseable {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while installing the companion app", exception);
         }
-
-        Files.createDirectories(this.dataDirectory);
-        Files.createDirectories(this.sessionsDirectory);
-        this.sessionDirectory = this.sessionsDirectory.resolve(UUID.randomUUID().toString());
-        Files.createDirectory(this.sessionDirectory);
-        String sessionId = this.sessionDirectory.getFileName().toString();
-        this.sessionDescriptorFile = this.sessionDirectory.resolve(CompanionLaunchContract.SESSION_DESCRIPTOR_FILE_NAME);
-        Files.deleteIfExists(this.sessionDescriptorFile);
-        Files.copy(
-                this.runtimeClassIndex.runtimeSourceManifest(),
-                this.sessionDirectory.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME)
-        );
-        this.sessionToken = newSessionToken();
-
-        Path logsDirectory = this.appDirectory.resolve("logs");
+        Path launchJar = stageLaunchJar(this.appHome, installation.companionJar());
+        Path logsDirectory = this.appHome.resolve("logs");
         Files.createDirectories(logsDirectory);
         this.processLog = logsDirectory.resolve(
                 "companion-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH.mm.ss"))
-                        + "-" + sessionId + ".log"
+                        + ".log"
         );
         Path javaExecutable = CompanionJavaRuntime.resolveCurrentExecutable();
 
         ProcessBuilder processBuilder = new ProcessBuilder(
                 javaExecutable.toString(),
                 "-jar",
-                installation.companionJar().toString(),
-                CompanionLaunchContract.DATA_DIRECTORY_ARGUMENT,
-                this.dataDirectory.toString(),
-                CompanionLaunchContract.INDEX_FILE_ARGUMENT,
-                this.runtimeClassIndex.indexFile().toString(),
-                CompanionLaunchContract.WORKSPACE_DIRECTORY_ARGUMENT,
-                this.workspaceDirectory.toString(),
-                CompanionLaunchContract.SESSION_DESCRIPTOR_ARGUMENT,
-                this.sessionDescriptorFile.toString()
+                launchJar.toString(),
+                CompanionLaunchContract.APP_HOME_ARGUMENT,
+                this.appHome.toString()
         );
-        processBuilder.environment().put(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, this.sessionToken);
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(this.processLog.toFile());
         reportProgress(CompanionStartupProgress.starting());
-        this.process = processBuilder.start();
+        this.launchedProcess = processBuilder.start();
         TotalDebug.LOGGER.info(
-                "Started per-process TotalDebugCompanion session {} from {} with Minecraft Java {}; output is written to {}",
-                this.sessionDirectory.getFileName(),
-                installation.companionJar(),
+                "Started TotalDebugCompanion from {} with Minecraft Java {}; output is written to {}",
+                launchJar,
                 javaExecutable,
                 this.processLog
         );
 
-        return awaitDescriptor(this.sessionDescriptorFile);
+        return awaitDescriptor(this.instanceDescriptorFile);
+    }
+
+    private CompanionSessionDescriptor readLiveDescriptor() throws IOException {
+        if (!Files.isRegularFile(this.instanceDescriptorFile)) {
+            return null;
+        }
+        CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(this.instanceDescriptorFile);
+        boolean processAlive = ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false);
+        if (!processAlive) {
+            Files.deleteIfExists(this.instanceDescriptorFile);
+            Files.deleteIfExists(this.instanceKeyFile);
+            return null;
+        }
+        if (descriptor.protocolVersion() != CompanionProtocol.VERSION) {
+            throw new IOException(
+                    "Close the running Companion before using protocol " + CompanionProtocol.VERSION
+            );
+        }
+        if (!Files.isRegularFile(this.instanceKeyFile)) {
+            throw new IOException("Companion instance key is missing");
+        }
+        return descriptor;
+    }
+
+    private String readInstanceKey() throws IOException {
+        String token = Files.readString(this.instanceKeyFile, StandardCharsets.US_ASCII).trim();
+        if (token.length() < 32) {
+            throw new IOException("Companion instance key is invalid");
+        }
+        return token;
+    }
+
+    static Path stageLaunchJar(Path appHome, Path sourceJar) throws IOException {
+        String hash = CompanionAppInstaller.sha256(sourceJar);
+        Path buildDirectory = appHome.toAbsolutePath().normalize().resolve("builds").resolve(hash);
+        Path launchJar = buildDirectory.resolve("TotalDebugCompanion.jar");
+        if (Files.exists(launchJar)) {
+            if (Files.isRegularFile(launchJar) && hash.equals(CompanionAppInstaller.sha256(launchJar))) {
+                return launchJar;
+            }
+            throw new IOException("Companion build cache conflicts with " + launchJar);
+        }
+        Files.createDirectories(buildDirectory);
+        Path staged = Files.createTempFile(buildDirectory, ".companion-", ".jar");
+        try {
+            Files.copy(sourceJar, staged, StandardCopyOption.REPLACE_EXISTING);
+            if (!hash.equals(CompanionAppInstaller.sha256(staged))) {
+                throw new IOException("Staged Companion checksum mismatch");
+            }
+            try {
+                Files.move(staged, launchJar, StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.FileAlreadyExistsException exception) {
+                if (!Files.isRegularFile(launchJar) || !hash.equals(CompanionAppInstaller.sha256(launchJar))) {
+                    throw exception;
+                }
+            }
+        } finally {
+            Files.deleteIfExists(staged);
+        }
+        return launchJar;
     }
 
     private void reportProgress(CompanionStartupProgress progress) {
@@ -464,16 +513,14 @@ public final class CompanionAppClient implements AutoCloseable {
                                     + ", got " + descriptor.protocolVersion()
                     );
                 }
-                if (descriptor.processId() != this.process.pid()) {
-                    throw new IOException(
-                            "Companion descriptor PID mismatch: expected " + this.process.pid()
-                                    + ", got " + descriptor.processId()
-                    );
+                if (!ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
+                    throw new IOException("Companion descriptor names a stopped process");
                 }
                 return descriptor;
             }
-            if (!this.process.isAlive()) {
-                throw new IOException("Companion process exited before publishing its session descriptor; see " + this.processLog);
+            Process started = this.launchedProcess;
+            if (started != null && !started.isAlive()) {
+                throw new IOException("Companion exited before publishing its endpoint; see " + this.processLog);
             }
             try {
                 Thread.sleep(this.timeouts.descriptorPollInterval());
@@ -520,38 +567,13 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    private void resetExitedSession() throws IOException {
+    private void resetConnection() {
         this.transportExpected = false;
         this.client.close();
-        cleanupSessionDirectory();
         this.authenticated = new CompletableFuture<>();
         this.ready = new CompletableFuture<>();
         this.negotiatedCapabilities = 0;
         this.sessionToken = null;
-        this.process = null;
-        this.sessionDirectory = null;
-        this.sessionDescriptorFile = null;
-    }
-
-    private void cleanupSessionDirectory() throws IOException {
-        if (this.sessionDirectory == null) {
-            return;
-        }
-        Path normalizedSession = this.sessionDirectory.toAbsolutePath().normalize();
-        if (!this.sessionsDirectory.equals(normalizedSession.getParent())) {
-            throw new IOException("Refusing to clean an unexpected Companion session directory: " + normalizedSession);
-        }
-        if (this.sessionDescriptorFile != null) {
-            Files.deleteIfExists(this.sessionDescriptorFile);
-        }
-        Files.deleteIfExists(normalizedSession.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME));
-        Files.deleteIfExists(normalizedSession);
-    }
-
-    private static String newSessionToken() {
-        byte[] token = new byte[32];
-        TOKEN_RANDOM.nextBytes(token);
-        return HexFormat.of().formatHex(token);
     }
 
     @Override
@@ -559,13 +581,18 @@ public final class CompanionAppClient implements AutoCloseable {
         this.closing = true;
         notifySessionClosed();
         this.client.close();
-        if (this.process != null && this.process.isAlive()) {
-            this.process.destroy();
-        }
+    }
+
+    private static String profileId(Path workspaceDirectory) {
         try {
-            cleanupSessionDirectory();
-        } catch (IOException exception) {
-            TotalDebug.LOGGER.warn("Unable to clean Companion session directory {}", this.sessionDirectory, exception);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String identity = workspaceDirectory.toAbsolutePath().normalize().toString();
+            if (System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
+                identity = identity.toLowerCase(java.util.Locale.ROOT);
+            }
+            return HexFormat.of().formatHex(digest.digest(identity.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
     }
 }

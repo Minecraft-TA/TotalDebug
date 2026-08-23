@@ -35,6 +35,7 @@ import java.util.zip.ZipFile;
 final class RuntimeClassIndex {
     private static final String INDEX_FILE_NAME = "index";
     private static final String METADATA_FILE_NAME = "index.meta";
+    private static final String INDEXES_DIRECTORY_NAME = "indexes";
     private static final String RUNTIME_SOURCES_DIRECTORY_NAME = "runtime-sources";
     private static final String RUNTIME_SOURCES_MANIFEST_NAME = "sources.txt";
     private static final String INDEX_FORMAT_VERSION = "2";
@@ -62,8 +63,9 @@ final class RuntimeClassIndex {
         }
 
         Files.createDirectories(this.dataDirectory);
-        Path indexFile = this.dataDirectory.resolve(INDEX_FILE_NAME);
-        Path metadataFile = this.dataDirectory.resolve(METADATA_FILE_NAME);
+        Path indexDirectory = indexDirectory(signature);
+        Path indexFile = indexDirectory.resolve(INDEX_FILE_NAME);
+        Path metadataFile = indexDirectory.resolve(METADATA_FILE_NAME);
         Path runtimeSourcesDirectory = runtimeSourcesDirectory(signature);
         Path runtimeSourceManifest = runtimeSourcesDirectory.resolve(RUNTIME_SOURCES_MANIFEST_NAME);
         if (Files.isRegularFile(indexFile)
@@ -77,7 +79,8 @@ final class RuntimeClassIndex {
         beforeBuild.run();
         TotalDebug.LOGGER.info("Building companion class index from {} runtime sources", sources.size());
         long started = System.nanoTime();
-        Path workspace = Files.createTempDirectory(this.dataDirectory, ".class-index-");
+        Files.createDirectories(indexDirectory.getParent());
+        Path workspace = Files.createTempDirectory(indexDirectory.getParent(), ".class-index-");
         try {
             Path stagedRuntimeSources = workspace.resolve(RUNTIME_SOURCES_DIRECTORY_NAME);
             PreparedIndexInputs indexInputs = prepareIndexInputs(
@@ -108,8 +111,7 @@ final class RuntimeClassIndex {
             Path stagedMetadata = workspace.resolve(METADATA_FILE_NAME);
             Files.writeString(stagedMetadata, signature, StandardCharsets.UTF_8);
             publishRuntimeSources(stagedRuntimeSources, runtimeSourcesDirectory);
-            atomicReplace(stagedIndex, indexFile);
-            atomicReplace(stagedMetadata, metadataFile);
+            publishIndex(stagedIndex, indexDirectory, signature);
             this.ensuredSignature = signature;
             TotalDebug.LOGGER.info(
                     "Built companion class index from {} JAR inputs and {} direct class files in {} ms",
@@ -125,8 +127,18 @@ final class RuntimeClassIndex {
         }
     }
 
-    Path indexFile() {
-        return this.dataDirectory.resolve(INDEX_FILE_NAME);
+    synchronized Path indexFile() {
+        if (this.ensuredSignature == null) {
+            throw new IllegalStateException("Runtime class index has not been ensured");
+        }
+        return indexDirectory(this.ensuredSignature).resolve(INDEX_FILE_NAME);
+    }
+
+    synchronized String signature() {
+        if (this.ensuredSignature == null) {
+            throw new IllegalStateException("Runtime class index has not been ensured");
+        }
+        return this.ensuredSignature;
     }
 
     synchronized Path runtimeSourceManifest() {
@@ -313,6 +325,35 @@ final class RuntimeClassIndex {
         return this.dataDirectory.resolve(RUNTIME_SOURCES_DIRECTORY_NAME).resolve(signature);
     }
 
+    private Path indexDirectory(String signature) {
+        return this.dataDirectory.resolve(INDEXES_DIRECTORY_NAME).resolve(signature);
+    }
+
+    static void publishIndex(
+            Path stagedIndex,
+            Path indexDirectory,
+            String signature
+    ) throws IOException {
+        if (Files.exists(indexDirectory)) {
+            Path index = indexDirectory.resolve(INDEX_FILE_NAME);
+            Path metadata = indexDirectory.resolve(METADATA_FILE_NAME);
+            if (Files.isRegularFile(index)
+                    && Files.isRegularFile(metadata)
+                    && signature.equals(Files.readString(metadata, StandardCharsets.UTF_8))
+                    && Files.mismatch(stagedIndex, index) == -1) {
+                return;
+            }
+            throw new IOException("Class-index cache conflicts with signature directory " + indexDirectory);
+        }
+
+        Path stagedDirectory = stagedIndex.getParent();
+        try {
+            Files.move(stagedDirectory, indexDirectory, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException exception) {
+            throw new IOException("The companion data directory does not support atomic index updates", exception);
+        }
+    }
+
     static void publishRuntimeSources(Path stagedDirectory, Path publishedDirectory) throws IOException {
         Path publishedManifest = publishedDirectory.resolve(RUNTIME_SOURCES_MANIFEST_NAME);
         Files.createDirectories(publishedDirectory.getParent());
@@ -381,19 +422,6 @@ final class RuntimeClassIndex {
             }
         }
         digest.update((byte) 0);
-    }
-
-    private static void atomicReplace(Path source, Path destination) throws IOException {
-        try {
-            Files.move(
-                    source,
-                    destination,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-        } catch (AtomicMoveNotSupportedException exception) {
-            throw new IOException("The companion data directory does not support atomic index updates", exception);
-        }
     }
 
     private static void deleteTree(Path root) throws IOException {

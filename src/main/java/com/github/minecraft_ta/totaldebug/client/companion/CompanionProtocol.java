@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     public static final short READY = 1;
     public static final short DECOMPILE_OR_OPEN = 2;

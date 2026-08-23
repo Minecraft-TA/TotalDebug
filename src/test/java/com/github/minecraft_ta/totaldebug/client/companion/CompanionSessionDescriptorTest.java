@@ -19,12 +19,12 @@ class CompanionSessionDescriptorTest {
     void readsTheExactThreeFieldDescriptor() throws Exception {
         Path descriptorFile = Files.writeString(
                 this.temporaryDirectory.resolve("session.properties"),
-                "protocol=2\nport=41731\npid=9912\n"
+                "protocol=3\nport=41731\npid=9912\n"
         );
 
         CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile);
 
-        assertEquals(2, descriptor.protocolVersion());
+        assertEquals(3, descriptor.protocolVersion());
         assertEquals(41731, descriptor.port());
         assertEquals(9912, descriptor.processId());
         assertFalse(Files.readString(descriptorFile).contains("token"));
@@ -34,7 +34,7 @@ class CompanionSessionDescriptorTest {
     void rejectsUnknownFieldsInsteadOfGuessing() throws Exception {
         Path descriptorFile = Files.writeString(
                 this.temporaryDirectory.resolve("session.properties"),
-                "protocol=2\nport=41731\npid=9912\ntoken=secret\n"
+                "protocol=3\nport=41731\npid=9912\ntoken=secret\n"
         );
 
         IOException exception = assertThrows(
