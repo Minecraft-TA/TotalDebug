@@ -32,7 +32,11 @@ public final class InitialIndexBenchmark {
         try {
             long totalStarted = System.nanoTime();
             long prepareStarted = System.nanoTime();
-            RuntimeClassIndex.PreparedIndexInputs inputs = RuntimeClassIndex.prepareIndexInputs(sources, workspace);
+            RuntimeClassIndex.PreparedIndexInputs inputs = RuntimeClassIndex.prepareIndexInputs(
+                    sources,
+                    workspace.resolve("materialized"),
+                    workspace.resolve("published")
+            );
             long prepareMillis = elapsedMillis(prepareStarted);
 
             long buildStarted = System.nanoTime();

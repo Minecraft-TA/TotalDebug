@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeClassIndexTest {
@@ -53,14 +54,23 @@ class RuntimeClassIndexTest {
             Path virtualSourceJar = fileSystem.getPath("/META-INF/jarjar/source.jar");
 
             List<Path> inputs = new ArrayList<>();
+            List<Path> referenceSources = new ArrayList<>();
+            Path materialized = this.temporaryDirectory.resolve("materialized");
+            Path published = this.temporaryDirectory.resolve("published");
             RuntimeClassIndex.prepareJarSource(
                     virtualSourceJar,
-                    this.temporaryDirectory,
+                    materialized,
+                    published,
                     7,
-                    inputs
+                    inputs,
+                    referenceSources
             );
 
             assertEquals(2, inputs.size());
+            assertEquals(List.of(
+                    published.resolve("source-7.jar"),
+                    published.resolve("nested-7/nested-0.jar")
+            ), referenceSources);
             assertSame(FileSystems.getDefault(), inputs.getFirst().getFileSystem());
             assertTrue(Files.isRegularFile(inputs.getFirst()));
             assertArrayEquals(sourceJarBytes, Files.readAllBytes(inputs.getFirst()));
@@ -82,6 +92,43 @@ class RuntimeClassIndexTest {
         assertEquals(2, classes.size());
         assertArrayEquals(new byte[]{1, 2, 3}, classes.getFirst());
         assertArrayEquals(new byte[]{4, 5, 6}, classes.getLast());
+    }
+
+    @Test
+    void publishesAnImmutableRuntimeSourceCache() throws Exception {
+        Path published = this.temporaryDirectory.resolve("runtime-sources/signature");
+        Path staged = stageRuntimeSources("first-stage", published, "source.jar", new byte[]{1, 2, 3});
+
+        RuntimeClassIndex.publishRuntimeSources(staged, published);
+
+        assertEquals(
+                List.of(published.resolve("source.jar")),
+                RuntimeSourceManifest.read(published.resolve("sources.txt"))
+        );
+        assertArrayEquals(new byte[]{1, 2, 3}, Files.readAllBytes(published.resolve("source.jar")));
+
+        Path identical = stageRuntimeSources("identical-stage", published, "source.jar", new byte[]{1, 2, 3});
+        RuntimeClassIndex.publishRuntimeSources(identical, published);
+        assertTrue(Files.notExists(identical));
+
+        Path contentConflict = stageRuntimeSources("content-conflict", published, "source.jar", new byte[]{9});
+        assertThrows(
+                java.io.IOException.class,
+                () -> RuntimeClassIndex.publishRuntimeSources(contentConflict, published)
+        );
+
+        Path conflicting = stageRuntimeSources("conflicting-stage", published, "other.jar", new byte[]{4});
+        assertThrows(
+                java.io.IOException.class,
+                () -> RuntimeClassIndex.publishRuntimeSources(conflicting, published)
+        );
+    }
+
+    private Path stageRuntimeSources(String name, Path published, String fileName, byte[] content) throws Exception {
+        Path staged = Files.createDirectories(this.temporaryDirectory.resolve(name));
+        Files.write(staged.resolve(fileName), content);
+        RuntimeSourceManifest.write(staged.resolve("sources.txt"), List.of(published.resolve(fileName)));
+        return staged;
     }
 
     private static String fingerprint(Path directory) throws Exception {

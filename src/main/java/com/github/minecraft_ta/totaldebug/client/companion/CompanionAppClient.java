@@ -405,6 +405,10 @@ public final class CompanionAppClient implements AutoCloseable {
         String sessionId = this.sessionDirectory.getFileName().toString();
         this.sessionDescriptorFile = this.sessionDirectory.resolve(CompanionLaunchContract.SESSION_DESCRIPTOR_FILE_NAME);
         Files.deleteIfExists(this.sessionDescriptorFile);
+        Files.copy(
+                this.runtimeClassIndex.runtimeSourceManifest(),
+                this.sessionDirectory.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME)
+        );
         this.sessionToken = newSessionToken();
 
         Path logsDirectory = this.appDirectory.resolve("logs");
@@ -540,6 +544,7 @@ public final class CompanionAppClient implements AutoCloseable {
         if (this.sessionDescriptorFile != null) {
             Files.deleteIfExists(this.sessionDescriptorFile);
         }
+        Files.deleteIfExists(normalizedSession.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME));
         Files.deleteIfExists(normalizedSession);
     }
 

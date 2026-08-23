@@ -35,7 +35,9 @@ import java.util.zip.ZipFile;
 final class RuntimeClassIndex {
     private static final String INDEX_FILE_NAME = "index";
     private static final String METADATA_FILE_NAME = "index.meta";
-    private static final String INDEX_FORMAT_VERSION = "1";
+    private static final String RUNTIME_SOURCES_DIRECTORY_NAME = "runtime-sources";
+    private static final String RUNTIME_SOURCES_MANIFEST_NAME = "sources.txt";
+    private static final String INDEX_FORMAT_VERSION = "2";
 
     private final Path dataDirectory;
     private String ensuredSignature;
@@ -62,9 +64,12 @@ final class RuntimeClassIndex {
         Files.createDirectories(this.dataDirectory);
         Path indexFile = this.dataDirectory.resolve(INDEX_FILE_NAME);
         Path metadataFile = this.dataDirectory.resolve(METADATA_FILE_NAME);
+        Path runtimeSourcesDirectory = runtimeSourcesDirectory(signature);
+        Path runtimeSourceManifest = runtimeSourcesDirectory.resolve(RUNTIME_SOURCES_MANIFEST_NAME);
         if (Files.isRegularFile(indexFile)
                 && Files.isRegularFile(metadataFile)
                 && signature.equals(Files.readString(metadataFile, StandardCharsets.UTF_8))) {
+            RuntimeSourceManifest.read(runtimeSourceManifest);
             this.ensuredSignature = signature;
             return false;
         }
@@ -74,10 +79,20 @@ final class RuntimeClassIndex {
         long started = System.nanoTime();
         Path workspace = Files.createTempDirectory(this.dataDirectory, ".class-index-");
         try {
-            PreparedIndexInputs indexInputs = prepareIndexInputs(sources, workspace);
+            Path stagedRuntimeSources = workspace.resolve(RUNTIME_SOURCES_DIRECTORY_NAME);
+            PreparedIndexInputs indexInputs = prepareIndexInputs(
+                    sources,
+                    stagedRuntimeSources,
+                    runtimeSourcesDirectory
+            );
             if (indexInputs.jarFiles().isEmpty() && indexInputs.classFiles().isEmpty()) {
                 throw new IOException("No runtime class files were available for the companion class index");
             }
+
+            RuntimeSourceManifest.write(
+                    stagedRuntimeSources.resolve(RUNTIME_SOURCES_MANIFEST_NAME),
+                    indexInputs.referenceSources()
+            );
 
             Path stagedIndex = workspace.resolve(INDEX_FILE_NAME);
             try (ClassIndex classIndex = ClassIndex.fromSources(
@@ -92,6 +107,7 @@ final class RuntimeClassIndex {
 
             Path stagedMetadata = workspace.resolve(METADATA_FILE_NAME);
             Files.writeString(stagedMetadata, signature, StandardCharsets.UTF_8);
+            publishRuntimeSources(stagedRuntimeSources, runtimeSourcesDirectory);
             atomicReplace(stagedIndex, indexFile);
             atomicReplace(stagedMetadata, metadataFile);
             this.ensuredSignature = signature;
@@ -113,17 +129,37 @@ final class RuntimeClassIndex {
         return this.dataDirectory.resolve(INDEX_FILE_NAME);
     }
 
-    static PreparedIndexInputs prepareIndexInputs(List<Path> sources, Path workspace) throws IOException {
+    synchronized Path runtimeSourceManifest() {
+        if (this.ensuredSignature == null) {
+            throw new IllegalStateException("Runtime class index has not been ensured");
+        }
+        return runtimeSourcesDirectory(this.ensuredSignature).resolve(RUNTIME_SOURCES_MANIFEST_NAME);
+    }
+
+    static PreparedIndexInputs prepareIndexInputs(
+            List<Path> sources,
+            Path materializedSources,
+            Path publishedSources
+    ) throws IOException {
         List<Path> jarFiles = new ArrayList<>();
         List<byte[]> classFiles = new ArrayList<>();
+        List<Path> referenceSources = new ArrayList<>();
         int sourceNumber = 0;
         for (Path source : sources) {
             int currentSourceNumber = sourceNumber++;
             try {
                 if (Files.isDirectory(source)) {
                     readClassDirectory(source, classFiles);
+                    referenceSources.add(source);
                 } else {
-                    prepareJarSource(source, workspace, currentSourceNumber, jarFiles);
+                    prepareJarSource(
+                            source,
+                            materializedSources,
+                            publishedSources,
+                            currentSourceNumber,
+                            jarFiles,
+                            referenceSources
+                    );
                 }
             } catch (IOException | RuntimeException exception) {
                 throw new IOException(
@@ -135,18 +171,28 @@ final class RuntimeClassIndex {
         }
 
         readJdkClasses(classFiles);
-        return new PreparedIndexInputs(List.copyOf(jarFiles), List.copyOf(classFiles));
+        return new PreparedIndexInputs(
+                List.copyOf(jarFiles),
+                List.copyOf(classFiles),
+                List.copyOf(referenceSources)
+        );
     }
 
     static void prepareJarSource(
             Path sourceJar,
-            Path workspace,
+            Path materializedSources,
+            Path publishedSources,
             int sourceNumber,
-            List<Path> inputs
+            List<Path> inputs,
+            List<Path> referenceSources
     ) throws IOException {
         Path indexInput = sourceJar;
+        Path referenceInput = sourceJar;
         if (sourceJar.getFileSystem() != FileSystems.getDefault()) {
-            indexInput = workspace.resolve("source-" + sourceNumber + ".jar");
+            String fileName = "source-" + sourceNumber + ".jar";
+            indexInput = materializedSources.resolve(fileName);
+            referenceInput = publishedSources.resolve(fileName);
+            Files.createDirectories(materializedSources);
             try (InputStream input = Files.newInputStream(sourceJar);
                  OutputStream output = Files.newOutputStream(indexInput)) {
                 input.transferTo(output);
@@ -154,7 +200,14 @@ final class RuntimeClassIndex {
         }
 
         inputs.add(indexInput);
-        extractNestedJars(indexInput, workspace.resolve("nested-" + sourceNumber), inputs);
+        referenceSources.add(referenceInput);
+        extractNestedJars(
+                indexInput,
+                materializedSources.resolve("nested-" + sourceNumber),
+                publishedSources.resolve("nested-" + sourceNumber),
+                inputs,
+                referenceSources
+        );
     }
 
     static int readClassDirectory(Path sourceDirectory, List<byte[]> classFiles) throws IOException {
@@ -170,7 +223,13 @@ final class RuntimeClassIndex {
         return classFiles.size() - initialSize;
     }
 
-    private static void extractNestedJars(Path sourceJar, Path outputDirectory, List<Path> inputs) throws IOException {
+    private static void extractNestedJars(
+            Path sourceJar,
+            Path outputDirectory,
+            Path publishedDirectory,
+            List<Path> inputs,
+            List<Path> referenceSources
+    ) throws IOException {
         try (ZipFile zip = new ZipFile(sourceJar.toFile())) {
             int nestedNumber = 0;
             for (ZipEntry entry : zip.stream()
@@ -182,6 +241,7 @@ final class RuntimeClassIndex {
                     Files.copy(input, nestedJar);
                 }
                 inputs.add(nestedJar);
+                referenceSources.add(publishedDirectory.resolve(nestedJar.getFileName().toString()));
             }
         }
     }
@@ -205,7 +265,7 @@ final class RuntimeClassIndex {
         }
     }
 
-    record PreparedIndexInputs(List<Path> jarFiles, List<byte[]> classFiles) {
+    record PreparedIndexInputs(List<Path> jarFiles, List<byte[]> classFiles, List<Path> referenceSources) {
     }
 
     private static boolean isIndexableClassEntry(String entryName) {
@@ -246,6 +306,56 @@ final class RuntimeClassIndex {
                 updateDigest(digest, source.relativize(classFile).toString());
                 updateDigest(digest, classFile);
             }
+        }
+    }
+
+    private Path runtimeSourcesDirectory(String signature) {
+        return this.dataDirectory.resolve(RUNTIME_SOURCES_DIRECTORY_NAME).resolve(signature);
+    }
+
+    static void publishRuntimeSources(Path stagedDirectory, Path publishedDirectory) throws IOException {
+        Path publishedManifest = publishedDirectory.resolve(RUNTIME_SOURCES_MANIFEST_NAME);
+        Files.createDirectories(publishedDirectory.getParent());
+
+        if (Files.exists(publishedDirectory)) {
+            if (!Files.isDirectory(publishedDirectory)
+                    || !Files.isRegularFile(publishedManifest)
+                    || !directoryContentEquals(stagedDirectory, publishedDirectory)) {
+                throw new IOException("Runtime-source cache conflicts with signature directory " + publishedDirectory);
+            }
+            RuntimeSourceManifest.read(publishedManifest);
+            deleteTree(stagedDirectory);
+            return;
+        }
+
+        try {
+            Files.move(stagedDirectory, publishedDirectory, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException exception) {
+            throw new IOException("The companion data directory does not support atomic runtime-source updates", exception);
+        }
+        RuntimeSourceManifest.read(publishedManifest);
+    }
+
+    private static boolean directoryContentEquals(Path first, Path second) throws IOException {
+        List<Path> firstFiles = relativeFiles(first);
+        List<Path> secondFiles = relativeFiles(second);
+        if (!firstFiles.equals(secondFiles)) {
+            return false;
+        }
+        for (Path relative : firstFiles) {
+            if (Files.mismatch(first.resolve(relative), second.resolve(relative)) != -1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<Path> relativeFiles(Path directory) throws IOException {
+        try (Stream<Path> paths = Files.walk(directory)) {
+            return paths.filter(Files::isRegularFile)
+                    .map(directory::relativize)
+                    .sorted()
+                    .toList();
         }
     }
 
