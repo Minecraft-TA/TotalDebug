@@ -29,6 +29,14 @@ Run a development client or dedicated server with:
 
 When `../TotalDebugCompanion` exists, `runClient` builds its `shadowJar` and uses that JAR automatically. This keeps local Companion changes testable without publishing a release or changing its version.
 
+Build a matching pair for an external Minecraft instance with:
+
+```powershell
+.\gradlew.bat localCompanionPair
+```
+
+The task builds the sibling Companion shadow JAR, embeds its SHA-256 in TotalDebug, verifies the match, and writes both JARs to `build/local-companion-pair`.
+
 Pass an explicit JAR to override the sibling checkout:
 
 ```powershell

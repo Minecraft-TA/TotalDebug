@@ -12,3 +12,5 @@ Use the checked-in Gradle wrapper in each repository. The workspace JDKs are:
 - Java 21: `C:\Users\Admin\.jdks\temurin-21.0.12`
 
 All four repositories use Java 21. Local coordinated dependency builds are published to Maven Local before verifying their consumers.
+
+When deploying TotalDebug and Companion to an external Minecraft instance, run `.\gradlew.bat localCompanionPair` in TotalDebug and copy both JARs from `build\local-companion-pair`. Completion requires `verifyCompanionPair` to report the same Companion SHA-256 for the mod metadata and shadow JAR.

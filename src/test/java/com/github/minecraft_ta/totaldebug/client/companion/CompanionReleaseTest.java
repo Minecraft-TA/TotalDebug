@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CompanionReleaseTest {
+    private static final String PUBLISHED_SHA256 =
+            "7f09e350acb7dbcc8a8a994d6ba2a8340b7226e67ae6acf69ba9ee61babf7157";
+
     @Test
     void loadsTheGeneratedImmutableReleaseMetadata() {
         CompanionRelease release = CompanionRelease.loadBundled();
@@ -22,7 +25,7 @@ class CompanionReleaseTest {
                 release.downloadUri()
         );
         assertEquals(
-                "7f09e350acb7dbcc8a8a994d6ba2a8340b7226e67ae6acf69ba9ee61babf7157",
+                System.getProperty("totaldebug.test.companionSha256", PUBLISHED_SHA256),
                 release.sha256()
         );
     }

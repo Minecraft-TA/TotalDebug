@@ -1,13 +1,6 @@
 import groovy.json.JsonSlurper
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.OutputFile
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.TaskAction
 
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 abstract class GenerateParchmentParameterIndex extends DefaultTask {
@@ -81,6 +74,61 @@ abstract class GenerateParchmentParameterIndex extends DefaultTask {
     }
 }
 
+abstract class VerifyCompanionPair extends DefaultTask {
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getTotalDebugJar()
+
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getCompanionJar()
+
+    @TaskAction
+    void verify() {
+        def release = new Properties()
+        new ZipFile(totalDebugJar.get().asFile).withCloseable { archive ->
+            def entry = archive.getEntry('META-INF/totaldebug/companion-release.properties')
+            if (entry == null) {
+                throw new GradleException('Built TotalDebug JAR does not contain Companion release metadata')
+            }
+            archive.getInputStream(entry).withCloseable { input -> release.load(input) }
+        }
+
+        def embeddedSha256 = release.getProperty('sha256')
+        def actualSha256 = sha256(companionJar.get().asFile)
+        if (embeddedSha256 != actualSha256) {
+            throw new GradleException(
+                    "Companion pair mismatch: TotalDebug pins ${embeddedSha256}, but "
+                            + "${companionJar.get().asFile} has ${actualSha256}"
+            )
+        }
+        logger.lifecycle("Verified TotalDebug and Companion pair at SHA-256 ${actualSha256}")
+    }
+
+    static String sha256(File input) {
+        def digest = MessageDigest.getInstance('SHA-256')
+        input.withInputStream { stream ->
+            byte[] buffer = new byte[8192]
+            int read
+            while ((read = stream.read(buffer)) != -1) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        HexFormat.of().formatHex(digest.digest())
+    }
+}
+
+abstract class CompanionSha256ArgumentProvider implements CommandLineArgumentProvider {
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getCompanionJar()
+
+    @Override
+    Iterable<String> asArguments() {
+        ["-Dtotaldebug.test.companionSha256=${VerifyCompanionPair.sha256(companionJar.get().asFile)}"]
+    }
+}
+
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.144'
@@ -140,6 +188,12 @@ def useSiblingCompanion = !explicitCompanionJar.isPresent()
         && !usePublishedCompanion.get()
         && siblingCompanionBuildFile.asFile.isFile()
         && siblingCompanionWrapper.asFile.isFile()
+def pairedCompanionJar = explicitCompanionJar.isPresent()
+        ? file(explicitCompanionJar.get())
+        : useSiblingCompanion ? siblingCompanionJar.asFile : null
+def pairedCompanionSha256 = pairedCompanionJar == null
+        ? null
+        : providers.provider { VerifyCompanionPair.sha256(pairedCompanionJar) }
 
 neoForge {
     version = project.neo_version
@@ -243,20 +297,69 @@ def minimumNeoForgeVersion = project.neo_version.toString()
 tasks.named('processResources').configure {
     dependsOn generateParchmentParameterIndex
     inputs.property('neo_version', minimumNeoForgeVersion)
+    if (pairedCompanionJar != null) {
+        if (useSiblingCompanion) {
+            dependsOn buildSiblingCompanion
+        }
+        inputs.file(pairedCompanionJar).withPathSensitivity(PathSensitivity.NONE)
+        filesMatching('META-INF/totaldebug/companion-release.properties') {
+            filter { line ->
+                line.startsWith('sha256=')
+                        ? "sha256=${pairedCompanionSha256.get()}"
+                        : line
+            }
+        }
+    }
     filesMatching('META-INF/neoforge.mods.toml') {
         filter { line -> line.replace('${neo_version}', minimumNeoForgeVersion) }
     }
 }
 
-tasks.named('jar', Jar).configure {
+def modJar = tasks.named('jar', Jar)
+
+modJar.configure {
     manifest.attributes(
             'Implementation-Title': 'TotalDebug',
             'Implementation-Version': project.version,
     )
 }
 
+def verifyCompanionPair = pairedCompanionJar == null
+        ? tasks.register('verifyCompanionPair') {
+            group = 'verification'
+            description = 'Checks that the built TotalDebug JAR pins the selected local Companion JAR.'
+            onlyIf { false }
+        }
+        : tasks.register('verifyCompanionPair', VerifyCompanionPair) {
+            group = 'verification'
+            description = 'Checks that the built TotalDebug JAR pins the selected local Companion JAR.'
+            totalDebugJar = modJar.flatMap { it.archiveFile }
+            companionJar = pairedCompanionJar
+            dependsOn modJar
+        }
+
+tasks.named('check').configure {
+    dependsOn verifyCompanionPair
+}
+
+if (pairedCompanionJar != null) {
+    tasks.register('localCompanionPair', Sync) {
+        group = 'build'
+        description = 'Builds and collects matching local TotalDebug and Companion JARs.'
+        dependsOn verifyCompanionPair
+        from(modJar.flatMap { it.archiveFile })
+        from(pairedCompanionJar)
+        into(layout.buildDirectory.dir('local-companion-pair'))
+    }
+}
+
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    if (pairedCompanionJar != null) {
+        def sha256ArgumentProvider = objects.newInstance(CompanionSha256ArgumentProvider)
+        sha256ArgumentProvider.companionJar = pairedCompanionJar
+        jvmArgumentProviders.add(sha256ArgumentProvider)
+    }
 }
 
 tasks.register('benchmarkInitialIndex', JavaExec) {
