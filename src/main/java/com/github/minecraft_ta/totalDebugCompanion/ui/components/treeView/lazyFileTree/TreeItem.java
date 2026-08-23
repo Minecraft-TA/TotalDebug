@@ -44,6 +44,10 @@ public class TreeItem {
         return renderedName;
     }
 
+    public String getTooltip() {
+        return this.name;
+    }
+
     public void setIcon(Icon icon) {
         this.icon = icon;
     }

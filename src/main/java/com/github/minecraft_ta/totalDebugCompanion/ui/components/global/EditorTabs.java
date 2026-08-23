@@ -20,7 +20,7 @@ public class EditorTabs extends JTabbedPane {
     public EditorTabs() {
         super();
         setTabLayoutPolicy(SCROLL_TAB_LAYOUT);
-        setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 0));
+        setBorder(BorderFactory.createEmptyBorder());
     }
 
     /**

@@ -934,6 +934,7 @@
       "tabHeight": 40,
       "tabSelectionArc": 4,
       "hoverColor": "tab-bg-hovered",
+      "selectedBackground": "tab-selected-bg-inactive",
       "contentAreaColor": "dialog-border",
       "focusColor": "tab-selected-bg-active",
       "tabContentMinWidth": 24

@@ -26,4 +26,9 @@ public class FileSystemFileItem extends TreeItem {
     public Path getPath() {
         return path;
     }
+
+    @Override
+    public String getTooltip() {
+        return this.path.toString();
+    }
 }

@@ -44,6 +44,22 @@ Companion's own name for the icon; the second column is the source path inside t
 | target | `general/locate` | | decompile | `actions/preview` |
 | block | `general/remove` | | | |
 
+The file-tree polish set uses the following additional New UI assets:
+
+| here | expui | | here | expui |
+|---|---|---|---|---|
+| folder | `nodes/folder` | | package | `nodes/package` |
+| sourceRoot | `nodes/sourceRoot` | | resourcesRoot | `nodes/resourcesRoot` |
+| library | `nodes/library` | | resourceBundle | `nodes/resourceBundle` |
+| module | `nodes/module` | | image | `fileTypes/image` |
+| json | `fileTypes/json` | | config | `fileTypes/config` |
+| xml | `fileTypes/xml` | | yaml | `fileTypes/yaml` |
+| propertiesFile | `fileTypes/properties` | | markdown | `fileTypes/markdown` |
+| manifest | `fileTypes/manifest` | | binaryData | `fileTypes/binaryData` |
+| html | `fileTypes/html` | | css | `fileTypes/css` |
+| javaScript | `fileTypes/javaScript` | | font | `fileTypes/font` |
+| settings | `general/settings` | | | |
+
 `decompile` and `block` have no exact New UI counterpart; those two are judgement calls and are the
 first place to look if an icon reads wrong.
 

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
@@ -182,6 +183,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
         private FindUsagesAction() {
             super("Find Usages");
+            putValue(SMALL_ICON, Icons.SEARCH_ICON);
         }
 
         @Override

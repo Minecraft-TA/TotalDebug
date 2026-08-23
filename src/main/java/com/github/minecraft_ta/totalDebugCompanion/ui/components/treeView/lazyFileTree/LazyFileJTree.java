@@ -30,6 +30,8 @@ public class LazyFileJTree extends JTree {
         setShowsRootHandles(true);
         setRootVisible(false);
         setBorder(BorderFactory.createEmptyBorder());
+        putClientProperty("JTree.wideSelection", true);
+        ToolTipManager.sharedInstance().registerComponent(this);
 
         setModel(new DefaultTreeModel(new LazyTreeNode(this.itemFactory.createHiddenRoot())));
         addTreeWillExpandListener(new TreeWillExpandListener() {
@@ -99,12 +101,21 @@ public class LazyFileJTree extends JTree {
                     return this;
 
                 setText(treeNode.getUserObject().getRenderedName());
-                var icon = treeNode.getUserObject().getIcon();
-                if (icon != null)
-                    setIcon(icon);
+                setIcon(treeNode.getUserObject().getIcon());
+                setIconTextGap(5);
+                setToolTipText(treeNode.getUserObject().getTooltip());
                 return this;
             }
         });
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        Color background = UIManager.getColor("ToolWindow.background");
+        if (background != null) {
+            setBackground(background);
+        }
     }
 
     protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
@@ -145,12 +156,9 @@ public class LazyFileJTree extends JTree {
     }
 
     private void loadItemsForNode(LazyTreeNode node) {
-        CompletableFuture.supplyAsync(() -> ((DirectoryTreeItem) node.getUserObject()).loadChildren().stream().sorted((c1, c2) -> {
-            var value = Boolean.compare(c2 instanceof DirectoryTreeItem, c1 instanceof DirectoryTreeItem);
-            if (value == 0)
-                value = c1.getName().compareTo(c2.getName());
-            return value;
-        }).toList()).thenAccept((items) -> {
+        CompletableFuture.supplyAsync(() -> ((DirectoryTreeItem) node.getUserObject()).loadChildren().stream()
+                .sorted(LazyFileJTree::compareTreeItems)
+                .toList()).thenAccept((items) -> {
             SwingUtilities.invokeLater(() -> {
                 var selection = getSelectionRows();
 
@@ -164,6 +172,15 @@ public class LazyFileJTree extends JTree {
             e.printStackTrace();
             return null;
         });
+    }
+
+    static int compareTreeItems(TreeItem first, TreeItem second) {
+        int directoryOrder = Boolean.compare(second.isDirectory(), first.isDirectory());
+        if (directoryOrder != 0) {
+            return directoryOrder;
+        }
+        int nameOrder = String.CASE_INSENSITIVE_ORDER.compare(first.getName(), second.getName());
+        return nameOrder != 0 ? nameOrder : first.getName().compareTo(second.getName());
     }
 
     public void deleteSelectedItems() {

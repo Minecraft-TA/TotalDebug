@@ -28,12 +28,17 @@ public class ZipFileRootItem extends DirectoryTreeItem {
             indexZipFile(path);
         }
 
-        return new DirectoryEntry(this.root).loadChildren();
+        return new DirectoryEntry(this.root, "", false).loadChildren();
     }
 
     @Override
     public Icon getIcon() {
         return Icons.JAR_FILE;
+    }
+
+    @Override
+    public String getTooltip() {
+        return this.path.toString();
     }
 
     private void indexZipFile(Path path) {
@@ -58,33 +63,63 @@ public class ZipFileRootItem extends DirectoryTreeItem {
     public static final class DirectoryEntry extends DirectoryTreeItem {
 
         private final Node node;
+        private final String entryPath;
+        private final boolean resourceTree;
 
-        private DirectoryEntry(Node node) {
+        private DirectoryEntry(Node node, String entryPath, boolean resourceTree) {
             super(node.name);
             this.node = node;
+            this.entryPath = entryPath;
+            this.resourceTree = resourceTree;
         }
 
         @Override
         public List<TreeItem> loadChildren() {
             return node.getChildren().stream().map(n -> {
-                if (n.getChildren().isEmpty())
-                    return new Entry(n);
-                return new DirectoryEntry(n);
+                String childPath = this.entryPath.isEmpty() ? n.name : this.entryPath + '/' + n.name;
+                boolean childResourceTree = this.resourceTree
+                        || n.name.equalsIgnoreCase("assets")
+                        || n.name.equalsIgnoreCase("data")
+                        || n.name.equalsIgnoreCase("META-INF");
+                if (n.getChildren().isEmpty()) {
+                    return new Entry(n, childPath);
+                }
+                return new DirectoryEntry(n, childPath, childResourceTree);
             }).toList();
+        }
+
+        @Override
+        public Icon getIcon() {
+            return FileTreeIcons.forArchiveDirectory(
+                    this.node.name,
+                    this.resourceTree,
+                    this.node.hasClassDescendant()
+            );
+        }
+
+        @Override
+        public String getTooltip() {
+            return this.entryPath + '/';
         }
     }
 
     public static class Entry extends TreeItem {
 
-        private Entry(Node node) {
+        private final String entryPath;
+
+        private Entry(Node node, String entryPath) {
             super(node.name);
+            this.entryPath = entryPath;
         }
 
         @Override
         public Icon getIcon() {
-            if (this.getName().endsWith(".class"))
-                return Icons.CLASS_FILE;
-            return Icons.TEXT_FILE;
+            return FileTreeIcons.forFileName(getName());
+        }
+
+        @Override
+        public String getTooltip() {
+            return this.entryPath;
         }
     }
 
@@ -123,6 +158,13 @@ public class ZipFileRootItem extends DirectoryTreeItem {
             if (this.children == null)
                 this.children = new ArrayList<>();
             return this.children;
+        }
+
+        private boolean hasClassDescendant() {
+            return getChildren().stream().anyMatch(child ->
+                    child.name.toLowerCase(java.util.Locale.ROOT).endsWith(".class")
+                            || child.hasClassDescendant()
+            );
         }
 
         private String getFirstPart(String path) {

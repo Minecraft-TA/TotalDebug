@@ -24,6 +24,8 @@ class CompanionDefaultsAddonTest {
 
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
         assertEquals(25, UIManager.get("TabbedPane.tabHeight"));
+        assertEquals(2, UIManager.get("TabbedPane.tabSelectionHeight"));
+        assertEquals(1, UIManager.get("TabbedPane.contentSeparatorHeight"));
         assertEquals(Boolean.FALSE, UIManager.get("TitlePane.unifiedBackground"));
         assertNotNull(UIManager.getBorder("MenuBar.border"));
 

@@ -16,6 +16,8 @@ public class CloseButton extends JButton {
     public CloseButton() {
         int size = 16;
         setPreferredSize(new Dimension(size, size));
+        setBorder(BorderFactory.createEmptyBorder());
+        setMargin(new Insets(0, 0, 0, 0));
         setContentAreaFilled(false);
         setFocusable(false);
         addMouseListener(new MouseAdapter() {
@@ -49,9 +51,9 @@ public class CloseButton extends JButton {
         Graphics2D g2 = (Graphics2D) g.create();
 
         if (this.hovered) {
-            Icons.CLOSE_HOVERED_ICON.paintIcon(this, g, 0, 0);
+            Icons.CLOSE_HOVERED_ICON.paintIcon(this, g2, 0, 0);
         } else {
-            Icons.CLOSE_ICON.paintIcon(this, g, 0, 0);
+            Icons.CLOSE_ICON.paintIcon(this, g2, 0, 0);
         }
 
         g2.dispose();

@@ -23,7 +23,7 @@ public class LabelWithButtonTabComponent extends JPanel {
         };
 
         label.setIcon(icon);
-        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 5));
+        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
         add(label);
 
         JButton button = new CloseButton();
@@ -34,7 +34,7 @@ public class LabelWithButtonTabComponent extends JPanel {
             }
         });
         add(button);
-        setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
+        setBorder(BorderFactory.createEmptyBorder());
     }
 
 }

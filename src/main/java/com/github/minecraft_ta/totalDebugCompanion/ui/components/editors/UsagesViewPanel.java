@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceS
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceNavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
@@ -24,6 +25,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import javax.swing.border.CompoundBorder;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -143,7 +145,10 @@ public final class UsagesViewPanel extends JPanel {
         header.add(firstRow);
         header.add(Box.createVerticalStrut(6));
         header.add(secondRow);
-        header.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        header.setBorder(new CompoundBorder(
+                DynamicMatteBorder.separatorRule(0, 0, 1, 0),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)
+        ));
         add(header, BorderLayout.NORTH);
 
         this.cancelButton.addActionListener(event -> cancelActiveSearch());

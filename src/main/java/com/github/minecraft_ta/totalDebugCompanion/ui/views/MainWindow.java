@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTa
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
@@ -18,8 +19,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.lang.reflect.Field;
-import java.util.function.Consumer;
 
 public class MainWindow extends JFrame implements AWTEventListener {
 
@@ -31,37 +30,31 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private SearchEverywherePopup searchEverywherePopup;
 
     private MainWindow() {
-        var root = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        var root = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT) {
+            @Override
+            protected void paintChildren(Graphics graphics) {
+                super.paintChildren(graphics);
+                Color previous = graphics.getColor();
+                graphics.setColor(ThemeColors.separator());
+                int separatorX = getDividerLocation() + getDividerSize() / 2;
+                graphics.fillRect(separatorX, 0, 1, getHeight());
+                graphics.setColor(previous);
+            }
+        };
 
         root.setLeftComponent(UIUtils.verticalLayout(new FileTreeViewHeader(), new FileTreeView(this.editorTabs)));
         root.setRightComponent(this.editorTabs);
-        root.setDividerSize(10);
+        root.setBorder(BorderFactory.createEmptyBorder());
+        root.setDividerSize(7);
         root.setDividerLocation(350);
-        root.setOneTouchExpandable(true);
-
-        try {
-            var dividerField = root.getUI().getClass().getSuperclass().getDeclaredField("divider");
-            dividerField.setAccessible(true);
-            var divider = dividerField.get(root.getUI());
-
-            var setButtonSize = (Consumer<Field>) (f) -> {
-                f.setAccessible(true);
-                try {
-                    var button = f.get(divider);
-                    var method = button.getClass().getSuperclass().getDeclaredMethod("setArrowWidth", int.class);
-                    method.invoke(button, 10);
-                } catch (Throwable ignored) {}
-            };
-            setButtonSize.accept(divider.getClass().getSuperclass().getDeclaredField("leftButton"));
-            setButtonSize.accept(divider.getClass().getSuperclass().getDeclaredField("rightButton"));
-        } catch (Throwable ignored) {}
+        root.setOneTouchExpandable(false);
 
         getContentPane().add(root);
 
         var menuBar = new JMenuBar();
 
         var fileMenu = new JMenu("File");
-        fileMenu.add(new AbstractAction("Settings...") {
+        fileMenu.add(new AbstractAction("Settings...", Icons.SETTINGS) {
             @Override
             public void actionPerformed(ActionEvent e) {
                 new SettingsWindow(MainWindow.this).setVisible(true);
@@ -71,7 +64,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
         var toolsMenu = new JMenu("Tools");
         if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID)) {
-            toolsMenu.add(new AbstractAction("Chunk Grid") {
+            toolsMenu.add(new AbstractAction("Chunk Grid", Icons.OVERLAY_MODE) {
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     ChunkGridWindow.open();
@@ -111,7 +104,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
                 CompanionApp.exit();
             }
         });
-        setTitle("TotalDebugCompanion");
+        setTitle("TotalDebug Companion");
         updateWindowIcon(ThemeManager.current());
         ThemeManager.addThemeChangeListener(this::updateWindowIcon);
 

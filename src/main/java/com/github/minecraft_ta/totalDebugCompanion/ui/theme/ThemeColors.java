@@ -20,6 +20,16 @@ public final class ThemeColors {
         return first(new Color(0x40434A), "Component.borderColor", "Separator.foreground");
     }
 
+    /** Low-contrast separators inside the main workspace. */
+    public static Color separator() {
+        return first(
+                new Color(0x34363A),
+                "OnePixelDivider.background",
+                "TabbedPane.contentAreaColor",
+                "Separator.foreground"
+        );
+    }
+
     /** De-emphasised text: secondary labels, hints, counters. */
     public static Color mutedText() {
         return first(new Color(0x9FA2A8), "Label.disabledForeground", "TextField.placeholderForeground");

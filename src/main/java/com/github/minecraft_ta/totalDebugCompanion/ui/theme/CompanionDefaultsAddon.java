@@ -37,6 +37,8 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
 
         defaults.put("TabbedPane.tabInsets", new Insets(0, 10, 0, 10));
         defaults.put("TabbedPane.tabHeight", 25);
+        defaults.put("TabbedPane.tabSelectionHeight", 2);
+        defaults.put("TabbedPane.contentSeparatorHeight", 1);
 
         defaults.put(
                 "Table.focusSelectedCellHighlightBorder",

@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
 
 import javax.swing.*;
+import java.awt.Color;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -81,26 +82,27 @@ public class FileTreeView extends JScrollPane {
                 if (splitIndex != -1)
                     item.setRenderedName(TextUtils.htmlPrimarySecondaryString(fileName.substring(splitIndex + 1), "  ", fileName.substring(0, splitIndex)));
 
-                if (path.getParent().getFileName().toString().equals("scripts"))
-                    item.setIcon(Icons.JAVA_FILE);
-                else
-                    item.setIcon(Icons.JAVA_CLASS);
+                item.setIcon(FileTreeIcons.forFileName(fileName));
                 return item;
             }
         });
 
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
         if (CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            rootItems.add(tree.getItemFactory().createFileSystemDirectoryItem(
+            var scripts = tree.getItemFactory().createFileSystemDirectoryItem(
                     CompanionApp.getRootPath().resolve("scripts"),
                     true
-            ));
+            );
+            scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
+            rootItems.add(scripts);
         }
-        rootItems.add(tree.getItemFactory().createFileSystemDirectoryItem(
+        var decompiledFiles = tree.getItemFactory().createFileSystemDirectoryItem(
                 CompanionApp.getRootPath().resolve("decompiled-files"),
                 true
-        ));
-        rootItems.add(new DirectoryTreeItem("mods") {
+        );
+        decompiledFiles.setIcon(FileTreeIcons.forRootDirectory("decompiled-files"));
+        rootItems.add(decompiledFiles);
+        var mods = new DirectoryTreeItem("mods") {
                     @Override
                     public List<TreeItem> loadChildren() {
                         try {
@@ -113,10 +115,23 @@ public class FileTreeView extends JScrollPane {
                             throw new RuntimeException(e);
                         }
                     }
-                });
+                };
+        mods.setIcon(FileTreeIcons.forRootDirectory("mods"));
+        rootItems.add(mods);
         tree.addRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
 
         setViewportView(tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (getViewport() != null) {
+            Color background = UIManager.getColor("ToolWindow.background");
+            if (background != null) {
+                getViewport().setBackground(background);
+            }
+        }
     }
 }

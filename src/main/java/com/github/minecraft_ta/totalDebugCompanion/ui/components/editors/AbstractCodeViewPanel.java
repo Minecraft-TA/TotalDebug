@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaLin
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
@@ -18,6 +19,7 @@ import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.event.DocumentEvent;
 import java.awt.*;
 import java.awt.event.FocusAdapter;
@@ -56,7 +58,10 @@ public class AbstractCodeViewPanel extends JPanel {
         super(new BorderLayout());
         this.identifier = identifier;
 
-        this.editorScrollPane.getGutter().setBorder(new Gutter.GutterBorder(0, 5, 0, 0));
+        this.editorScrollPane.getGutter().setBorder(new CompoundBorder(
+                DynamicMatteBorder.separatorRule(0, 0, 0, 1),
+                BorderFactory.createEmptyBorder(0, 5, 0, 5)
+        ));
         this.editorScrollPane.setBorder(BorderFactory.createEmptyBorder());
 
         this.editorPane.setAnimateBracketMatching(false);

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
 import javax.swing.*;
@@ -20,6 +21,7 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
             throw new IllegalArgumentException("Not a directory");
 
         this.path = path;
+        setIcon(Icons.FOLDER);
 
         if (watch) {
             FileUtils.startNewDirectoryWatcher(path, () -> SwingUtilities.invokeLater(() -> lazyFileJTree.loadItemsForTopLevelItem(this)));
@@ -40,5 +42,10 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public String getTooltip() {
+        return this.path.toString();
     }
 }

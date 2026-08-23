@@ -35,11 +35,33 @@ public class Icons {
     public static final FlatSVGIcon TEXT_FILE = new FlatSVGIcon("icons/text.svg");
     public static final FlatSVGIcon CLASS_FILE = new FlatSVGIcon("icons/classFile.svg");
     public static final FlatSVGIcon JAR_FILE = new FlatSVGIcon("icons/jar.svg");
+    public static final FlatSVGIcon FOLDER = new FlatSVGIcon("icons/folder.svg");
+    public static final FlatSVGIcon PACKAGE = new FlatSVGIcon("icons/package.svg");
+    public static final FlatSVGIcon SOURCE_ROOT = new FlatSVGIcon("icons/sourceRoot.svg");
+    public static final FlatSVGIcon RESOURCES_ROOT = new FlatSVGIcon("icons/resourcesRoot.svg");
+    public static final FlatSVGIcon LIBRARY = new FlatSVGIcon("icons/library.svg");
+    public static final FlatSVGIcon RESOURCE_BUNDLE = new FlatSVGIcon("icons/resourceBundle.svg");
+    public static final FlatSVGIcon MODULE = new FlatSVGIcon("icons/module.svg");
+
+    public static final FlatSVGIcon IMAGE_FILE = new FlatSVGIcon("icons/image.svg");
+    public static final FlatSVGIcon JSON_FILE = new FlatSVGIcon("icons/json.svg");
+    public static final FlatSVGIcon CONFIG_FILE = new FlatSVGIcon("icons/config.svg");
+    public static final FlatSVGIcon XML_FILE = new FlatSVGIcon("icons/xml.svg");
+    public static final FlatSVGIcon YAML_FILE = new FlatSVGIcon("icons/yaml.svg");
+    public static final FlatSVGIcon PROPERTIES_FILE = new FlatSVGIcon("icons/propertiesFile.svg");
+    public static final FlatSVGIcon MARKDOWN_FILE = new FlatSVGIcon("icons/markdown.svg");
+    public static final FlatSVGIcon MANIFEST_FILE = new FlatSVGIcon("icons/manifest.svg");
+    public static final FlatSVGIcon BINARY_FILE = new FlatSVGIcon("icons/binaryData.svg");
+    public static final FlatSVGIcon HTML_FILE = new FlatSVGIcon("icons/html.svg");
+    public static final FlatSVGIcon CSS_FILE = new FlatSVGIcon("icons/css.svg");
+    public static final FlatSVGIcon JAVASCRIPT_FILE = new FlatSVGIcon("icons/javaScript.svg");
+    public static final FlatSVGIcon FONT_FILE = new FlatSVGIcon("icons/font.svg");
 
     public static final FlatSVGIcon CLOSE_ICON = new FlatSVGIcon("icons/close.svg");
     public static final FlatSVGIcon CLOSE_HOVERED_ICON = new FlatSVGIcon("icons/closeHovered.svg");
     public static final FlatSVGIcon DOWNLOAD = new FlatSVGIcon("icons/download.svg");
     public static final FlatSVGIcon DELETE = new FlatSVGIcon("icons/delete.svg");
+    public static final FlatSVGIcon SETTINGS = new FlatSVGIcon("icons/settings.svg");
 
     public static final FlatSVGIcon RUN = new FlatSVGIcon("icons/run.svg");
     public static final FlatSVGIcon RUN_SERVER = new FlatSVGIcon("icons/runServer.svg");

@@ -2,10 +2,11 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.*;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import javax.swing.border.CompoundBorder;
 import java.awt.*;
 
 public class BottomInformationBar extends JPanel {
@@ -21,7 +22,11 @@ public class BottomInformationBar extends JPanel {
         add(this.infoLabel);
         add(Box.createHorizontalGlue());
 
-        setBorder(DynamicMatteBorder.rule(1, 0, 0, 0));
+        setBorder(new CompoundBorder(
+                DynamicMatteBorder.separatorRule(1, 0, 0, 0),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)
+        ));
+        setMinimumSize(new Dimension(0, 21));
     }
 
     public void setDefaultInfoText(String text, Color color) {

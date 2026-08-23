@@ -29,6 +29,10 @@ public class DynamicMatteBorder extends AbstractBorder {
         return new DynamicMatteBorder(top, left, bottom, right, ThemeColors::border);
     }
 
+    public static DynamicMatteBorder separatorRule(int top, int left, int bottom, int right) {
+        return new DynamicMatteBorder(top, left, bottom, right, ThemeColors::separator);
+    }
+
     @Override
     public void paintBorder(Component component, Graphics g, int x, int y, int width, int height) {
         Color previous = g.getColor();
