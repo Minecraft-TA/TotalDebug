@@ -28,7 +28,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F3b | Transformed bytes and class inventory | Deferred after inventory | The runtime-source inventory is complete and powers the class-name catalog, Companion index, and live-script compiler classpath; exact post-transform capture and process-wide loaded-class enumeration are deferred because the available no-agent hooks do not expose authoritative loaded bytes |
 | F4 | Companion application IPC and lifecycle | Complete | Companion 2.0 is Java 21 jar-only; each game process launches and authenticates its exact IPv4-loopback child through protocol v2; cold launch, handshake, ready, and open passed live |
 | F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
-| F6 | Live reference search | Not started | Depends on the relevant F3 capabilities |
+| F6 | Live reference search | Not started | The runtime-source inventory is sufficient for references in physical class files; references introduced only by runtime transformation remain deferred with F3b |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic index; JIndex 1.0.0 now guards native lifetime, retained child objects, and concurrent close while keeping the runtime format working |
 | F8 | Java scripting | Complete | Client and server runs share the Java 21 compiler/runner; optional negotiated run/stop payloads, per-player server ownership, config/operator policy, bounded status forwarding, disconnect cleanup, and unsupported-server refusal are covered, and server execution passed live |
 | F9 | Core decompile command | Complete | Block, item, entity, and block-entity IDs resolve through their exact registries; class names use the mod's defining loader without initialization and have cached package-aware completion; the expanded command and completion passed live |
@@ -40,7 +40,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F15 | TPS/MSPT tab display | Deferred | Not part of the current core-restoration phase |
 | F16 | Boss-bar suppression | Dropped | Do not add the legacy `renderBossBar` option |
 | F17 | Config screen | Optional | Revisit after retained config is functional |
-| F18 | GT/NEI/JEI integrations | JEI implemented; live gate pending | GT and NEI remain dropped; optional JEI 19 integration resolves F6 targets from the ingredient list, bookmarks, recipe screens, and registered GUI handlers before the normal container-slot fallback |
+| F18 | GT/NEI/JEI integrations | Complete | GT and NEI remain dropped; optional JEI 19 integration resolves F6 targets from the ingredient list, bookmarks, recipe screens, and registered GUI handlers before the normal container-slot fallback; the user confirmed the integration live |
 | F19 | NEI recipe export | Dropped | Depends on obsolete NEI/GT APIs |
 | F20 | Fake players | Optional | Independent late feature |
 
@@ -81,7 +81,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S15 | F9 command target expansion | Command-tree, completion, and resolution-policy tests, `gradlew build`, then one live item/entity/block-entity/class smoke | Complete |
 | S16 | F8a client-side Java scripting | Mirrored golden wire fixtures, compiler/classloader/runner tests, clean TotalDebug and Companion builds, then live THREAD/PRE_TICK/POST_TICK, diagnostics, cancellation, and server-rejection checks | Complete |
 | S17 | F8b server-side Java scripting | Optional payload codecs and channel gates, policy/status/disconnect tests, per-session ownership review, `gradlew test build`, then one live server-side run through Companion | Complete |
-| S18 | F18 JEI code-view integration | JEI API resolver priority and lifecycle tests, optional-dependency artifact inspection, `gradlew test build`, then one live ingredient-list/bookmark/recipe-screen F6 smoke | Implementation complete; live gate pending |
+| S18 | F18 JEI code-view integration | JEI API resolver priority and lifecycle tests, optional-dependency artifact inspection, `gradlew test build`, then one live ingredient-list/bookmark/recipe-screen F6 smoke | Complete |
 
 ## Core-flow milestone
 
@@ -125,7 +125,7 @@ Live reference search remains a future slice. Exact transformed-byte capture and
 | 2026-08-22 | S16 | The combined TotalDebug tree passed 65 tests and Companion passed 19 in clean builds. With the development Companion JAR, THREAD execution and log output, javac diagnostics, PRE_TICK and POST_TICK execution, cooperative Stop behavior, and explicit refusal of server-side execution passed live. The compiler resolved 115 runtime sources under Java 21; Minecraft's `net.minecraft.world.level.block` package was both exported and open to the unnamed script module. |
 | 2026-08-23 | S15 live | The expanded `/decompile` command and its class completion passed in the live client, closing the remaining F9 runtime gate. |
 | 2026-08-23 | S17 | Added bounded optional serverbound run/stop payloads, whitelisted clientbound status forwarding, local unsupported-server gating, per-session player runners, config/operator enforcement, and logout/server-stop cleanup. TotalDebug passed all 95 tests and `gradlew test build`; the user confirmed a server-side script run through Companion live. A concurrent live client held NeoForge's generated jars open, so the redundant `clean` task could not delete them. |
-| 2026-08-23 | S18 | Added optional JEI 19.27.0.340 integration through its public plugin/runtime APIs. Resolver priority covers the ingredient list, bookmarks, recipe and plugin screen ingredients, then the existing container slot. All 102 tests and `gradlew test build` passed; the final TotalDebug JAR declares JEI as an optional client dependency and does not embed it. Live F6 verification remains. |
+| 2026-08-23 | S18 | Added optional JEI 19.27.0.340 integration through its public plugin/runtime APIs. Resolver priority covers the ingredient list, bookmarks, recipe and plugin screen ingredients, then the existing container slot. All 102 tests and `gradlew test build` passed; the final TotalDebug JAR declares JEI as an optional client dependency and does not embed it. The user confirmed the integration live, closing the slice. |
 
 ## Foundation dependency decisions
 
