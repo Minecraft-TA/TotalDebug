@@ -26,3 +26,10 @@ type="required"
 versionRange="[1.21.1]"
 ordering="NONE"
 side="BOTH"
+
+[[dependencies.total_debug]]
+modId="jei"
+type="optional"
+versionRange="[19.27,20)"
+ordering="AFTER"
+side="CLIENT"
