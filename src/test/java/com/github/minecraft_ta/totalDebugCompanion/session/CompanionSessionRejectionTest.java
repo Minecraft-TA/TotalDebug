@@ -51,6 +51,10 @@ class CompanionSessionRejectionTest {
                 },
                 Map.of(CompanionLaunchContract.TOKEN_ENVIRONMENT_VARIABLE, "correct-token-value-1234567890abcdef")
         );
+        assertEquals(
+                sessionDirectory.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME),
+                configuration.runtimeSourceManifest()
+        );
 
         try (CompanionSession session = new CompanionSession("correct-token-value-1234567890abcdef");
              Client client = new Client()) {

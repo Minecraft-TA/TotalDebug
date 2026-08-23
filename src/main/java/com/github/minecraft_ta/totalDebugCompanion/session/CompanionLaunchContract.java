@@ -9,6 +9,7 @@ final class CompanionLaunchContract {
     static final String SESSION_DESCRIPTOR_ARGUMENT = "--session-descriptor";
 
     static final String SESSION_DESCRIPTOR_FILE_NAME = "session.properties";
+    static final String RUNTIME_SOURCE_MANIFEST_FILE_NAME = "runtime-sources.txt";
     static final String DESCRIPTOR_PROTOCOL_KEY = "protocol";
     static final String DESCRIPTOR_PORT_KEY = "port";
     static final String DESCRIPTOR_PROCESS_ID_KEY = "pid";

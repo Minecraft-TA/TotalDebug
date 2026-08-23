@@ -84,6 +84,14 @@ public final class CompanionLaunchConfiguration {
         return this.indexFile;
     }
 
+    public Path runtimeSourceManifest() {
+        Path parent = this.sessionDescriptor.getParent();
+        if (parent == null) {
+            throw new IllegalStateException("Session descriptor has no parent directory");
+        }
+        return parent.resolve(CompanionLaunchContract.RUNTIME_SOURCE_MANIFEST_FILE_NAME);
+    }
+
     public Path workspaceDirectory() {
         return this.workspaceDirectory;
     }

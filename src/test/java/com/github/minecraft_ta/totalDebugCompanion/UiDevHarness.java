@@ -90,6 +90,10 @@ public final class UiDevHarness {
         Path workspace = Files.createDirectories(root.resolve("workspace"));
         Files.createDirectories(workspace.resolve("mods"));
         Path indexFile = Files.createFile(root.resolve("classes.jindex"));
+        Path runtimeSources = Files.writeString(
+                root.resolve("runtime-sources.txt"),
+                "totaldebug-runtime-sources-v1\n" + workspace.toUri().toASCIIString() + "\n"
+        );
         Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
 
         // Literal argument names rather than the package-private CompanionLaunchContract constants;

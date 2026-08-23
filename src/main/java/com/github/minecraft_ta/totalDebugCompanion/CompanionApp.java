@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
@@ -95,6 +96,7 @@ public final class CompanionApp {
         if (!Files.isRegularFile(launchConfiguration.indexFile())) {
             throw new IOException("Class index does not exist: " + launchConfiguration.indexFile());
         }
+        RuntimeSourceManifest.read(launchConfiguration.runtimeSourceManifest());
         if (!Files.isDirectory(launchConfiguration.workspaceDirectory())) {
             throw new IOException("Minecraft workspace does not exist: " + launchConfiguration.workspaceDirectory());
         }
@@ -219,6 +221,10 @@ public final class CompanionApp {
 
     public static Path getIndexFile() {
         return requireConfiguration().indexFile();
+    }
+
+    public static Path getRuntimeSourceManifest() {
+        return requireConfiguration().runtimeSourceManifest();
     }
 
     public static Path getWorkspaceDirectory() {

@@ -30,6 +30,7 @@ dependencies {
 
     implementation('org.apache.commons:commons-compress:1.28.0')
     implementation('com.google.code.gson:gson:2.14.0')
+    implementation('org.ow2.asm:asm:9.9.1')
     implementation('org.eclipse.jdt:org.eclipse.jdt.core:3.46.0') {
         exclude group: "org.eclipse.platform", module: "org.eclipse.equinox.app"
         exclude group: "org.eclipse.platform", module: "org.eclipse.core.filesystem"
