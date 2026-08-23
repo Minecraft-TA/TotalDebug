@@ -29,7 +29,7 @@ class ClientScriptServiceTest {
         service.handleRunRequest(serverRun(7));
 
         assertTrue(transport.runs.isEmpty());
-        assertEquals(List.of(new Status(7, ScriptStatusType.COMPILATION_FAILED, "unsupported server")), statuses);
+        assertEquals(List.of(new Status(7, ScriptStatusType.RUN_EXCEPTION, "unsupported server")), statuses);
     }
 
     @Test

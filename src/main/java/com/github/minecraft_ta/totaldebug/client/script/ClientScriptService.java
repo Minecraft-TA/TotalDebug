@@ -74,7 +74,7 @@ public final class ClientScriptService implements AutoCloseable {
         if (!availability.available()) {
             sendUntrackedStatus(
                     message.scriptId(),
-                    ScriptStatusType.COMPILATION_FAILED,
+                    ScriptStatusType.RUN_EXCEPTION,
                     availability.unavailableReason()
             );
             return;
