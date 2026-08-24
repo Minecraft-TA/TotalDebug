@@ -151,7 +151,7 @@ public class LazyFileJTree extends JTree {
     public void loadItemsForTopLevelItem(TreeItem item) {
         var node = findTopLevelNodeForItem(item);
         if (node == null)
-            throw new IllegalStateException();
+            return;
         loadItemsForNode(node);
     }
 
@@ -176,6 +176,11 @@ public class LazyFileJTree extends JTree {
 
     public void setRootNodes(DirectoryTreeItem... roots) {
         LazyTreeNode hiddenRoot = (LazyTreeNode) getModel().getRoot();
+        for (int i = 0; i < hiddenRoot.getChildCount(); i++) {
+            if (hiddenRoot.getChildAt(i) instanceof LazyTreeNode child) {
+                child.getUserObject().dispose();
+            }
+        }
         hiddenRoot.removeAllChildren();
         for (DirectoryTreeItem root : roots) {
             hiddenRoot.add(new LazyTreeNode(root));

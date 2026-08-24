@@ -85,7 +85,6 @@ public class FileTreeView extends JScrollPane {
             }
         });
 
-        reloadProfile();
         setViewportView(this.tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
     }

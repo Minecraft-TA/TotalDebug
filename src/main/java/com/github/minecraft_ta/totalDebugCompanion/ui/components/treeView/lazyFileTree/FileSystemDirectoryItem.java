@@ -8,11 +8,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
 public class FileSystemDirectoryItem extends DirectoryTreeItem {
 
     private final LazyFileJTree tree;
     private final Path path;
+    private final Runnable stopWatching;
 
     FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path, boolean watch) {
         super(path.getFileName().toString());
@@ -23,25 +25,39 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         this.path = path;
         setIcon(Icons.FOLDER);
 
-        if (watch) {
-            FileUtils.startNewDirectoryWatcher(path, () -> SwingUtilities.invokeLater(() -> lazyFileJTree.loadItemsForTopLevelItem(this)));
-        }
+        this.stopWatching = watch
+                ? FileUtils.startNewDirectoryWatcher(path, () -> SwingUtilities.invokeLater(() -> lazyFileJTree.loadItemsForTopLevelItem(this)))
+                : () -> {};
     }
 
     @Override
     public List<TreeItem> loadChildren() {
-        try {
-            return Files.walk(this.path, 1)
-                    .map(path -> {
-                        if (Files.isDirectory(path))
-                            return tree.getItemFactory().createFileSystemDirectoryItem(path, false);
-                        return tree.getItemFactory().createFileSystemFileItem(path);
-                    })
-                    .skip(1)
+        try (var paths = Files.list(this.path)) {
+            return paths.map(this::createChildIfPresent)
+                    .filter(Objects::nonNull)
                     .toList();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private TreeItem createChildIfPresent(Path child) {
+        try {
+            if (Files.isDirectory(child))
+                return tree.getItemFactory().createFileSystemDirectoryItem(child, false);
+            if (!Files.exists(child))
+                return null;
+            return tree.getItemFactory().createFileSystemFileItem(child);
+        } catch (IllegalArgumentException exception) {
+            if (!Files.exists(child))
+                return null;
+            throw exception;
+        }
+    }
+
+    @Override
+    public void dispose() {
+        this.stopWatching.run();
     }
 
     @Override

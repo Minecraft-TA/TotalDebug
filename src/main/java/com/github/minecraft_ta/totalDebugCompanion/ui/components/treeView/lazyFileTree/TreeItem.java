@@ -22,6 +22,10 @@ public class TreeItem {
 
     }
 
+    public void dispose() {
+
+    }
+
     public boolean isHiddenRoot() {
         return isHiddenRoot;
     }
