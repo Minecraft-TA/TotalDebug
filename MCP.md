@@ -2,6 +2,8 @@
 
 The persistent, single-instance Companion hosts a Streamable HTTP MCP server for its full lifetime. The server remains available while Minecraft is offline and listens at `http://127.0.0.1:32123/mcp`. Runtime execution becomes available only while an authenticated Minecraft session is connected.
 
+Codex should launch `CompanionMcpSidecar` over stdio instead of connecting to this URL directly. The sidecar publishes the tool catalog immediately, even when Companion is absent, and checks the HTTP connection before each tool call. This lets one Codex task survive Companion and Minecraft starts, stops, and restarts.
+
 The active endpoint is written to `<companion-app-home>/mcp-endpoint.json`:
 
 ```json
@@ -40,3 +42,15 @@ Each job records:
 - durable `source` and `job` artifacts under `<companion-app-home>/mcp/artifacts/<job-id>`.
 
 The MCP layer does not execute Java itself. It queues the existing authenticated SCNet messages, and TotalDebug compiles and runs the source in the target Minecraft JVM. This keeps static indexing and orchestration in Companion while runtime authority remains in the game process.
+
+## Codex sidecar
+
+Launch the sidecar from the shaded Companion JAR:
+
+```text
+java -cp TotalDebugCompanion.jar com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpSidecar
+```
+
+The sidecar owns Codex's long-lived stdio MCP session. It does not start or own Companion. `status` succeeds while Companion is offline and reports `companion_available: false`; other tools return a retryable offline result. When Companion starts later, the next call connects without restarting Codex. Before each forwarded call, the sidecar pings the current HTTP session so a Companion restart is detected before an execution request is submitted.
+
+The tool catalog is shared by the HTTP server and sidecar in the same JAR, so offline discovery and live forwarding expose identical schemas. Installing a JAR with changed tool schemas still requires a new Codex task because the running sidecar process keeps the catalog it started with.

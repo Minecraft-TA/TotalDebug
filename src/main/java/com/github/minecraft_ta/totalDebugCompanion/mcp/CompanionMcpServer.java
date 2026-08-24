@@ -4,11 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.SearchOptions;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -30,12 +27,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-/** Authenticated loopback MCP host for Companion code mode. */
+/** Loopback MCP host for Companion code mode. */
 public final class CompanionMcpServer implements AutoCloseable {
     private static final String MCP_ENDPOINT = "/mcp";
     static final int MCP_PORT = 32_123;
     private static final int MAX_REQUEST_BYTES = 1_048_576;
-    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     private final Path dataDirectory;
     private final Supplier<Path> workspaceDirectory;
@@ -91,13 +87,10 @@ public final class CompanionMcpServer implements AutoCloseable {
                 .maxRequestSize(MAX_REQUEST_BYTES)
                 .build();
         this.mcpServer = McpServer.sync(this.transportProvider)
-                .serverInfo("totaldebug-companion", "1.0.0")
-                .instructions(
-                        "Use code_execute for runtime facts. It executes unrestricted Java inside the connected "
-                                + "Minecraft JVM. Poll jobs_get until the job reaches a terminal state."
-                )
+                .serverInfo(CompanionMcpToolCatalog.SERVER_NAME, CompanionMcpToolCatalog.SERVER_VERSION)
+                .instructions(CompanionMcpToolCatalog.INSTRUCTIONS)
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
-                .tools(toolSpecifications())
+                .tools(CompanionMcpToolCatalog.specifications(this::callTool))
                 .build();
 
         Path mcpDirectory = this.dataDirectory.resolve("mcp");
@@ -159,129 +152,40 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.jobs.runtimeDisconnected();
     }
 
-    private List<McpServerFeatures.SyncToolSpecification> toolSpecifications() {
-        return List.of(
-                tool(
-                        "status",
-                        "Report the Companion, transport, and connected runtime state.",
-                        objectSchema(Map.of(), List.of()),
-                        request -> status()
-                ),
-                tool(
-                        "code_execute",
-                        "Submit unrestricted Java statements for execution inside the connected Minecraft JVM. "
-                                + "Use log or logln in the code to return observed values.",
-                        objectSchema(
-                                Map.of(
-                                        "code", stringSchema("Java statements inserted into BaseScript.run()."),
-                                        "imports", arraySchema(
-                                                stringSchema("Java import target, for example java.util.Map or static java.lang.Math.*.")
-                                        ),
-                                        "side", enumSchema("Minecraft execution side.", "client", "server"),
-                                        "environment", enumSchema(
-                                                "Execution thread. Tick environments cannot be interrupted safely after starting.",
-                                                "thread",
-                                                "pre_tick",
-                                                "post_tick"
-                                        )
-                                ),
-                                List.of("code")
-                        ),
-                        request -> execute(request.arguments())
-                ),
-                tool(
-                        "jobs_get",
-                        "Get one code job, including its terminal output or error and source provenance.",
-                        objectSchema(
-                                Map.of("job_id", stringSchema("UUID returned by code_execute.")),
-                                List.of("job_id")
-                        ),
-                        request -> this.jobs.get(requiredString(request.arguments(), "job_id"))
+    private McpSchema.CallToolResult callTool(McpSchema.CallToolRequest request) {
+        try {
+            Map<String, Object> result = switch (request.name()) {
+                case "status" -> status();
+                case "code_execute" -> execute(request.arguments());
+                case "jobs_get" -> this.jobs.get(requiredString(request.arguments(), "job_id"))
+                        .map(CodeModeJobService.JobSnapshot::asMap)
+                        .orElseThrow(() -> new IllegalArgumentException("Unknown job"));
+                case "jobs_list" -> Map.of(
+                        "jobs",
+                        this.jobs.list(optionalInteger(request.arguments(), "limit", 20)).stream()
                                 .map(CodeModeJobService.JobSnapshot::asMap)
-                                .orElseThrow(() -> new IllegalArgumentException("Unknown job"))
-                ),
-                tool(
-                        "jobs_list",
-                        "List recent code jobs in newest-first order.",
-                        objectSchema(
-                                Map.of("limit", integerSchema("Maximum jobs to return, from 1 to 256.", 1, 256)),
-                                List.of()
-                        ),
-                        request -> Map.of(
-                                "jobs",
-                                this.jobs.list(optionalInteger(request.arguments(), "limit", 20)).stream()
-                                        .map(CodeModeJobService.JobSnapshot::asMap)
-                                        .toList()
-                        )
-                ),
-                tool(
-                        "jobs_cancel",
-                        "Request cooperative cancellation of a running code job.",
-                        objectSchema(
-                                Map.of("job_id", stringSchema("UUID returned by code_execute.")),
-                                List.of("job_id")
-                        ),
-                        request -> Map.of(
-                                "job_id",
-                                requiredString(request.arguments(), "job_id"),
-                                "cancellation_requested",
-                                this.jobs.cancel(requiredString(request.arguments(), "job_id"))
-                        )
-                ),
-                tool(
-                        "search_classes",
-                        "Search the exact class index generated from the connected Minecraft runtime.",
-                        objectSchema(
-                                Map.of(
-                                        "query", stringSchema("Class name fragment."),
-                                        "limit", integerSchema("Maximum matches to return, from 1 to 200.", 1, 200)
-                                ),
-                                List.of("query")
-                        ),
-                        request -> searchClasses(
-                                requiredString(request.arguments(), "query"),
-                                optionalInteger(request.arguments(), "limit", 50)
-                        )
-                ),
-                tool(
-                        "artifacts_read",
-                        "Read the exact generated Java source or current job record retained by Companion.",
-                        objectSchema(
-                                Map.of(
-                                        "job_id", stringSchema("UUID returned by code_execute."),
-                                        "artifact", enumSchema("Artifact to read.", "source", "job")
-                                ),
-                                List.of("job_id", "artifact")
-                        ),
-                        request -> readArtifact(request.arguments())
-                )
-        );
-    }
-
-    private McpServerFeatures.SyncToolSpecification tool(
-            String name,
-            String description,
-            Map<String, Object> inputSchema,
-            ToolHandler handler
-    ) {
-        McpSchema.Tool tool = McpSchema.Tool.builder(name)
-                .description(description)
-                .inputSchema(inputSchema)
-                .build();
-        return McpServerFeatures.SyncToolSpecification.builder()
-                .tool(tool)
-                .callHandler((exchange, request) -> {
-                    try {
-                        Map<String, Object> result = handler.handle(request);
-                        return toolResult(result, false);
-                    } catch (RuntimeException | IOException exception) {
-                        return toolResult(
-                                Map.of("error", Objects.requireNonNullElse(exception.getMessage(), exception.toString())),
-                                true
-                        );
-                    }
-                })
-                .build();
+                                .toList()
+                );
+                case "jobs_cancel" -> Map.of(
+                        "job_id",
+                        requiredString(request.arguments(), "job_id"),
+                        "cancellation_requested",
+                        this.jobs.cancel(requiredString(request.arguments(), "job_id"))
+                );
+                case "search_classes" -> searchClasses(
+                        requiredString(request.arguments(), "query"),
+                        optionalInteger(request.arguments(), "limit", 50)
+                );
+                case "artifacts_read" -> readArtifact(request.arguments());
+                default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
+            };
+            return CompanionMcpToolCatalog.result(result, false);
+        } catch (RuntimeException | IOException exception) {
+            return CompanionMcpToolCatalog.result(
+                    Map.of("error", Objects.requireNonNullElse(exception.getMessage(), exception.toString())),
+                    true
+            );
+        }
     }
 
     private Map<String, Object> status() {
@@ -352,47 +256,6 @@ public final class CompanionMcpServer implements AutoCloseable {
                 "job_id", jobId,
                 "artifact", artifact,
                 "content", this.jobs.readArtifact(jobId, artifact)
-        );
-    }
-
-    private static McpSchema.CallToolResult toolResult(Map<String, Object> result, boolean error) {
-        return McpSchema.CallToolResult.builder()
-                .addTextContent(GSON.toJson(result))
-                .structuredContent(result)
-                .isError(error)
-                .build();
-    }
-
-    private static Map<String, Object> objectSchema(
-            Map<String, Object> properties,
-            List<String> required
-    ) {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("type", "object");
-        schema.put("properties", properties);
-        schema.put("required", required);
-        schema.put("additionalProperties", false);
-        return schema;
-    }
-
-    private static Map<String, Object> stringSchema(String description) {
-        return Map.of("type", "string", "description", description);
-    }
-
-    private static Map<String, Object> arraySchema(Map<String, Object> items) {
-        return Map.of("type", "array", "items", items, "default", List.of());
-    }
-
-    private static Map<String, Object> enumSchema(String description, String... values) {
-        return Map.of("type", "string", "description", description, "enum", List.of(values));
-    }
-
-    private static Map<String, Object> integerSchema(String description, int minimum, int maximum) {
-        return Map.of(
-                "type", "integer",
-                "description", description,
-                "minimum", minimum,
-                "maximum", maximum
         );
     }
 
@@ -495,10 +358,5 @@ public final class CompanionMcpServer implements AutoCloseable {
             this.mcpServer = null;
         }
         this.transportProvider = null;
-    }
-
-    @FunctionalInterface
-    private interface ToolHandler {
-        Map<String, Object> handle(McpSchema.CallToolRequest request) throws IOException;
     }
 }
