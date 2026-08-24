@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -44,7 +43,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -192,19 +190,14 @@ public final class CompanionApp {
                 && current.runtimeSourceManifest().equals(requested.runtimeSourceManifest());
 
         if (!sameSnapshot) {
-            List<Path> runtimeSources = RuntimeSourceManifest.read(requested.runtimeSourceManifest());
-            ReferenceSearchService replacement = new ReferenceSearchService(runtimeSources);
             try {
                 CompanionClassIndex.replace(requested.indexFile());
             } catch (RuntimeException exception) {
-                replacement.close();
                 throw new IOException("Unable to open the class index", exception);
             }
-            ReferenceSearchService previous = referenceSearchService;
-            referenceSearchService = replacement;
-            if (previous != null) {
-                previous.close();
-            }
+        }
+        if (referenceSearchService == null) {
+            referenceSearchService = new ReferenceSearchService(CompanionClassIndex::get);
         }
 
         profile = requested;

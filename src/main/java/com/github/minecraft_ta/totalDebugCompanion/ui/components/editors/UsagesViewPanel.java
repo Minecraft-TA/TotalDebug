@@ -3,9 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchPhase;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchProgress;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchResult;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceNavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
@@ -18,7 +16,6 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
@@ -46,22 +43,26 @@ import java.util.Objects;
 public final class UsagesViewPanel extends JPanel {
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
+    private static final int INITIAL_RESULT_LIMIT = 200;
+    private static final int MAX_RESULT_LIMIT = 5_000;
 
     private final CodeSymbol symbol;
     private final ReferenceSearchService searchService;
     private final JLabel targetLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
-    private final JProgressBar progressBar = new JProgressBar();
     private final JButton cancelButton = new JButton("Cancel");
+    private final JButton showMoreButton = new JButton("Show more");
     private final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
     private final DefaultTreeModel treeModel = new DefaultTreeModel(this.rootNode);
     private final JTree resultsTree = new JTree(this.treeModel);
-    private final JLabel messageLabel = new JLabel("Searching runtime bytecode…", SwingConstants.CENTER);
+    private final JLabel messageLabel = new JLabel("Looking up indexed references...", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
 
     private ReferenceSearchService.SearchHandle activeSearch;
     private long searchGeneration;
     private boolean detached;
+    private int resultLimit = INITIAL_RESULT_LIMIT;
+    private boolean resultTruncated;
 
     public UsagesViewPanel(CodeSymbol symbol, ReferenceSearchService searchService) {
         super(new BorderLayout());
@@ -86,43 +87,52 @@ public final class UsagesViewPanel extends JPanel {
     public void restartSearch() {
         requireEdt();
         this.detached = false;
-        cancelActiveSearch();
+        this.resultLimit = INITIAL_RESULT_LIMIT;
+        this.resultTruncated = false;
+        startSearch(true);
+    }
+
+    private void startSearch(boolean clearResults) {
+        requireEdt();
+        if (this.activeSearch != null) {
+            this.activeSearch.cancel();
+            this.activeSearch = null;
+        }
         long generation = ++this.searchGeneration;
-
-        this.rootNode.removeAllChildren();
-        this.treeModel.reload();
-        this.messageLabel.setText("Searching runtime bytecode…");
-        showCard(MESSAGE_CARD);
-        this.statusLabel.setText("Preparing runtime sources");
-        this.progressBar.setMinimum(0);
-        this.progressBar.setMaximum(1);
-        this.progressBar.setValue(0);
-        this.progressBar.setIndeterminate(true);
-        this.progressBar.setStringPainted(false);
+        if (clearResults) {
+            this.rootNode.removeAllChildren();
+            this.treeModel.reload();
+            this.messageLabel.setText("Looking up indexed references...");
+            showCard(MESSAGE_CARD);
+        }
+        if (this.resultLimit == INITIAL_RESULT_LIMIT) {
+            this.statusLabel.setText("Searching indexed references");
+        } else {
+            this.statusLabel.setText("Loading up to " + this.resultLimit + " usage sites");
+        }
+        this.cancelButton.setVisible(true);
         this.cancelButton.setEnabled(true);
+        this.showMoreButton.setVisible(false);
 
-        this.activeSearch = this.searchService.search(this.symbol.referenceQuery(), new ReferenceSearchService.Listener() {
-            @Override
-            public void onProgress(ReferenceSearchProgress progress) {
-                if (isCurrent(generation)) {
-                    updateProgress(progress);
-                }
-            }
+        this.activeSearch = this.searchService.search(
+                this.symbol.referenceQuery(),
+                this.resultLimit,
+                new ReferenceSearchService.Listener() {
+                    @Override
+                    public void onCompleted(ReferenceLocationPage result) {
+                        if (isCurrent(generation)) {
+                            showResult(result);
+                        }
+                    }
 
-            @Override
-            public void onCompleted(ReferenceSearchResult result) {
-                if (isCurrent(generation)) {
-                    showResult(result);
+                    @Override
+                    public void onFailed(Throwable failure) {
+                        if (isCurrent(generation)) {
+                            showFailure(failure);
+                        }
+                    }
                 }
-            }
-
-            @Override
-            public void onFailed(Throwable failure) {
-                if (isCurrent(generation)) {
-                    showFailure(failure);
-                }
-            }
-        });
+        );
     }
 
     private void configureHeader() {
@@ -132,26 +142,25 @@ public final class UsagesViewPanel extends JPanel {
         Box firstRow = Box.createHorizontalBox();
         firstRow.add(this.targetLabel);
         firstRow.add(Box.createHorizontalGlue());
+        firstRow.add(this.showMoreButton);
+        firstRow.add(Box.createHorizontalStrut(6));
         firstRow.add(this.cancelButton);
-
-        this.progressBar.setStringPainted(false);
-        Box secondRow = Box.createHorizontalBox();
-        secondRow.add(this.statusLabel);
-        secondRow.add(Box.createHorizontalStrut(12));
-        secondRow.add(this.progressBar);
 
         JPanel header = new JPanel();
         header.setLayout(new javax.swing.BoxLayout(header, javax.swing.BoxLayout.Y_AXIS));
         header.add(firstRow);
         header.add(Box.createVerticalStrut(6));
-        header.add(secondRow);
+        header.add(this.statusLabel);
         header.setBorder(new CompoundBorder(
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
                 BorderFactory.createEmptyBorder(8, 10, 8, 10)
         ));
         add(header, BorderLayout.NORTH);
 
+        this.cancelButton.setVisible(false);
+        this.showMoreButton.setVisible(false);
         this.cancelButton.addActionListener(event -> cancelActiveSearch());
+        this.showMoreButton.addActionListener(event -> showMoreResults());
     }
 
     private void configureResultsTree() {
@@ -181,38 +190,36 @@ public final class UsagesViewPanel extends JPanel {
         });
     }
 
-    private void updateProgress(ReferenceSearchProgress progress) {
-        requireEdt();
-        this.progressBar.setIndeterminate(false);
-        this.progressBar.setMaximum(Math.max(1, progress.totalClassFiles()));
-        this.progressBar.setValue(progress.processedClassFiles());
-        this.progressBar.setStringPainted(true);
-        this.progressBar.setString(progress.processedClassFiles() + " / " + progress.totalClassFiles());
-        this.statusLabel.setText(progress.phase() == ReferenceSearchPhase.RESOLVING_MEMBER_OWNERS
-                ? "Resolving declaring types"
-                : "Scanning references");
-    }
-
-    private void showResult(ReferenceSearchResult result) {
+    private void showResult(ReferenceLocationPage result) {
         requireEdt();
         this.activeSearch = null;
-        this.cancelButton.setEnabled(false);
-        this.progressBar.setIndeterminate(false);
-        this.progressBar.setMaximum(Math.max(1, result.totalClassFiles()));
-        this.progressBar.setValue(result.scannedClassFiles());
-        this.progressBar.setStringPainted(true);
-        this.progressBar.setString(result.scannedClassFiles() + " / " + result.totalClassFiles());
+        this.cancelButton.setVisible(false);
+        this.resultTruncated = result.truncated();
 
         populateResults(result.locations());
         int classCount = (int) result.locations().stream().map(ReferenceLocation::className).distinct().count();
-        if (result.cancelled()) {
-            this.statusLabel.setText("Cancelled — " + result.locations().size() + " partial usage sites");
+        if (result.truncated()) {
+            if (this.resultLimit < MAX_RESULT_LIMIT) {
+                this.statusLabel.setText(
+                        "Showing " + result.locations().size() + " usage sites in " + classCount
+                                + " classes. More are available."
+                );
+                this.showMoreButton.setVisible(true);
+                this.showMoreButton.setEnabled(true);
+            } else {
+                this.statusLabel.setText(
+                        "Showing " + result.locations().size() + " usage sites in " + classCount
+                                + " classes. Additional sites are omitted."
+                );
+                this.showMoreButton.setVisible(false);
+            }
         } else {
             this.statusLabel.setText(result.locations().size() + " usage sites in " + classCount + " classes");
+            this.showMoreButton.setVisible(false);
         }
 
         if (result.locations().isEmpty()) {
-            this.messageLabel.setText(result.cancelled() ? "Search cancelled" : "No usages found");
+            this.messageLabel.setText("No usages found");
             showCard(MESSAGE_CARD);
         } else {
             showCard(RESULTS_CARD);
@@ -222,17 +229,17 @@ public final class UsagesViewPanel extends JPanel {
     private void showFailure(Throwable failure) {
         requireEdt();
         this.activeSearch = null;
-        this.cancelButton.setEnabled(false);
-        this.progressBar.setIndeterminate(false);
-        this.progressBar.setStringPainted(false);
+        this.cancelButton.setVisible(false);
+        this.showMoreButton.setVisible(false);
         String detail = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
         this.statusLabel.setText("Reference search failed");
-        this.messageLabel.setText("Unable to search runtime bytecode: " + detail);
+        this.messageLabel.setText("Unable to query the reference index: " + detail);
         showCard(MESSAGE_CARD);
         failure.printStackTrace(System.err);
     }
 
     private void populateResults(List<ReferenceLocation> locations) {
+        this.rootNode.removeAllChildren();
         Map<String, DefaultMutableTreeNode> classNodes = new LinkedHashMap<>();
         for (ReferenceLocation location : locations) {
             DefaultMutableTreeNode classNode = classNodes.computeIfAbsent(location.className(), className -> {
@@ -269,9 +276,25 @@ public final class UsagesViewPanel extends JPanel {
     private void cancelActiveSearch() {
         if (this.activeSearch != null && !this.activeSearch.isDone()) {
             this.activeSearch.cancel();
-            this.statusLabel.setText("Cancelling…");
-            this.cancelButton.setEnabled(false);
+            this.activeSearch = null;
+            this.searchGeneration++;
+            this.statusLabel.setText("Search cancelled");
+            this.cancelButton.setVisible(false);
+            this.showMoreButton.setVisible(this.resultTruncated);
         }
+    }
+
+    private void showMoreResults() {
+        requireEdt();
+        if (this.activeSearch != null || !this.resultTruncated) {
+            return;
+        }
+        this.resultLimit = nextResultLimit(this.resultLimit);
+        startSearch(false);
+    }
+
+    private static int nextResultLimit(int current) {
+        return Math.min(MAX_RESULT_LIMIT, current * 5);
     }
 
     private boolean isCurrent(long generation) {

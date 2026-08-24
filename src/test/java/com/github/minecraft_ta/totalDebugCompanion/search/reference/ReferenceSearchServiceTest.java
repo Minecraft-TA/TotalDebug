@@ -1,10 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchPhase;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchProgress;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchResult;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
@@ -13,100 +11,114 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReferenceSearchServiceTest {
     @Test
-    void deliversProgressAndCompletionOnTheSwingEventThread() throws Exception {
+    void deliversBoundedResultsOnTheSwingEventThread() throws Exception {
         CountDownLatch completed = new CountDownLatch(1);
-        AtomicBoolean progressOnEdt = new AtomicBoolean();
         AtomicBoolean completionOnEdt = new AtomicBoolean();
-        ReferenceSearchResult expected = new ReferenceSearchResult(
+        AtomicInteger receivedLimit = new AtomicInteger();
+        ReferenceLocationPage expected = new ReferenceLocationPage(
                 List.of(ReferenceLocation.method("example.Use", "run", "()V")),
-                1,
-                1,
-                false
+                true
         );
 
-        try (var service = new ReferenceSearchService((query, monitor) -> {
-            monitor.onProgress(new ReferenceSearchProgress(ReferenceSearchPhase.SCANNING_REFERENCES, 1, 1));
+        try (var service = new ReferenceSearchService((query, limit) -> {
+            receivedLimit.set(limit);
             return expected;
         })) {
-            service.search(ReferenceQuery.classReference("example.Target"), new ReferenceSearchService.Listener() {
-                @Override
-                public void onProgress(ReferenceSearchProgress progress) {
-                    progressOnEdt.set(SwingUtilities.isEventDispatchThread());
-                }
-
-                @Override
-                public void onCompleted(ReferenceSearchResult result) {
-                    assertEquals(expected, result);
-                    completionOnEdt.set(SwingUtilities.isEventDispatchThread());
-                    completed.countDown();
-                }
-
-                @Override
-                public void onFailed(Throwable failure) {
-                    throw new AssertionError(failure);
-                }
-            });
+            service.search(
+                    ReferenceQuery.classReference("example.Target"),
+                    200,
+                    listener(result -> {
+                        assertEquals(expected, result);
+                        completionOnEdt.set(SwingUtilities.isEventDispatchThread());
+                        completed.countDown();
+                    })
+            );
 
             assertTrue(completed.await(Duration.ofSeconds(5).toMillis(), TimeUnit.MILLISECONDS));
-            assertTrue(progressOnEdt.get());
+            assertEquals(200, receivedLimit.get());
             assertTrue(completionOnEdt.get());
         }
     }
 
     @Test
-    void aNewSearchCooperativelyCancelsThePreviousOne() throws Exception {
+    void aNewSearchSuppressesThePreviousResult() throws Exception {
         CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
         CountDownLatch firstCompleted = new CountDownLatch(1);
         CountDownLatch secondCompleted = new CountDownLatch(1);
-        AtomicReference<ReferenceSearchResult> firstResult = new AtomicReference<>();
+        AtomicReference<ReferenceLocationPage> secondResult = new AtomicReference<>();
 
-        try (var service = new ReferenceSearchService((query, monitor) -> {
+        try (var service = new ReferenceSearchService((query, limit) -> {
             if (query instanceof ReferenceQuery.ClassReference type && type.className().equals("example.First")) {
                 firstStarted.countDown();
-                while (!monitor.isCancelled()) {
-                    Thread.onSpinWait();
+                try {
+                    if (!releaseFirst.await(5, TimeUnit.SECONDS)) {
+                        throw new AssertionError("Timed out waiting to release the first query");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(exception);
                 }
-                return new ReferenceSearchResult(List.of(), 0, 1, true);
             }
-            return new ReferenceSearchResult(List.of(), 1, 1, false);
+            return new ReferenceLocationPage(
+                    List.of(ReferenceLocation.classDeclaration(
+                            ((ReferenceQuery.ClassReference) query).className()
+                    )),
+                    false
+            );
         })) {
             service.search(
                     ReferenceQuery.classReference("example.First"),
-                    listener(firstResult, firstCompleted)
+                    200,
+                    listener(ignored -> firstCompleted.countDown())
             );
             assertTrue(firstStarted.await(Duration.ofSeconds(5).toMillis(), TimeUnit.MILLISECONDS));
 
             service.search(
                     ReferenceQuery.classReference("example.Second"),
-                    listener(new AtomicReference<>(), secondCompleted)
+                    200,
+                    listener(result -> {
+                        secondResult.set(result);
+                        secondCompleted.countDown();
+                    })
             );
+            releaseFirst.countDown();
 
-            assertTrue(firstCompleted.await(Duration.ofSeconds(5).toMillis(), TimeUnit.MILLISECONDS));
             assertTrue(secondCompleted.await(Duration.ofSeconds(5).toMillis(), TimeUnit.MILLISECONDS));
-            assertTrue(firstResult.get().cancelled());
+            assertFalse(firstCompleted.await(100, TimeUnit.MILLISECONDS));
+            assertEquals(
+                    List.of(ReferenceLocation.classDeclaration("example.Second")),
+                    secondResult.get().locations()
+            );
         }
     }
 
-    private static ReferenceSearchService.Listener listener(
-            AtomicReference<ReferenceSearchResult> result,
-            CountDownLatch completed
-    ) {
+    @Test
+    void rejectsNonPositiveLimits() {
+        try (var service = new ReferenceSearchService((query, limit) -> new ReferenceLocationPage(List.of(), false))) {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> service.search(ReferenceQuery.classReference("example.Target"), 0, listener(ignored -> {
+                    }))
+            );
+        }
+    }
+
+    private static ReferenceSearchService.Listener listener(java.util.function.Consumer<ReferenceLocationPage> result) {
         return new ReferenceSearchService.Listener() {
             @Override
-            public void onProgress(ReferenceSearchProgress progress) {
-            }
-
-            @Override
-            public void onCompleted(ReferenceSearchResult value) {
-                result.set(value);
-                completed.countDown();
+            public void onCompleted(ReferenceLocationPage value) {
+                result.accept(value);
             }
 
             @Override

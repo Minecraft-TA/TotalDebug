@@ -1,43 +1,44 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.IndexedReferenceSearch;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchEngine;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchMonitor;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchProgress;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceSearchResult;
+import com.github.tth05.jindex.ClassIndex;
 
 import javax.swing.SwingUtilities;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Collection;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
-/** Owns the single full-runtime reference scan allowed to run at a time. */
+/** Runs bounded reference-index queries away from the Swing event thread. */
 public final class ReferenceSearchService implements AutoCloseable {
-    private static final long PROGRESS_INTERVAL_NANOS = 50_000_000L;
-
     private final Searcher searcher;
     private final ExecutorService executor;
     private SearchOperation activeSearch;
 
-    public ReferenceSearchService(Collection<Path> runtimeSources) {
-        this(new ReferenceSearchEngine(runtimeSources)::search);
+    public ReferenceSearchService(ClassIndex index) {
+        this(singleIndex(index));
+    }
+
+    public ReferenceSearchService(Supplier<ClassIndex> indexSupplier) {
+        Objects.requireNonNull(indexSupplier, "indexSupplier");
+        this.searcher = (query, limit) -> new IndexedReferenceSearch(indexSupplier.get()).search(query, limit);
+        this.executor = newExecutor();
     }
 
     ReferenceSearchService(Searcher searcher) {
         this.searcher = Objects.requireNonNull(searcher, "searcher");
-        this.executor = Executors.newSingleThreadExecutor(runnable -> Thread.ofPlatform()
-                .daemon(true)
-                .name("totaldebug-reference-search-coordinator")
-                .unstarted(runnable));
+        this.executor = newExecutor();
     }
 
-    public synchronized SearchHandle search(ReferenceQuery query, Listener listener) {
+    public synchronized SearchHandle search(ReferenceQuery query, int limit, Listener listener) {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(listener, "listener");
+        if (limit <= 0) {
+            throw new IllegalArgumentException("Reference-search limit must be positive");
+        }
         if (this.executor.isShutdown()) {
             throw new IllegalStateException("Reference-search service is closed");
         }
@@ -45,7 +46,7 @@ public final class ReferenceSearchService implements AutoCloseable {
             this.activeSearch.cancel();
         }
 
-        SearchOperation operation = new SearchOperation(query, listener);
+        SearchOperation operation = new SearchOperation(query, limit, listener);
         this.activeSearch = operation;
         this.executor.execute(operation::run);
         return operation;
@@ -67,9 +68,7 @@ public final class ReferenceSearchService implements AutoCloseable {
     }
 
     public interface Listener {
-        void onProgress(ReferenceSearchProgress progress);
-
-        void onCompleted(ReferenceSearchResult result);
+        void onCompleted(ReferenceLocationPage result);
 
         void onFailed(Throwable failure);
     }
@@ -82,49 +81,44 @@ public final class ReferenceSearchService implements AutoCloseable {
 
     @FunctionalInterface
     interface Searcher {
-        ReferenceSearchResult search(ReferenceQuery query, ReferenceSearchMonitor monitor) throws IOException;
+        ReferenceLocationPage search(ReferenceQuery query, int limit);
     }
 
-    private final class SearchOperation implements ReferenceSearchMonitor, SearchHandle {
+    private final class SearchOperation implements SearchHandle {
         private final ReferenceQuery query;
+        private final int limit;
         private final Listener listener;
         private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean done = new AtomicBoolean();
-        private long lastProgressDispatch;
 
-        private SearchOperation(ReferenceQuery query, Listener listener) {
+        private SearchOperation(ReferenceQuery query, int limit, Listener listener) {
             this.query = query;
+            this.limit = limit;
             this.listener = listener;
         }
 
         private void run() {
             try {
-                ReferenceSearchResult result = searcher.search(this.query, this);
-                dispatch(() -> this.listener.onCompleted(result));
-            } catch (Throwable failure) {
-                if (!(failure instanceof InterruptedException) && !Thread.currentThread().isInterrupted()) {
-                    dispatch(() -> this.listener.onFailed(failure));
+                ReferenceLocationPage result = searcher.search(this.query, this.limit);
+                if (!this.cancelled.get()) {
+                    dispatch(() -> {
+                        if (!this.cancelled.get()) {
+                            this.listener.onCompleted(result);
+                        }
+                    });
+                }
+            } catch (RuntimeException failure) {
+                if (!this.cancelled.get() && !Thread.currentThread().isInterrupted()) {
+                    dispatch(() -> {
+                        if (!this.cancelled.get()) {
+                            this.listener.onFailed(failure);
+                        }
+                    });
                 }
             } finally {
                 this.done.set(true);
                 finished(this);
             }
-        }
-
-        @Override
-        public boolean isCancelled() {
-            return this.cancelled.get();
-        }
-
-        @Override
-        public void onProgress(ReferenceSearchProgress progress) {
-            long now = System.nanoTime();
-            if (progress.processedClassFiles() != progress.totalClassFiles()
-                    && now - this.lastProgressDispatch < PROGRESS_INTERVAL_NANOS) {
-                return;
-            }
-            this.lastProgressDispatch = now;
-            dispatch(() -> this.listener.onProgress(progress));
         }
 
         @Override
@@ -144,5 +138,17 @@ public final class ReferenceSearchService implements AutoCloseable {
         } else {
             SwingUtilities.invokeLater(callback);
         }
+    }
+
+    private static ExecutorService newExecutor() {
+        return Executors.newSingleThreadExecutor(runnable -> Thread.ofPlatform()
+                .daemon(true)
+                .name("totaldebug-reference-search")
+                .unstarted(runnable));
+    }
+
+    private static Supplier<ClassIndex> singleIndex(ClassIndex index) {
+        Objects.requireNonNull(index, "index");
+        return () -> index;
     }
 }
