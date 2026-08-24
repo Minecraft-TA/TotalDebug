@@ -10,6 +10,8 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
+import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -63,6 +65,7 @@ public final class CompanionApp {
     private static volatile CompanionProfile profile;
     private static volatile CompanionDecompilationService decompilationService;
     private static volatile ReferenceSearchService referenceSearchService;
+    private static CompanionMcpServer mcpServer;
     private static volatile boolean uiStarted;
 
     private CompanionApp() {
@@ -117,9 +120,14 @@ public final class CompanionApp {
                 @Override
                 public void disconnected() {
                     updateUiState("Offline");
+                    CompanionMcpServer current = mcpServer;
+                    if (current != null) {
+                        current.runtimeDisconnected();
+                    }
                 }
             });
             SERVER = session.server();
+            startMcpServer();
             startUi();
             session.bindAndPublish(launchConfiguration);
             updateUiState("Offline");
@@ -134,6 +142,7 @@ public final class CompanionApp {
             return 1;
         } finally {
             GlobalConfig.getInstance().saveNow();
+            closeMcpServer();
             if (session != null) {
                 session.close();
             }
@@ -318,6 +327,50 @@ public final class CompanionApp {
         }, "Companion JDT prewarm");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    private static void startMcpServer() throws Exception {
+        CodeModeJobService jobs = new CodeModeJobService(
+                SERVER,
+                () -> hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION),
+                CompanionApp::runtimeContext,
+                launchConfiguration.appHome().resolve("mcp").resolve("artifacts")
+        );
+        CompanionMcpServer server = new CompanionMcpServer(
+                launchConfiguration.appHome(),
+                () -> hasProfile() ? getWorkspaceDirectory() : null,
+                () -> hasProfile() ? getIndexFile() : null,
+                jobs
+        );
+        try {
+            server.start();
+            mcpServer = server;
+            System.err.println("TotalDebug Companion MCP listening at " + server.endpointUrl());
+        } catch (Exception exception) {
+            server.close();
+            throw exception;
+        }
+    }
+
+    private static void closeMcpServer() {
+        CompanionMcpServer server = mcpServer;
+        mcpServer = null;
+        if (server != null) {
+            server.close();
+        }
+    }
+
+    private static Map<String, Object> runtimeContext() {
+        CompanionProfile current = profile;
+        if (current == null) {
+            return Map.of();
+        }
+        return Map.of(
+                "profile_id", current.id(),
+                "runtime_signature", current.runtimeSignature(),
+                "workspace_directory", current.workspaceDirectory().toString(),
+                "index_file", current.indexFile().toString()
+        );
     }
 
     private static void startUi() throws InvocationTargetException, InterruptedException {

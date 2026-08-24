@@ -103,6 +103,10 @@ configurations {
 dependencies {
     parchmentData("org.parchmentmc.data:parchment-${parchment_minecraft_version}:${parchment_mappings_version}")
 
+    implementation platform('io.modelcontextprotocol.sdk:mcp-bom:2.0.1')
+    implementation('io.modelcontextprotocol.sdk:mcp')
+    implementation('org.apache.tomcat.embed:tomcat-embed-core:11.0.24')
+
     implementation('net.java.dev.jna:jna:5.19.1')
     implementation("com.github.tth05:jindex:${jindex_version}")
     implementation("com.github.tth05:SCNet:${scnet_version}")
