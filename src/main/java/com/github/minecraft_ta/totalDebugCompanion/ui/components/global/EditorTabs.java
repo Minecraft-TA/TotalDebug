@@ -12,15 +12,18 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.Consumer;
 
 public class EditorTabs extends JTabbedPane {
 
     private final List<IEditorPanel> editors = new ArrayList<>();
+    private final List<Consumer<IEditorPanel>> selectedEditorListeners = new ArrayList<>();
 
     public EditorTabs() {
         super();
         setTabLayoutPolicy(SCROLL_TAB_LAYOUT);
         setBorder(BorderFactory.createEmptyBorder());
+        addChangeListener(event -> notifySelectedEditorChanged());
     }
 
     /**
@@ -47,10 +50,13 @@ public class EditorTabs extends JTabbedPane {
 
     @Override
     public void removeTabAt(int index) {
-        if (!this.editors.get(index).canClose())
+        IEditorPanel editor = this.editors.get(index);
+        if (!editor.canClose())
             return;
         super.removeTabAt(index);
         editors.remove(index);
+        editor.dispose();
+        notifySelectedEditorChanged();
     }
 
     public CompletableFuture<Void> openEditorTab(IEditorPanel editorPanel) {
@@ -87,5 +93,17 @@ public class EditorTabs extends JTabbedPane {
             return null;
 
         return editors.get(getSelectedIndex());
+    }
+
+    public void addSelectedEditorListener(Consumer<IEditorPanel> listener) {
+        this.selectedEditorListeners.add(listener);
+        listener.accept(getSelectedEditor());
+    }
+
+    private void notifySelectedEditorChanged() {
+        IEditorPanel selected = getSelectedEditor();
+        for (Consumer<IEditorPanel> listener : this.selectedEditorListeners) {
+            listener.accept(selected);
+        }
     }
 }

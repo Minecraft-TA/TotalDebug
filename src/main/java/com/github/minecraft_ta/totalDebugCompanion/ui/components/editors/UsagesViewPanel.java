@@ -3,20 +3,22 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
-import com.github.tth05.jindex.ReferenceKind;
 import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
@@ -36,9 +38,7 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public final class UsagesViewPanel extends JPanel {
@@ -53,6 +53,7 @@ public final class UsagesViewPanel extends JPanel {
     private final JLabel statusLabel = new JLabel();
     private final JButton cancelButton = new JButton("Cancel");
     private final JButton showMoreButton = new JButton("Show more");
+    private final JButton groupByButton = new JButton("Group by");
     private final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
     private final DefaultTreeModel treeModel = new DefaultTreeModel(this.rootNode);
     private final JTree resultsTree = new JTree(this.treeModel);
@@ -64,6 +65,8 @@ public final class UsagesViewPanel extends JPanel {
     private boolean detached;
     private int resultLimit = INITIAL_RESULT_LIMIT;
     private boolean resultTruncated;
+    private List<ReferenceUsage> currentUsages = List.of();
+    private UsageTreeModel.Options groupingOptions = UsageTreeModel.Options.defaults();
 
     public UsagesViewPanel(CodeSymbol symbol, ReferenceSearchService searchService) {
         super(new BorderLayout());
@@ -101,6 +104,7 @@ public final class UsagesViewPanel extends JPanel {
         }
         long generation = ++this.searchGeneration;
         if (clearResults) {
+            this.currentUsages = List.of();
             this.rootNode.removeAllChildren();
             this.treeModel.reload();
             this.messageLabel.setText("Looking up indexed references...");
@@ -143,6 +147,8 @@ public final class UsagesViewPanel extends JPanel {
         Box firstRow = Box.createHorizontalBox();
         firstRow.add(this.targetLabel);
         firstRow.add(Box.createHorizontalGlue());
+        firstRow.add(this.groupByButton);
+        firstRow.add(Box.createHorizontalStrut(6));
         firstRow.add(this.showMoreButton);
         firstRow.add(Box.createHorizontalStrut(6));
         firstRow.add(this.cancelButton);
@@ -160,6 +166,8 @@ public final class UsagesViewPanel extends JPanel {
 
         this.cancelButton.setVisible(false);
         this.showMoreButton.setVisible(false);
+        this.groupByButton.setToolTipText("Choose how usage sites are grouped");
+        this.groupByButton.addActionListener(event -> showGroupingMenu());
         this.cancelButton.addActionListener(event -> cancelActiveSearch());
         this.showMoreButton.addActionListener(event -> showMoreResults());
     }
@@ -196,8 +204,9 @@ public final class UsagesViewPanel extends JPanel {
         this.activeSearch = null;
         this.cancelButton.setVisible(false);
         this.resultTruncated = result.truncated();
+        this.currentUsages = result.usages();
 
-        populateResults(result.usages());
+        populateResults(this.currentUsages);
         int classCount = (int) result.usages().stream()
                 .map(ReferenceUsage::location)
                 .map(ReferenceLocation::className)
@@ -249,20 +258,94 @@ public final class UsagesViewPanel extends JPanel {
 
     private void populateResults(List<ReferenceUsage> usages) {
         this.rootNode.removeAllChildren();
-        Map<String, DefaultMutableTreeNode> classNodes = new LinkedHashMap<>();
-        for (ReferenceUsage usage : usages) {
-            ReferenceLocation location = usage.location();
-            DefaultMutableTreeNode classNode = classNodes.computeIfAbsent(location.className(), className -> {
-                DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ClassNode(className));
-                this.rootNode.add(node);
-                return node;
-            });
-            classNode.add(new DefaultMutableTreeNode(new UsageNode(usage)));
+        if (!usages.isEmpty()) {
+            UsageTreeModel.Group grouped = UsageTreeModel.build(
+                    usages,
+                    this.searchService.sourceCatalog(),
+                    this.groupingOptions
+            );
+            this.rootNode.add(createTreeNode(grouped));
         }
         this.treeModel.reload();
         for (int row = 0; row < this.resultsTree.getRowCount(); row++) {
-            this.resultsTree.expandRow(row);
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) this.resultsTree.getPathForRow(row)
+                    .getLastPathComponent();
+            if (node.getUserObject() instanceof GroupNode) {
+                this.resultsTree.expandRow(row);
+            }
         }
+    }
+
+    private DefaultMutableTreeNode createTreeNode(UsageTreeModel.Group group) {
+        DefaultMutableTreeNode node = new DefaultMutableTreeNode(new GroupNode(group));
+        for (UsageTreeModel.Group child : group.children()) {
+            node.add(createTreeNode(child));
+        }
+        boolean includeClassName = !this.groupingOptions.fileStructure();
+        for (ReferenceUsage usage : group.usages()) {
+            node.add(new DefaultMutableTreeNode(new UsageNode(
+                    usage,
+                    includeClassName,
+                    this.searchService.sourceCatalog().moduleFor(usage.sourceId()).label()
+            )));
+        }
+        return node;
+    }
+
+    private void showGroupingMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem heading = new JMenuItem("Group by");
+        heading.setEnabled(false);
+        menu.add(heading);
+        menu.addSeparator();
+        menu.add(groupingItem("File structure", this.groupingOptions.fileStructure(), selected ->
+                updateGrouping(new UsageTreeModel.Options(
+                        this.groupingOptions.module(),
+                        this.groupingOptions.packageName(),
+                        selected,
+                        this.groupingOptions.usageType()
+                ))));
+        menu.add(groupingItem("Module", this.groupingOptions.module(), selected ->
+                updateGrouping(new UsageTreeModel.Options(
+                        selected,
+                        this.groupingOptions.packageName(),
+                        this.groupingOptions.fileStructure(),
+                        this.groupingOptions.usageType()
+                ))));
+        menu.add(groupingItem("Package", this.groupingOptions.packageName(), selected ->
+                updateGrouping(new UsageTreeModel.Options(
+                        this.groupingOptions.module(),
+                        selected,
+                        this.groupingOptions.fileStructure(),
+                        this.groupingOptions.usageType()
+                ))));
+        menu.add(groupingItem("Usage type", this.groupingOptions.usageType(), selected ->
+                updateGrouping(new UsageTreeModel.Options(
+                        this.groupingOptions.module(),
+                        this.groupingOptions.packageName(),
+                        this.groupingOptions.fileStructure(),
+                        selected
+                ))));
+        menu.show(
+                this.groupByButton,
+                Math.max(0, this.groupByButton.getWidth() - menu.getPreferredSize().width),
+                this.groupByButton.getHeight()
+        );
+    }
+
+    private JCheckBoxMenuItem groupingItem(
+            String label,
+            boolean selected,
+            java.util.function.Consumer<Boolean> selection
+    ) {
+        JCheckBoxMenuItem item = new JCheckBoxMenuItem(label, selected);
+        item.addActionListener(event -> selection.accept(item.isSelected()));
+        return item;
+    }
+
+    private void updateGrouping(UsageTreeModel.Options options) {
+        this.groupingOptions = options;
+        populateResults(this.currentUsages);
     }
 
     private void openSelectedUsage() {
@@ -341,29 +424,16 @@ public final class UsagesViewPanel extends JPanel {
         };
     }
 
-    private static String usageLabel(ReferenceUsage usage) {
+    private static String usageLabel(ReferenceUsage usage, boolean includeClassName) {
         String relations = usage.kinds().stream()
                 .sorted()
-                .map(UsagesViewPanel::relationLabel)
+                .map(UsageTreeModel::relationLabel)
                 .collect(java.util.stream.Collectors.joining(", "));
         String count = usage.occurrenceCount() == 1 ? "" : " ×" + usage.occurrenceCount();
-        return usageLabel(usage.location().site()) + "  —  " + relations + count;
-    }
-
-    private static String relationLabel(ReferenceKind kind) {
-        return switch (kind) {
-            case CLASS_HIERARCHY -> "hierarchy";
-            case CLASS_DECLARATION -> "type declaration";
-            case CLASS_ANNOTATION_OR_METADATA -> "annotation/metadata";
-            case CLASS_RUNTIME_TYPE -> "runtime type";
-            case CLASS_MEMBER_USAGE -> "member usage";
-            case FIELD_READ -> "read";
-            case FIELD_WRITE -> "write";
-            case FIELD_HANDLE -> "field handle";
-            case METHOD_INVOKE -> "call";
-            case METHOD_HANDLE -> "method handle";
-            case STRING_LITERAL -> "string literal";
-        };
+        String owner = includeClassName
+                ? UsageTreeModel.simpleClassName(usage.location().className()) + '.'
+                : "";
+        return owner + usageLabel(usage.location().site()) + "  -  " + relations + count;
     }
 
     private static String methodLabel(ReferenceLocation.Method method) {
@@ -390,17 +460,18 @@ public final class UsagesViewPanel extends JPanel {
         }
     }
 
-    private record ClassNode(String className) {
+    private record GroupNode(UsageTreeModel.Group group) {
         @Override
         public String toString() {
-            return this.className;
+            String result = this.group.siteCount() == 1 ? "1 result" : this.group.siteCount() + " results";
+            return this.group.label() + "  " + result;
         }
     }
 
-    private record UsageNode(ReferenceUsage usage) {
+    private record UsageNode(ReferenceUsage usage, boolean includeClassName, String moduleLabel) {
         @Override
         public String toString() {
-            return usageLabel(this.usage);
+            return usageLabel(this.usage, this.includeClassName);
         }
     }
 
@@ -419,12 +490,21 @@ public final class UsagesViewPanel extends JPanel {
                     tree, value, selected, expanded, leaf, row, hasFocus
             );
             Object userValue = ((DefaultMutableTreeNode) value).getUserObject();
-            if (userValue instanceof ClassNode) {
-                setIcon(Icons.JAVA_CLASS);
+            if (userValue instanceof GroupNode group) {
+                setIcon(switch (group.group().kind()) {
+                    case SCOPE, USAGE_TYPE -> Icons.SEARCH_ICON;
+                    case MODULE -> Icons.MODULE;
+                    case PACKAGE -> Icons.PACKAGE;
+                    case CLASS -> Icons.JAVA_CLASS;
+                });
+                setToolTipText(group.group().referenceCount() + " indexed references");
             } else if (userValue instanceof UsageNode usage) {
                 ReferenceLocation location = usage.usage().location();
                 setIcon(locationIcon(location.site()));
-                setToolTipText(location.className() + '#' + usageLabel(usage.usage()));
+                setToolTipText(
+                        usage.moduleLabel() + " | " + location.className() + '#'
+                                + usageLabel(usage.usage(), false)
+                );
             }
             return component;
         }

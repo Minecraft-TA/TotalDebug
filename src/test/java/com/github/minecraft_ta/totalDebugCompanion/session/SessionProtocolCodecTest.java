@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
@@ -17,20 +18,17 @@ class SessionProtocolCodecTest {
 
     @Test
     void clientHelloReadsTheSharedGoldenBytes() {
-        byte[] golden = HEX.parseHex("000000040000000361626300000000000000070000000170000000016400000001690000000177000000016d0000000173");
+        byte[] golden = HEX.parseHex("00000005000000036162630000000000000007000000017000000001640000000177");
         ClientHelloMessage message = new ClientHelloMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
-        assertEquals(4, message.protocolVersion());
+        assertEquals(5, message.protocolVersion());
         assertEquals("abc", message.token());
         assertEquals(7, message.requestedCapabilities());
         assertEquals("p", message.profileId());
         assertEquals("d", message.dataDirectory());
-        assertEquals("i", message.indexFile());
         assertEquals("w", message.workspaceDirectory());
-        assertEquals("m", message.runtimeSourceManifest());
-        assertEquals("s", message.runtimeSignature());
     }
 
     @Test
@@ -41,9 +39,23 @@ class SessionProtocolCodecTest {
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("0000000401000000000000000700000000"),
+                HEX.parseHex("0000000501000000000000000700000000"),
                 writtenBytes(output)
         );
+    }
+
+    @Test
+    void runtimeInventoryReadsTheSharedGoldenBytes() {
+        RuntimeInventoryMessage message = new RuntimeInventoryMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
+                HEX.parseHex("000000010000000269640000000466696c6500000000")
+        )));
+
+        assertEquals(RuntimeInventoryMessage.AVAILABLE, message.state());
+        assertEquals("id", message.inventoryId());
+        assertEquals("file", message.inventoryFile());
+        assertEquals("", message.detail());
     }
 
     private static byte[] writtenBytes(ByteBufferOutputStream output) {

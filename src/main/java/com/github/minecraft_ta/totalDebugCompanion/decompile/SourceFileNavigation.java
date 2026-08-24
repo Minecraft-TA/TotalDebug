@@ -1,12 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.SourceReferenceLocator;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -37,16 +39,32 @@ final class SourceFileNavigation {
     private SourceFileNavigation() {
     }
 
-    static void open(Path filePath, int targetType, String targetIdentifier) {
+    static void open(
+            Path filePath,
+            int targetType,
+            String targetIdentifier,
+            String binaryName,
+            RuntimeSnapshotBytecodeSource.ClassOrigin origin
+    ) {
         int offset = targetOffset(filePath, targetType, targetIdentifier);
-        openAt(filePath, offset);
+        openAt(filePath, offset, location(filePath, binaryName, origin));
     }
 
-    static void openUsage(Path filePath, ReferenceLocation location, ReferenceQuery query) {
-        openAt(filePath, usageOffset(CodeView.readCode(filePath), location, query));
+    static void openUsage(
+            Path filePath,
+            ReferenceLocation referenceLocation,
+            ReferenceQuery query,
+            String binaryName,
+            RuntimeSnapshotBytecodeSource.ClassOrigin origin
+    ) {
+        openAt(
+                filePath,
+                usageOffset(CodeView.readCode(filePath), referenceLocation, query),
+                location(filePath, binaryName, origin)
+        );
     }
 
-    private static void openAt(Path filePath, int offset) {
+    private static void openAt(Path filePath, int offset, EditorLocation location) {
         SwingUtilities.invokeLater(() -> {
             MainWindow window = MainWindow.INSTANCE;
             AtomicBoolean created = new AtomicBoolean();
@@ -55,7 +73,7 @@ final class SourceFileNavigation {
                     view -> view.getPath().equals(filePath),
                     () -> {
                         created.set(true);
-                        return new CodeView(filePath, offset);
+                        return new CodeView(filePath, offset, location);
                     }
             ).thenAccept(codeView -> {
                 if (!created.get()) {
@@ -64,6 +82,20 @@ final class SourceFileNavigation {
                 UIUtils.focusWindow(window);
             });
         });
+    }
+
+    private static EditorLocation location(
+            Path filePath,
+            String binaryName,
+            RuntimeSnapshotBytecodeSource.ClassOrigin origin
+    ) {
+        return origin == null
+                ? EditorLocation.forFile(filePath, null)
+                : EditorLocation.forRuntimeClass(
+                        binaryName,
+                        origin.logicalSource(),
+                        origin.module().displayName()
+                );
     }
 
     static int usageOffset(String source, ReferenceLocation location, ReferenceQuery query) {

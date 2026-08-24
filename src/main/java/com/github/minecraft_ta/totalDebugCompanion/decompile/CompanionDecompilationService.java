@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
     private static final String CACHE_FORMAT = "1";
@@ -76,17 +76,32 @@ public final class CompanionDecompilationService implements AutoCloseable {
         ensureOpen();
         String normalizedName = requireBinaryName(binaryName);
         String identifier = Objects.requireNonNullElse(targetIdentifier, "");
-        return open(normalizedName, sourceFile -> SourceFileNavigation.open(sourceFile, targetType, identifier));
+        return open(normalizedName, (sourceFile, origin) -> SourceFileNavigation.open(
+                sourceFile,
+                targetType,
+                identifier,
+                normalizedName,
+                origin
+        ));
     }
 
     public CompletableFuture<Path> openUsage(ReferenceUsage usage, ReferenceQuery query) {
         Objects.requireNonNull(usage, "usage");
         Objects.requireNonNull(query, "query");
         String binaryName = requireBinaryName(usage.location().className());
-        return open(binaryName, sourceFile -> SourceFileNavigation.openUsage(sourceFile, usage.location(), query));
+        return open(binaryName, (sourceFile, origin) -> SourceFileNavigation.openUsage(
+                sourceFile,
+                usage.location(),
+                query,
+                binaryName,
+                origin
+        ));
     }
 
-    private CompletableFuture<Path> open(String binaryName, Consumer<Path> navigation) {
+    private CompletableFuture<Path> open(
+            String binaryName,
+            BiConsumer<Path, RuntimeSnapshotBytecodeSource.ClassOrigin> navigation
+    ) {
         CompletableFuture<Path> task = decompile(binaryName);
         task.whenComplete((sourceFile, failure) -> {
             if (this.closed) {
@@ -94,7 +109,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
             }
             if (failure == null) {
                 try {
-                    navigation.accept(sourceFile);
+                    navigation.accept(sourceFile, this.bytecodeSource.findClassOrigin(binaryName));
                 } catch (RuntimeException exception) {
                     showFailure(binaryName, exception);
                 }

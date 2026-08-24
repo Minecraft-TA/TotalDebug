@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.IndexedReferenceSearch;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.tth05.jindex.ClassIndex;
 
 import javax.swing.SwingUtilities;
@@ -16,6 +17,7 @@ import java.util.function.Supplier;
 public final class ReferenceSearchService implements AutoCloseable {
     private final Searcher searcher;
     private final ExecutorService executor;
+    private final RuntimeSourceCatalog sourceCatalog;
     private SearchOperation activeSearch;
 
     public ReferenceSearchService(ClassIndex index) {
@@ -23,14 +25,27 @@ public final class ReferenceSearchService implements AutoCloseable {
     }
 
     public ReferenceSearchService(Supplier<ClassIndex> indexSupplier) {
+        this(indexSupplier, RuntimeSourceCatalog.empty());
+    }
+
+    public ReferenceSearchService(
+            Supplier<ClassIndex> indexSupplier,
+            RuntimeSourceCatalog sourceCatalog
+    ) {
         Objects.requireNonNull(indexSupplier, "indexSupplier");
         this.searcher = (query, limit) -> new IndexedReferenceSearch(indexSupplier.get()).search(query, limit);
+        this.sourceCatalog = Objects.requireNonNull(sourceCatalog, "sourceCatalog");
         this.executor = newExecutor();
     }
 
     ReferenceSearchService(Searcher searcher) {
         this.searcher = Objects.requireNonNull(searcher, "searcher");
+        this.sourceCatalog = RuntimeSourceCatalog.empty();
         this.executor = newExecutor();
+    }
+
+    public RuntimeSourceCatalog sourceCatalog() {
+        return this.sourceCatalog;
     }
 
     public synchronized SearchHandle search(ReferenceQuery query, int limit, Listener listener) {

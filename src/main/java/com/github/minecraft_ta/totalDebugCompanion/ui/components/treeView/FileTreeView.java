@@ -4,7 +4,10 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -17,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
@@ -44,9 +48,12 @@ public class FileTreeView extends JScrollPane {
                 return;
 
             if (item instanceof FileSystemFileItem fileItem) {
-                if (node.getParent().getUserObject().getName().equals("scripts")
+                String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
+                boolean javaFile = lowerName.endsWith(".java");
+                if (javaFile
+                        && node.getParent().getUserObject().getName().equals("scripts")
                         && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-                    var name = fileItem.getName().replace(".java", "");
+                    var name = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
 
                     tabs.focusOrCreateIfAbsent(ScriptView.class, sv -> sv.getTitle().equals(name + ".java"), () -> {
                         if (name.equals("BaseScript"))
@@ -54,19 +61,23 @@ public class FileTreeView extends JScrollPane {
                         else
                             return new ScriptView(name);
                     });
-                } else {
+                } else if (javaFile && fileItem.getPath().getParent().equals(
+                        CompanionApp.getRootPath().resolve("decompiled-files")
+                )) {
+                    String binaryName = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
+                    CompanionApp.openClass(binaryName);
+                } else if (javaFile) {
                     tabs.focusOrCreateIfAbsent(CodeView.class, cv -> cv.getPath().equals(fileItem.getPath()), () -> new CodeView(fileItem.getPath(), 0));
+                } else {
+                    openResource(tabs, new LocalFileSource(fileItem.getPath()));
                 }
-            } else if (item instanceof ZipFileRootItem.Entry) {
-                if (!item.getName().endsWith(".class"))
-                    return;
-
-                //Reconstruct the class name
-                StringBuilder fullName = new StringBuilder(item.getName().substring(0, item.getName().length() - 6));
-                while (!((node = node.getParent()).getUserObject() instanceof ZipFileRootItem)) {
-                    fullName.insert(0, '.').insert(0, node.getUserObject().getName());
+            } else if (item instanceof ZipFileRootItem.Entry entry) {
+                String entryPath = entry.getEntryPath();
+                if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {
+                    CompanionApp.openClass(entryPath.substring(0, entryPath.length() - 6).replace('/', '.'));
+                } else {
+                    openResource(tabs, entry.contentSource());
                 }
-                CompanionApp.openClass(fullName.toString());
             }
         });
 
@@ -76,9 +87,16 @@ public class FileTreeView extends JScrollPane {
                 var item = super.createFileSystemFileItem(path);
 
                 var fileName = item.getName();
-                var splitIndex = fileName.lastIndexOf('.', fileName.length() - ".java".length() - 1);
-                if (splitIndex != -1)
-                    item.setRenderedName(TextUtils.htmlPrimarySecondaryString(fileName.substring(splitIndex + 1), "  ", fileName.substring(0, splitIndex)));
+                if (fileName.toLowerCase(Locale.ROOT).endsWith(".java")) {
+                    var splitIndex = fileName.lastIndexOf('.', fileName.length() - ".java".length() - 1);
+                    if (splitIndex != -1) {
+                        item.setRenderedName(TextUtils.htmlPrimarySecondaryString(
+                                fileName.substring(splitIndex + 1),
+                                "  ",
+                                fileName.substring(0, splitIndex)
+                        ));
+                    }
+                }
 
                 item.setIcon(FileTreeIcons.forFileName(fileName));
                 return item;
@@ -87,6 +105,14 @@ public class FileTreeView extends JScrollPane {
 
         setViewportView(this.tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
+    }
+
+    private static void openResource(EditorTabs tabs, ContentSource source) {
+        tabs.focusOrCreateIfAbsent(
+                ResourceView.class,
+                view -> view.source().identity().equals(source.identity()),
+                () -> new ResourceView(source)
+        );
     }
 
     public void reloadProfile() {

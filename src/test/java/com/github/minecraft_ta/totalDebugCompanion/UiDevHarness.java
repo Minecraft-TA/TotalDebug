@@ -3,8 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
+import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -15,8 +19,10 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -82,23 +88,43 @@ public final class UiDevHarness {
     private static void writeSampleArchive(Path target) throws java.io.IOException {
         try (ZipOutputStream archive = new ZipOutputStream(Files.newOutputStream(target))) {
             addArchiveEntry(archive, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n");
-            addArchiveEntry(archive, "assets/sample/textures/gui/debug.png", "sample-image");
-            addArchiveEntry(archive, "assets/sample/lang/en_us.json", "{}\n");
+            addArchiveEntry(archive, "assets/sample/textures/gui/debug.png", samplePng());
+            addArchiveEntry(archive, "assets/sample/lang/en_us.json", "{\"debug.sample\": \"Hello\"}\n");
             addArchiveEntry(archive, "assets/sample/font/ui.ttf", "sample-font");
             addArchiveEntry(archive, "data/sample/tags/blocks/debug.json", "{}\n");
             addArchiveEntry(archive, "sample/api/Example.class", "sample-class");
             addArchiveEntry(archive, "sample/api/package-info.class", "sample-package");
-            addArchiveEntry(archive, "config/defaults.toml", "enabled=true\n");
+            addArchiveEntry(archive, "config/defaults.toml", "enabled = true\nmessage = \"Hello\"\n");
+            addArchiveEntry(archive, "config/legacy.cfg", "[general]\nenabled = true\n");
             addArchiveEntry(archive, "docs/README.md", "# Sample\n");
+            addArchiveEntry(archive, "docs/NOTICE.custom", "An unknown but valid text file.\n");
             addArchiveEntry(archive, "pack.mcmeta", "{}\n");
         }
     }
 
     private static void addArchiveEntry(ZipOutputStream archive, String name, String contents)
             throws java.io.IOException {
+        addArchiveEntry(archive, name, contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private static void addArchiveEntry(ZipOutputStream archive, String name, byte[] contents)
+            throws java.io.IOException {
         archive.putNextEntry(new ZipEntry(name));
-        archive.write(contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        archive.write(contents);
         archive.closeEntry();
+    }
+
+    private static byte[] samplePng() throws java.io.IOException {
+        BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(new Color(0x4878D0));
+        graphics.fillRect(8, 8, 48, 48);
+        graphics.setColor(new Color(0xE8B84A));
+        graphics.fillRect(20, 20, 24, 24);
+        graphics.dispose();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", output);
+        return output.toByteArray();
     }
 
     private static void writeSampleClassIndex(Path target) throws java.io.IOException {
@@ -200,7 +226,8 @@ public final class UiDevHarness {
         Files.createDirectories(root.resolve("decompiled-files"));
         Path workspace = Files.createDirectories(root.resolve("workspace"));
         Path mods = Files.createDirectories(workspace.resolve("mods"));
-        writeSampleArchive(mods.resolve("companion-ui-sample.jar"));
+        Path sampleArchive = mods.resolve("companion-ui-sample.jar");
+        writeSampleArchive(sampleArchive);
         Path indexFile = root.resolve("classes.jindex");
         writeSampleClassIndex(indexFile);
         Path runtimeSources = Files.writeString(
@@ -208,17 +235,15 @@ public final class UiDevHarness {
                 "totaldebug-runtime-sources-v1\n" + workspace.toUri().toASCIIString() + "\n"
         );
         Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
+        Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
 
         CompanionProfile profile = new CompanionProfile(
                 "ui-dev",
                 root,
-                indexFile,
                 workspace,
-                runtimeSources,
-                "ui-dev",
                 CompanionProtocol.SUPPORTED_CAPABILITIES
         );
-        CompanionApp.configureWithoutSession(profile);
+        CompanionApp.configureWithoutSession(profile, indexFile, List.of(workspace), "ui-dev");
 
         GlobalConfig.getInstance().loadFrom(root);
         var positionalArguments = Arrays.stream(args).filter(argument -> !argument.startsWith("--")).toList();
@@ -239,11 +264,40 @@ public final class UiDevHarness {
         SwingUtilities.invokeAndWait(() -> {
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(sample, 0));
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(
+                    sample,
+                    0,
+                    EditorLocation.forRuntimeClass(
+                            "com.github.minecraft_ta.totaldebug.ThemeSample",
+                            sampleClasses.toUri().toASCIIString()
+                    )
+            ));
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+                    new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1)
+            ));
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+                    new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1)
+            ));
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+                    new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1)
+            ));
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+                    new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1)
+            ));
+            if (Arrays.asList(args).contains("--select-code")) {
+                SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(0));
+            }
             if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
                 startThemeCycling();
             }
             MainWindow.INSTANCE.setSize(1280, 720);
+            if (Arrays.asList(args).contains("--index-building")) {
+                MainWindow.INSTANCE.setRuntimeIndexStatus(new RuntimeIndexService.Status(
+                        RuntimeIndexService.Phase.BUILDING,
+                        "Building class index",
+                        null
+                ));
+            }
             MainWindow.INSTANCE.setVisible(true);
             UIUtils.centerJFrame(MainWindow.INSTANCE);
             ToolTipManager.sharedInstance().setInitialDelay(200);

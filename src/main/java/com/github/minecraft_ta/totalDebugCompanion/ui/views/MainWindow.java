@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -28,7 +30,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final FileTreeView fileTreeView;
     private final JMenu toolsMenu = new JMenu("Tools");
     private final JMenu scriptMenu = new JMenu("Script");
-    private final JLabel connectionState = new JLabel("Offline");
+    private final JButton connectionState = new JButton("Game: Offline");
+    private final JButton mcpState = new JButton("MCP: Listening");
+    private final ApplicationStatusBar statusBar = new ApplicationStatusBar();
     private final Action chunkGridAction;
     private final Action packetLoggerAction;
     private final Action newScriptAction;
@@ -57,7 +61,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
         root.setDividerLocation(350);
         root.setOneTouchExpandable(false);
 
-        getContentPane().add(root);
+        getContentPane().add(root, BorderLayout.CENTER);
+        getContentPane().add(this.statusBar, BorderLayout.SOUTH);
+        this.editorTabs.addSelectedEditorListener(this.statusBar::setEditor);
 
         var menuBar = new JMenuBar();
 
@@ -97,8 +103,14 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.scriptMenu.add(this.newScriptAction);
         menuBar.add(this.scriptMenu);
         menuBar.add(Box.createHorizontalGlue());
-        this.connectionState.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 10));
+        configureServiceButton(this.connectionState, "Game connection", () -> CompanionApp.isConnected()
+                ? "Minecraft is connected and authenticated."
+                : "Minecraft is not connected.");
         menuBar.add(this.connectionState);
+        configureServiceButton(this.mcpState, "MCP server", () -> CompanionApp.isMcpListening()
+                ? "MCP is listening at " + CompanionApp.getMcpEndpoint()
+                : "MCP is not listening.");
+        menuBar.add(this.mcpState);
 
         setJMenuBar(menuBar);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -118,6 +130,22 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private void updateWindowIcon(CompanionTheme theme) {
         setIconImages(Icons.createWindowIconImages(theme));
+    }
+
+    private static void configureServiceButton(JButton button, String title, java.util.function.Supplier<String> detail) {
+        button.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        button.setContentAreaFilled(false);
+        button.setFocusable(false);
+        button.addActionListener(event -> {
+            JPopupMenu popup = new JPopupMenu();
+            JMenuItem heading = new JMenuItem(title);
+            heading.setEnabled(false);
+            popup.add(heading);
+            JMenuItem description = new JMenuItem(detail.get());
+            description.setEnabled(false);
+            popup.add(description);
+            popup.show(button, Math.max(0, button.getWidth() - popup.getPreferredSize().width), button.getHeight());
+        });
     }
 
     @Override
@@ -165,7 +193,11 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void setConnectionState(String state) {
-        this.connectionState.setText(state);
+        this.connectionState.setText("Game: " + state);
         refreshActions();
+    }
+
+    public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
+        this.statusBar.setRuntimeStatus(status);
     }
 }

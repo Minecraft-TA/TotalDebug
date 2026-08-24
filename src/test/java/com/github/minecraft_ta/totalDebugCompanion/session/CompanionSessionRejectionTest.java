@@ -73,6 +73,24 @@ class CompanionSessionRejectionTest {
         }
     }
 
+    @Test
+    void authenticatedHandshakePublishesReadyAfterServerHello() throws Exception {
+        String token = "correct-token-value-1234567890abcdef";
+        CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
+
+        try (CompanionSession session = new CompanionSession(token);
+             Client client = configuredClient(token)) {
+            session.bindAndPublish(configuration);
+            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile());
+            CompletableFuture<TestReady> ready = new CompletableFuture<>();
+            client.getMessageBus().listenAlways(TestReady.class, ready::complete);
+
+            assertTrue(connect(client, descriptor).get(2, TimeUnit.SECONDS).accepted);
+            ready.get(2, TimeUnit.SECONDS);
+            assertTrue(session.isConnected());
+        }
+    }
+
     private static Client configuredClient(String token) {
         Client client = new Client();
         client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.RECOMMENDED_MAX_FRAME_SIZE);
@@ -82,6 +100,11 @@ class CompanionSessionRejectionTest {
                 CompanionProtocol.SERVER_HELLO,
                 TestServerHello.class,
                 TestServerHello::new
+        );
+        client.getMessageProcessor().registerMessage(
+                CompanionProtocol.READY,
+                TestReady.class,
+                TestReady::new
         );
         client.addConnectionListener(new IConnectionListener() {
             @Override
@@ -125,10 +148,7 @@ class CompanionSessionRejectionTest {
             messageStream.writeLong(CompanionProtocol.CORE_CAPABILITIES);
             messageStream.writeString("profile");
             messageStream.writeString("data");
-            messageStream.writeString("index");
             messageStream.writeString("workspace");
-            messageStream.writeString("sources");
-            messageStream.writeString("signature");
         }
     }
 
@@ -142,6 +162,12 @@ class CompanionSessionRejectionTest {
             this.accepted = messageStream.readBoolean();
             messageStream.readLong();
             this.reason = messageStream.readString();
+        }
+    }
+
+    public static final class TestReady extends AbstractMessageIncoming {
+        @Override
+        public void read(ByteBufferInputStream messageStream) {
         }
     }
 }

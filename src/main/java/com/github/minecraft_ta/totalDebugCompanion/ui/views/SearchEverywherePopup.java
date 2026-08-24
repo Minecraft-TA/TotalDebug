@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -86,37 +87,13 @@ public class SearchEverywherePopup extends JFrame {
         resultListScrollPane.setPreferredSize(new Dimension(500, 500));
         resultListScrollPane.setBorder(DynamicMatteBorder.rule(1, 0, 0, 0));
     }
+    private final JLabel indexStatus = new JLabel("Building class index...", SwingConstants.CENTER);
+    private final JPanel resultCards = new JPanel(new CardLayout());
 
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
     {
         searchTextField.getDocument().addDocumentListener((DocumentChangeListener) e -> {
-            var query = searchTextField.getText();
-            var model = (DefaultListModel<IndexedClass>) resultList.getModel();
-            if (query == null || query.isBlank()) {
-                model.clear();
-                return;
-            }
-
-            var classes = Arrays
-                    .stream(CompanionClassIndex.get().findClasses(query, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.IGNORE_CASE, 800)))
-                    // Down-rank inner classes
-                    .sorted((a, b) -> a.getInnerClassType() != null ? b.getInnerClassType() != null ? 0 : 1 : b.getInnerClassType() != null ? -1 : 0)
-                    .collect(Collectors.toList());
-
-            var selectedClass = resultList.getSelectedIndex() == -1 ? null : model.get(resultList.getSelectedIndex()).getNameWithPackage();
-
-            model.clear();
-            model.addAll(classes);
-
-            for (int i = 0; i < classes.size() && selectedClass != null; i++) {
-                if (!classes.get(i).getNameWithPackage().equals(selectedClass))
-                    continue;
-
-                resultList.setSelectedIndex(i);
-                return;
-            }
-
-            resultList.setSelectedIndex(0);
+            refreshResults();
         });
         ((AbstractDocument) searchTextField.getDocument()).setDocumentFilter(new DocumentFilter() {
             @Override
@@ -145,7 +122,16 @@ public class SearchEverywherePopup extends JFrame {
         getRootPane().registerKeyboardAction(e -> openClass(resultList.getSelectedIndex()), KeyStroke.getKeyStroke("ENTER"), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         add(this.searchTextField, BorderLayout.NORTH);
-        add(this.resultListScrollPane, BorderLayout.CENTER);
+        this.resultCards.add(this.resultListScrollPane, "results");
+        this.resultCards.add(this.indexStatus, "status");
+        add(this.resultCards, BorderLayout.CENTER);
+        CompanionApp.addRuntimeIndexStatusListener(status -> SwingUtilities.invokeLater(() -> {
+            if (CompanionClassIndex.isOpen()) {
+                refreshResults();
+            } else {
+                showIndexStatus(status);
+            }
+        }));
 
         ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
 
@@ -178,6 +164,55 @@ public class SearchEverywherePopup extends JFrame {
 
         CompanionApp.openClass(resultList.getModel().getElementAt(index).getNameWithPackageDot());
         setVisible(false);
+    }
+
+    private void refreshResults() {
+        if (!CompanionClassIndex.isOpen()) {
+            showIndexStatus(CompanionApp.getRuntimeIndexStatus());
+            return;
+        }
+        ((CardLayout) this.resultCards.getLayout()).show(this.resultCards, "results");
+        var query = this.searchTextField.getText();
+        var model = (DefaultListModel<IndexedClass>) this.resultList.getModel();
+        if (query == null || query.isBlank()) {
+            model.clear();
+            return;
+        }
+
+        var classes = Arrays
+                .stream(CompanionClassIndex.get().findClasses(
+                        query,
+                        SearchOptions.with(
+                                SearchOptions.SearchMode.CONTAINS,
+                                SearchOptions.MatchMode.IGNORE_CASE,
+                                800
+                        )
+                ))
+                .sorted((a, b) -> a.getInnerClassType() != null
+                        ? b.getInnerClassType() != null ? 0 : 1
+                        : b.getInnerClassType() != null ? -1 : 0)
+                .collect(Collectors.toList());
+        var selectedClass = this.resultList.getSelectedIndex() == -1
+                ? null
+                : model.get(this.resultList.getSelectedIndex()).getNameWithPackage();
+        model.clear();
+        model.addAll(classes);
+        for (int index = 0; index < classes.size() && selectedClass != null; index++) {
+            if (classes.get(index).getNameWithPackage().equals(selectedClass)) {
+                this.resultList.setSelectedIndex(index);
+                return;
+            }
+        }
+        if (!classes.isEmpty()) {
+            this.resultList.setSelectedIndex(0);
+        }
+    }
+
+    private void showIndexStatus(RuntimeIndexService.Status status) {
+        this.indexStatus.setText(status.phase() == RuntimeIndexService.Phase.FAILED
+                ? "Class index unavailable — use Retry in the bottom bar"
+                : "Building class index... " + status.detail());
+        ((CardLayout) this.resultCards.getLayout()).show(this.resultCards, "status");
     }
 
     private static JLabel primaryLabel(String primary) {

@@ -49,7 +49,7 @@ class SessionAuthenticatorTest {
         ServerHelloMessage response = authenticator.authenticate(hello(1, "correct-token-value", 0b0111));
 
         assertFalse(response.accepted());
-        assertEquals("Unsupported protocol version: expected 4, got 1", response.rejectionReason());
+        assertEquals("Unsupported protocol version: expected 5, got 1", response.rejectionReason());
     }
 
     private static ClientHelloMessage hello(int version, String token, long capabilities) {
@@ -57,13 +57,13 @@ class SessionAuthenticatorTest {
         byte[] value = "x".getBytes(StandardCharsets.UTF_8);
         ByteBuffer buffer = ByteBuffer.allocate(
                 Integer.BYTES + Integer.BYTES + tokenBytes.length + Long.BYTES
-                        + 6 * (Integer.BYTES + value.length)
+                        + 3 * (Integer.BYTES + value.length)
         );
         buffer.putInt(version);
         buffer.putInt(tokenBytes.length);
         buffer.put(tokenBytes);
         buffer.putLong(capabilities);
-        for (int index = 0; index < 6; index++) {
+        for (int index = 0; index < 3; index++) {
             buffer.putInt(value.length);
             buffer.put(value);
         }

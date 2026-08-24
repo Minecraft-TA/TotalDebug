@@ -7,13 +7,10 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
-import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.FindImplementationsPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.IndexedMethod;
 import org.eclipse.jdt.core.JavaModelException;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -21,7 +18,6 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import javax.swing.*;
 import javax.swing.text.TextAction;
 import java.awt.event.ActionEvent;
-import java.awt.event.HierarchyEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -31,28 +27,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private static final FindImplementationsPopup FIND_IMPLEMENTATIONS_POPUP = new FindImplementationsPopup(MainWindow.INSTANCE);
 
-    private final SearchManager searchManager = new SearchManager(editorPane);
-
     public CodeViewPanel(CodeView codeView) {
         super(codeView.getPath().toString(), codeView.getTitle());
         this.editorPane.setEditable(false);
-
-        //Ctrl+F keybind for search
-        this.editorPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl pressed F"), "openSearchPopup");
-        this.editorPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "closeSearchPopup");
-        this.editorPane.getActionMap().put("closeSearchPopup", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                removeHeaderComponent();
-                searchManager.hideHighlights();
-            }
-        });
-        this.editorPane.getActionMap().put("openSearchPopup", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                setHeaderComponent(new SearchHeaderBar(searchManager));
-            }
-        });
+        enableSearch();
 
         this.editorPane.getActionMap().put(FindImplementationsAction.KEY, new FindImplementationsAction());
         this.editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl T"), FindImplementationsAction.KEY);
@@ -90,20 +68,6 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             }
         });
 
-        //Stop search thread if the tab is closed
-        addHierarchyListener(e -> {
-            if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
-                this.searchManager.stopThread();
-            }
-        });
-
-        //Scroll to focused search position
-        this.searchManager.addFocusedIndexChangedListener(i -> {
-            if (this.searchManager.getMatchCount() == 0)
-                return;
-
-            SwingUtilities.invokeLater(() -> UIUtils.centerViewportOnRange(this.editorScrollPane, this.searchManager.getFocusedRangeStart(), this.searchManager.getFocusedRangeEnd()));
-        });
     }
 
     public void setCode(String code) {

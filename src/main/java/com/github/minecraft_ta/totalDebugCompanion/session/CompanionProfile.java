@@ -14,18 +14,12 @@ import java.util.Properties;
 public record CompanionProfile(
         String id,
         Path dataDirectory,
-        Path indexFile,
         Path workspaceDirectory,
-        Path runtimeSourceManifest,
-        String runtimeSignature,
         long supportedCapabilities
 ) {
     private static final String ID = "id";
     private static final String DATA = "data";
-    private static final String INDEX = "index";
     private static final String WORKSPACE = "workspace";
-    private static final String SOURCES = "sources";
-    private static final String SIGNATURE = "signature";
     private static final String CAPABILITIES = "capabilities";
 
     public CompanionProfile {
@@ -33,22 +27,14 @@ public record CompanionProfile(
             throw new IllegalArgumentException("Profile id is blank");
         }
         dataDirectory = normalize(dataDirectory, "dataDirectory");
-        indexFile = normalize(indexFile, "indexFile");
         workspaceDirectory = normalize(workspaceDirectory, "workspaceDirectory");
-        runtimeSourceManifest = normalize(runtimeSourceManifest, "runtimeSourceManifest");
-        if (Objects.requireNonNull(runtimeSignature, "runtimeSignature").isBlank()) {
-            throw new IllegalArgumentException("Runtime signature is blank");
-        }
     }
 
     public static CompanionProfile fromHello(ClientHelloMessage hello, long capabilities) {
         return new CompanionProfile(
                 hello.profileId(),
                 Path.of(hello.dataDirectory()),
-                Path.of(hello.indexFile()),
                 Path.of(hello.workspaceDirectory()),
-                Path.of(hello.runtimeSourceManifest()),
-                hello.runtimeSignature(),
                 capabilities
         );
     }
@@ -60,10 +46,7 @@ public record CompanionProfile(
         Properties values = new Properties();
         values.setProperty(ID, this.id);
         values.setProperty(DATA, this.dataDirectory.toString());
-        values.setProperty(INDEX, this.indexFile.toString());
         values.setProperty(WORKSPACE, this.workspaceDirectory.toString());
-        values.setProperty(SOURCES, this.runtimeSourceManifest.toString());
-        values.setProperty(SIGNATURE, this.runtimeSignature);
         values.setProperty(CAPABILITIES, Long.toUnsignedString(this.supportedCapabilities));
         Path staged = Files.createTempFile(parent, ".profile-", ".tmp");
         try (OutputStream output = Files.newOutputStream(staged)) {
@@ -85,10 +68,7 @@ public record CompanionProfile(
             return new CompanionProfile(
                     required(values, ID),
                     Path.of(required(values, DATA)),
-                    Path.of(required(values, INDEX)),
                     Path.of(required(values, WORKSPACE)),
-                    Path.of(required(values, SOURCES)),
-                    required(values, SIGNATURE),
                     Long.parseUnsignedLong(required(values, CAPABILITIES))
             );
         } catch (IllegalArgumentException exception) {

@@ -1,61 +1,74 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
-import javax.swing.*;
-import javax.swing.border.CompoundBorder;
-import java.awt.*;
+import java.awt.Color;
+import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
-public class BottomInformationBar extends JPanel {
+/** Mutable editor-status model rendered by the single application status bar. */
+public final class BottomInformationBar {
+    public enum Style {
+        PLAIN,
+        INFORMATION,
+        PROCESS,
+        SUCCESS,
+        FAILURE
+    }
 
-    private final JLabel infoLabel = new JLabel();
+    public record State(String text, Color color, Style style) {
+        public State {
+            text = Objects.requireNonNullElse(text, "");
+            Objects.requireNonNull(style, "style");
+        }
+    }
 
-    public BottomInformationBar() {
-        super();
-        setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
+    private final CopyOnWriteArrayList<Consumer<State>> listeners = new CopyOnWriteArrayList<>();
+    private volatile State state = new State("", ThemeColors.mutedText(), Style.PLAIN);
 
-        // Font size lives in File > Settings; it is a global setting and every editor tab used to
-        // render its own copy of the slider.
-        add(this.infoLabel);
-        add(Box.createHorizontalGlue());
+    public State state() {
+        return this.state;
+    }
 
-        setBorder(new CompoundBorder(
-                DynamicMatteBorder.separatorRule(1, 0, 0, 0),
-                BorderFactory.createEmptyBorder(2, 6, 2, 6)
-        ));
-        setMinimumSize(new Dimension(0, 21));
+    public void addListener(Consumer<State> listener) {
+        Consumer<State> checked = Objects.requireNonNull(listener, "listener");
+        this.listeners.add(checked);
+        checked.accept(this.state);
+    }
+
+    public void removeListener(Consumer<State> listener) {
+        this.listeners.remove(listener);
     }
 
     public void setDefaultInfoText(String text, Color color) {
-        this.infoLabel.setText(text);
-        this.infoLabel.setForeground(color);
+        update(new State(text, color, Style.PLAIN));
     }
 
     public void setDefaultInfoText(String text) {
-        this.infoLabel.setIcon(Icons.INFORMATION);
-        this.infoLabel.setText(text);
+        update(new State(text, null, Style.INFORMATION));
     }
 
     public void setProcessInfoText(String text) {
-        this.infoLabel.setIcon(new AnimatedFlatSVGIcon("icons/process"));
-        this.infoLabel.setText(text);
+        update(new State(text, null, Style.PROCESS));
     }
 
     public void setSuccessInfoText(String text) {
-        this.infoLabel.setIcon(Icons.SUCCESS);
-        this.infoLabel.setText(text);
+        update(new State(text, null, Style.SUCCESS));
     }
 
     public void setFailureInfoText(String text) {
-        this.infoLabel.setIcon(Icons.ERROR);
-        this.infoLabel.setText(text);
+        update(new State(text, null, Style.FAILURE));
     }
 
     public void clearInfoText() {
-        this.infoLabel.setIcon(null);
-        setDefaultInfoText("", ThemeColors.mutedText());
+        update(new State("", ThemeColors.mutedText(), Style.PLAIN));
+    }
+
+    private void update(State replacement) {
+        this.state = replacement;
+        for (Consumer<State> listener : this.listeners) {
+            listener.accept(replacement);
+        }
     }
 }

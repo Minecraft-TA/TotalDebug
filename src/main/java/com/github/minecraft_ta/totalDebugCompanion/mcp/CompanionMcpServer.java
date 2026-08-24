@@ -225,6 +225,9 @@ public final class CompanionMcpServer implements AutoCloseable {
     }
 
     private Map<String, Object> searchClasses(String query, int limit) {
+        if (!CompanionClassIndex.isOpen()) {
+            throw new IllegalStateException("The runtime class index is still being built");
+        }
         if (query.isBlank()) {
             throw new IllegalArgumentException("query must not be blank");
         }

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
 import javax.swing.*;
 import java.awt.*;
@@ -79,5 +80,22 @@ public class ScriptView implements IEditorPanel {
         if (this.scriptPanel == null)
             this.scriptPanel = new ScriptPanel(this);
         return this.scriptPanel;
+    }
+
+    @Override
+    public EditorLocation getLocation() {
+        return new EditorLocation("Scripts", java.util.List.of(this.path.getFileName().toString()), this.path.toString());
+    }
+
+    @Override
+    public BottomInformationBar getInformationBar() {
+        return this.scriptPanel == null ? null : this.scriptPanel.getBottomInformationBar();
+    }
+
+    @Override
+    public void dispose() {
+        if (this.scriptPanel != null) {
+            this.scriptPanel.dispose();
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
@@ -28,7 +29,7 @@ public class ZipFileRootItem extends DirectoryTreeItem {
             indexZipFile(path);
         }
 
-        return new DirectoryEntry(this.root, "", false).loadChildren();
+        return new DirectoryEntry(this.path, this.root, "", false).loadChildren();
     }
 
     @Override
@@ -52,7 +53,10 @@ public class ZipFileRootItem extends DirectoryTreeItem {
                 if (name.endsWith("/"))
                     name = name.substring(0, name.length() - 1);
                 var index = name.lastIndexOf('/');
-                root.add(index == -1 ? "" : name.substring(0, index), new Node(index == -1 ? name : name.substring(index + 1)));
+                root.add(
+                        index == -1 ? "" : name.substring(0, index),
+                        new Node(index == -1 ? name : name.substring(index + 1), el.getSize(), el.getCompressedSize())
+                );
             }
         } catch (Throwable e) {
             e.printStackTrace();
@@ -62,12 +66,14 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
     public static final class DirectoryEntry extends DirectoryTreeItem {
 
+        private final Path archivePath;
         private final Node node;
         private final String entryPath;
         private final boolean resourceTree;
 
-        private DirectoryEntry(Node node, String entryPath, boolean resourceTree) {
+        private DirectoryEntry(Path archivePath, Node node, String entryPath, boolean resourceTree) {
             super(node.name);
+            this.archivePath = archivePath;
             this.node = node;
             this.entryPath = entryPath;
             this.resourceTree = resourceTree;
@@ -82,9 +88,9 @@ public class ZipFileRootItem extends DirectoryTreeItem {
                         || n.name.equalsIgnoreCase("data")
                         || n.name.equalsIgnoreCase("META-INF");
                 if (n.getChildren().isEmpty()) {
-                    return new Entry(n, childPath);
+                    return new Entry(this.archivePath, n, childPath);
                 }
-                return new DirectoryEntry(n, childPath, childResourceTree);
+                return new DirectoryEntry(this.archivePath, n, childPath, childResourceTree);
             }).toList();
         }
 
@@ -105,11 +111,17 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
     public static class Entry extends TreeItem {
 
+        private final Path archivePath;
         private final String entryPath;
+        private final long size;
+        private final long compressedSize;
 
-        private Entry(Node node, String entryPath) {
+        private Entry(Path archivePath, Node node, String entryPath) {
             super(node.name);
+            this.archivePath = archivePath;
             this.entryPath = entryPath;
+            this.size = node.size;
+            this.compressedSize = node.compressedSize;
         }
 
         @Override
@@ -119,17 +131,41 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
+            return this.archivePath.toAbsolutePath().normalize() + "!/" + this.entryPath;
+        }
+
+        public String getEntryPath() {
             return this.entryPath;
+        }
+
+        public long getSize() {
+            return this.size;
+        }
+
+        public long getCompressedSize() {
+            return this.compressedSize;
+        }
+
+        public ArchiveEntrySource contentSource() {
+            return new ArchiveEntrySource(this.archivePath, this.entryPath, this.size);
         }
     }
 
     private static final class Node {
 
         private final String name;
+        private final long size;
+        private final long compressedSize;
         private List<Node> children;
 
         private Node(String name) {
+            this(name, -1, -1);
+        }
+
+        private Node(String name, long size, long compressedSize) {
             this.name = name;
+            this.size = size;
+            this.compressedSize = compressedSize;
         }
 
         private boolean add(String fullPath, Node node) {

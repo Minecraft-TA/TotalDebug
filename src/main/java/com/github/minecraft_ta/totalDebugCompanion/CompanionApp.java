@@ -12,13 +12,19 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytec
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
+import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
+import com.github.minecraft_ta.totalDebugCompanion.syntax.ManifestTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.syntax.TomlTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -49,11 +55,13 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 
 public final class CompanionApp {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
@@ -65,8 +73,15 @@ public final class CompanionApp {
     private static volatile CompanionProfile profile;
     private static volatile CompanionDecompilationService decompilationService;
     private static volatile ReferenceSearchService referenceSearchService;
+    private static RuntimeIndexService runtimeIndexService;
+    private static volatile Path activeIndexFile;
+    private static volatile String activeRuntimeSignature;
+    private static final List<PendingClassOpen> pendingClassOpens = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
     private static volatile boolean uiStarted;
+
+    private record PendingClassOpen(String binaryName, int targetType, String targetIdentifier) {
+    }
 
     private CompanionApp() {
     }
@@ -104,6 +119,8 @@ public final class CompanionApp {
 
             GlobalConfig.getInstance().loadFrom(launchConfiguration.appHome());
             configureLookAndFeel();
+            runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
+            runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
             restoreProfile();
 
             session = new CompanionSession(token, CompanionApp::attach, new CompanionSession.Listener() {
@@ -125,6 +142,11 @@ public final class CompanionApp {
                         current.runtimeDisconnected();
                     }
                 }
+
+                @Override
+                public void runtimeInventory(RuntimeInventoryMessage message) {
+                    handleRuntimeInventory(message);
+                }
             });
             SERVER = session.server();
             startMcpServer();
@@ -145,6 +167,9 @@ public final class CompanionApp {
             closeMcpServer();
             if (session != null) {
                 session.close();
+            }
+            if (runtimeIndexService != null) {
+                runtimeIndexService.close();
             }
             closeDecompilationService();
             closeReferenceSearchService();
@@ -199,58 +224,14 @@ public final class CompanionApp {
         validateProfile(requested);
         CompanionProfile current = profile;
         boolean profileChanged = !requested.equals(current);
-        boolean sameSnapshot = current != null
-                && current.id().equals(requested.id())
-                && current.runtimeSignature().equals(requested.runtimeSignature())
-                && current.dataDirectory().equals(requested.dataDirectory())
-                && current.indexFile().equals(requested.indexFile())
-                && current.runtimeSourceManifest().equals(requested.runtimeSourceManifest());
-
-        List<Path> runtimeSources = !sameSnapshot || decompilationService == null
-                ? RuntimeSourceManifest.read(requested.runtimeSourceManifest())
-                : null;
-        ClassIndex replacementIndex = null;
-        if (!sameSnapshot) {
-            try {
-                replacementIndex = ClassIndex.fromFile(requested.indexFile().toString());
-            } catch (RuntimeException exception) {
-                throw new IOException("Unable to open the class index", exception);
-            }
-        }
-        CompanionDecompilationService replacementDecompilation = null;
-        try {
-            if (runtimeSources != null) {
-                ClassIndex decompilationIndex = replacementIndex == null
-                        ? CompanionClassIndex.get()
-                        : replacementIndex;
-                replacementDecompilation = new CompanionDecompilationService(
-                        requested.runtimeSignature(),
-                        requested.dataDirectory(),
-                        new RuntimeSnapshotBytecodeSource(runtimeSources, decompilationIndex)
-                );
-            }
-        } catch (IOException | RuntimeException exception) {
-            if (replacementIndex != null) {
-                replacementIndex.close();
-            }
-            throw exception;
-        }
-        if (replacementIndex != null) {
+        if (profileChanged) {
             closeDecompilationService();
-            CompanionClassIndex.replace(replacementIndex);
+            closeReferenceSearchService();
+            CompanionClassIndex.close();
+            activeIndexFile = null;
+            activeRuntimeSignature = null;
         }
-        if (referenceSearchService == null) {
-            referenceSearchService = new ReferenceSearchService(CompanionClassIndex::get);
-        }
-
         profile = requested;
-        if (replacementDecompilation != null) {
-            CompanionDecompilationService previous = decompilationService;
-            decompilationService = replacementDecompilation;
-            if (previous != null) {
-                previous.close();
-            }
-        }
         setupDataDirectories();
         if (persist) {
             requested.writeAtomically(launchConfiguration.profileFile());
@@ -258,19 +239,66 @@ public final class CompanionApp {
         if (uiStarted && profileChanged) {
             refreshUiProfile();
         }
-        prewarmJavaParser();
+        if (profileChanged && runtimeIndexService != null) {
+            runtimeIndexService.restore(requested.dataDirectory());
+        }
     }
 
     private static void validateProfile(CompanionProfile requested) throws IOException {
         Files.createDirectories(requested.dataDirectory());
-        if (!Files.isRegularFile(requested.indexFile())) {
-            throw new IOException("Class index not found");
-        }
-        if (!Files.isRegularFile(requested.runtimeSourceManifest())) {
-            throw new IOException("Runtime sources not found");
-        }
         if (!Files.isDirectory(requested.workspaceDirectory())) {
             throw new IOException("Minecraft workspace not found");
+        }
+    }
+
+    private static void handleRuntimeInventory(RuntimeInventoryMessage message) {
+        CompanionProfile current = profile;
+        if (current == null || runtimeIndexService == null) {
+            return;
+        }
+        switch (message.state()) {
+            case RuntimeInventoryMessage.PREPARING -> runtimeIndexService.waiting(
+                    message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail()
+            );
+            case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
+                    current.dataDirectory(),
+                    message.inventoryId(),
+                    Path.of(message.inventoryFile())
+            );
+            case RuntimeInventoryMessage.FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
+            default -> runtimeIndexService.failedBeforeBuild("Minecraft sent an unknown runtime inventory state");
+        }
+    }
+
+    private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot) {
+        CompanionProfile current = requireProfile();
+        CompanionDecompilationService replacement;
+        try {
+            replacement = new CompanionDecompilationService(
+                    snapshot.signature(),
+                    current.dataDirectory(),
+                    RuntimeSnapshotBytecodeSource.fromIndexedSources(snapshot.sources(), snapshot.index())
+            );
+        } catch (IOException | RuntimeException exception) {
+            throw new IllegalStateException("Unable to activate the runtime class index", exception);
+        }
+
+        closeDecompilationService();
+        closeReferenceSearchService();
+        CompanionClassIndex.replace(snapshot.index());
+        decompilationService = replacement;
+        referenceSearchService = new ReferenceSearchService(
+                CompanionClassIndex::get,
+                new RuntimeSourceCatalog(snapshot.sources())
+        );
+        activeIndexFile = snapshot.indexFile();
+        activeRuntimeSignature = snapshot.signature();
+        prewarmJavaParser();
+
+        List<PendingClassOpen> queued = List.copyOf(pendingClassOpens);
+        pendingClassOpens.clear();
+        for (PendingClassOpen pending : queued) {
+            replacement.openClass(pending.binaryName(), pending.targetType(), pending.targetIdentifier());
         }
     }
 
@@ -282,6 +310,31 @@ public final class CompanionApp {
         }
     }
 
+    static void configureWithoutSession(
+            CompanionProfile developmentProfile,
+            Path indexFile,
+            List<Path> runtimeSources,
+            String runtimeSignature
+    ) {
+        configureWithoutSession(developmentProfile);
+        try {
+            ClassIndex index = ClassIndex.fromFile(indexFile.toString());
+            List<RuntimeSnapshotBytecodeSource.Source> sources = new ArrayList<>();
+            for (int sourceId = 0; sourceId < runtimeSources.size(); sourceId++) {
+                sources.add(new RuntimeSnapshotBytecodeSource.Source(sourceId, runtimeSources.get(sourceId)));
+            }
+            installRuntimeSnapshot(new RuntimeIndexService.ReadySnapshot(
+                    "ui-development",
+                    runtimeSignature,
+                    indexFile,
+                    sources,
+                    index
+            ));
+        } catch (RuntimeException exception) {
+            throw new IllegalStateException("Unable to configure the UI class index", exception);
+        }
+    }
+
     static void configureLookAndFeel() {
         configureFonts();
         if (FlatLaf.supportsNativeWindowDecorations()) {
@@ -289,12 +342,17 @@ public final class CompanionApp {
             JDialog.setDefaultLookAndFeelDecorated(true);
         }
         ThemeManager.installInitialTheme();
-        TokenMakerFactory.setDefaultInstance(new AbstractTokenMakerFactory() {
-            @Override
-            protected void initTokenMakerMap() {
-                putMapping(RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
-            }
-        });
+        configureTokenMakers();
+    }
+
+    static void configureTokenMakers() {
+        TokenMakerFactory factory = TokenMakerFactory.getDefaultInstance();
+        if (!(factory instanceof AbstractTokenMakerFactory mappings)) {
+            throw new IllegalStateException("RSyntaxTextArea token factory does not support custom mappings");
+        }
+        mappings.putMapping(RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
+        mappings.putMapping(FileTypeResolver.SYNTAX_STYLE_TOML, TomlTokenMaker.class.getName());
+        mappings.putMapping(FileTypeResolver.SYNTAX_STYLE_MANIFEST, ManifestTokenMaker.class.getName());
     }
 
     private static void configureFonts() {
@@ -339,7 +397,7 @@ public final class CompanionApp {
         CompanionMcpServer server = new CompanionMcpServer(
                 launchConfiguration.appHome(),
                 () -> hasProfile() ? getWorkspaceDirectory() : null,
-                () -> hasProfile() ? getIndexFile() : null,
+                () -> activeIndexFile,
                 jobs
         );
         try {
@@ -365,18 +423,23 @@ public final class CompanionApp {
         if (current == null) {
             return Map.of();
         }
-        return Map.of(
-                "profile_id", current.id(),
-                "runtime_signature", current.runtimeSignature(),
-                "workspace_directory", current.workspaceDirectory().toString(),
-                "index_file", current.indexFile().toString()
-        );
+        Map<String, Object> context = new java.util.LinkedHashMap<>();
+        context.put("profile_id", current.id());
+        context.put("workspace_directory", current.workspaceDirectory().toString());
+        if (activeRuntimeSignature != null) {
+            context.put("runtime_signature", activeRuntimeSignature);
+        }
+        if (activeIndexFile != null) {
+            context.put("index_file", activeIndexFile.toString());
+        }
+        return Map.copyOf(context);
     }
 
     private static void startUi() throws InvocationTargetException, InterruptedException {
         SwingUtilities.invokeAndWait(() -> {
             uiStarted = true;
             MainWindow.INSTANCE.setSize(1280, 720);
+            MainWindow.INSTANCE.setRuntimeIndexStatus(getRuntimeIndexStatus());
             MainWindow.INSTANCE.setVisible(true);
             UIUtils.centerJFrame(MainWindow.INSTANCE);
             ToolTipManager.sharedInstance().setInitialDelay(200);
@@ -404,6 +467,13 @@ public final class CompanionApp {
             return;
         }
         SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setConnectionState(state));
+    }
+
+    private static void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
+        if (!uiStarted) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setRuntimeIndexStatus(status));
     }
 
     private static void stopUi() throws InvocationTargetException, InterruptedException {
@@ -453,6 +523,15 @@ public final class CompanionApp {
         return session != null && session.isConnected();
     }
 
+    public static boolean isMcpListening() {
+        return mcpServer != null;
+    }
+
+    public static String getMcpEndpoint() {
+        CompanionMcpServer current = mcpServer;
+        return current == null ? "unavailable" : current.endpointUrl();
+    }
+
     public static boolean hasProfile() {
         return profile != null;
     }
@@ -467,7 +546,17 @@ public final class CompanionApp {
     }
 
     public static void openClass(String binaryName, int targetType, String targetIdentifier) {
-        getDecompilationService().openClass(binaryName, targetType, targetIdentifier);
+        CompanionDecompilationService service = decompilationService;
+        if (service == null) {
+            synchronized (CompanionApp.class) {
+                service = decompilationService;
+                if (service == null) {
+                    pendingClassOpens.add(new PendingClassOpen(binaryName, targetType, targetIdentifier));
+                    return;
+                }
+            }
+        }
+        service.openClass(binaryName, targetType, targetIdentifier);
     }
 
     public static Path getRootPath() {
@@ -475,11 +564,11 @@ public final class CompanionApp {
     }
 
     public static Path getIndexFile() {
-        return requireProfile().indexFile();
-    }
-
-    public static Path getRuntimeSourceManifest() {
-        return requireProfile().runtimeSourceManifest();
+        Path indexFile = activeIndexFile;
+        if (indexFile == null) {
+            throw new IllegalStateException("Class index is not ready");
+        }
+        return indexFile;
     }
 
     public static Path getWorkspaceDirectory() {
@@ -500,6 +589,30 @@ public final class CompanionApp {
             throw new IllegalStateException("Decompilation is unavailable");
         }
         return service;
+    }
+
+    public static RuntimeIndexService.Status getRuntimeIndexStatus() {
+        RuntimeIndexService service = runtimeIndexService;
+        return service == null
+                ? new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "Waiting for runtime inventory", null)
+                : service.status();
+    }
+
+    public static void addRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
+        RuntimeIndexService service = runtimeIndexService;
+        if (service != null) {
+            service.addStatusListener(listener);
+        } else {
+            listener.accept(getRuntimeIndexStatus());
+        }
+    }
+
+    public static void retryRuntimeIndex() {
+        RuntimeIndexService service = runtimeIndexService;
+        if (service != null) {
+            service.waiting("Requesting runtime inventory again");
+        }
+        send(new RetryRuntimeInventoryMessage());
     }
 
     private static CompanionProfile requireProfile() {

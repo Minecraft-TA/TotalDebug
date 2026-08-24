@@ -16,10 +16,7 @@ class CompanionProfileTest {
         CompanionProfile profile = new CompanionProfile(
                 "atm10",
                 this.temporaryDirectory.resolve("data"),
-                this.temporaryDirectory.resolve("indexes/signature/index"),
                 this.temporaryDirectory.resolve("workspace"),
-                this.temporaryDirectory.resolve("runtime-sources/signature/sources.txt"),
-                "signature",
                 CompanionProtocol.CORE_CAPABILITIES | CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION
         );
         Path profileFile = this.temporaryDirectory.resolve("profile.properties");

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory.RuntimeModule;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 
@@ -8,7 +9,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -16,13 +19,60 @@ import java.util.zip.ZipFile;
 
 /** Reads the class-file view described by one persisted runtime profile. */
 public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource {
+    public record Source(int sourceId, Path path, String logicalUri, RuntimeModule module) {
+        public Source {
+            if (sourceId < 0) {
+                throw new IllegalArgumentException("sourceId must not be negative");
+            }
+            path = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
+            if (Objects.requireNonNull(logicalUri, "logicalUri").isBlank()) {
+                throw new IllegalArgumentException("logicalUri must not be blank");
+            }
+            Objects.requireNonNull(module, "module");
+        }
+
+        public Source(int sourceId, Path path, String logicalUri) {
+            this(sourceId, path, logicalUri, unclassifiedModule(path));
+        }
+
+        public Source(int sourceId, Path path) {
+            this(sourceId, path, Objects.requireNonNull(path, "path").toUri().toASCIIString());
+        }
+
+        private static RuntimeModule unclassifiedModule(Path path) {
+            String fileName = Objects.requireNonNull(path, "path").getFileName().toString();
+            return new RuntimeModule(fileName, fileName);
+        }
+    }
+
+    public record ClassOrigin(String logicalSource, String resourceName, RuntimeModule module) {
+        public ClassOrigin {
+            if (Objects.requireNonNull(logicalSource, "logicalSource").isBlank()) {
+                throw new IllegalArgumentException("logicalSource must not be blank");
+            }
+            if (Objects.requireNonNull(resourceName, "resourceName").isBlank()) {
+                throw new IllegalArgumentException("resourceName must not be blank");
+            }
+            Objects.requireNonNull(module, "module");
+        }
+    }
+
     private final List<Path> sources;
     private final List<Path> archiveSources;
     private final List<Path> directorySources;
     private final ClassIndex classIndex;
+    private final Map<Integer, Source> sourcesById;
 
     public RuntimeSnapshotBytecodeSource(List<Path> sources, ClassIndex classIndex) {
-        List<Path> requestedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
+        this(toIndexedSources(sources), classIndex, true);
+    }
+
+    public static RuntimeSnapshotBytecodeSource fromIndexedSources(List<Source> sources, ClassIndex classIndex) {
+        return new RuntimeSnapshotBytecodeSource(sources, classIndex, true);
+    }
+
+    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex, boolean ignored) {
+        List<Source> requestedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
         if (requestedSources.isEmpty()) {
             throw new IllegalArgumentException("sources must not be empty");
         }
@@ -31,10 +81,13 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         List<Path> normalizedSources = new ArrayList<>();
         List<Path> archives = new ArrayList<>();
         List<Path> directories = new ArrayList<>();
-        for (Path source : requestedSources) {
-            Path normalized = Objects.requireNonNull(source, "sources contains null")
-                    .toAbsolutePath()
-                    .normalize();
+        Map<Integer, Source> byId = new LinkedHashMap<>();
+        for (Source source : requestedSources) {
+            Path normalized = source.path();
+            Source previous = byId.putIfAbsent(source.sourceId(), source);
+            if (previous != null && !previous.equals(source)) {
+                throw new IllegalArgumentException("Source id " + source.sourceId() + " maps to more than one path");
+            }
             normalizedSources.add(normalized);
             if (Files.isDirectory(normalized)) {
                 directories.add(normalized);
@@ -47,6 +100,7 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         this.sources = List.copyOf(normalizedSources);
         this.archiveSources = List.copyOf(archives);
         this.directorySources = List.copyOf(directories);
+        this.sourcesById = Map.copyOf(byId);
     }
 
     @Override
@@ -58,9 +112,13 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
 
         if (indexedClass != null) {
             int sourceId = indexedClass.getSourceId();
-            if (sourceId < this.archiveSources.size()) {
-                preferredSource = this.archiveSources.get(sourceId);
-                byte[] bytes = readSource(preferredSource, resourceName);
+            Source indexedSource = this.sourcesById.get(sourceId);
+            preferredSource = indexedSource == null ? null : indexedSource.path();
+            if (indexedSource != null) {
+                if ("jrt:/".equals(indexedSource.logicalUri())) {
+                    return readJdk(resourceName);
+                }
+                byte[] bytes = readSource(indexedSource.path(), resourceName);
                 if (bytes != null) {
                     return bytes;
                 }
@@ -86,6 +144,40 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
             }
         }
         return readJdk(resourceName);
+    }
+
+    public ClassOrigin findClassOrigin(String className) {
+        String internalName = normalizeClassName(className);
+        String resourceName = internalName + ".class";
+        IndexedClass indexedClass = findIndexedClass(internalName);
+        if (indexedClass != null) {
+            Source source = this.sourcesById.get(indexedClass.getSourceId());
+            if (source != null) {
+                return new ClassOrigin(source.logicalUri(), resourceName, source.module());
+            }
+        }
+
+        var resource = ClassLoader.getPlatformClassLoader().getResource(resourceName);
+        if (resource != null && "jrt".equalsIgnoreCase(resource.getProtocol())) {
+            String external = resource.toExternalForm();
+            int resourceStart = external.lastIndexOf('/' + resourceName);
+            String moduleRoot = resourceStart < 0 ? external : external.substring(0, resourceStart);
+            return new ClassOrigin(
+                    moduleRoot,
+                    resourceName,
+                    new RuntimeModule("java-runtime", "Java Runtime")
+            );
+        }
+        return null;
+    }
+
+    private static List<Source> toIndexedSources(List<Path> sources) {
+        List<Path> requested = List.copyOf(Objects.requireNonNull(sources, "sources"));
+        List<Source> indexed = new ArrayList<>(requested.size());
+        for (int index = 0; index < requested.size(); index++) {
+            indexed.add(new Source(index, requested.get(index)));
+        }
+        return indexed;
     }
 
     private IndexedClass findIndexedClass(String internalName) {

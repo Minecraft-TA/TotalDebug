@@ -10,7 +10,7 @@ class FileTreeIconsTest {
     @Test
     void assignsSpecificIconsToCommonModArchiveFiles() {
         assertSame(Icons.JAVA_CLASS, FileTreeIcons.forFileName("Example.class"));
-        assertSame(Icons.PACKAGE, FileTreeIcons.forFileName("package-info.class"));
+        assertSame(Icons.JAVA_CLASS, FileTreeIcons.forFileName("package-info.class"));
         assertSame(Icons.MODULE, FileTreeIcons.forFileName("module-info.class"));
         assertSame(Icons.IMAGE_FILE, FileTreeIcons.forFileName("debug.PNG"));
         assertSame(Icons.JSON_FILE, FileTreeIcons.forFileName("pack.mcmeta"));

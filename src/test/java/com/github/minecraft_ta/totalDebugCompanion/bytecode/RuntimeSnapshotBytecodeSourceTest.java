@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,34 @@ class RuntimeSnapshotBytecodeSourceTest {
     }
 
     @Test
+    void reportsTheLogicalOriginRecordedForTheIndexedClass() throws Exception {
+        byte[] expected = classBytes(ArchiveFixture.class);
+        String resourceName = resourceName(ArchiveFixture.class);
+        Path selected = jar("selected-origin.jar", resourceName, expected);
+        String logical = "file:///mods/original.jar";
+
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.archive(4, selected.toString())))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(
+                            4,
+                            selected,
+                            logical,
+                            new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                    )),
+                    index
+            );
+
+            RuntimeSnapshotBytecodeSource.ClassOrigin origin = source.findClassOrigin(
+                    ArchiveFixture.class.getName()
+            );
+
+            assertEquals(logical, origin.logicalSource());
+            assertEquals(resourceName, origin.resourceName());
+            assertEquals("Example Mod", origin.module().displayName());
+        }
+    }
+
+    @Test
     void readsDirectClassDirectoriesAndJdkClasses() throws Exception {
         byte[] expected = classBytes(DirectoryFixture.class);
         String resourceName = resourceName(DirectoryFixture.class);
@@ -63,6 +92,26 @@ class RuntimeSnapshotBytecodeSourceTest {
             assertEquals((byte) 0xFE, stringBytes[1]);
             assertEquals((byte) 0xBA, stringBytes[2]);
             assertEquals((byte) 0xBE, stringBytes[3]);
+        }
+    }
+
+    @Test
+    void readsAnExplicitJdkSourceFromTheRuntimeImage() throws Exception {
+        byte[] expected = classBytes(String.class);
+        Path javaHome = Path.of(System.getProperty("java.home"));
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(5, expected)))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(
+                            5,
+                            javaHome,
+                            "jrt:/",
+                            new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime")
+                    )),
+                    index
+            );
+
+            assertArrayEquals(expected, source.findClassBytes(String.class.getName()));
+            assertEquals("Java Runtime", source.findClassOrigin(String.class.getName()).module().displayName());
         }
     }
 
@@ -121,7 +170,10 @@ class RuntimeSnapshotBytecodeSourceTest {
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {
-        try (InputStream input = type.getClassLoader().getResourceAsStream(resourceName(type))) {
+        ClassLoader loader = type.getClassLoader() == null
+                ? ClassLoader.getPlatformClassLoader()
+                : type.getClassLoader();
+        try (InputStream input = loader.getResourceAsStream(resourceName(type))) {
             if (input == null) {
                 throw new IOException("Missing test class bytes for " + type.getName());
             }

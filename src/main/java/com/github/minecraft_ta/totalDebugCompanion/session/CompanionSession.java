@@ -22,6 +22,8 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMes
 import com.github.minecraft_ta.totalDebugCompanion.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -55,6 +57,9 @@ public final class CompanionSession implements AutoCloseable {
         }
 
         default void disconnected() {
+        }
+
+        default void runtimeInventory(RuntimeInventoryMessage message) {
         }
     }
 
@@ -147,10 +152,24 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.BLOCK_PACKET, BlockPacketMessage.class);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class, ClientHelloMessage::new);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.SERVER_HELLO, ServerHelloMessage.class);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.RUNTIME_INVENTORY,
+                RuntimeInventoryMessage.class,
+                RuntimeInventoryMessage::new
+        );
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.RETRY_RUNTIME_INVENTORY,
+                RetryRuntimeInventoryMessage.class
+        );
     }
 
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
+        this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, message -> runFeature(
+                CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY,
+                "RuntimeInventory",
+                () -> this.listener.runtimeInventory(message)
+        ));
         this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> runFeature(
                 CompanionProtocol.CAPABILITY_CODE_VIEW,
                 "OpenClass",

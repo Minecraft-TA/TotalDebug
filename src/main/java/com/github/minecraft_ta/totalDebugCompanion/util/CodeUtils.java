@@ -28,9 +28,15 @@ public class CodeUtils {
      * lexical ones.
      */
     public static void initJavaColors(SyntaxScheme scheme, EditorPalette palette) {
+        initSyntaxColors(scheme, palette);
+        initJavaSemanticColors(scheme, palette);
+    }
+
+    public static void initSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
         scheme.getStyle(TokenTypes.RESERVED_WORD).foreground = palette.keyword();
         scheme.getStyle(TokenTypes.RESERVED_WORD_2).foreground = palette.keyword();
         scheme.getStyle(TokenTypes.DATA_TYPE).foreground = palette.keyword();
+        scheme.getStyle(TokenTypes.PREPROCESSOR).foreground = palette.keyword();
         // IntelliJ renders true/false as keywords rather than as literals.
         scheme.getStyle(TokenTypes.LITERAL_BOOLEAN).foreground = palette.keyword();
 
@@ -42,20 +48,36 @@ public class CodeUtils {
 
         scheme.getStyle(TokenTypes.LITERAL_STRING_DOUBLE_QUOTE).foreground = palette.string();
         scheme.getStyle(TokenTypes.LITERAL_CHAR).foreground = palette.string();
+        scheme.getStyle(TokenTypes.LITERAL_BACKQUOTE).foreground = palette.string();
+        scheme.getStyle(TokenTypes.REGEX).foreground = palette.string();
 
         scheme.getStyle(TokenTypes.COMMENT_EOL).foreground = palette.comment();
         scheme.getStyle(TokenTypes.COMMENT_MULTILINE).foreground = palette.comment();
         scheme.getStyle(TokenTypes.COMMENT_MARKUP).foreground = palette.comment();
         scheme.getStyle(TokenTypes.COMMENT_DOCUMENTATION).foreground = palette.docComment();
+        scheme.getStyle(TokenTypes.COMMENT_KEYWORD).foreground = palette.docComment();
+        scheme.getStyle(TokenTypes.MARKUP_COMMENT).foreground = palette.comment();
 
         scheme.getStyle(TokenTypes.SEPARATOR).foreground = palette.foreground();
         scheme.getStyle(TokenTypes.OPERATOR).foreground = palette.foreground();
         scheme.getStyle(TokenTypes.IDENTIFIER).foreground = palette.foreground();
 
         scheme.getStyle(TokenTypes.ANNOTATION).foreground = palette.annotation();
-        scheme.getStyle(ShadowedTokenTypes.TYPE).foreground = palette.classReference();
-
         scheme.getStyle(TokenTypes.FUNCTION).foreground = palette.instanceMethod();
+
+        scheme.getStyle(TokenTypes.MARKUP_TAG_DELIMITER).foreground = palette.foreground();
+        scheme.getStyle(TokenTypes.MARKUP_TAG_NAME).foreground = palette.keyword();
+        scheme.getStyle(TokenTypes.MARKUP_TAG_ATTRIBUTE).foreground = palette.field();
+        scheme.getStyle(TokenTypes.MARKUP_TAG_ATTRIBUTE_VALUE).foreground = palette.string();
+        scheme.getStyle(TokenTypes.MARKUP_DTD).foreground = palette.keyword();
+        scheme.getStyle(TokenTypes.MARKUP_PROCESSING_INSTRUCTION).foreground = palette.keyword();
+        scheme.getStyle(TokenTypes.MARKUP_CDATA_DELIMITER).foreground = palette.keyword();
+        scheme.getStyle(TokenTypes.MARKUP_CDATA).foreground = palette.string();
+        scheme.getStyle(TokenTypes.MARKUP_ENTITY_REFERENCE).foreground = palette.annotation();
+    }
+
+    public static void initJavaSemanticColors(SyntaxScheme scheme, EditorPalette palette) {
+        scheme.getStyle(ShadowedTokenTypes.TYPE).foreground = palette.classReference();
         scheme.getStyle(ShadowedTokenTypes.FIELD).foreground = palette.field();
     }
 
