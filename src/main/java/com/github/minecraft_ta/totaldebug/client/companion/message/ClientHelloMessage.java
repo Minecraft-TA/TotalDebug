@@ -11,10 +11,7 @@ public final class ClientHelloMessage extends AbstractMessageOutgoing {
     private final long requestedCapabilities;
     private final String profileId;
     private final String dataDirectory;
-    private final String indexFile;
     private final String workspaceDirectory;
-    private final String runtimeSourceManifest;
-    private final String runtimeSignature;
 
     public ClientHelloMessage(
             int protocolVersion,
@@ -22,20 +19,14 @@ public final class ClientHelloMessage extends AbstractMessageOutgoing {
             long requestedCapabilities,
             String profileId,
             String dataDirectory,
-            String indexFile,
-            String workspaceDirectory,
-            String runtimeSourceManifest,
-            String runtimeSignature
+            String workspaceDirectory
     ) {
         this.protocolVersion = protocolVersion;
         this.token = Objects.requireNonNull(token, "token");
         this.requestedCapabilities = requestedCapabilities;
         this.profileId = Objects.requireNonNull(profileId, "profileId");
         this.dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory");
-        this.indexFile = Objects.requireNonNull(indexFile, "indexFile");
         this.workspaceDirectory = Objects.requireNonNull(workspaceDirectory, "workspaceDirectory");
-        this.runtimeSourceManifest = Objects.requireNonNull(runtimeSourceManifest, "runtimeSourceManifest");
-        this.runtimeSignature = Objects.requireNonNull(runtimeSignature, "runtimeSignature");
     }
 
     @Override
@@ -45,10 +36,7 @@ public final class ClientHelloMessage extends AbstractMessageOutgoing {
         messageStream.writeLong(this.requestedCapabilities);
         messageStream.writeString(this.profileId);
         messageStream.writeString(this.dataDirectory);
-        messageStream.writeString(this.indexFile);
         messageStream.writeString(this.workspaceDirectory);
-        messageStream.writeString(this.runtimeSourceManifest);
-        messageStream.writeString(this.runtimeSignature);
     }
 
     public int protocolVersion() {
@@ -71,19 +59,7 @@ public final class ClientHelloMessage extends AbstractMessageOutgoing {
         return this.dataDirectory;
     }
 
-    public String indexFile() {
-        return this.indexFile;
-    }
-
     public String workspaceDirectory() {
         return this.workspaceDirectory;
-    }
-
-    public String runtimeSourceManifest() {
-        return this.runtimeSourceManifest;
-    }
-
-    public String runtimeSignature() {
-        return this.runtimeSignature;
     }
 }

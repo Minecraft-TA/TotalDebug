@@ -7,6 +7,8 @@ import com.github.minecraft_ta.totaldebug.client.companion.message.CompanionRead
 import com.github.minecraft_ta.totaldebug.client.companion.message.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ScriptStatusMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.StopScriptMessage;
@@ -17,10 +19,14 @@ import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -30,6 +36,9 @@ import java.util.HexFormat;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -44,7 +53,13 @@ public final class CompanionAppClient implements AutoCloseable {
     private final Path instanceKeyFile;
     private final String profileId;
     private final CompanionAppInstaller installer;
-    private final RuntimeClassIndex runtimeClassIndex;
+    private final RuntimeInventoryPublisher runtimeInventoryPublisher;
+    private final Object runtimeInventoryLock = new Object();
+    private final ExecutorService runtimeInventoryWorker = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "TotalDebug runtime inventory");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final CompanionTimeouts timeouts;
     private final CompanionForegroundHandoff foregroundHandoff;
     private final Client client = new Client();
@@ -65,10 +80,14 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile long negotiatedCapabilities;
     private volatile boolean closing;
     private volatile boolean transportExpected;
+    private volatile RuntimeInventoryMessage runtimeInventoryState = RuntimeInventoryMessage.preparing(
+            "Waiting for the Minecraft session"
+    );
 
     private Process launchedProcess;
     private Path processLog;
     private CompanionSessionDescriptor activeDescriptor;
+    private Future<?> runtimeInventoryTask;
 
     public CompanionAppClient(Path totalDebugDirectory) {
         this(
@@ -105,7 +124,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.instanceKeyFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
         this.profileId = profileId(this.workspaceDirectory);
         this.installer = new CompanionAppInstaller(this.appDirectory);
-        this.runtimeClassIndex = new RuntimeClassIndex(this.dataDirectory);
+        this.runtimeInventoryPublisher = new RuntimeInventoryPublisher(this.dataDirectory);
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
         this.foregroundHandoff = Objects.requireNonNull(foregroundHandoff, "foregroundHandoff");
 
@@ -218,8 +237,21 @@ public final class CompanionAppClient implements AutoCloseable {
                 ServerHelloMessage.class,
                 ServerHelloMessage::new
         );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.RUNTIME_INVENTORY,
+                RuntimeInventoryMessage.class
+        );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.RETRY_RUNTIME_INVENTORY,
+                RetryRuntimeInventoryMessage.class,
+                RetryRuntimeInventoryMessage::new
+        );
 
         this.client.getMessageBus().listenAlways(ServerHelloMessage.class, this::handleServerHello);
+        this.client.getMessageBus().listenAlways(
+                RetryRuntimeInventoryMessage.class,
+                message -> startRuntimeInventoryPreparation(true)
+        );
         this.client.getMessageBus().listenAlways(CompanionReadyMessage.class, message -> {
             CompletableFuture<Void> authentication = this.authenticated;
             if (!authentication.isDone() || authentication.isCompletedExceptionally()) {
@@ -257,10 +289,7 @@ public final class CompanionAppClient implements AutoCloseable {
                         CompanionProtocol.REQUESTED_CAPABILITIES,
                         CompanionAppClient.this.profileId,
                         CompanionAppClient.this.dataDirectory.toString(),
-                        CompanionAppClient.this.runtimeClassIndex.indexFile().toString(),
-                        CompanionAppClient.this.workspaceDirectory.toString(),
-                        CompanionAppClient.this.runtimeClassIndex.runtimeSourceManifest().toString(),
-                        CompanionAppClient.this.runtimeClassIndex.signature()
+                        CompanionAppClient.this.workspaceDirectory.toString()
                 ));
             }
 
@@ -314,6 +343,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.negotiatedCapabilities = message.capabilities();
         this.sessionToken = null;
         authentication.complete(null);
+        startRuntimeInventoryPreparation(false);
     }
 
     private boolean hasCapability(long capability) {
@@ -325,14 +355,8 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void ensureConnectedAndReady() throws IOException {
         try {
-            boolean indexBuilt = this.runtimeClassIndex.ensurePresent(
-                    () -> reportProgress(CompanionStartupProgress.indexing())
-            );
             CompletableFuture<Void> readiness = this.ready;
             if (this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
-                if (indexBuilt) {
-                    reportProgress(CompanionStartupProgress.ready());
-                }
                 return;
             }
             resetConnection();
@@ -353,6 +377,48 @@ public final class CompanionAppClient implements AutoCloseable {
             reportProgress(CompanionStartupProgress.failed(exception.getMessage()));
             this.client.close();
             throw exception;
+        }
+    }
+
+    private void startRuntimeInventoryPreparation(boolean force) {
+        synchronized (this.runtimeInventoryLock) {
+            if (this.closing || !hasCapability(CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY)) {
+                return;
+            }
+            if (!force && this.runtimeInventoryState.state() == RuntimeInventoryMessage.AVAILABLE) {
+                sendRuntimeInventoryState();
+                return;
+            }
+            if (this.runtimeInventoryTask != null && !this.runtimeInventoryTask.isDone()) {
+                sendRuntimeInventoryState();
+                return;
+            }
+
+            this.runtimeInventoryState = RuntimeInventoryMessage.preparing("Discovering runtime class sources");
+            sendRuntimeInventoryState();
+            this.runtimeInventoryTask = this.runtimeInventoryWorker.submit(() -> {
+                try {
+                    RuntimeInventoryPublisher.PublishedInventory published = this.runtimeInventoryPublisher.publish();
+                    this.runtimeInventoryState = RuntimeInventoryMessage.available(
+                            published.id(),
+                            published.file().toString()
+                    );
+                    sendRuntimeInventoryState();
+                } catch (IOException | RuntimeException exception) {
+                    TotalDebug.LOGGER.error("Unable to publish the Companion runtime inventory", exception);
+                    String detail = exception.getMessage();
+                    this.runtimeInventoryState = RuntimeInventoryMessage.failed(
+                            detail == null || detail.isBlank() ? "Runtime inventory preparation failed" : detail
+                    );
+                    sendRuntimeInventoryState();
+                }
+            });
+        }
+    }
+
+    private void sendRuntimeInventoryState() {
+        if (hasCapability(CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY) && this.client.isConnected()) {
+            this.client.getMessageProcessor().enqueueMessage(this.runtimeInventoryState);
         }
     }
 
@@ -411,7 +477,11 @@ public final class CompanionAppClient implements AutoCloseable {
         }
         CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(this.instanceDescriptorFile);
         boolean processAlive = ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false);
-        if (!processAlive) {
+        if (!processAlive || !isInstanceLockHeld()) {
+            TotalDebug.LOGGER.info(
+                    "Discarding stale TotalDebugCompanion descriptor for process {}",
+                    descriptor.processId()
+            );
             Files.deleteIfExists(this.instanceDescriptorFile);
             Files.deleteIfExists(this.instanceKeyFile);
             return null;
@@ -425,6 +495,28 @@ public final class CompanionAppClient implements AutoCloseable {
             throw new IOException("Companion instance key is missing");
         }
         return descriptor;
+    }
+
+    private boolean isInstanceLockHeld() throws IOException {
+        Path lockFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_LOCK_FILE_NAME);
+        Files.createDirectories(this.appHome);
+        try (FileChannel channel = FileChannel.open(
+                lockFile,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE
+        )) {
+            FileLock lock = null;
+            try {
+                lock = channel.tryLock();
+                return lock == null;
+            } catch (OverlappingFileLockException exception) {
+                return true;
+            } finally {
+                if (lock != null) {
+                    lock.release();
+                }
+            }
+        }
     }
 
     private String readInstanceKey() throws IOException {
@@ -549,6 +641,9 @@ public final class CompanionAppClient implements AutoCloseable {
         this.closing = true;
         notifySessionClosed();
         this.client.close();
+        synchronized (this.runtimeInventoryLock) {
+            this.runtimeInventoryWorker.shutdownNow();
+        }
     }
 
     private static String profileId(Path workspaceDirectory) {

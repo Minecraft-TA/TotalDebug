@@ -185,7 +185,6 @@ dependencies {
     def embeddedLibraries = [
             "com.github.tth05:SCNet:${scnet_version}",
             "io.github.classgraph:classgraph:${classgraph_version}",
-            "com.github.tth05:jindex:${jindex_version}",
     ]
     embeddedLibraries.each { library ->
         implementation library
@@ -274,12 +273,6 @@ tasks.named('test', Test).configure {
         sha256ArgumentProvider.companionJar = pairedCompanionJar
         jvmArgumentProviders.add(sha256ArgumentProvider)
     }
-}
-
-tasks.register('benchmarkInitialIndex', JavaExec) {
-    dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.github.minecraft_ta.totaldebug.client.companion.InitialIndexBenchmark'
 }
 
 tasks.withType(JavaCompile).configureEach {

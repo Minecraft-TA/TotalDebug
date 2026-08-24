@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
-import com.github.tth05.jindex.ClassIndex;
 import io.github.classgraph.ClassGraph;
 import net.minecraft.world.level.block.Block;
 
@@ -29,8 +28,7 @@ public record ScriptCompilerClasspath(List<Path> sources, String argument) {
         return fromSources(RuntimeSourceInventory.discover(
                 TotalDebug.class,
                 Block.class,
-                ClassGraph.class,
-                ClassIndex.class
+                ClassGraph.class
         ));
     }
 

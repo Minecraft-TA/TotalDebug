@@ -16,28 +16,41 @@ class SessionProtocolCodecTest {
 
     @Test
     void clientHelloMatchesTheSharedGoldenBytes() {
-        ClientHelloMessage message = new ClientHelloMessage(4, "abc", 7, "p", "d", "i", "w", "m", "s");
+        ClientHelloMessage message = new ClientHelloMessage(5, "abc", 7, "p", "d", "w");
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("000000040000000361626300000000000000070000000170000000016400000001690000000177000000016d0000000173"),
+                HEX.parseHex("00000005000000036162630000000000000007000000017000000001640000000177"),
                 writtenBytes(output)
         );
     }
 
     @Test
     void serverHelloReadsTheSharedGoldenBytes() {
-        byte[] golden = HEX.parseHex("0000000401000000000000000700000000");
+        byte[] golden = HEX.parseHex("0000000501000000000000000700000000");
         ServerHelloMessage message = new ServerHelloMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
-        assertEquals(4, message.protocolVersion());
+        assertEquals(5, message.protocolVersion());
         assertTrue(message.accepted());
         assertEquals(7, message.capabilities());
         assertEquals("", message.rejectionReason());
+    }
+
+    @Test
+    void runtimeInventoryMatchesTheSharedGoldenBytes() {
+        RuntimeInventoryMessage message = RuntimeInventoryMessage.available("id", "file");
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        message.write(output);
+
+        assertArrayEquals(
+                HEX.parseHex("000000010000000269640000000466696c6500000000"),
+                writtenBytes(output)
+        );
     }
 
     private static byte[] writtenBytes(ByteBufferOutputStream output) {
