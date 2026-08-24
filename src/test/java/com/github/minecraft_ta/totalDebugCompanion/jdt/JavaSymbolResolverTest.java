@@ -1,14 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
-import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceNavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.tth05.jindex.ClassIndex;
-import org.eclipse.jdt.core.dom.ASTVisitor;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -18,7 +13,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -111,63 +105,12 @@ final class JavaSymbolResolverTest {
         assertTrue(resolution.unavailableReason().contains("Local-variable"));
     }
 
-    @Test
-    void usageNavigationIdentifiersMatchTheReceivingJdtBindings() {
-        var unit = ASTCache.rawParse("Name", SOURCE);
-
-        assertEquals(
-                normalizedBindingIdentifier(unit, "run", false),
-                normalizedNavigationIdentifier(ReferenceLocation.method(
-                        "example.Target",
-                        "run",
-                        "([I[Ljava/lang/String;)Ljava/lang/String;"
-                ))
-        );
-        assertEquals(
-                normalizedBindingIdentifier(unit, "Target", true),
-                normalizedNavigationIdentifier(ReferenceLocation.method(
-                        "example.Target",
-                        "<init>",
-                        "(Ljava/lang/String;)V"
-                ))
-        );
-    }
-
     private static String prepareAst(String key) throws InterruptedException {
         CountDownLatch parsed = new CountDownLatch(1);
         ASTCache.addChangeListener(key, (unit, version) -> parsed.countDown());
         ASTCache.update(key, "Target", SOURCE);
         assertTrue(parsed.await(5, TimeUnit.SECONDS), "Timed out waiting for the Java model");
         return key;
-    }
-
-    private static String normalizedBindingIdentifier(
-            org.eclipse.jdt.core.dom.CompilationUnit unit,
-            String name,
-            boolean constructor
-    ) {
-        AtomicReference<String> identifier = new AtomicReference<>();
-        unit.accept(new ASTVisitor() {
-            @Override
-            public boolean visit(MethodDeclaration declaration) {
-                if (declaration.isConstructor() == constructor
-                        && declaration.getName().getIdentifier().equals(name)) {
-                    identifier.set(CodeUtils.minimalizeMethodIdentifier(
-                            declaration.resolveBinding().getKey(),
-                            false
-                    ).replace("Name~", ""));
-                }
-                return true;
-            }
-        });
-        return Objects.requireNonNull(identifier.get(), "method binding");
-    }
-
-    private static String normalizedNavigationIdentifier(ReferenceLocation location) {
-        return CodeUtils.minimalizeMethodIdentifier(
-                ReferenceNavigationTarget.from(location).identifier(),
-                false
-        );
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {

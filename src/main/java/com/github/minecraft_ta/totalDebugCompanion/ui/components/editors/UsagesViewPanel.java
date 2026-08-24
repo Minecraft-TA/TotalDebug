@@ -3,11 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
-import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceNavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.tth05.jindex.ReferenceKind;
 import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
@@ -119,7 +120,7 @@ public final class UsagesViewPanel extends JPanel {
                 this.resultLimit,
                 new ReferenceSearchService.Listener() {
                     @Override
-                    public void onCompleted(ReferenceLocationPage result) {
+                    public void onCompleted(ReferenceUsagePage result) {
                         if (isCurrent(generation)) {
                             showResult(result);
                         }
@@ -190,35 +191,43 @@ public final class UsagesViewPanel extends JPanel {
         });
     }
 
-    private void showResult(ReferenceLocationPage result) {
+    private void showResult(ReferenceUsagePage result) {
         requireEdt();
         this.activeSearch = null;
         this.cancelButton.setVisible(false);
         this.resultTruncated = result.truncated();
 
-        populateResults(result.locations());
-        int classCount = (int) result.locations().stream().map(ReferenceLocation::className).distinct().count();
+        populateResults(result.usages());
+        int classCount = (int) result.usages().stream()
+                .map(ReferenceUsage::location)
+                .map(ReferenceLocation::className)
+                .distinct()
+                .count();
+        long referenceCount = result.usages().stream().mapToLong(ReferenceUsage::occurrenceCount).sum();
         if (result.truncated()) {
             if (this.resultLimit < MAX_RESULT_LIMIT) {
                 this.statusLabel.setText(
-                        "Showing " + result.locations().size() + " usage sites in " + classCount
+                        "Showing " + result.usages().size() + " usage sites (" + referenceCount
+                                + " references) in " + classCount
                                 + " classes. More are available."
                 );
                 this.showMoreButton.setVisible(true);
                 this.showMoreButton.setEnabled(true);
             } else {
                 this.statusLabel.setText(
-                        "Showing " + result.locations().size() + " usage sites in " + classCount
+                        "Showing " + result.usages().size() + " usage sites (" + referenceCount
+                                + " references) in " + classCount
                                 + " classes. Additional sites are omitted."
                 );
                 this.showMoreButton.setVisible(false);
             }
         } else {
-            this.statusLabel.setText(result.locations().size() + " usage sites in " + classCount + " classes");
+            this.statusLabel.setText(result.usages().size() + " usage sites (" + referenceCount
+                    + " references) in " + classCount + " classes");
             this.showMoreButton.setVisible(false);
         }
 
-        if (result.locations().isEmpty()) {
+        if (result.usages().isEmpty()) {
             this.messageLabel.setText("No usages found");
             showCard(MESSAGE_CARD);
         } else {
@@ -238,16 +247,17 @@ public final class UsagesViewPanel extends JPanel {
         failure.printStackTrace(System.err);
     }
 
-    private void populateResults(List<ReferenceLocation> locations) {
+    private void populateResults(List<ReferenceUsage> usages) {
         this.rootNode.removeAllChildren();
         Map<String, DefaultMutableTreeNode> classNodes = new LinkedHashMap<>();
-        for (ReferenceLocation location : locations) {
+        for (ReferenceUsage usage : usages) {
+            ReferenceLocation location = usage.location();
             DefaultMutableTreeNode classNode = classNodes.computeIfAbsent(location.className(), className -> {
                 DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ClassNode(className));
                 this.rootNode.add(node);
                 return node;
             });
-            classNode.add(new DefaultMutableTreeNode(new UsageNode(location)));
+            classNode.add(new DefaultMutableTreeNode(new UsageNode(usage)));
         }
         this.treeModel.reload();
         for (int row = 0; row < this.resultsTree.getRowCount(); row++) {
@@ -264,12 +274,7 @@ public final class UsagesViewPanel extends JPanel {
         if (!(nodeValue instanceof UsageNode usage)) {
             return;
         }
-        ReferenceNavigationTarget target = ReferenceNavigationTarget.from(usage.location());
-        CompanionApp.openClass(
-                target.className(),
-                target.elementType(),
-                target.identifier()
-        );
+        CompanionApp.getDecompilationService().openUsage(usage.usage(), this.symbol.referenceQuery());
     }
 
     private void cancelActiveSearch() {
@@ -336,6 +341,31 @@ public final class UsagesViewPanel extends JPanel {
         };
     }
 
+    private static String usageLabel(ReferenceUsage usage) {
+        String relations = usage.kinds().stream()
+                .sorted()
+                .map(UsagesViewPanel::relationLabel)
+                .collect(java.util.stream.Collectors.joining(", "));
+        String count = usage.occurrenceCount() == 1 ? "" : " ×" + usage.occurrenceCount();
+        return usageLabel(usage.location().site()) + "  —  " + relations + count;
+    }
+
+    private static String relationLabel(ReferenceKind kind) {
+        return switch (kind) {
+            case CLASS_HIERARCHY -> "hierarchy";
+            case CLASS_DECLARATION -> "type declaration";
+            case CLASS_ANNOTATION_OR_METADATA -> "annotation/metadata";
+            case CLASS_RUNTIME_TYPE -> "runtime type";
+            case CLASS_MEMBER_USAGE -> "member usage";
+            case FIELD_READ -> "read";
+            case FIELD_WRITE -> "write";
+            case FIELD_HANDLE -> "field handle";
+            case METHOD_INVOKE -> "call";
+            case METHOD_HANDLE -> "method handle";
+            case STRING_LITERAL -> "string literal";
+        };
+    }
+
     private static String methodLabel(ReferenceLocation.Method method) {
         Type methodType = Type.getMethodType(method.descriptor());
         String arguments = java.util.Arrays.stream(methodType.getArgumentTypes())
@@ -367,10 +397,10 @@ public final class UsagesViewPanel extends JPanel {
         }
     }
 
-    private record UsageNode(ReferenceLocation location) {
+    private record UsageNode(ReferenceUsage usage) {
         @Override
         public String toString() {
-            return usageLabel(this.location.site());
+            return usageLabel(this.usage);
         }
     }
 
@@ -392,8 +422,9 @@ public final class UsagesViewPanel extends JPanel {
             if (userValue instanceof ClassNode) {
                 setIcon(Icons.JAVA_CLASS);
             } else if (userValue instanceof UsageNode usage) {
-                setIcon(locationIcon(usage.location().site()));
-                setToolTipText(usage.location().className() + '#' + usageLabel(usage.location().site()));
+                ReferenceLocation location = usage.usage().location();
+                setIcon(locationIcon(location.site()));
+                setToolTipText(location.className() + '#' + usageLabel(usage.usage()));
             }
             return component;
         }

@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode.reference;
 
 import com.github.tth05.jindex.ClassIndex;
+import com.github.tth05.jindex.ReferenceKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceFixtures.REFERENCES;
 import static com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceFixtures.TARGET;
@@ -31,30 +33,30 @@ class IndexedReferenceSearchTest {
 
             assertEquals(
                     classReferenceLocations(),
-                    search.search(ReferenceQuery.classReference("fixture.Target"), 100).locations()
+                    locations(search.search(ReferenceQuery.classReference("fixture.Target"), 100))
             );
             assertEquals(
                     List.of(location("methodHandle", "()V"), location("methodNoArgs", "()V")),
-                    search.search(ReferenceQuery.methodReference("fixture.Target", "run", "()V"), 100).locations()
+                    locations(search.search(ReferenceQuery.methodReference("fixture.Target", "run", "()V"), 100))
             );
             assertEquals(
                     List.of(location("methodInt", "()V")),
-                    search.search(ReferenceQuery.methodReference("fixture.Target", "run", "(I)V"), 100).locations()
+                    locations(search.search(ReferenceQuery.methodReference("fixture.Target", "run", "(I)V"), 100))
             );
             assertEquals(
                     List.of(location("fieldInt", "()V")),
-                    search.search(ReferenceQuery.fieldReference("fixture.Target", "VALUE", "I"), 100).locations()
+                    locations(search.search(ReferenceQuery.fieldReference("fixture.Target", "VALUE", "I"), 100))
             );
             assertEquals(
                     List.of(location("fieldString", "()V")),
-                    search.search(
+                    locations(search.search(
                             ReferenceQuery.fieldReference("fixture.Target", "VALUE", "Ljava/lang/String;"),
                             100
-                    ).locations()
+                    ))
             );
 
-            ReferenceLocationPage limited = search.search(ReferenceQuery.classReference("fixture.Target"), 1);
-            assertEquals(1, limited.locations().size());
+            ReferenceUsagePage limited = search.search(ReferenceQuery.classReference("fixture.Target"), 1);
+            assertEquals(1, limited.usages().size());
             assertTrue(limited.truncated());
             assertFalse(search.search(ReferenceQuery.classReference("fixture.Target"), 100).truncated());
         }
@@ -71,11 +73,11 @@ class IndexedReferenceSearchTest {
             IndexedReferenceSearch search = new IndexedReferenceSearch(index);
             assertEquals(
                     List.of(ReferenceLocation.method("fixture.HierarchyReferences", "inheritedMethod", "()V")),
-                    search.search(ReferenceQuery.methodReference("fixture.Target", "run", "()V"), 100).locations()
+                    locations(search.search(ReferenceQuery.methodReference("fixture.Target", "run", "()V"), 100))
             );
             assertEquals(
                     List.of(ReferenceLocation.method("fixture.HierarchyReferences", "inheritedField", "()V")),
-                    search.search(ReferenceQuery.fieldReference("fixture.Target", "VALUE", "I"), 100).locations()
+                    locations(search.search(ReferenceQuery.fieldReference("fixture.Target", "VALUE", "I"), 100))
             );
         }
     }
@@ -93,13 +95,39 @@ class IndexedReferenceSearchTest {
         ))) {
             assertEquals(
                     List.of(ReferenceLocation.method("fixture.InterfaceReferences", "inheritedInterface", "()V")),
-                    new IndexedReferenceSearch(index)
+                    locations(new IndexedReferenceSearch(index)
                             .search(
                                     ReferenceQuery.methodReference("fixture.InterfaceTarget", "run", "()V"),
                                     100
-                            )
-                            .locations()
+                            ))
             );
         }
+    }
+
+    @Test
+    void preservesRelationKindsAndOccurrenceCounts() {
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(
+                referenceFixture(REFERENCES),
+                targetDeclarationFixture()
+        ))) {
+            IndexedReferenceSearch search = new IndexedReferenceSearch(index);
+            ReferenceUsage fieldUsage = search.search(
+                    ReferenceQuery.fieldReference("fixture.Target", "VALUE", "I"),
+                    100
+            ).usages().getFirst();
+            assertEquals(Set.of(ReferenceKind.FIELD_READ), fieldUsage.kinds());
+            assertEquals(1, fieldUsage.occurrenceCount());
+
+            List<ReferenceUsage> methodUsages = search.search(
+                    ReferenceQuery.methodReference("fixture.Target", "run", "()V"),
+                    100
+            ).usages();
+            assertEquals(Set.of(ReferenceKind.METHOD_HANDLE), methodUsages.getFirst().kinds());
+            assertEquals(Set.of(ReferenceKind.METHOD_INVOKE), methodUsages.getLast().kinds());
+        }
+    }
+
+    private static List<ReferenceLocation> locations(ReferenceUsagePage page) {
+        return page.usages().stream().map(ReferenceUsage::location).toList();
     }
 }

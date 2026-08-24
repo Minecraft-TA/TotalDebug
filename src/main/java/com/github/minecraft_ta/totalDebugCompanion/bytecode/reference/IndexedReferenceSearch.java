@@ -6,7 +6,7 @@ import com.github.tth05.jindex.ReferenceSearchPage;
 import com.github.tth05.jindex.ReferenceTarget;
 
 import java.util.Objects;
-import java.util.TreeSet;
+import java.util.ArrayList;
 
 /** Adapts JIndex's persisted reference graph to Companion navigation locations. */
 public final class IndexedReferenceSearch {
@@ -16,14 +16,21 @@ public final class IndexedReferenceSearch {
         this.index = Objects.requireNonNull(index, "index");
     }
 
-    public ReferenceLocationPage search(ReferenceQuery query, int limit) {
+    public ReferenceUsagePage search(ReferenceQuery query, int limit) {
         Objects.requireNonNull(query, "query");
         ReferenceSearchPage page = this.index.findReferences(toTarget(query), limit);
-        TreeSet<ReferenceLocation> locations = new TreeSet<>();
+        ArrayList<ReferenceUsage> usages = new ArrayList<>(page.results().length);
         for (ReferenceResult result : page.results()) {
-            locations.add(toLocation(result));
+            usages.add(new ReferenceUsage(
+                    result.siteId(),
+                    toLocation(result),
+                    result.sourceId(),
+                    result.kinds(),
+                    result.occurrenceCount()
+            ));
         }
-        return new ReferenceLocationPage(locations.stream().toList(), page.truncated());
+        usages.sort(null);
+        return new ReferenceUsagePage(usages, page.truncated());
     }
 
     private static ReferenceTarget toTarget(ReferenceQuery query) {

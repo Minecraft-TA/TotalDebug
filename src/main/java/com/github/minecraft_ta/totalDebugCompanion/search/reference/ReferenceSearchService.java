@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.IndexedReferenceSearch;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.tth05.jindex.ClassIndex;
 
@@ -68,7 +68,7 @@ public final class ReferenceSearchService implements AutoCloseable {
     }
 
     public interface Listener {
-        void onCompleted(ReferenceLocationPage result);
+        void onCompleted(ReferenceUsagePage result);
 
         void onFailed(Throwable failure);
     }
@@ -81,7 +81,7 @@ public final class ReferenceSearchService implements AutoCloseable {
 
     @FunctionalInterface
     interface Searcher {
-        ReferenceLocationPage search(ReferenceQuery query, int limit);
+        ReferenceUsagePage search(ReferenceQuery query, int limit);
     }
 
     private final class SearchOperation implements SearchHandle {
@@ -99,7 +99,7 @@ public final class ReferenceSearchService implements AutoCloseable {
 
         private void run() {
             try {
-                ReferenceLocationPage result = searcher.search(this.query, this.limit);
+                ReferenceUsagePage result = searcher.search(this.query, this.limit);
                 if (!this.cancelled.get()) {
                     dispatch(() -> {
                         if (!this.cancelled.get()) {

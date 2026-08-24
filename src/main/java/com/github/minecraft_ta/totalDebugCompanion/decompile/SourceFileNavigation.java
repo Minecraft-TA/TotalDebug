@@ -1,6 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.SourceReferenceLocator;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
@@ -21,6 +26,7 @@ import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,6 +39,14 @@ final class SourceFileNavigation {
 
     static void open(Path filePath, int targetType, String targetIdentifier) {
         int offset = targetOffset(filePath, targetType, targetIdentifier);
+        openAt(filePath, offset);
+    }
+
+    static void openUsage(Path filePath, ReferenceLocation location, ReferenceQuery query) {
+        openAt(filePath, usageOffset(CodeView.readCode(filePath), location, query));
+    }
+
+    private static void openAt(Path filePath, int offset) {
         SwingUtilities.invokeLater(() -> {
             MainWindow window = MainWindow.INSTANCE;
             AtomicBoolean created = new AtomicBoolean();
@@ -50,6 +64,21 @@ final class SourceFileNavigation {
                 UIUtils.focusWindow(window);
             });
         });
+    }
+
+    static int usageOffset(String source, ReferenceLocation location, ReferenceQuery query) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(query, "query");
+
+        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
+        if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
+            throw new IllegalStateException("Decompiled source has no top-level type");
+        }
+        ASTNode site = findSite(location.site(), type)
+                .orElseThrow(() -> new IllegalStateException("Usage declaration not found in decompiled source: "
+                        + location));
+        return SourceReferenceLocator.findFirst(site, query).orElse(site.getStartPosition());
     }
 
     private static int targetOffset(Path filePath, int targetType, String targetIdentifier) {
@@ -81,6 +110,42 @@ final class SourceFileNavigation {
         throw new IllegalArgumentException("Unknown source target type: " + targetType);
     }
 
+    private static Optional<ASTNode> findSite(ReferenceLocation.Site site, AbstractTypeDeclaration type) {
+        return switch (site) {
+            case ReferenceLocation.ClassDeclaration ignored -> Optional.of(type);
+            case ReferenceLocation.Method method -> findTargetMethod(method, type).map(ASTNode.class::cast);
+            case ReferenceLocation.Field field -> findFieldSite(field.name(), type);
+            case ReferenceLocation.RecordComponent component -> findRecordComponentSite(component.name(), type);
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Optional<ASTNode> findFieldSite(String name, AbstractTypeDeclaration type) {
+        List<Object> declarations = new ArrayList<>(bodyDeclarations(type));
+        if (type instanceof EnumDeclaration enumDeclaration) {
+            declarations.addAll(enumDeclaration.enumConstants());
+        }
+        return declarations.stream()
+                .filter(declaration -> declaration instanceof FieldDeclaration
+                        || declaration instanceof EnumConstantDeclaration)
+                .filter(declaration -> fieldMatches(declaration, name))
+                .map(ASTNode.class::cast)
+                .findFirst();
+    }
+
+    private static Optional<ASTNode> findRecordComponentSite(String name, AbstractTypeDeclaration type) {
+        if (!(type instanceof RecordDeclaration recordDeclaration)) {
+            return Optional.empty();
+        }
+        for (Object candidate : recordDeclaration.recordComponents()) {
+            SingleVariableDeclaration component = (SingleVariableDeclaration) candidate;
+            if (component.getName().getIdentifier().equals(name)) {
+                return Optional.of(component);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static Optional<MethodDeclaration> findTargetMethod(
             String targetIdentifier,
             AbstractTypeDeclaration type
@@ -92,6 +157,22 @@ final class SourceFileNavigation {
                 .filter(method -> removeCompilationUnitName(
                         CodeUtils.minimalizeMethodIdentifier(method.resolveBinding().getKey(), false)
                 ).equals(targetIdentifier))
+                .findFirst();
+    }
+
+    private static Optional<MethodDeclaration> findTargetMethod(
+            ReferenceLocation.Method target,
+            AbstractTypeDeclaration type
+    ) {
+        return bodyDeclarations(type).stream()
+                .filter(MethodDeclaration.class::isInstance)
+                .map(MethodDeclaration.class::cast)
+                .filter(method -> {
+                    CodeSymbol symbol = JavaSymbolResolver.trySymbolForBinding(method.resolveBinding());
+                    return symbol instanceof CodeSymbol.MethodSymbol candidate
+                            && candidate.name().equals(target.name())
+                            && candidate.descriptor().equals(target.descriptor());
+                })
                 .findFirst();
     }
 

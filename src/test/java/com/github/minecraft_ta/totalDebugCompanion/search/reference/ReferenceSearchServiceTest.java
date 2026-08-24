@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocationPage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
+import com.github.tth05.jindex.ReferenceKind;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
@@ -25,8 +27,8 @@ class ReferenceSearchServiceTest {
         CountDownLatch completed = new CountDownLatch(1);
         AtomicBoolean completionOnEdt = new AtomicBoolean();
         AtomicInteger receivedLimit = new AtomicInteger();
-        ReferenceLocationPage expected = new ReferenceLocationPage(
-                List.of(ReferenceLocation.method("example.Use", "run", "()V")),
+        ReferenceUsagePage expected = new ReferenceUsagePage(
+                List.of(usage(ReferenceLocation.method("example.Use", "run", "()V"))),
                 true
         );
 
@@ -56,7 +58,7 @@ class ReferenceSearchServiceTest {
         CountDownLatch releaseFirst = new CountDownLatch(1);
         CountDownLatch firstCompleted = new CountDownLatch(1);
         CountDownLatch secondCompleted = new CountDownLatch(1);
-        AtomicReference<ReferenceLocationPage> secondResult = new AtomicReference<>();
+        AtomicReference<ReferenceUsagePage> secondResult = new AtomicReference<>();
 
         try (var service = new ReferenceSearchService((query, limit) -> {
             if (query instanceof ReferenceQuery.ClassReference type && type.className().equals("example.First")) {
@@ -70,10 +72,10 @@ class ReferenceSearchServiceTest {
                     throw new AssertionError(exception);
                 }
             }
-            return new ReferenceLocationPage(
-                    List.of(ReferenceLocation.classDeclaration(
+            return new ReferenceUsagePage(
+                    List.of(usage(ReferenceLocation.classDeclaration(
                             ((ReferenceQuery.ClassReference) query).className()
-                    )),
+                    ))),
                     false
             );
         })) {
@@ -98,14 +100,14 @@ class ReferenceSearchServiceTest {
             assertFalse(firstCompleted.await(100, TimeUnit.MILLISECONDS));
             assertEquals(
                     List.of(ReferenceLocation.classDeclaration("example.Second")),
-                    secondResult.get().locations()
+                    secondResult.get().usages().stream().map(ReferenceUsage::location).toList()
             );
         }
     }
 
     @Test
     void rejectsNonPositiveLimits() {
-        try (var service = new ReferenceSearchService((query, limit) -> new ReferenceLocationPage(List.of(), false))) {
+        try (var service = new ReferenceSearchService((query, limit) -> new ReferenceUsagePage(List.of(), false))) {
             assertThrows(
                     IllegalArgumentException.class,
                     () -> service.search(ReferenceQuery.classReference("example.Target"), 0, listener(ignored -> {
@@ -114,10 +116,10 @@ class ReferenceSearchServiceTest {
         }
     }
 
-    private static ReferenceSearchService.Listener listener(java.util.function.Consumer<ReferenceLocationPage> result) {
+    private static ReferenceSearchService.Listener listener(java.util.function.Consumer<ReferenceUsagePage> result) {
         return new ReferenceSearchService.Listener() {
             @Override
-            public void onCompleted(ReferenceLocationPage value) {
+            public void onCompleted(ReferenceUsagePage value) {
                 result.accept(value);
             }
 
@@ -126,5 +128,9 @@ class ReferenceSearchServiceTest {
                 throw new AssertionError(failure);
             }
         };
+    }
+
+    private static ReferenceUsage usage(ReferenceLocation location) {
+        return new ReferenceUsage(1, location, 0, java.util.Set.of(ReferenceKind.METHOD_INVOKE), 1);
     }
 }

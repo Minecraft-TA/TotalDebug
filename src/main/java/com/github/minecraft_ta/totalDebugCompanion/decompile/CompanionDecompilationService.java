@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilerDiagnostic;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.JavaDecompiler;
@@ -24,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
     private static final String CACHE_FORMAT = "1";
@@ -73,22 +76,33 @@ public final class CompanionDecompilationService implements AutoCloseable {
         ensureOpen();
         String normalizedName = requireBinaryName(binaryName);
         String identifier = Objects.requireNonNullElse(targetIdentifier, "");
-        CompletableFuture<Path> task = decompile(normalizedName);
+        return open(normalizedName, sourceFile -> SourceFileNavigation.open(sourceFile, targetType, identifier));
+    }
+
+    public CompletableFuture<Path> openUsage(ReferenceUsage usage, ReferenceQuery query) {
+        Objects.requireNonNull(usage, "usage");
+        Objects.requireNonNull(query, "query");
+        String binaryName = requireBinaryName(usage.location().className());
+        return open(binaryName, sourceFile -> SourceFileNavigation.openUsage(sourceFile, usage.location(), query));
+    }
+
+    private CompletableFuture<Path> open(String binaryName, Consumer<Path> navigation) {
+        CompletableFuture<Path> task = decompile(binaryName);
         task.whenComplete((sourceFile, failure) -> {
             if (this.closed) {
                 return;
             }
             if (failure == null) {
                 try {
-                    SourceFileNavigation.open(sourceFile, targetType, identifier);
+                    navigation.accept(sourceFile);
                 } catch (RuntimeException exception) {
-                    showFailure(normalizedName, exception);
+                    showFailure(binaryName, exception);
                 }
             } else {
                 Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                         ? failure.getCause()
                         : failure;
-                showFailure(normalizedName, cause);
+                showFailure(binaryName, cause);
             }
         });
         return task;

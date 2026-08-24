@@ -85,15 +85,30 @@ public final class JavaSymbolResolver {
             return Resolution.unavailable("JDT could not resolve this symbol to runtime bytecode");
         }
         try {
-            return switch (binding) {
-                case IMethodBinding method -> Resolution.resolved(methodSymbol(method));
-                case IVariableBinding variable when variable.isField() ->
-                        Resolution.resolved(fieldSymbol(variable));
-                default -> Resolution.unavailable("Find Usages supports classes, fields, and methods");
-            };
+            CodeSymbol symbol = symbolForBinding(binding);
+            return symbol == null
+                    ? Resolution.unavailable("Find Usages supports classes, fields, and methods")
+                    : Resolution.resolved(symbol);
         } catch (UnresolvedBindingException exception) {
             return Resolution.unavailable(exception.getMessage());
         }
+    }
+
+    public static CodeSymbol trySymbolForBinding(IBinding binding) {
+        try {
+            return symbolForBinding(binding);
+        } catch (UnresolvedBindingException ignored) {
+            return null;
+        }
+    }
+
+    private static CodeSymbol symbolForBinding(IBinding binding) {
+        return switch (binding) {
+            case ITypeBinding type -> new CodeSymbol.ClassSymbol(binaryName(type));
+            case IMethodBinding method -> methodSymbol(method);
+            case IVariableBinding variable when variable.isField() -> fieldSymbol(variable);
+            default -> null;
+        };
     }
 
     private static Resolution resolvedType(IType type) throws JavaModelException {
