@@ -4,43 +4,38 @@ import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
-import java.nio.file.Path;
 import java.util.Objects;
 
-public final class DecompileOrOpenMessage extends AbstractMessage {
-    private String name;
+public final class OpenClassMessage extends AbstractMessage {
+    private String binaryName;
     private int targetType;
     private String targetIdentifier;
 
-    public DecompileOrOpenMessage() {
+    public OpenClassMessage() {
     }
 
-    public DecompileOrOpenMessage(Path filePath) {
-        this(filePath.toAbsolutePath().normalize().toString(), -1, "");
-    }
-
-    public DecompileOrOpenMessage(String name, int targetType, String targetIdentifier) {
-        this.name = Objects.requireNonNull(name, "name");
+    public OpenClassMessage(String binaryName, int targetType, String targetIdentifier) {
+        this.binaryName = Objects.requireNonNull(binaryName, "binaryName");
         this.targetType = targetType;
         this.targetIdentifier = Objects.requireNonNullElse(targetIdentifier, "");
     }
 
     @Override
     public void read(ByteBufferInputStream messageStream) {
-        this.name = messageStream.readString();
+        this.binaryName = messageStream.readString();
         this.targetType = messageStream.readInt();
         this.targetIdentifier = messageStream.readString();
     }
 
     @Override
     public void write(ByteBufferOutputStream messageStream) {
-        messageStream.writeString(this.name);
+        messageStream.writeString(this.binaryName);
         messageStream.writeInt(this.targetType);
         messageStream.writeString(this.targetIdentifier);
     }
 
-    public String name() {
-        return this.name;
+    public String binaryName() {
+        return this.binaryName;
     }
 
     public int targetType() {

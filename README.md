@@ -1,8 +1,8 @@
 # TotalDebug
 
-TotalDebug is a Minecraft 1.21.1 NeoForge development mod. It can decompile a looked-at block or entity and a hovered item, then open the generated Java source in TotalDebugCompanion.
+TotalDebug is a Minecraft 1.21.1 NeoForge development mod. It resolves a looked-at block or entity and a hovered item, then asks TotalDebugCompanion to decompile and open the matching runtime class.
 
-The current port restores the core F6 and `/decompile block` workflow. It uses Vineflower for decompilation, JIndex for immutable runtime indexes, and SCNet for the authenticated local Companion connection. The Companion stays open when Minecraft exits and reconnects on the next run. [PORTING.md](PORTING.md) records completed slices and remaining features.
+The current port restores the core F6 and `/decompile block` workflow. Companion owns Vineflower, JIndex browsing, source caching, and offline navigation over the last published runtime snapshot. SCNet carries authenticated live requests from Minecraft. Companion stays open when Minecraft exits and reconnects on the next run. [PORTING.md](PORTING.md) records completed slices and remaining features.
 
 Local searchable snapshots of the old implementations may live under `legacy/`; their source trees are excluded from Git and Gradle. The 1.7.10 implementation is more advanced for most TotalDebug features and is the primary functional reference. The 1.12.2 snapshot is useful for its newer Minecraft and Forge APIs.
 

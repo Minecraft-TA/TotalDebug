@@ -6,18 +6,18 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class DecompileOrOpenMessageTest {
+class OpenClassMessageTest {
     @Test
     void preservesTheExistingCompanionWireFormat() {
-        DecompileOrOpenMessage outgoing = new DecompileOrOpenMessage("C:/code/Block.java", 9, "tick()V");
+        OpenClassMessage outgoing = new OpenClassMessage("net.minecraft.world.level.block.Block", 9, "tick()V");
         ByteBufferOutputStream output = new ByteBufferOutputStream();
         outgoing.write(output);
         output.getBuffer().flip();
 
-        DecompileOrOpenMessage incoming = new DecompileOrOpenMessage();
+        OpenClassMessage incoming = new OpenClassMessage();
         incoming.read(new ByteBufferInputStream(output.getBuffer()));
 
-        assertEquals("C:/code/Block.java", incoming.name());
+        assertEquals("net.minecraft.world.level.block.Block", incoming.binaryName());
         assertEquals(9, incoming.targetType());
         assertEquals("tick()V", incoming.targetIdentifier());
     }

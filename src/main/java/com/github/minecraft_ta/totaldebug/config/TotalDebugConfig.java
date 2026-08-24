@@ -67,7 +67,7 @@ public final class TotalDebugConfig {
         private Client(ModConfigSpec.Builder builder) {
             builder.push("decompilation");
             this.useCompanionApp = builder
-                    .comment("Open decompiled source files in the TotalDebug companion application.")
+                    .comment("Enable TotalDebug Companion for browsing and decompiling runtime classes.")
                     .define("useCompanionApp", true);
             builder.pop();
 

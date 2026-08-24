@@ -4,7 +4,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.CompanionReadyMessage;
-import com.github.minecraft_ta.totaldebug.client.companion.message.DecompileOrOpenMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ScriptStatusMessage;
@@ -32,7 +32,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -52,10 +51,6 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile CompletableFuture<Void> authenticated = new CompletableFuture<>();
     private volatile CompletableFuture<Void> ready = new CompletableFuture<>();
 
-    private volatile BiConsumer<String, SourceTarget> decompileRequestHandler = (binaryName, sourceTarget) -> TotalDebug.LOGGER.warn(
-            "Ignoring companion decompile request for {} because no handler is installed",
-            binaryName
-    );
     private volatile Consumer<RunScriptMessage> scriptRequestHandler = message -> TotalDebug.LOGGER.warn(
             "Ignoring companion script request {} because no handler is installed",
             message.scriptId()
@@ -119,10 +114,6 @@ public final class CompanionAppClient implements AutoCloseable {
         Runtime.getRuntime().addShutdownHook(new Thread(this::close, "TotalDebug companion shutdown"));
     }
 
-    public void setDecompileRequestHandler(BiConsumer<String, SourceTarget> handler) {
-        this.decompileRequestHandler = Objects.requireNonNull(handler, "handler");
-    }
-
     public void setScriptRequestHandler(Consumer<RunScriptMessage> handler) {
         this.scriptRequestHandler = Objects.requireNonNull(handler, "handler");
     }
@@ -151,21 +142,16 @@ public final class CompanionAppClient implements AutoCloseable {
         this.client.getMessageProcessor().enqueueMessage(new ScriptStatusMessage(scriptId, type, message));
     }
 
-    public synchronized void openAndFocus(
-            Path sourceFile,
+    public synchronized void openClassAndFocus(
+            String binaryName,
             SourceTarget sourceTarget,
             Runnable beforeTransfer
     ) throws IOException {
+        Objects.requireNonNull(binaryName, "binaryName");
         Objects.requireNonNull(beforeTransfer, "beforeTransfer");
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
-        transferForeground(beforeTransfer, () -> enqueueOpen(sourceFile, sourceTarget));
-    }
-
-    public synchronized void openInPlace(Path sourceFile, SourceTarget sourceTarget) throws IOException {
-        Objects.requireNonNull(sourceTarget, "sourceTarget");
-        ensureConnectedAndReady();
-        enqueueOpen(sourceFile, sourceTarget);
+        transferForeground(beforeTransfer, () -> enqueueOpenClass(binaryName, sourceTarget));
     }
 
     public synchronized void focus(Runnable beforeFocus) throws IOException {
@@ -177,14 +163,10 @@ public final class CompanionAppClient implements AutoCloseable {
         );
     }
 
-    public Path dataDirectory() {
-        return this.dataDirectory;
-    }
-
-    private void enqueueOpen(Path sourceFile, SourceTarget sourceTarget) {
+    private void enqueueOpenClass(String binaryName, SourceTarget sourceTarget) {
         CompanionSourceTargetCodec.WireTarget wireTarget = CompanionSourceTargetCodec.encode(sourceTarget);
-        this.client.getMessageProcessor().enqueueMessage(new DecompileOrOpenMessage(
-                sourceFile.toAbsolutePath().normalize().toString(),
+        this.client.getMessageProcessor().enqueueMessage(new OpenClassMessage(
+                binaryName,
                 wireTarget.javaElementType(),
                 wireTarget.identifier()
         ));
@@ -211,9 +193,9 @@ public final class CompanionAppClient implements AutoCloseable {
                 CompanionReadyMessage::new
         );
         this.client.getMessageProcessor().registerMessage(
-                CompanionProtocol.DECOMPILE_OR_OPEN,
-                DecompileOrOpenMessage.class,
-                DecompileOrOpenMessage::new
+                CompanionProtocol.OPEN_CLASS,
+                OpenClassMessage.class,
+                OpenClassMessage::new
         );
         this.client.getMessageProcessor().registerMessage(
                 CompanionProtocol.RUN_SCRIPT,
@@ -245,20 +227,6 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             this.ready.complete(null);
-        });
-        this.client.getMessageBus().listenAlways(DecompileOrOpenMessage.class, message -> {
-            if (!hasCapability(CompanionProtocol.CAPABILITY_REVERSE_DECOMPILE)) {
-                failSession("Companion sent a reverse-decompile request without negotiating that capability", null);
-                return;
-            }
-            SourceTarget sourceTarget;
-            try {
-                sourceTarget = CompanionSourceTargetCodec.decode(message.targetType(), message.targetIdentifier());
-            } catch (IllegalArgumentException exception) {
-                failSession("Companion sent an invalid source target: " + exception.getMessage(), exception);
-                return;
-            }
-            this.decompileRequestHandler.accept(message.name(), sourceTarget);
         });
         this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
             if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {

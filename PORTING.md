@@ -23,11 +23,11 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | F1 | Mod core and tick task lifecycle | Complete | Version identity, isolated client/server pre/post queues, lifecycle cleanup, and unit tests |
 | F2a | Configuration | Complete | Separate client/server specs; retained defaults and packet-class validation are tested |
 | F2b | Minecraft networking | Complete | Optional protocol v1 registration, bounded typed companion-forward payload, and receiver lifecycle are tested; remaining payloads stay feature-owned |
-| F2c | Core resources and libraries | Complete | Core language JSON is tested; SCNet 2.0.0, ClassGraph 4.8.193, Vineflower 1.12.0, and JIndex 1.0.0 resolve from versioned coordinates and are present in Jar-in-Jar metadata |
-| F3a | Named-class bytecode access | Complete | Defining-loader bytes, including nested target classes, decompile Java 21 test code and Minecraft classes through Vineflower's in-memory API |
+| F2c | Core resources and libraries | Complete | Core language JSON is tested; TotalDebug embeds SCNet, ClassGraph, and JIndex, while Companion packages Vineflower and its generated Parchment parameter index |
+| F3a | Named-class bytecode access | Complete | Companion resolves indexed runtime classes from the persisted archive and class-directory manifest, selects Java 21 multi-release entries, and falls back to its matching JDK view |
 | F3b | Transformed bytes and class inventory | Deferred after inventory | The runtime-source inventory is complete and powers the class-name catalog, Companion index, and live-script compiler classpath; exact post-transform capture and process-wide loaded-class enumeration are deferred because the available no-agent hooks do not expose authoritative loaded bytes |
-| F4 | Companion application IPC and lifecycle | Complete | Companion 2.0 is Java 21 jar-only; each game process launches and authenticates its exact IPv4-loopback child through protocol v2; cold launch, handshake, ready, and open passed live |
-| F5 | Class decompilation | Complete | The live Companion flow is restored; Vineflower now supplies the sole production decompiler and its `GrassBlock` output preserves the bounded bonemeal loops |
+| F4 | Companion application IPC and lifecycle | Complete | Companion 2.0 is a persistent Java 21 application; Minecraft discovers and authenticates it over IPv4 loopback using protocol v4 and reconnects without owning its lifetime |
+| F5 | Class decompilation | Complete | Companion owns Vineflower, Parchment naming, signature and byte-hash keyed caching, source files, and editor navigation; indexed classes remain browsable after Minecraft exits |
 | F6 | Live reference search | Editor implementation complete; live gate pending | Alt+F7 and the source context menu resolve exact JDT class, field, method, and constructor symbols into a cancellable Companion-local scan. A grouped usages editor shows phase progress and opens class/member results through the existing decompile flow; local variables fail explicitly because runtime bytecode cannot represent source-local usages. References introduced only by runtime transformation remain deferred with F3b |
 | F7 | Persistent class index | Complete | Runtime inputs plus JDK modules produce an atomic index; JIndex 1.0.0 now guards native lifetime, retained child objects, and concurrent close while keeping the runtime format working |
 | F8 | Java scripting | Complete | Client and server runs share the Java 21 compiler/runner; optional negotiated run/stop payloads, per-player server ownership, config/operator policy, bounded status forwarding, disconnect cleanup, and unsupported-server refusal are covered, and server execution passed live |
@@ -49,13 +49,13 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | ID | Area | State | Evidence / remaining gate |
 |---|---|---|---|
 | M1 | Companion Java 21 runtime | Complete | Companion builds as a non-preview Java 21 fat JAR; the mod launches it with the exact current Minecraft Java after validating the executable, version, and required modules |
-| M2 | Decompiler engine | Complete | Vineflower 1.12.0 is the only engine; modern Java 21, nested-class, Minecraft `Block`, and `GrassBlock` control-flow fixtures pass with no fallback |
+| M2 | Decompiler engine | Complete | Vineflower 1.12.0 is the only engine and now runs in Companion against the persisted runtime snapshot; modern Java 21, nested classes, naming, cache, archive, directory, JDK, and multi-release behavior are tested |
 | M3 | Companion editor stack | Complete | JDT 3.46 parses at JLS 21/compliance 21; FlatLaf 3.7.2, RSyntaxTextArea 4.0.1, Autocomplete 3.3.3, Gson 2.14.0, and Commons Compress 1.28.0 are pinned |
 | M4 | SCNet transport | Complete | SCNet 2.0.0 has bounded framing, partial read/write handling, selector wakeups, explicit lifecycle state, reconnect/close coverage, deterministic drain-before-close, and 59 passing tests |
 | M5 | JIndex native lifecycle | Complete | JIndex 1.0.0 serializes close against JNI calls, invalidates retained children exactly, pins Rust/native inputs, and passes Java plus Rust tests |
 | M6 | Versioned dependency supply | Complete locally | Default Gradle and IntelliJ builds resolve SCNet 2.0.0 and JIndex 1.0.0 from Maven Local through `com.github.tth05`; external Packagecloud publication waits for approval |
 | M7 | Companion session protocol | Complete | Loopback ephemeral endpoints, atomic descriptors, exact child PID checks, per-launch tokens, strict protocol/capability handshake, stable IDs, terminal disconnect ownership, deterministic rejection delivery, restart, and unsupported-feature gating are tested |
-| M8 | Client package/lifecycle cleanup | Complete | Client setup now assembles one explicit runtime; static NeoForge adapters delegate into lifecycle, tick, input, command, decompile, and Companion ownership; JDT element numbers exist only at the Companion wire boundary |
+| M8 | Client package/lifecycle cleanup | Complete | Client setup assembles one explicit runtime; TotalDebug owns live target resolution and sends binary class names, while Companion owns decompilation and JDT navigation |
 | M9 | Modernized live acceptance | Complete | Cold launch, warm reuse, block/entity/hovered block item/spawn egg F6, one-request-per-press, reverse Ctrl-click navigation, graceful close, and fresh-session relaunch passed live |
 | M10 | Launch and dependency policy ownership | Complete | SCNet requires explicit factories for received messages and uses Java 21 throughout build and CI; mirrored launch constants and injectable timing policies replace scattered literals; immutable Companion release metadata and checksum are generated from Gradle properties |
 
@@ -85,19 +85,20 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S19 | F6 reference-search engine | Exact bytecode fixtures for class, field, method, inheritance, annotations, signatures, handles, archive selection, virtual Jar-in-Jar paths, progress, cancellation, and failures; `gradlew test build`; no command, protocol, or UI work | Complete |
 | S20 | F6 Companion search ownership | Move the engine and tests to Companion; publish a strict runtime-source manifest from the mod; materialize virtual and nested JARs into the signature cache; copy the manifest into the owned session without changing the 2.0 command-line contract; mirrored manifest and launch-contract tests; both application builds | Complete |
 | S21 | F6 editor Find Usages | Shared typed JDT symbol resolution, Alt+F7 and context-menu entry points, one cancellable background scan, grouped usages editor, exact class/member navigation, EDT and cancellation tests, Companion full build, then one live class/field/method search and result-open smoke | Implementation complete; live smoke pending |
+| S22 | Companion-owned offline decompilation | Move Vineflower and Parchment naming into Companion; resolve indexed snapshot bytes from archives, directories, multi-release JARs, and the JDK; route every class-navigation entry point locally; use signature and byte-hash keyed caches; bump the paired protocol; remove the game-side engine | Implementation complete; live F6 and offline restart smoke pending |
 
 ## Core-flow milestone
 
 The original end-to-end milestone after F1-F3 and its modernized Companion 2.0 core transport are complete:
 
-1. Build or validate the runtime class index required by Companion.
-2. Install, start, authenticate with, and wait for the pinned Companion 2.0 child process.
-3. Obtain authoritative runtime bytes from the target class's defining loader.
-4. Decompile the class to the persistent source directory.
-5. Tell Companion to open the source file.
-6. Expose the flow through `/decompile block|item|entity|blockentity <id>`, `/decompile class <binary-name>`, and F6 block/entity/item targeting.
+1. Discover the NeoForge runtime sources and build or validate the persisted Companion index.
+2. Install or discover the pinned Companion build, authenticate over loopback, and attach the runtime profile.
+3. Resolve a live F6 or command target to its Java binary class name.
+4. Send that class name and optional member target to Companion.
+5. Let Companion read the class bytes from the saved runtime snapshot, run Vineflower, cache the source, and open the editor.
+6. While Minecraft is offline, use the same local path from the archive tree, Search Everywhere, implementations, usages, packet classes, and Ctrl-click.
 
-The editor Find Usages implementation is complete and awaits its consolidated live smoke. Exact transformed-byte capture and process-wide loaded-class enumeration are deferred until they justify an authoritative launch-time capture component.
+Exact transformed-byte capture and process-wide loaded-class enumeration remain deferred until they justify an authoritative launch-time capture component. A future capture source can overlay the snapshot without moving Vineflower back into Minecraft.
 
 ## Verification log
 
@@ -132,12 +133,14 @@ The editor Find Usages implementation is complete and awaits its consolidated li
 | 2026-08-23 | S19 | Added a UI-independent ASM reference-search engine over physical runtime class directories and runtime-selected multi-release archives. Exact typed queries cover class, field, and method declarations; member searches resolve inherited owners without reflection and stop at class and interface overrides. Results retain class, field, method, or record-component sites. The engine supports bounded parallel scans, phased progress, cooperative cancellation, NeoForge virtual Jar-in-Jar sources, and exact source failures. All 113 tests and `gradlew test build --warning-mode fail` passed. Commands, Companion transport, and UI remain deliberately unwired. |
 | 2026-08-23 | S20 | Moved the reference engine and its fixtures into Companion and pinned ASM 9.9.1 there. TotalDebug now uses the index signature to publish a strict physical-source manifest and atomically materialize NeoForge virtual and nested JARs into a per-signature cache before launch. It copies the manifest into the owned session directory, so the existing 2.0 command-line contract remains compatible. Companion rejects malformed manifests, non-file URIs, and missing source inputs before opening its UI. TotalDebug passed 105 tests and Companion passed 61; both full builds passed on Java 21. Clean tasks were blocked only by the active game and Companion holding their existing artifacts open. |
 | 2026-08-23 | S21 | Added one exact JDT symbol model shared by Find Usages, Ctrl+T, and Ctrl-click selection. Alt+F7 and the editor context menu open or rerun a typed usages tab with phase progress, cooperative cancellation, class grouping, and exact class/field/method/constructor/record-component navigation through the existing decompile message. Search callbacks are marshalled to the Swing EDT and a new request cancels the prior full-runtime scan. Companion passed all 68 tests and its full Java 21 build. The live class/field/method search and result-open smoke remains. |
+| 2026-08-24 | S22 | Moved Vineflower, Parchment naming, runtime byte lookup, source navigation, and persistent decompilation caching into Companion. TotalDebug now sends only the binary class name and optional member target. Companion passed all 80 tests, TotalDebug passed all 94 tests, both full Java 21 builds succeeded, and `localCompanionPair` verified SHA-256 `a44b253698cd999dcc2cf7ccac34c50ee6f2c5a3f07b743b177cb84e9f22dc68`. The final mod no longer embeds Vineflower. Live F6 and offline restart smoke remain. |
 
 ## Foundation dependency decisions
 
 - Keep SCNet as the transport and publish the hardened 2.0.0 artifact under `com.github.tth05`. TotalDebug owns authentication, capabilities, and application message semantics.
-- Use Vineflower 1.12.0 slim as the only production decompiler. The adapter supplies defining-loader bytes directly through `IContextSource`, captures warning/error diagnostics through `IFernflowerLogger`, rejects missing or partial output, and fixes the incorrect `GrassBlock.performBonemeal` loop reconstruction observed with Procyon.
+- Use Vineflower 1.12.0 slim as the only production decompiler. Companion supplies persisted snapshot bytes through `IContextSource`, captures diagnostics through `IFernflowerLogger`, rejects missing or partial output, and keeps Parchment and generated-variable naming. TotalDebug no longer embeds or runs the engine.
 - Use ClassGraph 4.8.193 once per process for class-name metadata over the explicit runtime source list already used by the Companion index. Read Java 21 module names directly from the `jrt:/` filesystem. This avoids relying on ModLauncher's module-reader discovery and avoids the legacy scan on every Tab press.
 - Use JIndex 1.0.0 under `com.github.tth05`. It loads its bundled native DLL from a resource stream under NeoForge, protects native lifetime across root and child wrappers, and remains Windows-only.
 - Keep physical reference scanning in Companion. TotalDebug owns NeoForge runtime-source discovery and publishes the exact default-filesystem inputs beside the JIndex signature; Companion owns bytecode analysis, progress, cancellation, and the editor usages view.
+- Keep decompilation in Companion. TotalDebug resolves live Minecraft objects and publishes runtime sources. Companion owns byte lookup, Vineflower, caching, and navigation. Future transformed bytes are an optional game-provided overlay, not a second decompiler.
 - Use the JDK HTTP client when F4 restores companion downloads; Apache HttpClient is not retained.

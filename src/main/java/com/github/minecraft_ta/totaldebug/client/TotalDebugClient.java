@@ -2,9 +2,7 @@ package com.github.minecraft_ta.totaldebug.client;
 
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
-import com.github.minecraft_ta.totaldebug.client.decompile.ClientDecompilationService;
-import com.github.minecraft_ta.totaldebug.client.decompile.DecompilationRequest;
-import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
+import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
@@ -18,7 +16,7 @@ import java.util.Optional;
 public final class TotalDebugClient {
     private static volatile TotalDebugClient instance;
 
-    private final ClientDecompilationService decompilation;
+    private final ClientCodeOpenService codeOpen;
     private final OpenCodeOperation openCode;
     private final CodeViewInput codeViewInput;
     private final ClientScriptService scripts;
@@ -30,22 +28,21 @@ public final class TotalDebugClient {
                 .normalize();
         CompanionAppClient companionApp = new CompanionAppClient(totalDebugDirectory);
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
-        this.decompilation = new ClientDecompilationService(companionApp);
+        this.codeOpen = new ClientCodeOpenService(companionApp);
         this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {
             @Override
             public void openClass(Class<?> targetClass) {
-                TotalDebugClient.this.decompilation.openClass(targetClass);
+                TotalDebugClient.this.codeOpen.openClass(targetClass);
             }
 
             @Override
             public void focusCompanion() {
-                TotalDebugClient.this.decompilation.focusCompanion();
+                TotalDebugClient.this.codeOpen.focusCompanion();
             }
         });
         this.codeViewInput = new CodeViewInput(this::openOrFocus);
         this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks());
         TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
-        companionApp.setDecompileRequestHandler(this.decompilation::openNamedClass);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
         companionApp.setSessionClosedHandler(this.scripts::close);
@@ -76,7 +73,7 @@ public final class TotalDebugClient {
     }
 
     public void openClass(Class<?> targetClass) {
-        this.decompilation.open(new DecompilationRequest(targetClass, SourceTarget.wholeClass()));
+        this.codeOpen.openClass(targetClass);
     }
 
     public CodeViewInput codeViewInput() {

@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
 
     public static final short READY = 1;
-    public static final short DECOMPILE_OR_OPEN = 2;
+    public static final short OPEN_CLASS = 2;
     public static final short OPEN_SEARCH_RESULTS = 3;
     public static final short RECEIVE_DATA_STATE = 4;
     public static final short CHUNK_GRID_DATA = 5;
@@ -28,15 +28,13 @@ public final class CompanionProtocol {
 
     public static final long CAPABILITY_CODE_VIEW = 1L;
     public static final long CAPABILITY_FOCUS_WINDOW = 1L << 1;
-    public static final long CAPABILITY_REVERSE_DECOMPILE = 1L << 2;
     public static final long CAPABILITY_CHUNK_GRID = 1L << 3;
     public static final long CAPABILITY_SCRIPT_EXECUTION = 1L << 4;
     public static final long CAPABILITY_PACKET_LOGGER = 1L << 5;
     public static final long CAPABILITY_SEARCH_RESULTS = 1L << 6;
 
     public static final long CORE_CAPABILITIES = CAPABILITY_CODE_VIEW
-            | CAPABILITY_FOCUS_WINDOW
-            | CAPABILITY_REVERSE_DECOMPILE;
+            | CAPABILITY_FOCUS_WINDOW;
     public static final long REQUESTED_CAPABILITIES = CORE_CAPABILITIES | CAPABILITY_SCRIPT_EXECUTION;
 
     private CompanionProtocol() {
