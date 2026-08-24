@@ -1,12 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import org.eclipse.jdt.core.IJavaElement;
 
 import java.util.Objects;
 
-/** Converts a bytecode usage site to the existing Companion-to-game source request. */
+/** Converts a bytecode usage site to a Companion source-navigation target. */
 public record ReferenceNavigationTarget(String className, int elementType, String identifier) {
     public static final int WHOLE_CLASS = -1;
 
@@ -30,10 +29,6 @@ public record ReferenceNavigationTarget(String className, int elementType, Strin
                     methodIdentifier(method)
             );
         };
-    }
-
-    public DecompileOrOpenMessage toMessage() {
-        return new DecompileOrOpenMessage(this.className, this.elementType, this.identifier);
     }
 
     private static String methodIdentifier(ReferenceLocation.Method method) {

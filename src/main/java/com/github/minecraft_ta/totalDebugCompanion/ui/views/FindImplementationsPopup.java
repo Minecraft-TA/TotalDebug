@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.AbstractCodeViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -141,11 +140,6 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
 
     protected abstract static class InternalListItem implements ListItem {
 
-        protected boolean checkConnection() {
-            //TODO: Display in bottom information bar?
-            return CompanionApp.SERVER.isClientConnected();
-        }
-
         public abstract Icon getIcon();
 
         public abstract void onAction();
@@ -163,10 +157,7 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
 
         @Override
         public void onAction() {
-            if (!checkConnection())
-                return;
-
-            CompanionApp.send(new DecompileOrOpenMessage(indexedClass.getNameWithPackageDot()));
+            CompanionApp.openClass(indexedClass.getNameWithPackageDot());
         }
 
         @Override
@@ -195,13 +186,10 @@ public class FindImplementationsPopup extends BaseListPopup<FindImplementationsP
 
         @Override
         public void onAction() {
-            if (!checkConnection())
-                return;
-
-            CompanionApp.send(new DecompileOrOpenMessage(
+            CompanionApp.openClass(
                     indexedMethod.getDeclaringClass().getNameWithPackageDot(),
                     IJavaElement.METHOD,
-                    indexedMethod.getName() + indexedMethod.getDescriptorString())
+                    indexedMethod.getName() + indexedMethod.getDescriptorString()
             );
         }
 

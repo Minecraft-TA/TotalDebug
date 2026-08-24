@@ -8,6 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceManifest;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -19,6 +22,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
+import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
@@ -43,6 +47,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,6 +61,7 @@ public final class CompanionApp {
     private static CompanionSession session;
     private static CompanionLaunchConfiguration launchConfiguration;
     private static volatile CompanionProfile profile;
+    private static volatile CompanionDecompilationService decompilationService;
     private static volatile ReferenceSearchService referenceSearchService;
     private static volatile boolean uiStarted;
 
@@ -131,6 +137,7 @@ public final class CompanionApp {
             if (session != null) {
                 session.close();
             }
+            closeDecompilationService();
             closeReferenceSearchService();
             CompanionClassIndex.close();
             stopUiAfterFailure();
@@ -186,21 +193,55 @@ public final class CompanionApp {
         boolean sameSnapshot = current != null
                 && current.id().equals(requested.id())
                 && current.runtimeSignature().equals(requested.runtimeSignature())
+                && current.dataDirectory().equals(requested.dataDirectory())
                 && current.indexFile().equals(requested.indexFile())
                 && current.runtimeSourceManifest().equals(requested.runtimeSourceManifest());
 
+        List<Path> runtimeSources = !sameSnapshot || decompilationService == null
+                ? RuntimeSourceManifest.read(requested.runtimeSourceManifest())
+                : null;
+        ClassIndex replacementIndex = null;
         if (!sameSnapshot) {
             try {
-                CompanionClassIndex.replace(requested.indexFile());
+                replacementIndex = ClassIndex.fromFile(requested.indexFile().toString());
             } catch (RuntimeException exception) {
                 throw new IOException("Unable to open the class index", exception);
             }
+        }
+        CompanionDecompilationService replacementDecompilation = null;
+        try {
+            if (runtimeSources != null) {
+                ClassIndex decompilationIndex = replacementIndex == null
+                        ? CompanionClassIndex.get()
+                        : replacementIndex;
+                replacementDecompilation = new CompanionDecompilationService(
+                        requested.runtimeSignature(),
+                        requested.dataDirectory(),
+                        new RuntimeSnapshotBytecodeSource(runtimeSources, decompilationIndex)
+                );
+            }
+        } catch (IOException | RuntimeException exception) {
+            if (replacementIndex != null) {
+                replacementIndex.close();
+            }
+            throw exception;
+        }
+        if (replacementIndex != null) {
+            closeDecompilationService();
+            CompanionClassIndex.replace(replacementIndex);
         }
         if (referenceSearchService == null) {
             referenceSearchService = new ReferenceSearchService(CompanionClassIndex::get);
         }
 
         profile = requested;
+        if (replacementDecompilation != null) {
+            CompanionDecompilationService previous = decompilationService;
+            decompilationService = replacementDecompilation;
+            if (previous != null) {
+                previous.close();
+            }
+        }
         setupDataDirectories();
         if (persist) {
             requested.writeAtomically(launchConfiguration.profileFile());
@@ -368,6 +409,14 @@ public final class CompanionApp {
         return current != null && current.send(message);
     }
 
+    public static void openClass(String binaryName) {
+        openClass(binaryName, -1, "");
+    }
+
+    public static void openClass(String binaryName, int targetType, String targetIdentifier) {
+        getDecompilationService().openClass(binaryName, targetType, targetIdentifier);
+    }
+
     public static Path getRootPath() {
         return requireProfile().dataDirectory();
     }
@@ -392,6 +441,14 @@ public final class CompanionApp {
         return service;
     }
 
+    public static CompanionDecompilationService getDecompilationService() {
+        CompanionDecompilationService service = decompilationService;
+        if (service == null) {
+            throw new IllegalStateException("Decompilation is unavailable");
+        }
+        return service;
+    }
+
     private static CompanionProfile requireProfile() {
         CompanionProfile current = profile;
         if (current == null) {
@@ -403,6 +460,14 @@ public final class CompanionApp {
     private static void closeReferenceSearchService() {
         ReferenceSearchService service = referenceSearchService;
         referenceSearchService = null;
+        if (service != null) {
+            service.close();
+        }
+    }
+
+    private static void closeDecompilationService() {
+        CompanionDecompilationService service = decompilationService;
+        decompilationService = null;
         if (service != null) {
             service.close();
         }

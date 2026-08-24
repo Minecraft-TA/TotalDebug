@@ -20,7 +20,10 @@ public class CodeView implements IEditorPanel {
     public CodeView(Path path, int offset) {
         this.path = path;
         this.codeViewPanel = new CodeViewPanel(this);
+        reload(offset);
+    }
 
+    public void reload(int offset) {
         CompletableFuture.runAsync(() -> {
             try {
                 var code = readCode(this.path);

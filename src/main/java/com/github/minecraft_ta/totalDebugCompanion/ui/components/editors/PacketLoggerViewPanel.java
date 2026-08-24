@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.formdev.flatlaf.extras.components.FlatComboBox;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.*;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
@@ -226,7 +225,7 @@ public class PacketLoggerViewPanel extends JPanel {
             int row = table.getSelectedRow();
             if (row != -1) {
                 String packet = (String) table.getValueAt(row, 0);
-                CompanionApp.send(new DecompileOrOpenMessage(packet));
+                CompanionApp.openClass(packet);
             }
         });
         popup.add(decompile);

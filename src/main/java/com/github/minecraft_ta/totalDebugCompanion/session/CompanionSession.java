@@ -6,7 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridD
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridRequestInfoUpdateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.UpdateFollowPlayerStateMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.OpenClassMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.BlockPacketMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.CapturePacketMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.ChannelListMessage;
@@ -122,7 +122,11 @@ public final class CompanionSession implements AutoCloseable {
 
     private void registerMessages() {
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.READY, ReadyMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.DECOMPILE_OR_OPEN, DecompileOrOpenMessage.class, DecompileOrOpenMessage::new);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.OPEN_CLASS,
+                OpenClassMessage.class,
+                OpenClassMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.OPEN_SEARCH_RESULTS, OpenSearchResultsMessage.class, OpenSearchResultsMessage::new);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.RECEIVE_DATA_STATE, ReceiveDataStateMessage.class);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.CHUNK_GRID_DATA, ChunkGridDataMessage.class, ChunkGridDataMessage::new);
@@ -147,10 +151,10 @@ public final class CompanionSession implements AutoCloseable {
 
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
-        this.server.getMessageBus().listenAlways(DecompileOrOpenMessage.class, message -> runFeature(
+        this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> runFeature(
                 CompanionProtocol.CAPABILITY_CODE_VIEW,
-                "DecompileOrOpen",
-                () -> DecompileOrOpenMessage.handle(message)
+                "OpenClass",
+                () -> OpenClassMessage.handle(message)
         ));
         this.server.getMessageBus().listenAlways(OpenSearchResultsMessage.class, message -> runFeature(
                 CompanionProtocol.CAPABILITY_SEARCH_RESULTS,

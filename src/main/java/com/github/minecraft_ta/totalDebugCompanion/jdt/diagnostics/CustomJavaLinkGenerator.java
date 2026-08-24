@@ -2,8 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.JavaModelException;
@@ -19,11 +17,9 @@ import javax.swing.event.HyperlinkEvent;
 public class CustomJavaLinkGenerator implements LinkGenerator {
 
     private final String identifier;
-    private final BottomInformationBar informationBar;
 
-    public CustomJavaLinkGenerator(String identifier, BottomInformationBar informationBar) {
+    public CustomJavaLinkGenerator(String identifier) {
         this.identifier = identifier;
-        this.informationBar = informationBar;
     }
 
     @Override
@@ -54,11 +50,6 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
         @Override
         public HyperlinkEvent execute() {
-            if (!CompanionApp.SERVER.isClientConnected()) {
-                informationBar.setFailureInfoText("Not connected to game client!");
-                return null;
-            }
-
             try {
                 if (el instanceof LocalVariable || el instanceof SourceMethod || el instanceof SourceField || el instanceof SourceType) {
                     var sourceRange = switch (el) {
@@ -99,7 +90,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                 }
 
-                CompanionApp.send(new DecompileOrOpenMessage(className, targetMemberType, targetMemberIdentifier));
+                CompanionApp.openClass(className, targetMemberType, targetMemberIdentifier);
             } catch (JavaModelException e) {
                 e.printStackTrace();
             }

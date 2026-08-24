@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -177,7 +176,7 @@ public class SearchEverywherePopup extends JFrame {
         if (index < 0)
             return;
 
-        CompanionApp.send(new DecompileOrOpenMessage(resultList.getModel().getElementAt(index).getNameWithPackageDot()));
+        CompanionApp.openClass(resultList.getModel().getElementAt(index).getNameWithPackageDot());
         setVisible(false);
     }
 

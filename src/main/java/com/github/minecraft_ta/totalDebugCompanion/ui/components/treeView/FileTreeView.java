@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.DecompileOrOpenMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
@@ -67,7 +66,7 @@ public class FileTreeView extends JScrollPane {
                 while (!((node = node.getParent()).getUserObject() instanceof ZipFileRootItem)) {
                     fullName.insert(0, '.').insert(0, node.getUserObject().getName());
                 }
-                CompanionApp.send(new DecompileOrOpenMessage(fullName.toString()));
+                CompanionApp.openClass(fullName.toString());
             }
         });
 

@@ -67,7 +67,7 @@ public class AbstractCodeViewPanel extends JPanel {
         this.editorPane.setAnimateBracketMatching(false);
         this.editorPane.setPaintMatchedBracketPair(true);
         this.editorPane.setMatchedBracketBorderColor(null);
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, this.bottomInformationBar));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier));
         this.editorPane.addHyperlinkListener(e -> {}); //Empty listener to circumvent RSyntaxTextArea bug
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) e -> {
             if (e.getType() == DocumentEvent.EventType.CHANGE)

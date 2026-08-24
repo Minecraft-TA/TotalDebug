@@ -264,12 +264,11 @@ public final class UsagesViewPanel extends JPanel {
         if (!(nodeValue instanceof UsageNode usage)) {
             return;
         }
-        if (CompanionApp.SERVER == null || !CompanionApp.SERVER.isClientConnected()) {
-            this.statusLabel.setText("Not connected to the game client");
-            return;
-        }
-        CompanionApp.send(
-                ReferenceNavigationTarget.from(usage.location()).toMessage()
+        ReferenceNavigationTarget target = ReferenceNavigationTarget.from(usage.location());
+        CompanionApp.openClass(
+                target.className(),
+                target.elementType(),
+                target.identifier()
         );
     }
 
