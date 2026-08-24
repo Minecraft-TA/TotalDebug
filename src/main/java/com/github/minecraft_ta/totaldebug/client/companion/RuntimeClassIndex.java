@@ -38,7 +38,7 @@ final class RuntimeClassIndex {
     private static final String INDEXES_DIRECTORY_NAME = "indexes";
     private static final String RUNTIME_SOURCES_DIRECTORY_NAME = "runtime-sources";
     private static final String RUNTIME_SOURCES_MANIFEST_NAME = "sources.txt";
-    private static final String INDEX_FORMAT_VERSION = "2";
+    private static final String INDEX_FORMAT_VERSION = "3";
 
     private final Path dataDirectory;
     private String ensuredSignature;
