@@ -37,6 +37,14 @@ Build a matching pair for an external Minecraft instance with:
 
 The task builds the sibling Companion shadow JAR, embeds its SHA-256 in TotalDebug, verifies the match, and writes both JARs to `build/local-companion-pair`.
 
+Install that verified Companion build as the MCP sidecar used by new Codex tasks with:
+
+```powershell
+.\gradlew.bat installCodexCompanionMcp
+```
+
+The task copies the Companion JAR to the stable Codex-owned path `%USERPROFILE%\.codex\mcp\totaldebug-companion\TotalDebugCompanion.jar`. Moving either repository afterward does not affect Codex. Rebuilding alone does not replace the installed copy; rerun the install task after Companion MCP changes. Override the Codex directory with `-PcodexHome=C:\path\to\.codex` or the `CODEX_HOME` environment variable.
+
 TotalDebug installs Companion builds side by side by content hash. F6 reuses a compatible running Companion or starts one when needed. Closing Minecraft disconnects the live tools but leaves the Companion and its current workspace open Offline.
 
 Pass an explicit JAR to override the sibling checkout:

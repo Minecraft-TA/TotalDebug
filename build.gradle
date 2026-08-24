@@ -103,6 +103,9 @@ def explicitCompanionJar = providers.gradleProperty('totaldebugCompanionJar')
 def usePublishedCompanion = providers.gradleProperty('totaldebugUsePublishedCompanion')
         .map { value -> value.toBoolean() }
         .orElse(false)
+def codexHome = providers.gradleProperty('codexHome')
+        .orElse(providers.environmentVariable('CODEX_HOME'))
+        .orElse(providers.systemProperty('user.home').map { home -> "${home}/.codex" })
 def siblingCompanionDirectory = layout.projectDirectory.dir('../TotalDebugCompanion')
 def siblingCompanionBuildFile = siblingCompanionDirectory.file('build.gradle')
 def siblingCompanionWrapper = siblingCompanionDirectory.file(
@@ -246,13 +249,21 @@ tasks.named('check').configure {
 }
 
 if (pairedCompanionJar != null) {
-    tasks.register('localCompanionPair', Sync) {
+    def localCompanionPair = tasks.register('localCompanionPair', Sync) {
         group = 'build'
         description = 'Builds and collects matching local TotalDebug and Companion JARs.'
         dependsOn verifyCompanionPair
         from(modJar.flatMap { it.archiveFile })
         from(pairedCompanionJar)
         into(layout.buildDirectory.dir('local-companion-pair'))
+    }
+
+    tasks.register('installCodexCompanionMcp', Copy) {
+        group = 'development'
+        description = 'Builds a verified local pair and installs the Companion MCP sidecar for Codex.'
+        dependsOn localCompanionPair
+        from(layout.buildDirectory.file('local-companion-pair/TotalDebugCompanion.jar'))
+        into(codexHome.map { home -> new File(home, 'mcp/totaldebug-companion') })
     }
 }
 
