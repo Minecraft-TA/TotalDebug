@@ -80,12 +80,15 @@ public class EditorTabs extends JTabbedPane {
         for (IEditorPanel editor : editors) {
             if (clazz.isAssignableFrom(editor.getClass()) && filter.test((T) editor)) {
                 setSelectedIndex(this.editors.indexOf(editor));
-                return CompletableFuture.completedFuture((T) editor);
+                T matchingEditor = (T) editor;
+                return matchingEditor.ready().thenApply(ignored -> matchingEditor);
             }
         }
 
         var tab = supplier.get();
-        return openEditorTab(tab).thenApply(v -> tab);
+        return openEditorTab(tab)
+                .thenCompose(ignored -> tab.ready())
+                .thenApply(ignored -> tab);
     }
 
     public IEditorPanel getSelectedEditor() {

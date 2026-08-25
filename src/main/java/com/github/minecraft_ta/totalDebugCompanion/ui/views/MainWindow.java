@@ -41,6 +41,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private SearchEverywherePopup searchEverywherePopup;
 
     private MainWindow() {
+        setAutoRequestFocus(false);
+
         var root = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT) {
             @Override
             protected void paintChildren(Graphics graphics) {

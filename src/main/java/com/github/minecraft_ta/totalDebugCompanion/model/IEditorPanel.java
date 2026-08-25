@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomIn
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.concurrent.CompletableFuture;
 
 public interface IEditorPanel {
 
@@ -14,6 +15,10 @@ public interface IEditorPanel {
     Icon getIcon();
 
     Component getComponent();
+
+    default CompletableFuture<Void> ready() {
+        return CompletableFuture.completedFuture(null);
+    }
 
     default EditorLocation getLocation() {
         return EditorLocation.empty();

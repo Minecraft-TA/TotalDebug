@@ -12,13 +12,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 public class CodeView implements IEditorPanel {
 
     private final Path path;
     private final EditorLocation location;
     private final CodeViewPanel codeViewPanel;
+    private volatile CompletableFuture<Void> ready = CompletableFuture.completedFuture(null);
 
     public CodeView(Path path, int offset) {
         this(path, offset, EditorLocation.forFile(path, CompanionApp.getWorkspaceDirectory()));
@@ -31,22 +31,24 @@ public class CodeView implements IEditorPanel {
         reload(offset);
     }
 
-    public void reload(int offset) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                var code = readCode(this.path);
-
-                SwingUtilities.invokeLater(() -> {
-                    codeViewPanel.setCode(code);
-                    codeViewPanel.centerViewportOnOffset(offset);
-                });
-            } catch (Exception e) {
-                throw new CompletionException(e);
-            }
-        }).exceptionally(e -> {
-            e.printStackTrace();
+    public CompletableFuture<Void> reload(int offset) {
+        CompletableFuture<Void> task = CompletableFuture
+                .supplyAsync(() -> readCode(this.path))
+                .thenAcceptAsync(code -> {
+                    this.codeViewPanel.setCode(code);
+                    this.codeViewPanel.centerViewportOnOffset(offset);
+                }, SwingUtilities::invokeLater);
+        this.ready = task;
+        task.exceptionally(failure -> {
+            failure.printStackTrace();
             return null;
         });
+        return task;
+    }
+
+    @Override
+    public CompletableFuture<Void> ready() {
+        return this.ready;
     }
 
     /**
