@@ -29,7 +29,6 @@ class CompanionDefaultsAddonTest {
         assertEquals(2, UIManager.get("TabbedPane.tabSelectionHeight"));
         assertEquals(1, UIManager.get("TabbedPane.contentSeparatorHeight"));
         assertEquals(Boolean.FALSE, UIManager.get("TitlePane.unifiedBackground"));
-        assertNotNull(UIManager.getBorder("MenuBar.border"));
         assertEquals("filled", UIManager.get("CheckBox.icon.style"));
         assertEquals("filled", UIManager.get("RadioButton.icon.style"));
         assertEquals(
@@ -58,7 +57,6 @@ class CompanionDefaultsAddonTest {
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
         assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"));
         assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"));
-        assertNotNull(UIManager.getBorder("MenuBar.border"));
         assertTrue(UIManager.getInsets("TabbedPane.tabInsets").left == 10);
         assertEquals(
                 UIManager.getColor("Component.accentColor"),

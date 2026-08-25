@@ -6,11 +6,11 @@ import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.WorkspacePanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
@@ -43,31 +43,17 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private MainWindow() {
         setAutoRequestFocus(false);
 
-        var root = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT) {
-            @Override
-            protected void paintChildren(Graphics graphics) {
-                super.paintChildren(graphics);
-                Color previous = graphics.getColor();
-                graphics.setColor(ThemeColors.separator());
-                int separatorX = getDividerLocation() + getDividerSize() / 2;
-                graphics.fillRect(separatorX, 0, 1, getHeight());
-                graphics.setColor(previous);
-            }
-        };
-
         this.fileTreeView = new FileTreeView(this.editorTabs);
-        root.setLeftComponent(UIUtils.verticalLayout(new FileTreeViewHeader(), this.fileTreeView));
-        root.setRightComponent(this.editorTabs);
-        root.setBorder(BorderFactory.createEmptyBorder());
-        root.setDividerSize(7);
-        root.setDividerLocation(350);
-        root.setOneTouchExpandable(false);
-
-        getContentPane().add(root, BorderLayout.CENTER);
-        getContentPane().add(this.statusBar, BorderLayout.SOUTH);
+        getContentPane().add(new WorkspacePanel(
+                new FileTreeViewHeader(),
+                this.fileTreeView,
+                this.editorTabs,
+                this.statusBar
+        ), BorderLayout.CENTER);
         this.editorTabs.addSelectedEditorListener(this.statusBar::setEditor);
 
         var menuBar = new JMenuBar();
+        menuBar.setBorder(BorderFactory.createEmptyBorder());
 
         var fileMenu = new JMenu("File");
         fileMenu.add(new AbstractAction("Settings...", Icons.SETTINGS) {

@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.BorderFactory;
@@ -42,10 +41,7 @@ public final class ApplicationStatusBar extends JPanel {
 
     public ApplicationStatusBar() {
         setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
-        setBorder(BorderFactory.createCompoundBorder(
-                DynamicMatteBorder.separatorRule(1, 0, 0, 0),
-                BorderFactory.createEmptyBorder(2, 7, 0, 5)
-        ));
+        setBorder(BorderFactory.createEmptyBorder(2, 7, 0, 5));
         setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
         setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 

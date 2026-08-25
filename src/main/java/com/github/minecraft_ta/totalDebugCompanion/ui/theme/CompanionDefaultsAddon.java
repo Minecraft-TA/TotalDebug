@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 import com.formdev.flatlaf.FlatDefaultsAddon;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SimpleMenuBarBorder;
 
 import javax.swing.BorderFactory;
 import javax.swing.LookAndFeel;
@@ -58,7 +57,6 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         );
 
         defaults.put("TitlePane.unifiedBackground", false);
-        defaults.put("MenuBar.border", new SimpleMenuBarBorder());
 
         applyUiFontSize(defaults);
     }
