@@ -118,13 +118,31 @@ public final class UiDevHarness {
                 }
 
                 class OverrideBase {
-                    public void overrideMe() {
+                    public void overrideMe(
+                            ThemeSample first,
+                            ThemeSample second,
+                            ThemeSample third,
+                            ThemeSample fourth,
+                            ThemeSample fifth,
+                            ThemeSample sixth,
+                            ThemeSample seventh,
+                            ThemeSample eighth
+                    ) {
                     }
                 }
 
                 final class OverrideChild extends OverrideBase {
                     @Override
-                    public void overrideMe() {
+                    public void overrideMe(
+                            ThemeSample first,
+                            ThemeSample second,
+                            ThemeSample third,
+                            ThemeSample fourth,
+                            ThemeSample fifth,
+                            ThemeSample sixth,
+                            ThemeSample seventh,
+                            ThemeSample eighth
+                    ) {
                     }
                 }
                 """ + "\n".repeat(20), java.nio.charset.StandardCharsets.UTF_8);
@@ -579,6 +597,80 @@ public final class UiDevHarness {
         timer.start();
     }
 
+    private static void scheduleHierarchyRowLayoutVerification() {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+            HierarchyPreviewPopup popup = Arrays.stream(java.awt.Window.getWindows())
+                    .filter(HierarchyPreviewPopup.class::isInstance)
+                    .map(HierarchyPreviewPopup.class::cast)
+                    .filter(java.awt.Window::isShowing)
+                    .findFirst()
+                    .orElse(null);
+            javax.swing.JLabel declaration = popup == null
+                    ? null
+                    : findLabelContaining(popup, "OverrideChild.overrideMe");
+            if (declaration != null) {
+                ((javax.swing.Timer) event.getSource()).stop();
+                Container row = declaration.getParent();
+                javax.swing.JLabel module = Arrays.stream(row.getComponents())
+                        .filter(javax.swing.JLabel.class::isInstance)
+                        .map(javax.swing.JLabel.class::cast)
+                        .filter(label -> label != declaration)
+                        .findFirst()
+                        .orElseThrow();
+                int declarationBaseline = declaration.getY()
+                        + declaration.getBaseline(declaration.getWidth(), declaration.getHeight());
+                int moduleBaseline = module.getY() + module.getBaseline(module.getWidth(), module.getHeight());
+                if (declaration.getPreferredSize().height > declaration.getHeight()
+                        || module.getPreferredSize().height > module.getHeight()
+                        || declaration.getY() + declaration.getHeight() > row.getHeight()
+                        || module.getY() + module.getHeight() > row.getHeight()
+                        || Math.abs(declarationBaseline - moduleBaseline) > 2) {
+                    System.err.printf(
+                            "HIERARCHY_ROW_LAYOUT_CLIPPED: row=%s declaration=%s preferred=%s baseline=%d "
+                                    + "module=%s preferred=%s baseline=%d%n",
+                            row.getSize(),
+                            declaration.getSize(),
+                            declaration.getPreferredSize(),
+                            declarationBaseline,
+                            module.getSize(),
+                            module.getPreferredSize(),
+                            moduleBaseline
+                    );
+                    MainWindow.INSTANCE.dispose();
+                    System.exit(4);
+                }
+                System.out.println("HIERARCHY_ROW_LAYOUT_OK");
+                MainWindow.INSTANCE.dispose();
+                System.exit(0);
+            }
+            if (System.nanoTime() >= deadline) {
+                ((javax.swing.Timer) event.getSource()).stop();
+                System.err.println("HIERARCHY_ROW_LAYOUT_MISSED");
+                MainWindow.INSTANCE.dispose();
+                System.exit(2);
+            }
+        });
+        timer.start();
+    }
+
+    private static javax.swing.JLabel findLabelContaining(Container root, String expectedText) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof javax.swing.JLabel label
+                    && label.getText() != null
+                    && label.getText().contains(expectedText)) {
+                return label;
+            }
+            if (component instanceof Container child) {
+                javax.swing.JLabel match = findLabelContaining(child, expectedText);
+                if (match != null) {
+                    return match;
+                }
+            }
+        }
+        return null;
+    }
+
     private static void dispatchMouseMove(Component component, Point point) {
         component.dispatchEvent(new MouseEvent(
                 component,
@@ -665,7 +757,8 @@ public final class UiDevHarness {
                 || Arrays.asList(args).contains("--verify-code-vision-click")
                 || Arrays.asList(args).contains("--verify-gutter-click")
                 || Arrays.asList(args).contains("--verify-gutter-direct")
-                || Arrays.asList(args).contains("--verify-gutter-hover");
+                || Arrays.asList(args).contains("--verify-gutter-hover")
+                || Arrays.asList(args).contains("--verify-hierarchy-row-layout");
         CompanionApp.configureLookAndFeel();
 
         System.out.println("UI dev harness data directory: " + root);
@@ -716,15 +809,19 @@ public final class UiDevHarness {
             boolean hoverGutter = Arrays.asList(args).contains("--hover-gutter");
             boolean hoverOverrideGutter = Arrays.asList(args).contains("--hover-override-gutter");
             boolean verifyGutterHover = Arrays.asList(args).contains("--verify-gutter-hover");
-            if (hoverGutter || hoverOverrideGutter || verifyGutterHover) {
+            boolean verifyHierarchyRowLayout = Arrays.asList(args).contains("--verify-hierarchy-row-layout");
+            if (hoverGutter || hoverOverrideGutter || verifyGutterHover || verifyHierarchyRowLayout) {
                 String source = CodeView.readCode(sample);
-                int declarationOffset = hoverOverrideGutter
+                int declarationOffset = hoverOverrideGutter || verifyHierarchyRowLayout
                         ? source.indexOf(
-                                "public void overrideMe()",
+                                "public void overrideMe(",
                                 source.indexOf("class OverrideBase")
                         )
                         : source.indexOf("public interface ThemeSample");
                 scheduleGutterHover(source, declarationOffset, verifyGutterHover);
+                if (verifyHierarchyRowLayout) {
+                    scheduleHierarchyRowLayoutVerification();
+                }
             }
             if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
                 startThemeCycling();

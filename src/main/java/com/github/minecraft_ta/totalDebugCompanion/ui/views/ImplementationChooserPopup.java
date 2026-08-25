@@ -452,7 +452,8 @@ public final class ImplementationChooserPopup extends BasePopup {
         String packageName = packageName(owner);
         return packageName.isEmpty()
                 ? primary
-                : "<html>" + primary + " <span style='color:#8c8f94'>" + packageName + "</span></html>";
+                : "<html><nobr>" + primary + " <span style='color:#8c8f94'>"
+                        + packageName + "</span></nobr></html>";
     }
 
     static Icon symbolIcon(CodeSymbol symbol) {

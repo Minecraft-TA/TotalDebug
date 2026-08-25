@@ -165,11 +165,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
         if (marker == null || point == null) {
             return;
         }
-        int lineHeight = this.iconRowHeader.getFontMetrics(this.gutter.getLineNumberFont()).getHeight();
-        Point popupPoint = new Point(
-                this.iconRowHeader.getWidth() + 8,
-                point.y + Math.max(8, lineHeight / 2) + 3
-        );
+        Point popupPoint = new Point(this.iconRowHeader.getWidth() + 8, point.y + 4);
         this.handler.preview(
                 marker.declaration(),
                 marker.relation(),
