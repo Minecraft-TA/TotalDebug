@@ -11,15 +11,8 @@ import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompil
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -29,11 +22,9 @@ import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String CACHE_FORMAT = "1";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-1";
 
-    private final String runtimeSignature;
-    private final Path outputDirectory;
-    private final Path cacheDirectory;
+    private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
     private final JavaDecompiler javaDecompiler;
     private final ExecutorService worker;
@@ -54,22 +45,17 @@ public final class CompanionDecompilationService implements AutoCloseable {
             RuntimeSnapshotBytecodeSource bytecodeSource,
             JavaDecompiler javaDecompiler
     ) throws IOException {
-        this.runtimeSignature = requireNonBlank(runtimeSignature, "runtimeSignature");
-        Path root = Objects.requireNonNull(dataDirectory, "dataDirectory").toAbsolutePath().normalize();
-        this.outputDirectory = root.resolve("decompiled-files");
-        Path cacheRoot = root.resolve(".decompiler-cache");
-        this.cacheDirectory = cacheRoot.resolve(this.runtimeSignature).resolve(CACHE_FORMAT).normalize();
-        if (!this.cacheDirectory.startsWith(cacheRoot)) {
-            throw new IllegalArgumentException("runtimeSignature is not a safe cache key");
-        }
+        this.sourceStore = DecompiledSourceStore.open(
+                dataDirectory,
+                requireNonBlank(runtimeSignature, "runtimeSignature"),
+                DECOMPILER_FORMAT
+        );
         this.bytecodeSource = Objects.requireNonNull(bytecodeSource, "bytecodeSource");
         this.javaDecompiler = Objects.requireNonNull(javaDecompiler, "javaDecompiler");
         this.worker = Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
                 .daemon()
                 .name("Companion decompiler")
                 .unstarted(task));
-        Files.createDirectories(this.outputDirectory);
-        Files.createDirectories(this.cacheDirectory);
     }
 
     public CompletableFuture<Path> openClass(String binaryName, int targetType, String targetIdentifier) {
@@ -125,10 +111,18 @@ public final class CompanionDecompilationService implements AutoCloseable {
 
     CompletableFuture<Path> decompile(String binaryName) {
         ensureOpen();
+        Path cached = this.sourceStore.find(binaryName);
+        if (cached != null) {
+            return CompletableFuture.completedFuture(cached);
+        }
         synchronized (this.inFlightRequests) {
             CompletableFuture<Path> existing = this.inFlightRequests.get(binaryName);
             if (existing != null && !existing.isDone()) {
                 return existing;
+            }
+            cached = this.sourceStore.find(binaryName);
+            if (cached != null) {
+                return CompletableFuture.completedFuture(cached);
             }
 
             CompletableFuture<Path> task = CompletableFuture.supplyAsync(() -> {
@@ -149,19 +143,6 @@ public final class CompanionDecompilationService implements AutoCloseable {
     }
 
     private Path decompileNow(String binaryName) throws IOException {
-        byte[] targetBytes = this.bytecodeSource.findClassBytes(binaryName);
-        if (targetBytes == null) {
-            throw new IOException("Class not found in runtime snapshot: " + binaryName);
-        }
-
-        String bytecodeHash = sha256(targetBytes);
-        Path cacheFile = this.cacheDirectory.resolve(bytecodeHash).resolve(binaryName + ".java");
-        Path outputFile = this.outputDirectory.resolve(binaryName + ".java");
-        if (Files.isRegularFile(cacheFile)) {
-            writeAtomically(outputFile, Files.readString(cacheFile, StandardCharsets.UTF_8));
-            return outputFile;
-        }
-
         DecompilationResult result = this.javaDecompiler.decompile(binaryName, this.bytecodeSource);
         for (DecompilerDiagnostic diagnostic : result.diagnostics()) {
             System.err.println("Vineflower " + diagnostic.severity().name().toLowerCase()
@@ -170,39 +151,10 @@ public final class CompanionDecompilationService implements AutoCloseable {
         if (!result.isComplete()) {
             throw new IOException("Vineflower produced partial source for " + binaryName);
         }
-
-        Files.createDirectories(cacheFile.getParent());
-        writeAtomically(cacheFile, result.source());
-        writeAtomically(outputFile, result.source());
-        return outputFile;
-    }
-
-    private static void writeAtomically(Path target, String content) throws IOException {
-        Files.createDirectories(Objects.requireNonNull(target.getParent(), "target has no parent"));
-        Path staged = Files.createTempFile(target.getParent(), ".decompiled-", ".tmp");
-        try {
-            Files.writeString(staged, content, StandardCharsets.UTF_8);
-            try {
-                Files.move(
-                        staged,
-                        target,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING
-                );
-            } catch (AtomicMoveNotSupportedException exception) {
-                Files.move(staged, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(staged);
+        if (this.closed) {
+            throw new IOException("Decompilation service closed before source could be stored");
         }
-    }
-
-    private static String sha256(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
+        return this.sourceStore.write(binaryName, result.source());
     }
 
     private static String requireBinaryName(String binaryName) {

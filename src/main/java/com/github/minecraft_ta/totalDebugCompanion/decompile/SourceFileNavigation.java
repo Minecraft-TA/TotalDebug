@@ -77,7 +77,7 @@ final class SourceFileNavigation {
                     }
             ).thenAccept(codeView -> {
                 if (!created.get()) {
-                    codeView.reload(offset);
+                    codeView.centerViewportOnOffset(offset);
                 }
                 UIUtils.focusWindow(window);
             });

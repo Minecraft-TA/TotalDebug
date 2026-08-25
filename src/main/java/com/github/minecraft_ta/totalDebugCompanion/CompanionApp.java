@@ -276,6 +276,7 @@ public final class CompanionApp {
 
     private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot) {
         CompanionProfile current = requireProfile();
+        closeDecompilationService();
         CompanionDecompilationService replacement;
         try {
             replacement = new CompanionDecompilationService(
@@ -287,7 +288,6 @@ public final class CompanionApp {
             throw new IllegalStateException("Unable to activate the runtime class index", exception);
         }
 
-        closeDecompilationService();
         closeReferenceSearchService();
         RuntimeSourceCatalog sourceCatalog = new RuntimeSourceCatalog(snapshot.sources());
         CodeInsightService currentInsightService = codeInsightService;

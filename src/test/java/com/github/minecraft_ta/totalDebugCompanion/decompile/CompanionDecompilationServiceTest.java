@@ -13,9 +13,13 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompanionDecompilationServiceTest {
@@ -23,9 +27,9 @@ class CompanionDecompilationServiceTest {
     Path temporaryDirectory;
 
     @Test
-    void reusesThePersistentSignatureAndBytecodeCache() throws Exception {
+    void reusesTheAuthoritativeDecompiledSourceCache() throws Exception {
         byte[] bytes = classBytes(CacheFixture.class);
-        Path classes = writeClass(bytes);
+        Path classes = writeClass(CacheFixture.class, bytes);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
             RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(
                     List.of(classes),
@@ -38,6 +42,10 @@ class CompanionDecompilationServiceTest {
                 assertEquals(firstOutput, service.decompile(CacheFixture.class.getName()).join());
             }
             assertEquals(1, firstRuns.get());
+            assertEquals(
+                    this.temporaryDirectory.resolve("data/decompiled-files/" + CacheFixture.class.getName() + ".java"),
+                    firstOutput
+            );
             assertTrue(Files.readString(firstOutput).contains("first"));
 
             AtomicInteger secondRuns = new AtomicInteger();
@@ -46,14 +54,90 @@ class CompanionDecompilationServiceTest {
             }
             assertEquals(0, secondRuns.get());
             assertTrue(Files.readString(firstOutput).contains("first"));
+        }
+    }
 
-            writeClass(new byte[]{9, 8, 7});
-            AtomicInteger changedRuns = new AtomicInteger();
-            try (CompanionDecompilationService service = service(bytecodeSource, changedRuns, "changed")) {
-                assertEquals(firstOutput, service.decompile(CacheFixture.class.getName()).join());
+    @Test
+    void changingRuntimeInvalidatesTheVisibleDecompiledSources() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
+            RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
+            Path output;
+            try (CompanionDecompilationService service = service(
+                    "first-runtime",
+                    bytecodeSource,
+                    new AtomicInteger(),
+                    "first"
+            )) {
+                output = service.decompile(CacheFixture.class.getName()).join();
+                assertTrue(Files.isRegularFile(output));
             }
-            assertEquals(1, changedRuns.get());
-            assertTrue(Files.readString(firstOutput).contains("changed"));
+
+            try (CompanionDecompilationService ignored = service(
+                    "second-runtime",
+                    bytecodeSource,
+                    new AtomicInteger(),
+                    "second"
+            )) {
+                assertFalse(Files.exists(output));
+            }
+        }
+    }
+
+    @Test
+    void cachedClassDoesNotWaitBehindAColdDecompilation() throws Exception {
+        byte[] cachedBytes = classBytes(CacheFixture.class);
+        byte[] coldBytes = classBytes(ColdFixture.class);
+        Path classes = writeClass(CacheFixture.class, cachedBytes);
+        writeClass(ColdFixture.class, coldBytes);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(
+                IndexSource.classFile(0, cachedBytes),
+                IndexSource.classFile(0, coldBytes)
+        ))) {
+            RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
+            try (CompanionDecompilationService service = service(
+                    bytecodeSource,
+                    new AtomicInteger(),
+                    "cached"
+            )) {
+                service.decompile(CacheFixture.class.getName()).join();
+            }
+
+            CountDownLatch coldStarted = new CountDownLatch(1);
+            CountDownLatch releaseCold = new CountDownLatch(1);
+            JavaDecompiler blockingDecompiler = (binaryName, source) -> {
+                if (binaryName.equals(CacheFixture.class.getName())) {
+                    throw new AssertionError("A cached class reached the decompiler");
+                }
+                coldStarted.countDown();
+                try {
+                    if (!releaseCold.await(5, TimeUnit.SECONDS)) {
+                        throw new AssertionError("Timed out waiting to release the cold decompilation");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Cold decompilation was interrupted", exception);
+                }
+                return completeSource("cold");
+            };
+
+            try (CompanionDecompilationService service = new CompanionDecompilationService(
+                    "runtime-signature",
+                    this.temporaryDirectory.resolve("data"),
+                    bytecodeSource,
+                    blockingDecompiler
+            )) {
+                CompletableFuture<Path> cold = service.decompile(ColdFixture.class.getName());
+                assertTrue(coldStarted.await(1, TimeUnit.SECONDS));
+                try {
+                    Path cached = service.decompile(CacheFixture.class.getName()).get(1, TimeUnit.SECONDS);
+                    assertTrue(Files.readString(cached).contains("cached"));
+                } finally {
+                    releaseCold.countDown();
+                }
+                cold.join();
+            }
         }
     }
 
@@ -62,25 +146,38 @@ class CompanionDecompilationServiceTest {
             AtomicInteger runs,
             String marker
     ) throws IOException {
+        return service("runtime-signature", bytecodeSource, runs, marker);
+    }
+
+    private CompanionDecompilationService service(
+            String runtimeSignature,
+            RuntimeSnapshotBytecodeSource bytecodeSource,
+            AtomicInteger runs,
+            String marker
+    ) throws IOException {
         JavaDecompiler decompiler = (binaryName, source) -> {
             runs.incrementAndGet();
-            return new DecompilationResult(
-                    "package fixture; public class CacheFixture { String value = \"" + marker + "\"; }",
-                    DecompilationResult.Status.COMPLETE,
-                    List.of()
-            );
+            return completeSource(marker);
         };
         return new CompanionDecompilationService(
-                "runtime-signature",
+                runtimeSignature,
                 this.temporaryDirectory.resolve("data"),
                 bytecodeSource,
                 decompiler
         );
     }
 
-    private Path writeClass(byte[] bytes) throws IOException {
+    private static DecompilationResult completeSource(String marker) {
+        return new DecompilationResult(
+                "package fixture; public class CacheFixture { String value = \"" + marker + "\"; }",
+                DecompilationResult.Status.COMPLETE,
+                List.of()
+        );
+    }
+
+    private Path writeClass(Class<?> type, byte[] bytes) throws IOException {
         Path classes = this.temporaryDirectory.resolve("classes");
-        Path classFile = classes.resolve(CacheFixture.class.getName().replace('.', '/') + ".class");
+        Path classFile = classes.resolve(type.getName().replace('.', '/') + ".class");
         Files.createDirectories(classFile.getParent());
         Files.write(classFile, bytes);
         return classes;
@@ -97,5 +194,8 @@ class CompanionDecompilationServiceTest {
     }
 
     private static final class CacheFixture {
+    }
+
+    private static final class ColdFixture {
     }
 }
