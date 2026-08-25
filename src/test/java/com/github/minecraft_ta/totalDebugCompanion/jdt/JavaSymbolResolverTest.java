@@ -22,7 +22,10 @@ final class JavaSymbolResolverTest {
     private static final String SOURCE = """
             package example;
 
+            import java.util.List;
+
             final class Target {
+                List<String> imported;
                 String field;
 
                 Target(String name) {
@@ -46,7 +49,8 @@ final class JavaSymbolResolverTest {
     static void initializeClassIndex() throws IOException {
         CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
-                classBytes(String.class)
+                classBytes(String.class),
+                classBytes(List.class)
         )));
     }
 
@@ -55,6 +59,7 @@ final class JavaSymbolResolverTest {
         ASTCache.removeFromCache("symbols");
         ASTCache.removeFromCache("constructor");
         ASTCache.removeFromCache("local");
+        ASTCache.removeFromCache("navigation");
         CompanionClassIndex.close();
     }
 
@@ -103,6 +108,15 @@ final class JavaSymbolResolverTest {
 
         assertFalse(resolution.isResolved());
         assertTrue(resolution.unavailableReason().contains("Local-variable"));
+    }
+
+    @Test
+    void resolvesTheConcreteImportedTypeFromAPackageSegment() throws Exception {
+        String key = prepareAst("navigation");
+
+        String owner = JavaSymbolResolver.navigationOwnerClass(key, SOURCE.indexOf("java.util"));
+
+        assertEquals("java.util.List", owner);
     }
 
     private static String prepareAst(String key) throws InterruptedException {

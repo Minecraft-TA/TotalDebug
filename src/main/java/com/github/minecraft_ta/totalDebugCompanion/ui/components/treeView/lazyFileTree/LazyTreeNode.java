@@ -4,11 +4,28 @@ import javax.swing.tree.DefaultMutableTreeNode;
 
 public class LazyTreeNode extends DefaultMutableTreeNode {
 
+    private boolean childrenLoaded;
+
     LazyTreeNode(TreeItem treeItem) {
         super(treeItem);
 
-        if (treeItem.isDirectory() && !treeItem.isHiddenRoot())
+        this.childrenLoaded = !treeItem.isDirectory() || treeItem.isHiddenRoot();
+        if (!this.childrenLoaded)
             add(new DefaultMutableTreeNode("Loading..."));
+    }
+
+    boolean areChildrenLoaded() {
+        return this.childrenLoaded;
+    }
+
+    void markChildrenStale() {
+        this.childrenLoaded = false;
+    }
+
+    void replaceChildren(java.util.List<TreeItem> items) {
+        removeAllChildren();
+        items.forEach(item -> add(new LazyTreeNode(item)));
+        this.childrenLoaded = true;
     }
 
     @Override

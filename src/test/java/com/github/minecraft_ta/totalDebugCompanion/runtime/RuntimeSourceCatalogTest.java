@@ -23,9 +23,11 @@ class RuntimeSourceCatalogTest {
         ));
 
         assertEquals(List.of(alpha, zeta), catalog.modules());
+        assertEquals(Path.of("alpha.jar").toAbsolutePath().normalize(), catalog.sourceFor(2).path());
         assertArrayEquals(new int[]{2, 3, 4}, catalog.sourceIdsForModules(Set.of("zeta", "alpha")));
         assertArrayEquals(new int[0], catalog.sourceIdsForModules(Set.of()));
         assertThrows(IllegalArgumentException.class, () -> catalog.sourceIdsForModules(Set.of("missing")));
+        assertThrows(IllegalArgumentException.class, () -> catalog.sourceFor(99));
     }
 
     private static RuntimeSnapshotBytecodeSource.Source source(

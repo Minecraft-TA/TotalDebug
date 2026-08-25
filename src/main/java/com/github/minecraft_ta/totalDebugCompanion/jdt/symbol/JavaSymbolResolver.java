@@ -7,12 +7,14 @@ import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ConstructorInvocation;
 import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
 import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.IBinding;
+import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -57,6 +59,51 @@ public final class JavaSymbolResolver {
             return Resolution.unavailable("Java model is still loading");
         }
         return resolve(unit, offset);
+    }
+
+    /** Resolves the concrete class that owns a qualified package segment at an editor offset. */
+    public static String navigationOwnerClass(String editorIdentifier, int offset) {
+        CompilationUnit unit = ASTCache.getFromCache(editorIdentifier);
+        if (unit == null) {
+            return null;
+        }
+
+        ASTNode current = NodeFinder.perform(unit, offset, 0);
+        while (current != null) {
+            IBinding binding = switch (current) {
+                case Name name -> name.resolveBinding();
+                case ImportDeclaration declaration -> declaration.resolveBinding();
+                default -> null;
+            };
+            String owner = ownerClass(binding);
+            if (owner != null) {
+                return owner;
+            }
+            current = current.getParent();
+        }
+
+        for (Object declaration : unit.types()) {
+            if (declaration instanceof AbstractTypeDeclaration type) {
+                String owner = ownerClass(type.resolveBinding());
+                if (owner != null) {
+                    return owner;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String ownerClass(IBinding binding) {
+        try {
+            return switch (binding) {
+                case ITypeBinding type -> binaryName(type);
+                case IMethodBinding method -> binaryName(method.getDeclaringClass());
+                case IVariableBinding variable -> binaryName(variable.getDeclaringClass());
+                case null, default -> null;
+            };
+        } catch (UnresolvedBindingException ignored) {
+            return null;
+        }
     }
 
     static Resolution resolve(CompilationUnit unit, int offset) throws JavaModelException {

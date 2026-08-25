@@ -6,11 +6,11 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.JComponent;
 import javax.swing.JLayer;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.plaf.LayerUI;
 import javax.swing.text.BadLocationException;
 import java.awt.AWTEvent;
@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Paints clickable code-vision counts without inserting text into the decompiled document. */
-final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
+final class CodeVisionLayerUI extends LayerUI<JComponent> {
     interface Handler {
         void showUsages(CodeSymbol symbol);
 
@@ -53,7 +53,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
         this.handler = Objects.requireNonNull(handler, "handler");
     }
 
-    void setEntries(List<CodeVisionEntry> entries, JLayer<RTextScrollPane> layer) {
+    void setEntries(List<CodeVisionEntry> entries, JLayer<JComponent> layer) {
         this.entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         this.hovered = null;
         this.hitTargets.clear();
@@ -78,12 +78,12 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
     public void paint(Graphics graphics, JComponent component) {
         super.paint(graphics, component);
         @SuppressWarnings("unchecked")
-        JLayer<RTextScrollPane> layer = (JLayer<RTextScrollPane>) component;
+        JLayer<JComponent> layer = (JLayer<JComponent>) component;
         Graphics2D draw = (Graphics2D) graphics.create();
         try {
             draw.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            Font editorFont = this.editor.getFont();
-            Font hintFont = editorFont.deriveFont(Math.max(10f, editorFont.getSize2D() - 2f));
+            Font uiFont = UIManager.getFont("Label.font");
+            Font hintFont = uiFont == null ? this.editor.getFont() : uiFont;
             draw.setFont(hintFont);
             FontMetrics metrics = draw.getFontMetrics();
             this.hitTargets.clear();
@@ -98,7 +98,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
 
     private void paintEntry(
             Graphics2D draw,
-            JLayer<RTextScrollPane> layer,
+            JLayer<JComponent> layer,
             FontMetrics metrics,
             CodeVisionEntry entry
     ) {
@@ -174,7 +174,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
     }
 
     @Override
-    protected void processMouseMotionEvent(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
+    protected void processMouseMotionEvent(MouseEvent event, JLayer<? extends JComponent> layer) {
         HitTarget target = targetAt(pointInLayer(event, layer));
         if (!Objects.equals(target, this.hovered)) {
             this.hovered = target;
@@ -185,7 +185,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
     }
 
     @Override
-    protected void processMouseEvent(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
+    protected void processMouseEvent(MouseEvent event, JLayer<? extends JComponent> layer) {
         if (event.getID() == MouseEvent.MOUSE_EXITED) {
             this.hovered = null;
             layer.setCursor(Cursor.getDefaultCursor());
@@ -215,7 +215,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
         event.consume();
     }
 
-    private static Point pointInLayer(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
+    private static Point pointInLayer(MouseEvent event, JLayer<? extends JComponent> layer) {
         return SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), layer);
     }
 

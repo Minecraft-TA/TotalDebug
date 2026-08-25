@@ -13,15 +13,21 @@ import java.util.Set;
 
 /** Resolves JIndex source ids to the runtime module that owns the indexed class. */
 public final class RuntimeSourceCatalog {
+    private final Map<Integer, RuntimeSnapshotBytecodeSource.Source> sourcesById;
     private final Map<Integer, RuntimeInventory.RuntimeModule> modulesBySourceId;
     private final List<RuntimeInventory.RuntimeModule> modules;
     private final Map<String, int[]> sourceIdsByModuleId;
 
     public RuntimeSourceCatalog(List<RuntimeSnapshotBytecodeSource.Source> sources) {
+        Map<Integer, RuntimeSnapshotBytecodeSource.Source> indexedSources = new LinkedHashMap<>();
         Map<Integer, RuntimeInventory.RuntimeModule> modules = new LinkedHashMap<>();
         Map<String, RuntimeInventory.RuntimeModule> modulesById = new LinkedHashMap<>();
         Map<String, List<Integer>> sourceIdsByModuleId = new LinkedHashMap<>();
         for (RuntimeSnapshotBytecodeSource.Source source : List.copyOf(sources)) {
+            RuntimeSnapshotBytecodeSource.Source previousSource = indexedSources.putIfAbsent(source.sourceId(), source);
+            if (previousSource != null && !previousSource.equals(source)) {
+                throw new IllegalArgumentException("Runtime source " + source.sourceId() + " is defined twice");
+            }
             RuntimeInventory.RuntimeModule previous = modules.putIfAbsent(source.sourceId(), source.module());
             if (previous != null && !previous.equals(source.module())) {
                 throw new IllegalArgumentException(
@@ -40,6 +46,7 @@ public final class RuntimeSourceCatalog {
             sourceIdsByModuleId.computeIfAbsent(source.module().id(), ignored -> new ArrayList<>())
                     .add(source.sourceId());
         }
+        this.sourcesById = Map.copyOf(indexedSources);
         this.modulesBySourceId = Map.copyOf(modules);
         this.modules = modulesById.values().stream()
                 .sorted(Comparator.comparing(RuntimeInventory.RuntimeModule::displayName, String.CASE_INSENSITIVE_ORDER)
@@ -61,6 +68,14 @@ public final class RuntimeSourceCatalog {
             throw new IllegalArgumentException("Unknown runtime source id " + sourceId);
         }
         return module;
+    }
+
+    public RuntimeSnapshotBytecodeSource.Source sourceFor(int sourceId) {
+        RuntimeSnapshotBytecodeSource.Source source = this.sourcesById.get(sourceId);
+        if (source == null) {
+            throw new IllegalArgumentException("Unknown runtime source id " + sourceId);
+        }
+        return source;
     }
 
     public List<RuntimeInventory.RuntimeModule> modules() {

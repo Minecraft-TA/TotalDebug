@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
@@ -157,6 +158,18 @@ public class FileTreeView extends JScrollPane {
         mods.setIcon(FileTreeIcons.forRootDirectory("mods"));
         rootItems.add(mods);
         this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
+    }
+
+    /** Reveals every runtime archive containing the requested Java package. */
+    public CompletableFuture<Boolean> revealPackage(String packageName, String archiveName) {
+        if (packageName == null || packageName.isBlank()) {
+            throw new IllegalArgumentException("A package name must not be blank");
+        }
+        return this.tree.revealDirectoryPath(
+                "mods",
+                archiveName,
+                List.of(packageName.split("\\."))
+        );
     }
 
     @Override

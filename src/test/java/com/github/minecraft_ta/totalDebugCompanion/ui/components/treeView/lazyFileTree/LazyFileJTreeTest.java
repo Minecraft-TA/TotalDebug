@@ -3,14 +3,17 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyF
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class LazyFileJTreeTest {
 
@@ -80,11 +83,43 @@ class LazyFileJTreeTest {
         assertTrue(assertDoesNotThrow(root::loadChildren).isEmpty());
     }
 
+    @Test
+    void revealsARequestedPackageInItsOwningContainer() throws Exception {
+        LazyFileJTree tree = new LazyFileJTree();
+        DirectoryTreeItem mods = directory("mods", List.of(
+                directory("first.jar", List.of(directory("com", List.of(directory("example", List.of()))))),
+                directory("second.jar", List.of(directory("com", List.of(directory("example", List.of()))))),
+                directory("other.jar", List.of(directory("org", List.of())))
+        ));
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(mods));
+
+        boolean revealed = tree.revealDirectoryPath(
+                "mods",
+                "second.jar",
+                List.of("com", "example")
+        ).get(3, TimeUnit.SECONDS);
+
+        assertTrue(revealed);
+        assertEquals(1, tree.getSelectionCount());
+        var selection = (LazyTreeNode) tree.getSelectionPath().getLastPathComponent();
+        assertEquals("example", selection.getUserObject().getName());
+        assertEquals("second.jar", ((LazyTreeNode) selection.getParent().getParent()).getUserObject().getName());
+    }
+
     private static DirectoryTreeItem emptyDirectory(String name) {
         return new DirectoryTreeItem(name) {
             @Override
             public List<TreeItem> loadChildren() {
                 return List.of();
+            }
+        };
+    }
+
+    private static DirectoryTreeItem directory(String name, List<TreeItem> children) {
+        return new DirectoryTreeItem(name) {
+            @Override
+            public List<TreeItem> loadChildren() {
+                return children;
             }
         };
     }

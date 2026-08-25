@@ -6,8 +6,8 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
-import org.fife.ui.rtextarea.RTextScrollPane;
 
+import javax.swing.JComponent;
 import javax.swing.JLayer;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,7 +19,7 @@ final class CodeVisionController implements AutoCloseable {
     private final String editorIdentifier;
     private final CodeInsightService service;
     private final CodeVisionLayerUI layerUI;
-    private final JLayer<RTextScrollPane> layer;
+    private final JLayer<JComponent> layer;
     private final HierarchyGutterMarkers gutterMarkers;
 
     private CodeInsightService.SearchHandle activeAnalysis;
@@ -30,7 +30,7 @@ final class CodeVisionController implements AutoCloseable {
             String editorIdentifier,
             CodeInsightService service,
             CodeVisionLayerUI layerUI,
-            JLayer<RTextScrollPane> layer,
+            JLayer<JComponent> layer,
             HierarchyGutterMarkers gutterMarkers
     ) {
         this.editorIdentifier = Objects.requireNonNull(editorIdentifier, "editorIdentifier");

@@ -2,8 +2,10 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.jdt.core.IJavaElement;
+import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.SourceRange;
 import org.eclipse.jdt.internal.core.*;
@@ -13,19 +15,43 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.event.HyperlinkEvent;
+import java.util.Objects;
+import java.util.function.BiConsumer;
+import java.util.function.IntFunction;
 
 public class CustomJavaLinkGenerator implements LinkGenerator {
 
-    private final String identifier;
+    @FunctionalInterface
+    interface ElementResolver {
+        IJavaElement resolve(int offset) throws JavaModelException;
+    }
+
+    private final ElementResolver elementResolver;
+    private final IntFunction<String> ownerClassResolver;
+    private final BiConsumer<String, String> packageNavigator;
 
     public CustomJavaLinkGenerator(String identifier) {
-        this.identifier = identifier;
+        this(
+                offset -> JavaSymbolResolver.selectElement(identifier, offset),
+                offset -> JavaSymbolResolver.navigationOwnerClass(identifier, offset),
+                (packageName, ownerClass) -> MainWindow.INSTANCE.revealPackage(packageName, ownerClass)
+        );
+    }
+
+    CustomJavaLinkGenerator(
+            ElementResolver elementResolver,
+            IntFunction<String> ownerClassResolver,
+            BiConsumer<String, String> packageNavigator
+    ) {
+        this.elementResolver = Objects.requireNonNull(elementResolver, "elementResolver");
+        this.ownerClassResolver = Objects.requireNonNull(ownerClassResolver, "ownerClassResolver");
+        this.packageNavigator = Objects.requireNonNull(packageNavigator, "packageNavigator");
     }
 
     @Override
     public LinkGeneratorResult isLinkAtOffset(RSyntaxTextArea textArea, int offs) {
         try {
-            IJavaElement element = JavaSymbolResolver.selectElement(this.identifier, offs);
+            IJavaElement element = this.elementResolver.resolve(offs);
             if (element == null) {
                 return null;
             }
@@ -66,6 +92,11 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                     }
 
                     UIUtils.centerViewportOnRange(((RTextScrollPane) textArea.getParent().getParent()), sourceRange.getOffset(), sourceRange.getOffset());
+                    return null;
+                }
+
+                if (el instanceof IPackageFragment packageFragment) {
+                    packageNavigator.accept(packageFragment.getElementName(), ownerClassResolver.apply(offs));
                     return null;
                 }
 

@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPag
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQuery;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.IndexedCodeInsight;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.tth05.jindex.ClassIndex;
@@ -57,6 +58,25 @@ public final class CodeInsightService implements AutoCloseable {
             throw new IllegalArgumentException("Hierarchy result limit must be positive");
         }
         return submit(binding -> new IndexedCodeInsight(binding.indexSupplier().get()).search(query, limit), listener);
+    }
+
+    public SearchHandle locateClass(
+            String binaryClassName,
+            Listener<RuntimeSnapshotBytecodeSource.Source> listener
+    ) {
+        String requestedClass = Objects.requireNonNull(binaryClassName, "binaryClassName");
+        int separator = requestedClass.lastIndexOf('.');
+        if (separator < 1 || separator == requestedClass.length() - 1) {
+            throw new IllegalArgumentException("A binary class name must include a package and simple name");
+        }
+        String packageName = requestedClass.substring(0, separator);
+        String simpleName = requestedClass.substring(separator + 1);
+        return submit(binding -> {
+            var indexedClass = binding.indexSupplier().get().findClass(packageName, simpleName);
+            return indexedClass == null
+                    ? null
+                    : binding.sourceCatalog().sourceFor(indexedClass.getSourceId());
+        }, listener);
     }
 
     private synchronized <T> SearchHandle submit(Task<T> task, Listener<T> listener) {

@@ -16,7 +16,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChoose
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import org.eclipse.jdt.core.JavaModelException;
-import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -44,7 +43,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final HierarchyPreviewPopup hierarchyPreview;
     private final CodeInsightService insightService;
     private final CodeVisionLayerUI codeVisionLayerUI;
-    private final JLayer<RTextScrollPane> codeVisionLayer;
+    private final JLayer<JComponent> codeVisionLayer;
     private final HierarchyGutterMarkers gutterMarkers;
     private final CodeVisionController codeVisionController;
     private boolean codeVisionDisposed;
@@ -81,8 +80,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 CodeViewPanel.this.navigateHierarchy(symbol, relation, count, anchorOffset);
             }
         });
-        this.codeVisionLayer = new JLayer<>(this.editorScrollPane, this.codeVisionLayerUI);
-        remove(this.editorScrollPane);
+        this.codeVisionLayer = new JLayer<>(this.editorLayer, this.codeVisionLayerUI);
+        remove(this.editorLayer);
         add(this.codeVisionLayer, BorderLayout.CENTER);
 
         this.gutterMarkers = new HierarchyGutterMarkers(

@@ -23,8 +23,6 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel {
         this.identifier = identifier;
 
         this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier));
-        this.editorPane.addHyperlinkListener(event -> {
-        });
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
             if (event.getType() == DocumentEvent.EventType.CHANGE) {
                 return;

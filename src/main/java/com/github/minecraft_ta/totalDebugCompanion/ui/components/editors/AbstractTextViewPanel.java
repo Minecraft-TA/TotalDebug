@@ -6,19 +6,17 @@ import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.Style;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
-import org.fife.ui.rsyntaxtextarea.Token;
 import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
-import javax.swing.border.CompoundBorder;
 import java.awt.*;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -36,13 +34,16 @@ public abstract class AbstractTextViewPanel extends JPanel {
         JETBRAINS_MONO_FONT = new Font(FlatJetBrainsMonoFont.FAMILY, Font.PLAIN, 14);
     }
 
-    protected final RSyntaxTextArea editorPane = new RSyntaxTextArea() {
-        @Override
-        public boolean getUnderlineForToken(Token token) {
-            return false;
-        }
-    };
+    protected final RSyntaxTextArea editorPane = new RSyntaxTextArea();
     protected final RTextScrollPane editorScrollPane = new RTextScrollPane(this.editorPane);
+    protected final EditorChromeLayerUI editorChromeLayerUI = new EditorChromeLayerUI(
+            this.editorPane,
+            this.editorScrollPane.getGutter()
+    );
+    protected final JLayer<RTextScrollPane> editorLayer = new JLayer<>(
+            this.editorScrollPane,
+            this.editorChromeLayerUI
+    );
     protected final BottomInformationBar bottomInformationBar;
 
     protected JComponent headerComponent;
@@ -60,10 +61,11 @@ public abstract class AbstractTextViewPanel extends JPanel {
         super(new BorderLayout());
         this.bottomInformationBar = bottomInformationBar;
 
-        this.editorScrollPane.getGutter().setBorder(new CompoundBorder(
-                DynamicMatteBorder.separatorRule(0, 0, 0, 1),
-                BorderFactory.createEmptyBorder(0, 5, 0, 5)
-        ));
+        Gutter gutter = this.editorScrollPane.getGutter();
+        gutter.setBorder(new PaddingOnlyGutterBorder(0, 5, 0, 5));
+        gutter.setOpaque(false);
+        gutter.setIconRowHeaderInheritsGutterBackground(true);
+        this.editorScrollPane.getRowHeader().setOpaque(false);
         this.editorScrollPane.setBorder(BorderFactory.createEmptyBorder());
 
         this.editorPane.setAnimateBracketMatching(false);
@@ -78,7 +80,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
         });
         this.editorPane.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_NONE);
 
-        add(this.editorScrollPane, BorderLayout.CENTER);
+        add(this.editorLayer, BorderLayout.CENTER);
         applyTheme();
         updateFonts();
         GlobalConfig.getInstance().addEditorFontSizeListener(this.fontSizeListener);
@@ -133,8 +135,14 @@ public abstract class AbstractTextViewPanel extends JPanel {
         EditorPalette palette = ThemeManager.palette();
         Gutter gutter = this.editorScrollPane.getGutter();
         gutter.setForeground(palette.lineNumber());
-        gutter.setBackground(palette.background());
+        gutter.setBackground(new Color(
+                palette.background().getRed(),
+                palette.background().getGreen(),
+                palette.background().getBlue(),
+                0
+        ));
         gutter.setBorderColor(palette.indentGuide());
+        gutter.setCurrentLineNumberColor(palette.foreground());
 
         this.editorPane.setBackground(palette.background());
         this.editorPane.setForeground(palette.foreground());
@@ -151,6 +159,12 @@ public abstract class AbstractTextViewPanel extends JPanel {
         SyntaxScheme scheme = this.editorPane.getSyntaxScheme();
         CodeUtils.initSyntaxColors(scheme, palette);
         applyAdditionalSyntaxColors(scheme, palette);
+        for (Style style : scheme.getStyles()) {
+            if (style != null) {
+                style.underline = false;
+            }
+        }
+        this.editorChromeLayerUI.setPalette(palette, this.editorLayer);
         this.editorPane.revalidate();
         this.editorPane.repaint();
     }
@@ -216,5 +230,15 @@ public abstract class AbstractTextViewPanel extends JPanel {
         }
         GlobalConfig.getInstance().removeEditorFontSizeListener(this.fontSizeListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
+    }
+
+    private static final class PaddingOnlyGutterBorder extends Gutter.GutterBorder {
+        private PaddingOnlyGutterBorder(int top, int left, int bottom, int right) {
+            super(top, left, bottom, right);
+        }
+
+        @Override
+        public void paintBorder(Component component, Graphics graphics, int x, int y, int width, int height) {
+        }
     }
 }
