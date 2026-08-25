@@ -28,6 +28,16 @@ class CompanionDefaultsAddonTest {
         assertEquals(1, UIManager.get("TabbedPane.contentSeparatorHeight"));
         assertEquals(Boolean.FALSE, UIManager.get("TitlePane.unifiedBackground"));
         assertNotNull(UIManager.getBorder("MenuBar.border"));
+        assertEquals("filled", UIManager.get("CheckBox.icon.style"));
+        assertEquals("filled", UIManager.get("RadioButton.icon.style"));
+        assertEquals(
+                UIManager.getColor("Component.accentColor"),
+                UIManager.getColor("CheckBox.icon[filled].selectedBackground")
+        );
+        assertEquals(
+                UIManager.getColor("List.selectionForeground"),
+                UIManager.getColor("CheckBox.icon[filled].checkmarkColor")
+        );
 
         Color focus = UIManager.getColor("Component.focusColor");
         assertNotNull(focus);
@@ -46,5 +56,9 @@ class CompanionDefaultsAddonTest {
         assertEquals(25, UIManager.get("TabbedPane.tabHeight"));
         assertNotNull(UIManager.getBorder("MenuBar.border"));
         assertTrue(UIManager.getInsets("TabbedPane.tabInsets").left == 10);
+        assertEquals(
+                UIManager.getColor("Component.accentColor"),
+                UIManager.getColor("CheckBox.icon[filled].selectedBackground")
+        );
     }
 }

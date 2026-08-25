@@ -23,6 +23,7 @@ import com.github.tth05.jindex.IndexSource;
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
 import javax.swing.JButton;
+import javax.swing.JList;
 import javax.swing.ToolTipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
@@ -362,6 +363,133 @@ public final class UiDevHarness {
         });
         openTimer.setRepeats(false);
         openTimer.start();
+    }
+
+    private static void scheduleSearchEverywhereInteractionVerification() {
+        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
+            MainWindow.INSTANCE.openSearchEverywhere();
+            javax.swing.Timer firstQuery = new javax.swing.Timer(250, queryEvent -> {
+                SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
+                        .filter(SearchEverywherePopup.class::isInstance)
+                        .map(SearchEverywherePopup.class::cast)
+                        .filter(java.awt.Window::isShowing)
+                        .findFirst()
+                        .orElseThrow();
+                popup.setLocation(MainWindow.INSTANCE.getX() + 220, MainWindow.INSTANCE.getY() + 70);
+                FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
+                if (search == null) {
+                    throw new IllegalStateException("Search Everywhere query field was not found");
+                }
+                search.setText("Theme");
+
+                javax.swing.Timer verifyResults = new javax.swing.Timer(450, verifyEvent -> {
+                    @SuppressWarnings("rawtypes")
+                    JList results = findComponent(popup, JList.class);
+                    if (results == null || results.getModel().getSize() == 0 || !results.isShowing()) {
+                        throw new IllegalStateException("Initial Search Everywhere results did not become visible");
+                    }
+
+                    int previousResultCount = results.getModel().getSize();
+                    search.setText("ThemeS");
+                    if (!results.isShowing() || results.getModel().getSize() != previousResultCount) {
+                        throw new IllegalStateException("Typing replaced visible results with a transient blank state");
+                    }
+
+                    Component dragSurface = findNamedComponent(popup, "searchEverywhere.dragSurface");
+                    if (dragSurface == null) {
+                        throw new IllegalStateException("Search Everywhere drag surface was not found");
+                    }
+                    Point before = popup.getLocation();
+                    dispatchWindowDrag(dragSurface, 36, 24);
+                    Point after = popup.getLocation();
+                    if (!after.equals(new Point(before.x + 36, before.y + 24))) {
+                        throw new IllegalStateException(
+                                "Search Everywhere drag moved to " + after + " instead of the expected offset"
+                        );
+                    }
+
+                    javax.swing.Timer verifyUpdated = new javax.swing.Timer(450, updatedEvent -> {
+                        if (results.getModel().getSize() == 0 || !results.isShowing()) {
+                            throw new IllegalStateException("Updated Search Everywhere results did not remain visible");
+                        }
+                        System.out.println("Search Everywhere interaction verification passed");
+                        popup.dispose();
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(0);
+                    });
+                    verifyUpdated.setRepeats(false);
+                    verifyUpdated.start();
+                });
+                verifyResults.setRepeats(false);
+                verifyResults.start();
+            });
+            firstQuery.setRepeats(false);
+            firstQuery.start();
+        });
+        openTimer.setRepeats(false);
+        openTimer.start();
+    }
+
+    private static Component findNamedComponent(Container root, String name) {
+        if (name.equals(root.getName())) {
+            return root;
+        }
+        for (Component component : root.getComponents()) {
+            if (name.equals(component.getName())) {
+                return component;
+            }
+            if (component instanceof Container child) {
+                Component match = findNamedComponent(child, name);
+                if (match != null) {
+                    return match;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void dispatchWindowDrag(Component component, int deltaX, int deltaY) {
+        Point screen = component.getLocationOnScreen();
+        long now = System.currentTimeMillis();
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_PRESSED,
+                now,
+                MouseEvent.BUTTON1_DOWN_MASK,
+                4,
+                4,
+                screen.x + 4,
+                screen.y + 4,
+                1,
+                false,
+                MouseEvent.BUTTON1
+        ));
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_DRAGGED,
+                now + 1,
+                MouseEvent.BUTTON1_DOWN_MASK,
+                4 + deltaX,
+                4 + deltaY,
+                screen.x + 4 + deltaX,
+                screen.y + 4 + deltaY,
+                0,
+                false,
+                MouseEvent.NOBUTTON
+        ));
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_RELEASED,
+                now + 2,
+                0,
+                4 + deltaX,
+                4 + deltaY,
+                screen.x + 4 + deltaX,
+                screen.y + 4 + deltaY,
+                1,
+                false,
+                MouseEvent.BUTTON1
+        ));
     }
 
     private static JButton findButton(Container root, String text) {
@@ -830,7 +958,8 @@ public final class UiDevHarness {
                 || Arrays.asList(args).contains("--verify-gutter-click")
                 || Arrays.asList(args).contains("--verify-gutter-direct")
                 || Arrays.asList(args).contains("--verify-gutter-hover")
-                || Arrays.asList(args).contains("--verify-hierarchy-row-layout");
+                || Arrays.asList(args).contains("--verify-hierarchy-row-layout")
+                || Arrays.asList(args).contains("--verify-search-everywhere-interactions");
         CompanionApp.configureLookAndFeel();
 
         System.out.println("UI dev harness data directory: " + root);
@@ -908,7 +1037,12 @@ public final class UiDevHarness {
             }
             boolean showSearchEverywhere = Arrays.asList(args).contains("--show-search-everywhere");
             boolean showModuleFilter = Arrays.asList(args).contains("--show-module-filter");
-            if (showSearchEverywhere || showModuleFilter) {
+            boolean verifySearchEverywhere = Arrays.asList(args).contains(
+                    "--verify-search-everywhere-interactions"
+            );
+            if (verifySearchEverywhere) {
+                scheduleSearchEverywhereInteractionVerification();
+            } else if (showSearchEverywhere || showModuleFilter) {
                 scheduleSearchEverywhere(showModuleFilter);
             }
             if (backgroundMode) {

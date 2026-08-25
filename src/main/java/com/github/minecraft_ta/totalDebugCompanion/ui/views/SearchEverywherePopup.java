@@ -67,6 +67,11 @@ public class SearchEverywherePopup extends JFrame {
     private List<RuntimeInventory.RuntimeModule> modules = List.of();
     private Category category = Category.ALL;
     private ScheduledFuture<?> pendingSearch;
+    private boolean searchPending;
+    private boolean documentRefreshQueued;
+    private Point dragPointerOrigin;
+    private Point dragWindowOrigin;
+    private boolean manuallyPositioned;
 
     SearchEverywherePopup() {
         this.moduleFilterPopup = new ModuleFilterPopup(
@@ -127,7 +132,9 @@ public class SearchEverywherePopup extends JFrame {
             syncRuntimeModules();
         }
         setVisible(true);
-        UIUtils.centerJFrame(this);
+        if (!this.manuallyPositioned) {
+            UIUtils.centerJFrame(this);
+        }
         this.searchTextField.requestFocusInWindow();
         this.searchTextField.selectAll();
         refreshResults();
@@ -145,16 +152,16 @@ public class SearchEverywherePopup extends JFrame {
 
     private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout(8, 6));
+        header.setName("searchEverywhere.header");
         header.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         JPanel tabs = new JPanel();
+        tabs.setName("searchEverywhere.dragSurface");
         tabs.setLayout(new BoxLayout(tabs, BoxLayout.X_AXIS));
         ButtonGroup group = new ButtonGroup();
         for (Category candidate : Category.values()) {
-            JToggleButton button = new JToggleButton(candidate.label(), candidate == this.category);
-            button.putClientProperty("JButton.buttonType", "toolBarButton");
-            button.setFocusable(false);
-            button.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            JToggleButton button = new SearchCategoryButton(candidate.label(), candidate == this.category);
+            button.setName("searchEverywhere.category." + candidate.name().toLowerCase(java.util.Locale.ROOT));
             button.addActionListener(event -> selectCategory(candidate));
             group.add(button);
             tabs.add(button);
@@ -163,6 +170,8 @@ public class SearchEverywherePopup extends JFrame {
         }
         tabs.add(Box.createHorizontalGlue());
         tabs.add(this.moduleFilterButton);
+        installDragSupport(header);
+        installDragSupport(tabs);
 
         header.add(tabs, BorderLayout.NORTH);
         header.add(this.searchTextField, BorderLayout.CENTER);
@@ -215,7 +224,7 @@ public class SearchEverywherePopup extends JFrame {
 
     private void configureSearchField() {
         this.searchTextField.putClientProperty("JTextField.placeholderText", "Search classes and symbols");
-        this.searchTextField.getDocument().addDocumentListener((DocumentChangeListener) event -> refreshResults());
+        this.searchTextField.getDocument().addDocumentListener((DocumentChangeListener) event -> queueDocumentRefresh());
         this.searchTextField.registerKeyboardAction(
                 event -> moveSelection(-1),
                 KeyStroke.getKeyStroke("UP"),
@@ -226,6 +235,17 @@ public class SearchEverywherePopup extends JFrame {
                 KeyStroke.getKeyStroke("DOWN"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+    }
+
+    private void queueDocumentRefresh() {
+        if (this.documentRefreshQueued) {
+            return;
+        }
+        this.documentRefreshQueued = true;
+        SwingUtilities.invokeLater(() -> {
+            this.documentRefreshQueued = false;
+            refreshResults();
+        });
     }
 
     private void configureFilterButton() {
@@ -245,6 +265,42 @@ public class SearchEverywherePopup extends JFrame {
             SwingUtilities.invokeLater(this.moduleFilterPopup::focusSearch);
         });
         updateFilterButton();
+    }
+
+    private void installDragSupport(JComponent surface) {
+        MouseAdapter drag = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event)) {
+                    return;
+                }
+                dragPointerOrigin = event.getLocationOnScreen();
+                dragWindowOrigin = getLocation();
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent event) {
+                if (dragPointerOrigin == null
+                        || dragWindowOrigin == null
+                        || (event.getModifiersEx() & MouseEvent.BUTTON1_DOWN_MASK) == 0) {
+                    return;
+                }
+                Point pointer = event.getLocationOnScreen();
+                setLocation(
+                        dragWindowOrigin.x + pointer.x - dragPointerOrigin.x,
+                        dragWindowOrigin.y + pointer.y - dragPointerOrigin.y
+                );
+                manuallyPositioned = true;
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                dragPointerOrigin = null;
+                dragWindowOrigin = null;
+            }
+        };
+        surface.addMouseListener(drag);
+        surface.addMouseMotionListener(drag);
     }
 
     private void selectCategory(Category selected) {
@@ -312,6 +368,7 @@ public class SearchEverywherePopup extends JFrame {
 
         String query = this.searchTextField.getText().strip();
         if (query.isEmpty()) {
+            this.searchPending = false;
             this.resultModel.clear();
             this.resultCount.setText(" ");
             showMessage(this.category == Category.TEXT
@@ -320,6 +377,7 @@ public class SearchEverywherePopup extends JFrame {
             return;
         }
         if (this.category != Category.TEXT && !query.chars().allMatch(character -> character < 128)) {
+            this.searchPending = false;
             this.resultModel.clear();
             this.resultCount.setText("0 results");
             showMessage("Class and symbol names are indexed as JVM ASCII names");
@@ -330,7 +388,8 @@ public class SearchEverywherePopup extends JFrame {
         int[] sourceIds = this.selectedModuleIds.size() == this.modules.size()
                 ? null
                 : this.sourceCatalog.sourceIdsForModules(this.selectedModuleIds);
-        showMessage("Searching the runtime index...");
+        this.searchPending = true;
+        this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
             try {
                 List<Result> results = this.search.search(
@@ -351,6 +410,8 @@ public class SearchEverywherePopup extends JFrame {
         if (generation != this.searchGeneration.get()) {
             return;
         }
+        this.pendingSearch = null;
+        this.searchPending = false;
         String selectedIdentity = this.resultList.getSelectedValue() == null
                 ? null
                 : identity(this.resultList.getSelectedValue());
@@ -378,6 +439,8 @@ public class SearchEverywherePopup extends JFrame {
         if (generation != this.searchGeneration.get()) {
             return;
         }
+        this.pendingSearch = null;
+        this.searchPending = false;
         failure.printStackTrace(System.err);
         this.resultModel.clear();
         this.resultCount.setText("Search failed");
@@ -385,6 +448,7 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void showIndexStatus(RuntimeIndexService.Status status) {
+        this.searchPending = false;
         this.resultModel.clear();
         this.resultCount.setText("Index unavailable");
         showMessage(status.phase() == RuntimeIndexService.Phase.FAILED
@@ -398,6 +462,9 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void openSelectedResult() {
+        if (this.searchPending) {
+            return;
+        }
         Result selected = this.resultList.getSelectedValue();
         if (selected == null) {
             return;
@@ -536,6 +603,40 @@ public class SearchEverywherePopup extends JFrame {
             row.add(left, BorderLayout.CENTER);
             row.add(module, BorderLayout.EAST);
             return row;
+        }
+    }
+
+    private static final class SearchCategoryButton extends JToggleButton {
+        private SearchCategoryButton(String text, boolean selected) {
+            super(text, selected);
+            setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            setBorderPainted(false);
+            setContentAreaFilled(false);
+            setFocusable(false);
+            setOpaque(false);
+            setRolloverEnabled(true);
+        }
+
+        @Override
+        public Color getForeground() {
+            if (isSelected()) {
+                Color selectedForeground = UIManager.getColor("List.selectionForeground");
+                return selectedForeground == null ? Color.WHITE : selectedForeground;
+            }
+            return ThemeColors.text();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            ButtonModel model = getModel();
+            if (model.isSelected() || model.isRollover()) {
+                Graphics2D paint = (Graphics2D) graphics.create();
+                paint.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                paint.setColor(model.isSelected() ? ThemeColors.accent() : ThemeColors.hoverBackground());
+                paint.fillRoundRect(0, 1, getWidth(), Math.max(0, getHeight() - 2), 7, 7);
+                paint.dispose();
+            }
+            super.paintComponent(graphics);
         }
     }
 }

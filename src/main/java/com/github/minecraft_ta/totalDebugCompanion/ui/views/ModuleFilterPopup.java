@@ -25,6 +25,10 @@ import java.util.function.Consumer;
 
 /** Searchable, non-closing module chooser used by Search Everywhere. */
 final class ModuleFilterPopup extends JPopupMenu {
+    private static final int LIST_WIDTH = 330;
+    private static final int MAX_LIST_HEIGHT = 280;
+    private static final int ROW_HEIGHT = 24;
+
     private final FlatIconTextField searchField = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JPanel moduleList = new JPanel();
     private final JScrollPane moduleScroll = new JScrollPane(this.moduleList);
@@ -48,7 +52,7 @@ final class ModuleFilterPopup extends JPopupMenu {
 
         this.moduleList.setLayout(new BoxLayout(this.moduleList, BoxLayout.Y_AXIS));
         this.moduleScroll.setBorder(BorderFactory.createEmptyBorder());
-        this.moduleScroll.setPreferredSize(new Dimension(330, 280));
+        this.moduleScroll.setPreferredSize(new Dimension(LIST_WIDTH, ROW_HEIGHT * 3));
         this.moduleScroll.getVerticalScrollBar().setUnitIncrement(18);
         content.add(this.moduleScroll, BorderLayout.CENTER);
         content.add(actionRow(), BorderLayout.SOUTH);
@@ -108,6 +112,7 @@ final class ModuleFilterPopup extends JPopupMenu {
     private void rebuildList() {
         String query = this.searchField.getText().strip().toLowerCase(Locale.ROOT);
         this.moduleList.removeAll();
+        int visibleModules = 0;
         for (RuntimeInventory.RuntimeModule module : this.modules) {
             if (!query.isEmpty()
                     && !module.displayName().toLowerCase(Locale.ROOT).contains(query)
@@ -126,12 +131,18 @@ final class ModuleFilterPopup extends JPopupMenu {
                 notifySelectionChanged();
             });
             this.moduleList.add(checkBox);
+            visibleModules++;
         }
         if (this.moduleList.getComponentCount() == 0) {
             JLabel empty = new JLabel("No matching modules");
             empty.setBorder(BorderFactory.createEmptyBorder(8, 4, 8, 4));
             this.moduleList.add(empty);
         }
+        int visibleRows = Math.max(1, visibleModules);
+        this.moduleScroll.setPreferredSize(new Dimension(
+                LIST_WIDTH,
+                Math.min(MAX_LIST_HEIGHT, Math.max(48, visibleRows * ROW_HEIGHT + 4))
+        ));
         this.moduleList.revalidate();
         this.moduleList.repaint();
     }

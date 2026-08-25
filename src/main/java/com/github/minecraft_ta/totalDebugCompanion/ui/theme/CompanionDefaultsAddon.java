@@ -40,6 +40,8 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         defaults.put("TabbedPane.tabSelectionHeight", 2);
         defaults.put("TabbedPane.contentSeparatorHeight", 1);
 
+        applySelectionControlColors(defaults);
+
         defaults.put(
                 "Table.focusSelectedCellHighlightBorder",
                 new BorderUIResource(BorderFactory.createEmptyBorder(0, 5, 0, 0))
@@ -53,6 +55,23 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         defaults.put("MenuBar.border", new SimpleMenuBarBorder());
 
         applyUiFontSize(defaults);
+    }
+
+    private static void applySelectionControlColors(UIDefaults defaults) {
+        Color accent = defaults.getColor("Component.accentColor");
+        if (accent == null) {
+            accent = new Color(0x3871E1);
+        }
+        Color selectedForeground = defaults.getColor("List.selectionForeground");
+        if (selectedForeground == null) {
+            selectedForeground = Color.WHITE;
+        }
+
+        defaults.put("CheckBox.icon.style", "filled");
+        defaults.put("RadioButton.icon.style", "filled");
+        defaults.put("CheckBox.icon[filled].selectedBorderColor", new ColorUIResource(accent));
+        defaults.put("CheckBox.icon[filled].selectedBackground", new ColorUIResource(accent));
+        defaults.put("CheckBox.icon[filled].checkmarkColor", new ColorUIResource(selectedForeground));
     }
 
     /**
