@@ -27,7 +27,7 @@ class RuntimeIndexServiceTest {
     void keepsTheRestoredSnapshotWhenTheLiveInventoryMatches() throws Exception {
         String inventoryId = "matching-inventory";
         Path dataDirectory = this.temporaryDirectory.resolve("data");
-        Path cacheDirectory = dataDirectory.resolve("indexes").resolve("test-signature");
+        Path cacheDirectory = dataDirectory.resolve("index");
         Path indexFile = cacheDirectory.resolve("index");
         Path sourcesFile = cacheDirectory.resolve(PreparedRuntimeSources.FILE_NAME);
         Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
@@ -42,7 +42,7 @@ class RuntimeIndexServiceTest {
                 classes.toUri().toASCIIString(),
                 new RuntimeInventory.RuntimeModule("test", "Test")
         )));
-        writeActiveRuntime(dataDirectory.resolve("active-runtime.properties"), inventoryId, indexFile, sourcesFile);
+        writeIndexMetadata(cacheDirectory.resolve("index.properties"), inventoryId);
 
         AtomicInteger installations = new AtomicInteger();
         List<RuntimeIndexService.ReadySnapshot> snapshots = new ArrayList<>();
@@ -86,15 +86,12 @@ class RuntimeIndexServiceTest {
         }
     }
 
-    private static void writeActiveRuntime(Path file, String inventoryId, Path indexFile, Path sourcesFile)
-            throws Exception {
+    private static void writeIndexMetadata(Path file, String inventoryId) throws Exception {
         Properties properties = new Properties();
+        properties.setProperty("format", "1");
         properties.setProperty("inventory.id", inventoryId);
-        properties.setProperty("signature", "test-signature");
-        properties.setProperty("index", indexFile.toString());
-        properties.setProperty("sources", sourcesFile.toString());
         try (var output = Files.newOutputStream(file)) {
-            properties.store(output, "test active runtime");
+            properties.store(output, "test runtime index");
         }
     }
 }

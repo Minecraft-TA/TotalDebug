@@ -8,17 +8,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,14 +30,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public final class RuntimeIndexService implements AutoCloseable {
+    private static final String INDEX_DIRECTORY_NAME = "index";
     private static final String INDEX_FILE_NAME = "index";
-    private static final String ACTIVE_FILE_NAME = "active-runtime.properties";
-    private static final String CACHE_FORMAT = "3";
+    private static final String METADATA_FILE_NAME = "index.properties";
+    private static final String CACHE_FORMAT = "1";
 
     public enum Phase {
         WAITING,
         PREPARING,
-        SIGNING,
         BUILDING,
         LOADING,
         READY,
@@ -56,7 +52,6 @@ public final class RuntimeIndexService implements AutoCloseable {
 
         public boolean active() {
             return phase == Phase.PREPARING
-                    || phase == Phase.SIGNING
                     || phase == Phase.BUILDING
                     || phase == Phase.LOADING;
         }
@@ -122,15 +117,15 @@ public final class RuntimeIndexService implements AutoCloseable {
         this.activeDataDirectory = null;
         long requestedGeneration = ++this.generation;
         Path root = normalizeDataDirectory(dataDirectory);
-        Path activeFile = root.resolve(ACTIVE_FILE_NAME);
-        if (!Files.isRegularFile(activeFile)) {
+        Path indexDirectory = root.resolve(INDEX_DIRECTORY_NAME);
+        if (!hasCompleteIndex(indexDirectory)) {
             update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
             return;
         }
         update(new Status(Phase.LOADING, "Loading the previous class index", null));
         this.worker.execute(() -> {
             try {
-                ReadySnapshot snapshot = loadActiveSnapshot(activeFile);
+                ReadySnapshot snapshot = loadSnapshot(indexDirectory);
                 publishReady(requestedGeneration, root, snapshot);
             } catch (IOException | RuntimeException exception) {
                 if (isCurrent(requestedGeneration)) {
@@ -174,19 +169,14 @@ public final class RuntimeIndexService implements AutoCloseable {
             if (!isCurrent(requestedGeneration)) {
                 return;
             }
-            update(new Status(Phase.SIGNING, "Checking runtime class sources", null));
-            String signature = calculateSignature(inventory);
-            Path cacheRoot = root.resolve("indexes");
-            Path cacheDirectory = cacheRoot.resolve(signature);
-            Path indexFile = cacheDirectory.resolve(INDEX_FILE_NAME);
-            Path sourceFile = cacheDirectory.resolve(PreparedRuntimeSources.FILE_NAME);
+            Path indexDirectory = root.resolve(INDEX_DIRECTORY_NAME);
             ReadySnapshot snapshot;
-            if (Files.isRegularFile(indexFile) && Files.isRegularFile(sourceFile)) {
+            if (matchesIndex(indexDirectory, inventory.id())) {
                 update(new Status(Phase.LOADING, "Loading cached class index", null));
-                snapshot = openSnapshot(inventory.id(), signature, indexFile, sourceFile);
+                snapshot = loadSnapshot(indexDirectory);
             } else {
                 update(new Status(Phase.BUILDING, "Building class index", null));
-                snapshot = buildSnapshot(inventory, signature, cacheRoot, cacheDirectory);
+                snapshot = buildSnapshot(inventory, root, indexDirectory);
             }
             publishReady(requestedGeneration, root, snapshot);
         } catch (IOException | RuntimeException exception) {
@@ -203,14 +193,13 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     private ReadySnapshot buildSnapshot(
             RuntimeInventory inventory,
-            String signature,
-            Path cacheRoot,
-            Path cacheDirectory
+            Path dataDirectory,
+            Path indexDirectory
     ) throws IOException {
-        Files.createDirectories(cacheRoot);
-        Path staged = Files.createTempDirectory(cacheRoot, ".runtime-index-");
+        Files.createDirectories(dataDirectory);
+        Path staged = Files.createTempDirectory(dataDirectory, ".runtime-index-");
         try {
-            List<PreparedInput> prepared = prepareInputs(inventory, staged, cacheDirectory);
+            List<PreparedInput> prepared = prepareInputs(inventory, staged, indexDirectory);
             List<IndexSource> indexSources = new ArrayList<>();
             var publishedSourcesById = new LinkedHashMap<Integer, RuntimeSnapshotBytecodeSource.Source>();
             for (PreparedInput input : prepared) {
@@ -243,21 +232,14 @@ public final class RuntimeIndexService implements AutoCloseable {
                 throw new IOException("JIndex could not build the runtime class index", exception);
             }
             PreparedRuntimeSources.write(staged.resolve(PreparedRuntimeSources.FILE_NAME), List.copyOf(publishedSources));
+            writeIndexMetadata(staged.resolve(METADATA_FILE_NAME), inventory.id());
+            deleteTree(indexDirectory);
             try {
-                Files.move(staged, cacheDirectory, StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.FileAlreadyExistsException exception) {
-                if (!Files.isRegularFile(cacheDirectory.resolve(INDEX_FILE_NAME))) {
-                    throw exception;
-                }
+                Files.move(staged, indexDirectory, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException exception) {
                 throw new IOException("The Companion data directory does not support atomic index updates", exception);
             }
-            return openSnapshot(
-                    inventory.id(),
-                    signature,
-                    cacheDirectory.resolve(INDEX_FILE_NAME),
-                    cacheDirectory.resolve(PreparedRuntimeSources.FILE_NAME)
-            );
+            return loadSnapshot(indexDirectory);
         } finally {
             deleteTree(staged);
         }
@@ -387,38 +369,8 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static String calculateSignature(RuntimeInventory inventory) throws IOException {
-        MessageDigest digest = sha256();
-        update(digest, CACHE_FORMAT);
-        update(digest, inventory.javaRuntimeVersion());
-        update(digest, inventory.javaHome());
-        update(digest, Boolean.toString(inventory.production()));
-        for (RuntimeInventory.Source source : inventory.sources()) {
-            update(digest, source.kind().name());
-            update(digest, source.logicalUri());
-            update(digest, source.module().id());
-            update(digest, source.module().displayName());
-            if (source.kind() == RuntimeInventory.SourceKind.ARCHIVE) {
-                update(digest, source.path());
-            } else {
-                try (Stream<Path> paths = Files.walk(source.path())) {
-                    for (Path classFile : paths.filter(Files::isRegularFile).sorted().toList()) {
-                        String relativeName = source.path().relativize(classFile).toString().replace('\\', '/');
-                        if (!isIndexableClass(relativeName)) {
-                            continue;
-                        }
-                        update(digest, relativeName);
-                        update(digest, classFile);
-                    }
-                }
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
-    }
-
     private static ReadySnapshot openSnapshot(
             String inventoryId,
-            String signature,
             Path indexFile,
             Path sourceFile
     ) throws IOException {
@@ -426,7 +378,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         try {
             return new ReadySnapshot(
                     inventoryId,
-                    signature,
+                    CACHE_FORMAT + ":" + inventoryId,
                     indexFile,
                     sources,
                     ClassIndex.fromFile(indexFile.toString())
@@ -436,26 +388,57 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static ReadySnapshot loadActiveSnapshot(Path activeFile) throws IOException {
-        Properties properties = new Properties();
-        try (InputStream input = Files.newInputStream(activeFile)) {
-            properties.load(input);
-        }
+    private static ReadySnapshot loadSnapshot(Path indexDirectory) throws IOException {
+        String inventoryId = readIndexInventoryId(indexDirectory);
         return openSnapshot(
-                properties.getProperty("inventory.id", ""),
-                required(properties, "signature"),
-                Path.of(required(properties, "index")),
-                Path.of(required(properties, "sources"))
+                inventoryId,
+                indexDirectory.resolve(INDEX_FILE_NAME),
+                indexDirectory.resolve(PreparedRuntimeSources.FILE_NAME)
         );
     }
 
-    private synchronized void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot)
-            throws IOException {
+    private static boolean hasCompleteIndex(Path indexDirectory) {
+        return Files.isRegularFile(indexDirectory.resolve(INDEX_FILE_NAME))
+                && Files.isRegularFile(indexDirectory.resolve(PreparedRuntimeSources.FILE_NAME))
+                && Files.isRegularFile(indexDirectory.resolve(METADATA_FILE_NAME));
+    }
+
+    private static boolean matchesIndex(Path indexDirectory, String inventoryId) {
+        if (!hasCompleteIndex(indexDirectory)) {
+            return false;
+        }
+        try {
+            return inventoryId.equals(readIndexInventoryId(indexDirectory));
+        } catch (IOException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static String readIndexInventoryId(Path indexDirectory) throws IOException {
+        Properties properties = new Properties();
+        try (InputStream input = Files.newInputStream(indexDirectory.resolve(METADATA_FILE_NAME))) {
+            properties.load(input);
+        }
+        if (!CACHE_FORMAT.equals(required(properties, "format"))) {
+            throw new IOException("Unsupported runtime index format");
+        }
+        return required(properties, "inventory.id");
+    }
+
+    private static void writeIndexMetadata(Path file, String inventoryId) throws IOException {
+        Properties properties = new Properties();
+        properties.setProperty("format", CACHE_FORMAT);
+        properties.setProperty("inventory.id", inventoryId);
+        try (OutputStream output = Files.newOutputStream(file)) {
+            properties.store(output, "TotalDebug Companion runtime index");
+        }
+    }
+
+    private synchronized void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot) {
         if (this.closed || this.generation != requestedGeneration) {
             snapshot.close();
             return;
         }
-        writeActiveSnapshot(root.resolve(ACTIVE_FILE_NAME), snapshot);
         try {
             this.readyHandler.accept(snapshot);
         } catch (RuntimeException exception) {
@@ -465,27 +448,6 @@ public final class RuntimeIndexService implements AutoCloseable {
         this.activeInventoryId = snapshot.inventoryId();
         this.activeDataDirectory = root;
         update(new Status(Phase.READY, "Class index ready", null));
-    }
-
-    private static void writeActiveSnapshot(Path file, ReadySnapshot snapshot) throws IOException {
-        Properties properties = new Properties();
-        properties.setProperty("inventory.id", snapshot.inventoryId());
-        properties.setProperty("signature", snapshot.signature());
-        properties.setProperty("index", snapshot.indexFile().toString());
-        properties.setProperty(
-                "sources",
-                snapshot.indexFile().getParent().resolve(PreparedRuntimeSources.FILE_NAME).toString()
-        );
-        Files.createDirectories(file.getParent());
-        Path staged = Files.createTempFile(file.getParent(), ".active-runtime-", ".tmp");
-        try (OutputStream output = Files.newOutputStream(staged)) {
-            properties.store(output, "TotalDebug Companion active runtime");
-        }
-        try {
-            Files.move(staged, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(staged);
-        }
     }
 
     private synchronized boolean isCurrent(long requestedGeneration) {
@@ -513,30 +475,6 @@ public final class RuntimeIndexService implements AutoCloseable {
         return name.endsWith(".class")
                 && !name.equals("module-info.class")
                 && !name.endsWith("/module-info.class");
-    }
-
-    private static MessageDigest sha256() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
-    }
-
-    private static void update(MessageDigest digest, String value) {
-        digest.update(value.getBytes(StandardCharsets.UTF_8));
-        digest.update((byte) 0);
-    }
-
-    private static void update(MessageDigest digest, Path file) throws IOException {
-        try (InputStream input = Files.newInputStream(file)) {
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                digest.update(buffer, 0, read);
-            }
-        }
-        digest.update((byte) 0);
     }
 
     private static String required(Properties properties, String key) {
