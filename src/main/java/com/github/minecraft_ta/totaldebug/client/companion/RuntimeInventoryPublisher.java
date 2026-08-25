@@ -41,19 +41,17 @@ final class RuntimeInventoryPublisher {
         List<Path> discovered = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
         Map<Path, RuntimeInventory.RuntimeModule> runtimeModules = describeRuntimeModules(discovered);
         String id = calculateInventoryId(discovered, runtimeModules);
-        Path inventories = this.dataDirectory.resolve("runtime-inventories");
-        Path publishedDirectory = inventories.resolve(id);
+        Path publishedDirectory = this.dataDirectory.resolve("runtime-inventory");
         Path publishedFile = publishedDirectory.resolve(RuntimeInventory.FILE_NAME);
         if (Files.isRegularFile(publishedFile)) {
             RuntimeInventory existing = RuntimeInventory.read(publishedFile);
-            if (!id.equals(existing.id())) {
-                throw new IOException("Runtime inventory cache conflicts with " + publishedDirectory);
+            if (id.equals(existing.id())) {
+                return new PublishedInventory(id, publishedFile);
             }
-            return new PublishedInventory(id, publishedFile);
         }
 
-        Files.createDirectories(inventories);
-        Path staged = Files.createTempDirectory(inventories, ".runtime-inventory-");
+        Files.createDirectories(this.dataDirectory);
+        Path staged = Files.createTempDirectory(this.dataDirectory, ".runtime-inventory-");
         try {
             List<RuntimeInventory.Source> sources = prepareSources(
                     discovered,
@@ -69,13 +67,9 @@ final class RuntimeInventoryPublisher {
                     sources
             );
             inventory.write(staged.resolve(RuntimeInventory.FILE_NAME));
+            deleteTree(publishedDirectory);
             try {
                 Files.move(staged, publishedDirectory, StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.FileAlreadyExistsException exception) {
-                RuntimeInventory winner = RuntimeInventory.read(publishedFile);
-                if (!id.equals(winner.id())) {
-                    throw exception;
-                }
             } catch (AtomicMoveNotSupportedException exception) {
                 throw new IOException("The TotalDebug data directory does not support atomic runtime inventory updates", exception);
             }
