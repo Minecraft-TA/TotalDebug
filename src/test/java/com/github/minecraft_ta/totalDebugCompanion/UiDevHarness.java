@@ -5,11 +5,14 @@ import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
+import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.ClassIndex;
@@ -19,10 +22,14 @@ import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rtextarea.IconRowHeader;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.event.MouseEvent;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
@@ -219,8 +226,8 @@ public final class UiDevHarness {
         stopTimer.start();
     }
 
-    private static void scheduleScreenshot(Path target) {
-        javax.swing.Timer timer = new javax.swing.Timer(1400, event -> {
+    private static void scheduleScreenshot(Path target, int delayMillis) {
+        javax.swing.Timer timer = new javax.swing.Timer(delayMillis, event -> {
             try {
                 Files.createDirectories(target.toAbsolutePath().getParent());
                 BufferedImage image = new BufferedImage(
@@ -289,6 +296,214 @@ public final class UiDevHarness {
         timer.start();
     }
 
+    private static void scheduleCodeVisionClickVerification(String source) {
+        javax.swing.Timer clickTimer = new javax.swing.Timer(1400, event -> {
+            try {
+                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                if (editor == null) {
+                    throw new IllegalStateException("Code editor was not found");
+                }
+                int declaration = source.indexOf("public interface ThemeSample");
+                int anchorOffset = source.indexOf('{', declaration) + 1;
+                Rectangle2D anchor = editor.modelToView2D(anchorOffset);
+                Point target = new Point(
+                        (int) Math.ceil(anchor.getX()) + 22,
+                        (int) Math.floor(anchor.getY() + anchor.getHeight() / 2)
+                );
+
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                    if (selected instanceof UsagesView) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.out.println("CODE_VISION_CLICK_OK");
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(0);
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.err.println("CODE_VISION_CLICK_MISSED selected="
+                                + (selected == null ? "null" : selected.getClass().getName()));
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(2);
+                    }
+                    dispatchMouseMove(editor, target);
+                    dispatchLeftClick(editor, target);
+                });
+                resultTimer.setInitialDelay(0);
+                resultTimer.start();
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(3);
+            }
+        });
+        clickTimer.setRepeats(false);
+        clickTimer.start();
+    }
+
+    private static void scheduleGutterClickVerification(String source) {
+        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+            try {
+                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                if (editor == null || iconRow == null) {
+                    throw new IllegalStateException("Code editor gutter was not found");
+                }
+                Rectangle2D declaration = editor.modelToView2D(source.indexOf("public interface ThemeSample"));
+                Point target = SwingUtilities.convertPoint(
+                        editor,
+                        0,
+                        (int) Math.floor(declaration.getY() + declaration.getHeight() / 2),
+                        iconRow
+                );
+                target.x = iconRow.getWidth() / 2;
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                    if (isShowing(ImplementationChooserPopup.class)) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.out.println("GUTTER_CLICK_OK");
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(0);
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.err.println("GUTTER_CLICK_MISSED");
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(2);
+                    }
+                    dispatchMouseMove(iconRow, target);
+                    dispatchLeftClick(iconRow, target);
+                });
+                resultTimer.setInitialDelay(0);
+                resultTimer.start();
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(3);
+            }
+        });
+        setupTimer.setRepeats(false);
+        setupTimer.start();
+    }
+
+    private static void scheduleGutterHover(String source, boolean verify) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        javax.swing.Timer hoverTimer = new javax.swing.Timer(150, event -> {
+            try {
+                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                if (editor == null || iconRow == null) {
+                    return;
+                }
+                int line = editor.getLineOfOffset(source.indexOf("public interface ThemeSample"));
+                if (iconRow.getTrackingIcons(line).length == 0) {
+                    if (System.nanoTime() >= deadline && verify) {
+                        throw new IllegalStateException("Hierarchy marker was not installed");
+                    }
+                    return;
+                }
+
+                if (verify) {
+                    ((javax.swing.Timer) event.getSource()).stop();
+                }
+                Rectangle2D declaration = editor.modelToView2D(source.indexOf("public interface ThemeSample"));
+                Point target = SwingUtilities.convertPoint(
+                        editor,
+                        0,
+                        (int) Math.floor(declaration.getY() + declaration.getHeight() / 2),
+                        iconRow
+                );
+                target.x = iconRow.getWidth() / 2;
+                dispatchMouseMove(iconRow, target);
+
+                if (verify) {
+                    scheduleWindowVerification(HierarchyPreviewPopup.class, "GUTTER_PREVIEW_OK");
+                }
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(3);
+            }
+        });
+        hoverTimer.setInitialDelay(1000);
+        hoverTimer.start();
+    }
+
+    private static <T extends java.awt.Window> boolean isShowing(Class<T> type) {
+        return Arrays.stream(java.awt.Window.getWindows()).anyMatch(window -> type.isInstance(window) && window.isShowing());
+    }
+
+    private static <T extends java.awt.Window> void scheduleWindowVerification(Class<T> type, String successMessage) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+            if (isShowing(type)) {
+                ((javax.swing.Timer) event.getSource()).stop();
+                System.out.println(successMessage);
+                MainWindow.INSTANCE.dispose();
+                System.exit(0);
+            }
+            if (System.nanoTime() >= deadline) {
+                ((javax.swing.Timer) event.getSource()).stop();
+                System.err.println(successMessage.replace("_OK", "_MISSED"));
+                MainWindow.INSTANCE.dispose();
+                System.exit(2);
+            }
+        });
+        timer.start();
+    }
+
+    private static void dispatchMouseMove(Component component, Point point) {
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_MOVED,
+                System.currentTimeMillis(),
+                0,
+                point.x,
+                point.y,
+                0,
+                false,
+                MouseEvent.NOBUTTON
+        ));
+    }
+
+    private static void dispatchLeftClick(Component component, Point point) {
+        long now = System.currentTimeMillis();
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_PRESSED,
+                now,
+                MouseEvent.BUTTON1_DOWN_MASK,
+                point.x,
+                point.y,
+                1,
+                false,
+                MouseEvent.BUTTON1
+        ));
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_RELEASED,
+                now + 1,
+                0,
+                point.x,
+                point.y,
+                1,
+                false,
+                MouseEvent.BUTTON1
+        ));
+        component.dispatchEvent(new MouseEvent(
+                component,
+                MouseEvent.MOUSE_CLICKED,
+                now + 2,
+                0,
+                point.x,
+                point.y,
+                1,
+                false,
+                MouseEvent.BUTTON1
+        ));
+    }
+
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("companion-ui-harness");
         Files.createDirectories(root.resolve("scripts"));
@@ -324,6 +539,10 @@ public final class UiDevHarness {
                 .map(argument -> Path.of(argument.substring("--screenshot=".length())))
                 .findFirst()
                 .orElse(null);
+        boolean backgroundMode = screenshot != null
+                || Arrays.asList(args).contains("--verify-code-vision-click")
+                || Arrays.asList(args).contains("--verify-gutter-click")
+                || Arrays.asList(args).contains("--verify-gutter-hover");
         CompanionApp.configureLookAndFeel();
 
         System.out.println("UI dev harness data directory: " + root);
@@ -359,6 +578,17 @@ public final class UiDevHarness {
             if (Arrays.asList(args).contains("--show-implementations")) {
                 scheduleImplementationPopup(CodeView.readCode(sample));
             }
+            if (Arrays.asList(args).contains("--verify-code-vision-click")) {
+                scheduleCodeVisionClickVerification(CodeView.readCode(sample));
+            }
+            if (Arrays.asList(args).contains("--verify-gutter-click")) {
+                scheduleGutterClickVerification(CodeView.readCode(sample));
+            }
+            boolean hoverGutter = Arrays.asList(args).contains("--hover-gutter");
+            boolean verifyGutterHover = Arrays.asList(args).contains("--verify-gutter-hover");
+            if (hoverGutter || verifyGutterHover) {
+                scheduleGutterHover(CodeView.readCode(sample), verifyGutterHover);
+            }
             if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
                 startThemeCycling();
             }
@@ -370,12 +600,19 @@ public final class UiDevHarness {
                         null
                 ));
             }
-            MainWindow.INSTANCE.setVisible(true);
-            UIUtils.centerJFrame(MainWindow.INSTANCE);
+            if (backgroundMode) {
+                MainWindow.INSTANCE.setAutoRequestFocus(false);
+                MainWindow.INSTANCE.setFocusableWindowState(false);
+                MainWindow.INSTANCE.setLocation(-20_000, -20_000);
+                MainWindow.INSTANCE.setVisible(true);
+            } else {
+                MainWindow.INSTANCE.setVisible(true);
+                UIUtils.centerJFrame(MainWindow.INSTANCE);
+            }
             ToolTipManager.sharedInstance().setInitialDelay(200);
             if (screenshot != null) {
                 expandTreeForScreenshot();
-                scheduleScreenshot(screenshot);
+                scheduleScreenshot(screenshot, hoverGutter ? 2600 : 1400);
             }
         });
     }

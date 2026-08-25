@@ -298,7 +298,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         setLocation(fittedX, Math.max(screen.y, fittedY));
     }
 
-    private static String targetLabel(CodeSymbol symbol) {
+    static String targetLabel(CodeSymbol symbol) {
         return switch (symbol) {
             case CodeSymbol.ClassSymbol type -> simpleClassName(type.className());
             case CodeSymbol.MethodSymbol method -> simpleClassName(method.ownerClassName()) + '.'
@@ -345,6 +345,23 @@ public final class ImplementationChooserPopup extends BasePopup {
         return separator < 0 ? "" : binaryName.substring(0, separator);
     }
 
+    static String resultLabel(CodeSymbol symbol) {
+        String owner = symbol.ownerClassName();
+        String primary = switch (symbol) {
+            case CodeSymbol.ClassSymbol ignored -> simpleClassName(owner);
+            case CodeSymbol.MethodSymbol method -> simpleClassName(owner) + '.' + displayMethod(method);
+            case CodeSymbol.FieldSymbol field -> simpleClassName(owner) + '.' + field.name();
+        };
+        String packageName = packageName(owner);
+        return packageName.isEmpty()
+                ? primary
+                : "<html>" + primary + " <span style='color:#8c8f94'>" + packageName + "</span></html>";
+    }
+
+    static Icon symbolIcon(CodeSymbol symbol) {
+        return symbol instanceof CodeSymbol.ClassSymbol ? Icons.JAVA_CLASS : Icons.JAVA_METHOD;
+    }
+
     private void moveSelection(int direction) {
         int size = this.listModel.size();
         if (size == 0) {
@@ -386,21 +403,5 @@ public final class ImplementationChooserPopup extends BasePopup {
             return row;
         }
 
-        private String resultLabel(CodeSymbol symbol) {
-            String owner = symbol.ownerClassName();
-            String primary = switch (symbol) {
-                case CodeSymbol.ClassSymbol ignored -> simpleClassName(owner);
-                case CodeSymbol.MethodSymbol method -> simpleClassName(owner) + '.' + displayMethod(method);
-                case CodeSymbol.FieldSymbol field -> simpleClassName(owner) + '.' + field.name();
-            };
-            String packageName = packageName(owner);
-            return packageName.isEmpty()
-                    ? primary
-                    : "<html>" + primary + " <span style='color:#8c8f94'>" + packageName + "</span></html>";
-        }
-
-        private Icon symbolIcon(CodeSymbol symbol) {
-            return symbol instanceof CodeSymbol.ClassSymbol ? Icons.JAVA_CLASS : Icons.JAVA_METHOD;
-        }
     }
 }

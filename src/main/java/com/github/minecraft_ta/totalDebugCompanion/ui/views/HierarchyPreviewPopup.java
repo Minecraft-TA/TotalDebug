@@ -1,0 +1,208 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.views;
+
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQuery;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JWindow;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Window;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+/** A compact, non-interactive hierarchy preview shown while a gutter marker is hovered. */
+public final class HierarchyPreviewPopup extends JWindow {
+    private static final int RESULT_LIMIT = 6;
+
+    private final CodeInsightService service;
+    private final JLabel title = new JLabel();
+    private final JPanel rows = new JPanel();
+    private final Map<HierarchyQuery, HierarchyPage> cache = new HashMap<>();
+
+    private CodeInsightService.SearchHandle activeSearch;
+    private long generation;
+    private Component invoker;
+    private Point anchor;
+
+    public HierarchyPreviewPopup(Window owner, CodeInsightService service) {
+        super(owner);
+        this.service = Objects.requireNonNull(service, "service");
+        setAlwaysOnTop(true);
+        setFocusableWindowState(false);
+        configureUi();
+    }
+
+    public void showImplementations(Component invoker, Point point, CodeSymbol symbol) {
+        showPreview(invoker, point, HierarchyQuery.implementations(symbol));
+    }
+
+    public void showBaseMethods(Component invoker, Point point, CodeSymbol.MethodSymbol symbol) {
+        showPreview(invoker, point, HierarchyQuery.baseMethods(symbol));
+    }
+
+    public void setContentFont(Font font) {
+        Font contentFont = Objects.requireNonNull(font, "font");
+        this.rows.setFont(contentFont);
+        this.title.setFont(contentFont.deriveFont(Font.BOLD));
+    }
+
+    public void hidePreview() {
+        this.generation++;
+        if (this.activeSearch != null) {
+            this.activeSearch.cancel();
+            this.activeSearch = null;
+        }
+        setVisible(false);
+    }
+
+    @Override
+    public void dispose() {
+        hidePreview();
+        super.dispose();
+    }
+
+    private void configureUi() {
+        JPanel content = new JPanel(new BorderLayout());
+        content.setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
+        setContentPane(content);
+
+        this.title.setBorder(BorderFactory.createEmptyBorder(8, 10, 7, 10));
+        content.add(this.title, BorderLayout.NORTH);
+
+        this.rows.setLayout(new BoxLayout(this.rows, BoxLayout.Y_AXIS));
+        this.rows.setBorder(BorderFactory.createEmptyBorder(0, 6, 2, 6));
+        content.add(this.rows, BorderLayout.CENTER);
+
+    }
+
+    private void showPreview(Component nextInvoker, Point point, HierarchyQuery query) {
+        this.invoker = Objects.requireNonNull(nextInvoker, "invoker");
+        this.anchor = new Point(Objects.requireNonNull(point, "point"));
+        this.title.setText(query.direction() == HierarchyDirection.BASE_METHODS
+                ? "Overrides"
+                : "Is implemented in");
+
+        HierarchyPage cached = this.cache.get(query);
+        if (cached != null) {
+            showResults(cached);
+            showAtAnchor();
+            return;
+        }
+
+        setMessage("Looking up the hierarchy...");
+        showAtAnchor();
+        long searchGeneration = ++this.generation;
+        if (this.activeSearch != null) {
+            this.activeSearch.cancel();
+        }
+        this.activeSearch = this.service.search(query, RESULT_LIMIT, new CodeInsightService.Listener<>() {
+            @Override
+            public void onCompleted(HierarchyPage page) {
+                if (searchGeneration != generation) {
+                    return;
+                }
+                activeSearch = null;
+                cache.put(query, page);
+                showResults(page);
+                showAtAnchor();
+            }
+
+            @Override
+            public void onFailed(Throwable failure) {
+                if (searchGeneration != generation) {
+                    return;
+                }
+                activeSearch = null;
+                setMessage("Hierarchy lookup failed");
+                showAtAnchor();
+            }
+        });
+    }
+
+    private void showResults(HierarchyPage page) {
+        this.rows.removeAll();
+        if (page.results().isEmpty()) {
+            addMessageRow("No declarations found");
+        } else {
+            for (HierarchyResult result : page.results()) {
+                this.rows.add(createResultRow(result));
+            }
+        }
+        if (page.truncated()) {
+            addMessageRow("More results...");
+        }
+    }
+
+    private JPanel createResultRow(HierarchyResult result) {
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
+
+        JLabel declaration = new JLabel(
+                ImplementationChooserPopup.resultLabel(result.symbol()),
+                ImplementationChooserPopup.symbolIcon(result.symbol()),
+                JLabel.LEFT
+        );
+        declaration.setFont(this.rows.getFont());
+        row.add(declaration, BorderLayout.CENTER);
+
+        RuntimeInventory.RuntimeModule module = this.service.sourceCatalog().moduleFor(result.sourceId());
+        JLabel moduleLabel = new JLabel(module.displayName());
+        moduleLabel.setForeground(ThemeColors.mutedText());
+        moduleLabel.setFont(this.rows.getFont().deriveFont(
+                Font.PLAIN,
+                Math.max(10f, this.rows.getFont().getSize2D() - 1f)
+        ));
+        moduleLabel.setToolTipText(module.label());
+        row.add(moduleLabel, BorderLayout.EAST);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        return row;
+    }
+
+    private void setMessage(String message) {
+        this.rows.removeAll();
+        addMessageRow(message);
+    }
+
+    private void addMessageRow(String message) {
+        JLabel label = new JLabel(message);
+        label.setForeground(ThemeColors.mutedText());
+        label.setFont(this.rows.getFont());
+        label.setBorder(BorderFactory.createEmptyBorder(4, 4, 5, 4));
+        this.rows.add(label);
+    }
+
+    private void showAtAnchor() {
+        this.rows.revalidate();
+        this.rows.repaint();
+        pack();
+        int width = Math.max(360, Math.min(760, getWidth()));
+        setSize(width, getHeight());
+
+        Point screenPoint = this.invoker.getLocationOnScreen();
+        int x = screenPoint.x + this.anchor.x;
+        int y = screenPoint.y + this.anchor.y;
+        Rectangle screen = this.invoker.getGraphicsConfiguration().getBounds();
+        if (screen.intersects(getOwner().getBounds())) {
+            x = Math.max(screen.x, Math.min(x, screen.x + screen.width - getWidth()));
+            y = Math.max(screen.y, Math.min(y, screen.y + screen.height - getHeight()));
+        }
+        setLocation(x, y);
+        setVisible(true);
+    }
+}

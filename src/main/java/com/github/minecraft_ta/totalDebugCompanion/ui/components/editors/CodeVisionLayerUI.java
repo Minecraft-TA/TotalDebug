@@ -162,13 +162,16 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
                 : blend(ThemeColors.mutedText(), ThemeColors.text(), 0.35f);
         draw.setColor(color);
         draw.drawString(text, x, baseline);
+        if (target.equals(this.hovered)) {
+            draw.drawLine(x, baseline + 1, x + width - 1, baseline + 1);
+        }
         this.hitTargets.add(target);
         return x + width;
     }
 
     @Override
     protected void processMouseMotionEvent(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
-        HitTarget target = targetAt(event.getPoint());
+        HitTarget target = targetAt(pointInLayer(event, layer));
         if (!Objects.equals(target, this.hovered)) {
             this.hovered = target;
             layer.setCursor(target == null ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -179,10 +182,17 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
 
     @Override
     protected void processMouseEvent(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
+        if (event.getID() == MouseEvent.MOUSE_EXITED) {
+            this.hovered = null;
+            layer.setCursor(Cursor.getDefaultCursor());
+            layer.setToolTipText(null);
+            layer.repaint();
+            return;
+        }
         if (event.getID() != MouseEvent.MOUSE_CLICKED || !SwingUtilities.isLeftMouseButton(event)) {
             return;
         }
-        HitTarget target = targetAt(event.getPoint());
+        HitTarget target = targetAt(pointInLayer(event, layer));
         if (target == null) {
             return;
         }
@@ -194,6 +204,10 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
             );
         }
         event.consume();
+    }
+
+    private static Point pointInLayer(MouseEvent event, JLayer<? extends RTextScrollPane> layer) {
+        return SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), layer);
     }
 
     private HitTarget targetAt(Point point) {

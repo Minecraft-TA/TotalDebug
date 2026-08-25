@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
@@ -20,6 +21,8 @@ import javax.swing.JLayer;
 import javax.swing.KeyStroke;
 import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -32,6 +35,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_USAGES_KEY = "findUsages";
 
     private final ImplementationChooserPopup implementationChooser;
+    private final HierarchyPreviewPopup hierarchyPreview;
     private final CodeVisionLayerUI codeVisionLayerUI;
     private final JLayer<RTextScrollPane> codeVisionLayer;
     private final HierarchyGutterMarkers gutterMarkers;
@@ -50,6 +54,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         var insightService = CompanionApp.getCodeInsightService();
         this.implementationChooser = new ImplementationChooserPopup(MainWindow.INSTANCE, insightService);
         this.implementationChooser.setListFont(this.editorPane.getFont());
+        this.hierarchyPreview = new HierarchyPreviewPopup(MainWindow.INSTANCE, insightService);
+        this.hierarchyPreview.setContentFont(this.editorPane.getFont());
 
         this.codeVisionLayerUI = new CodeVisionLayerUI(this.editorPane, new CodeVisionLayerUI.Handler() {
             @Override
@@ -84,6 +90,23 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                                 declaration.markerOffset()
                         );
                     }
+
+                    @Override
+                    public void previewImplementations(SourceDeclaration declaration, Component invoker, Point point) {
+                        hierarchyPreview.showImplementations(invoker, point, declaration.symbol());
+                    }
+
+                    @Override
+                    public void previewBaseMethods(SourceDeclaration declaration, Component invoker, Point point) {
+                        if (declaration.symbol() instanceof CodeSymbol.MethodSymbol method) {
+                            hierarchyPreview.showBaseMethods(invoker, point, method);
+                        }
+                    }
+
+                    @Override
+                    public void hidePreview() {
+                        hierarchyPreview.hidePreview();
+                    }
                 }
         );
         this.codeVisionController = new CodeVisionController(
@@ -96,7 +119,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
         configureActions();
         configureContextMenuCaret();
-        this.editorPane.getCaret().addChangeListener(event -> this.implementationChooser.setVisible(false));
+        this.editorPane.getCaret().addChangeListener(event -> {
+            this.implementationChooser.setVisible(false);
+            this.hierarchyPreview.hidePreview();
+        });
     }
 
     public void setCode(String code) {
@@ -110,6 +136,9 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         if (this.implementationChooser != null) {
             this.implementationChooser.setListFont(this.editorPane.getFont());
         }
+        if (this.hierarchyPreview != null) {
+            this.hierarchyPreview.setContentFont(this.editorPane.getFont());
+        }
     }
 
     @Override
@@ -118,6 +147,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.codeVisionDisposed = true;
             this.codeVisionController.close();
             this.implementationChooser.dispose();
+            this.hierarchyPreview.dispose();
         }
         super.dispose();
     }
