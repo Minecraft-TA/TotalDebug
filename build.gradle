@@ -206,3 +206,10 @@ tasks.register('uiHarness', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiDevHarness'
 }
+
+tasks.register('uiContactSheet', JavaExec) {
+    group = 'verification'
+    description = 'Renders every named Companion UI state in both themes.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiCaptureSuite'
+}

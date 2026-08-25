@@ -11,7 +11,6 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -22,7 +21,6 @@ import com.github.tth05.jindex.IndexSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
-import javax.swing.JButton;
 import javax.swing.JList;
 import javax.swing.ToolTipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -51,8 +49,8 @@ import javax.tools.ToolProvider;
  *
  * <pre>
  * ./gradlew uiHarness
- * ./gradlew uiHarness --args=islands-light
- * ./gradlew uiHarness --args="islands-dark cycle"   # live-switches themes every 8s
+ * ./gradlew uiHarness --args="--theme=islands-light --scenario=search-results"
+ * ./gradlew uiContactSheet
  * </pre>
  *
  * <p>Lives in {@code src/test} on purpose: production static-initialisation order is delicate here
@@ -257,114 +255,6 @@ public final class UiDevHarness {
         return null;
     }
 
-    private static void expandTreeForScreenshot() {
-        LazyFileJTree tree = findComponent(MainWindow.INSTANCE, LazyFileJTree.class);
-        if (tree == null) {
-            return;
-        }
-        javax.swing.Timer timer = new javax.swing.Timer(120, null);
-        timer.addActionListener(event -> {
-            for (int row = 0; row < tree.getRowCount(); row++) {
-                tree.expandRow(row);
-            }
-        });
-        timer.setRepeats(true);
-        timer.start();
-        javax.swing.Timer stopTimer = new javax.swing.Timer(1000, event -> timer.stop());
-        stopTimer.setRepeats(false);
-        stopTimer.start();
-    }
-
-    private static void scheduleScreenshot(Path target, int delayMillis) {
-        javax.swing.Timer timer = new javax.swing.Timer(delayMillis, event -> {
-            try {
-                Files.createDirectories(target.toAbsolutePath().getParent());
-                BufferedImage image = new BufferedImage(
-                        MainWindow.INSTANCE.getWidth(),
-                        MainWindow.INSTANCE.getHeight(),
-                        BufferedImage.TYPE_INT_ARGB
-                );
-                Graphics2D graphics = image.createGraphics();
-                MainWindow.INSTANCE.paintAll(graphics);
-                for (java.awt.Window window : java.awt.Window.getWindows()) {
-                    if (window == MainWindow.INSTANCE || !window.isShowing()) {
-                        continue;
-                    }
-                    Graphics2D popupGraphics = (Graphics2D) graphics.create();
-                    popupGraphics.translate(
-                            window.getX() - MainWindow.INSTANCE.getX(),
-                            window.getY() - MainWindow.INSTANCE.getY()
-                    );
-                    window.paintAll(popupGraphics);
-                    popupGraphics.dispose();
-                }
-                for (javax.swing.MenuElement element : javax.swing.MenuSelectionManager.defaultManager()
-                        .getSelectedPath()) {
-                    if (!(element instanceof javax.swing.JPopupMenu popup) || !popup.isShowing()) {
-                        continue;
-                    }
-                    Point location = popup.getLocationOnScreen();
-                    Component invoker = popup.getInvoker();
-                    if (invoker != null) {
-                        Point invokerLocation = invoker.getLocationOnScreen();
-                        location = new Point(
-                                invokerLocation.x + invoker.getWidth() - popup.getWidth(),
-                                invokerLocation.y + invoker.getHeight()
-                        );
-                    }
-                    Graphics2D popupGraphics = (Graphics2D) graphics.create();
-                    popupGraphics.translate(
-                            location.x - MainWindow.INSTANCE.getX(),
-                            location.y - MainWindow.INSTANCE.getY()
-                    );
-                    popup.paintAll(popupGraphics);
-                    popupGraphics.dispose();
-                }
-                graphics.dispose();
-                ImageIO.write(image, "png", target.toFile());
-                System.out.println("UI screenshot: " + target.toAbsolutePath());
-            } catch (Exception exception) {
-                exception.printStackTrace(System.err);
-                System.exit(1);
-            }
-            MainWindow.INSTANCE.dispose();
-            System.exit(0);
-        });
-        timer.setRepeats(false);
-        timer.start();
-    }
-
-    private static void scheduleSearchEverywhere(boolean showModuleFilter) {
-        javax.swing.Timer openTimer = new javax.swing.Timer(700, event -> {
-            MainWindow.INSTANCE.openSearchEverywhere();
-            javax.swing.Timer queryTimer = new javax.swing.Timer(350, queryEvent -> {
-                SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
-                        .filter(SearchEverywherePopup.class::isInstance)
-                        .map(SearchEverywherePopup.class::cast)
-                        .filter(java.awt.Window::isShowing)
-                        .findFirst()
-                        .orElseThrow();
-                popup.setLocation(MainWindow.INSTANCE.getX() + 220, MainWindow.INSTANCE.getY() + 70);
-                FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
-                if (search == null) {
-                    throw new IllegalStateException("Search Everywhere query field was not found");
-                }
-                search.setText("Theme");
-                if (showModuleFilter) {
-                    JButton filter = findButton(popup, "All modules");
-                    if (filter == null) {
-                        throw new IllegalStateException("Search Everywhere module filter was not found");
-                    }
-                    filter.doClick();
-                }
-            });
-            queryTimer.setRepeats(false);
-            queryTimer.start();
-        });
-        openTimer.setRepeats(false);
-        openTimer.start();
-    }
-
     private static void scheduleSearchEverywhereInteractionVerification() {
         javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
             MainWindow.INSTANCE.openSearchEverywhere();
@@ -492,21 +382,6 @@ public final class UiDevHarness {
         ));
     }
 
-    private static JButton findButton(Container root, String text) {
-        for (Component component : root.getComponents()) {
-            if (component instanceof JButton button && text.equals(button.getText())) {
-                return button;
-            }
-            if (component instanceof Container child) {
-                JButton match = findButton(child, text);
-                if (match != null) {
-                    return match;
-                }
-            }
-        }
-        return null;
-    }
-
     /**
      * Flips between the available themes on a timer. Cold-starting each theme proves the theme files
      * are right; only switching at runtime proves everything that caches a colour, font or icon
@@ -521,22 +396,6 @@ public final class UiDevHarness {
             System.out.println("switching theme -> " + next.id());
             com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.apply(next);
         });
-        timer.start();
-    }
-
-    private static void scheduleImplementationPopup(String source) {
-        javax.swing.Timer timer = new javax.swing.Timer(850, event -> {
-            RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-            if (editor == null) {
-                return;
-            }
-            editor.setCaretPosition(source.indexOf("void apply(ThemeSample other)") + "void ".length());
-            javax.swing.Action action = editor.getActionMap().get("findImplementations");
-            if (action != null) {
-                action.actionPerformed(new java.awt.event.ActionEvent(editor, 0, "findImplementations"));
-            }
-        });
-        timer.setRepeats(false);
         timer.start();
     }
 
@@ -629,49 +488,6 @@ public final class UiDevHarness {
         });
         setupTimer.setRepeats(false);
         setupTimer.start();
-    }
-
-    private static void scheduleGutterClick(String source) {
-        javax.swing.Timer timer = new javax.swing.Timer(1000, event -> {
-            try {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
-                if (editor == null || iconRow == null) {
-                    throw new IllegalStateException("Code editor gutter was not found");
-                }
-                Rectangle2D declaration = editor.modelToView2D(source.indexOf("public interface ThemeSample"));
-                Point target = SwingUtilities.convertPoint(
-                        editor,
-                        0,
-                        (int) Math.floor(declaration.getY() + declaration.getHeight() / 2),
-                        iconRow
-                );
-                target.x = iconRow.getWidth() / 2;
-                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-                javax.swing.Timer clickTimer = new javax.swing.Timer(250, clickEvent -> {
-                    if (isShowing(ImplementationChooserPopup.class)) {
-                        ((javax.swing.Timer) clickEvent.getSource()).stop();
-                        return;
-                    }
-                    if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) clickEvent.getSource()).stop();
-                        System.err.println("GUTTER_CHOOSER_SCREENSHOT_MISSED");
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(2);
-                    }
-                    dispatchMouseMove(iconRow, target);
-                    dispatchLeftClick(iconRow, target);
-                });
-                clickTimer.setInitialDelay(0);
-                clickTimer.start();
-            } catch (Exception exception) {
-                exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(3);
-            }
-        });
-        timer.setRepeats(false);
-        timer.start();
     }
 
     private static void scheduleSingleGutterNavigationVerification(String source) {
@@ -873,6 +689,17 @@ public final class UiDevHarness {
     private static void dispatchMouseMove(Component component, Point point) {
         component.dispatchEvent(new MouseEvent(
                 component,
+                MouseEvent.MOUSE_ENTERED,
+                System.currentTimeMillis(),
+                0,
+                point.x,
+                point.y,
+                0,
+                false,
+                MouseEvent.NOBUTTON
+        ));
+        component.dispatchEvent(new MouseEvent(
+                component,
                 MouseEvent.MOUSE_MOVED,
                 System.currentTimeMillis(),
                 0,
@@ -922,6 +749,12 @@ public final class UiDevHarness {
     }
 
     public static void main(String[] args) throws Exception {
+        if (Arrays.asList(args).contains("--list-scenarios")) {
+            for (UiRenderScenario scenario : UiRenderScenario.values()) {
+                System.out.println(scenario.id() + "\t" + scenario.description());
+            }
+            return;
+        }
         Path root = Files.createTempDirectory("companion-ui-harness");
         Files.createDirectories(root.resolve("scripts"));
         Files.createDirectories(root.resolve("decompiled-files"));
@@ -944,10 +777,13 @@ public final class UiDevHarness {
         writeSampleSource(sample);
 
         GlobalConfig.getInstance().loadFrom(root);
-        var positionalArguments = Arrays.stream(args).filter(argument -> !argument.startsWith("--")).toList();
-        if (!positionalArguments.isEmpty()) {
-            GlobalConfig.getInstance().setThemeId(positionalArguments.getFirst());
+        String themeId = argument(args, "--theme=").orElse(null);
+        if (themeId != null) {
+            GlobalConfig.getInstance().setThemeId(themeId);
         }
+        UiRenderScenario scenario = argument(args, "--scenario=")
+                .map(UiRenderScenario::parse)
+                .orElse(UiRenderScenario.MAIN);
         Path screenshot = Arrays.stream(args)
                 .filter(argument -> argument.startsWith("--screenshot="))
                 .map(argument -> Path.of(argument.substring("--screenshot=".length())))
@@ -989,11 +825,10 @@ public final class UiDevHarness {
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
                     new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1)
             ));
-            if (Arrays.asList(args).contains("--select-code")) {
+            boolean interactionVerification = Arrays.asList(args).stream()
+                    .anyMatch(argument -> argument.startsWith("--verify-"));
+            if (interactionVerification) {
                 SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(0));
-            }
-            if (Arrays.asList(args).contains("--show-implementations")) {
-                scheduleImplementationPopup(CodeView.readCode(sample));
             }
             if (Arrays.asList(args).contains("--verify-code-vision-click")) {
                 scheduleCodeVisionClickVerification(CodeView.readCode(sample));
@@ -1001,19 +836,14 @@ public final class UiDevHarness {
             if (Arrays.asList(args).contains("--verify-gutter-click")) {
                 scheduleGutterClickVerification(CodeView.readCode(sample));
             }
-            if (Arrays.asList(args).contains("--click-gutter")) {
-                scheduleGutterClick(CodeView.readCode(sample));
-            }
             if (Arrays.asList(args).contains("--verify-gutter-direct")) {
                 scheduleSingleGutterNavigationVerification(CodeView.readCode(sample));
             }
-            boolean hoverGutter = Arrays.asList(args).contains("--hover-gutter");
-            boolean hoverOverrideGutter = Arrays.asList(args).contains("--hover-override-gutter");
             boolean verifyGutterHover = Arrays.asList(args).contains("--verify-gutter-hover");
             boolean verifyHierarchyRowLayout = Arrays.asList(args).contains("--verify-hierarchy-row-layout");
-            if (hoverGutter || hoverOverrideGutter || verifyGutterHover || verifyHierarchyRowLayout) {
+            if (verifyGutterHover || verifyHierarchyRowLayout) {
                 String source = CodeView.readCode(sample);
-                int declarationOffset = hoverOverrideGutter || verifyHierarchyRowLayout
+                int declarationOffset = verifyHierarchyRowLayout
                         ? source.indexOf(
                                 "public void overrideMe(",
                                 source.indexOf("class OverrideBase")
@@ -1024,26 +854,15 @@ public final class UiDevHarness {
                     scheduleHierarchyRowLayoutVerification();
                 }
             }
-            if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
+            if (Arrays.asList(args).contains("--cycle-themes")) {
                 startThemeCycling();
             }
             MainWindow.INSTANCE.setSize(1280, 720);
-            if (Arrays.asList(args).contains("--index-building")) {
-                MainWindow.INSTANCE.setRuntimeIndexStatus(new RuntimeIndexService.Status(
-                        RuntimeIndexService.Phase.BUILDING,
-                        "Building class index",
-                        null
-                ));
-            }
-            boolean showSearchEverywhere = Arrays.asList(args).contains("--show-search-everywhere");
-            boolean showModuleFilter = Arrays.asList(args).contains("--show-module-filter");
             boolean verifySearchEverywhere = Arrays.asList(args).contains(
                     "--verify-search-everywhere-interactions"
             );
             if (verifySearchEverywhere) {
                 scheduleSearchEverywhereInteractionVerification();
-            } else if (showSearchEverywhere || showModuleFilter) {
-                scheduleSearchEverywhere(showModuleFilter);
             }
             if (backgroundMode) {
                 MainWindow.INSTANCE.setAutoRequestFocus(false);
@@ -1055,16 +874,21 @@ public final class UiDevHarness {
                 UIUtils.centerJFrame(MainWindow.INSTANCE);
             }
             ToolTipManager.sharedInstance().setInitialDelay(200);
-            if (screenshot != null) {
-                expandTreeForScreenshot();
-                int screenshotDelay = showSearchEverywhere || showModuleFilter
-                        ? 2600
-                        : hoverGutter || hoverOverrideGutter
-                        ? 2600
-                        : Arrays.asList(args).contains("--show-implementations") ? 3200
-                                : Arrays.asList(args).contains("--click-gutter") ? 5000 : 1400;
-                scheduleScreenshot(screenshot, screenshotDelay);
+            MainWindow.INSTANCE.setRuntimeIndexStatus(new RuntimeIndexService.Status(
+                    RuntimeIndexService.Phase.READY,
+                    "Runtime index ready",
+                    null
+            ));
+            if (!interactionVerification) {
+                UiScenarioDriver.schedule(scenario, CodeView.readCode(sample), screenshot);
             }
         });
+    }
+
+    private static java.util.Optional<String> argument(String[] args, String prefix) {
+        return Arrays.stream(args)
+                .filter(argument -> argument.startsWith(prefix))
+                .map(argument -> argument.substring(prefix.length()))
+                .findFirst();
     }
 }

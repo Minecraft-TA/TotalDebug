@@ -17,6 +17,19 @@ The JAR can also be launched directly:
 java -jar build/libs/TotalDebugCompanion.jar
 ```
 
+### Visual verification
+
+The UI harness renders named application states without a Minecraft session or control of the real mouse:
+
+```shell
+./gradlew uiHarness --args="--theme=islands-dark --scenario=search-results"
+./gradlew uiHarness --args="--list-scenarios"
+./gradlew uiContactSheet
+```
+
+`uiContactSheet` renders every registered state in a fresh process for both themes. It writes individual PNGs, `contact-sheet.png`, and `manifest.json` under `build/ui-screenshots` by default. Pass `--args="--output=<directory>"` to choose another output directory.
+Use `--assemble-only` with an existing capture directory to rebuild the sheets without rerendering the states.
+
 Companion keeps one workspace open at a time. Cached sources, scripts, class search, and reference search remain available Offline. Live tools reconnect when a compatible TotalDebug client starts. Closing Minecraft does not close Companion; closing the Companion window exits it.
 
 ## Screenshots
