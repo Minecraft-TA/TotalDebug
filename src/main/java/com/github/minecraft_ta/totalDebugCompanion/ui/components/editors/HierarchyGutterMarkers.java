@@ -8,10 +8,12 @@ import org.fife.ui.rtextarea.GutterIconInfo;
 import org.fife.ui.rtextarea.IconRowHeader;
 import org.fife.ui.rtextarea.IconRowEvent;
 import org.fife.ui.rtextarea.IconRowListener;
+import org.fife.ui.rtextarea.LineNumberList;
 
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.text.BadLocationException;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Point;
@@ -68,6 +70,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
         this.handler = Objects.requireNonNull(handler, "handler");
         this.gutter.setIconRowHeaderEnabled(true);
         this.iconRowHeader = findIconRowHeader(this.gutter);
+        placeLineNumbersOutside(this.gutter, this.iconRowHeader);
         this.previewTimer = new Timer(350, event -> showHoveredPreview());
         this.previewTimer.setRepeats(false);
         this.gutter.addIconRowListener(this);
@@ -199,6 +202,20 @@ final class HierarchyGutterMarkers implements IconRowListener {
             }
         }
         throw new IllegalStateException("RSyntaxTextArea gutter has no icon row header");
+    }
+
+    private static void placeLineNumbersOutside(Gutter gutter, IconRowHeader iconRowHeader) {
+        for (Component child : gutter.getComponents()) {
+            if (child instanceof LineNumberList lineNumbers) {
+                gutter.remove(lineNumbers);
+                gutter.remove(iconRowHeader);
+                gutter.add(lineNumbers, BorderLayout.LINE_START);
+                gutter.add(iconRowHeader, BorderLayout.CENTER);
+                gutter.revalidate();
+                return;
+            }
+        }
+        throw new IllegalStateException("RSyntaxTextArea gutter has no line numbers");
     }
 
     private record Marker(
