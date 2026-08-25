@@ -38,6 +38,62 @@ class CompanionAppInstallerTest {
     }
 
     @Test
+    void clientConfigUsesTheMutableDevelopmentJar() throws Exception {
+        Path developmentJar = Files.writeString(this.temporaryDirectory.resolve("configured-companion.jar"), "jar");
+        String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
+        try {
+            System.clearProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
+
+            CompanionInstallation installation = new CompanionAppInstaller(
+                    this.temporaryDirectory.resolve("app"),
+                    developmentJar.toString()
+            ).resolveOrInstall();
+
+            assertEquals(developmentJar.toAbsolutePath().normalize(), installation.companionJar());
+        } finally {
+            restoreProperty(CompanionAppInstaller.DEV_JAR_PROPERTY, oldJar);
+        }
+    }
+
+    @Test
+    void systemPropertyOverridesTheClientConfigPath() throws Exception {
+        Path configuredJar = Files.writeString(this.temporaryDirectory.resolve("configured.jar"), "configured");
+        Path propertyJar = Files.writeString(this.temporaryDirectory.resolve("property.jar"), "property");
+        String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
+        try {
+            System.setProperty(CompanionAppInstaller.DEV_JAR_PROPERTY, propertyJar.toString());
+
+            CompanionInstallation installation = new CompanionAppInstaller(
+                    this.temporaryDirectory.resolve("app"),
+                    configuredJar.toString()
+            ).resolveOrInstall();
+
+            assertEquals(propertyJar.toAbsolutePath().normalize(), installation.companionJar());
+        } finally {
+            restoreProperty(CompanionAppInstaller.DEV_JAR_PROPERTY, oldJar);
+        }
+    }
+
+    @Test
+    void keepsAUserReplacementAtThePublishedInstallationPath() throws Exception {
+        String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
+        try {
+            System.clearProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
+            Path appDirectory = this.temporaryDirectory.resolve("app");
+            Path replacement = appDirectory.resolve("2.0.0/TotalDebugCompanion.jar");
+            Files.createDirectories(replacement.getParent());
+            Files.writeString(replacement, "local replacement");
+
+            CompanionInstallation installation = new CompanionAppInstaller(appDirectory).resolveOrInstall();
+
+            assertEquals(replacement.toAbsolutePath().normalize(), installation.companionJar());
+            assertEquals("local replacement", Files.readString(replacement));
+        } finally {
+            restoreProperty(CompanionAppInstaller.DEV_JAR_PROPERTY, oldJar);
+        }
+    }
+
+    @Test
     void rejectsAMissingDevelopmentJar() {
         String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
         Path missingJar = this.temporaryDirectory.resolve("missing.jar");

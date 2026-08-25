@@ -1,61 +1,3 @@
-import java.security.MessageDigest
-import java.util.zip.ZipFile
-
-abstract class VerifyCompanionPair extends DefaultTask {
-    @InputFile
-    @PathSensitive(PathSensitivity.NONE)
-    abstract RegularFileProperty getTotalDebugJar()
-
-    @InputFile
-    @PathSensitive(PathSensitivity.NONE)
-    abstract RegularFileProperty getCompanionJar()
-
-    @TaskAction
-    void verify() {
-        def release = new Properties()
-        new ZipFile(totalDebugJar.get().asFile).withCloseable { archive ->
-            def entry = archive.getEntry('META-INF/totaldebug/companion-release.properties')
-            if (entry == null) {
-                throw new GradleException('Built TotalDebug JAR does not contain Companion release metadata')
-            }
-            archive.getInputStream(entry).withCloseable { input -> release.load(input) }
-        }
-
-        def embeddedSha256 = release.getProperty('sha256')
-        def actualSha256 = sha256(companionJar.get().asFile)
-        if (embeddedSha256 != actualSha256) {
-            throw new GradleException(
-                    "Companion pair mismatch: TotalDebug pins ${embeddedSha256}, but "
-                            + "${companionJar.get().asFile} has ${actualSha256}"
-            )
-        }
-        logger.lifecycle("Verified TotalDebug and Companion pair at SHA-256 ${actualSha256}")
-    }
-
-    static String sha256(File input) {
-        def digest = MessageDigest.getInstance('SHA-256')
-        input.withInputStream { stream ->
-            byte[] buffer = new byte[8192]
-            int read
-            while ((read = stream.read(buffer)) != -1) {
-                digest.update(buffer, 0, read)
-            }
-        }
-        HexFormat.of().formatHex(digest.digest())
-    }
-}
-
-abstract class CompanionSha256ArgumentProvider implements CommandLineArgumentProvider {
-    @InputFile
-    @PathSensitive(PathSensitivity.NONE)
-    abstract RegularFileProperty getCompanionJar()
-
-    @Override
-    Iterable<String> asArguments() {
-        ["-Dtotaldebug.test.companionSha256=${VerifyCompanionPair.sha256(companionJar.get().asFile)}"]
-    }
-}
-
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.144'
@@ -118,12 +60,9 @@ def useSiblingCompanion = !explicitCompanionJar.isPresent()
         && !usePublishedCompanion.get()
         && siblingCompanionBuildFile.asFile.isFile()
         && siblingCompanionWrapper.asFile.isFile()
-def pairedCompanionJar = explicitCompanionJar.isPresent()
+def developmentCompanionJar = explicitCompanionJar.isPresent()
         ? file(explicitCompanionJar.get())
         : useSiblingCompanion ? siblingCompanionJar.asFile : null
-def pairedCompanionSha256 = pairedCompanionJar == null
-        ? null
-        : providers.provider { VerifyCompanionPair.sha256(pairedCompanionJar) }
 
 neoForge {
     version = project.neo_version
@@ -166,6 +105,12 @@ def buildSiblingCompanion = tasks.register('buildSiblingCompanion', Exec) {
     commandLine siblingCompanionWrapper.asFile.absolutePath, 'shadowJar', '--console=plain'
 }
 
+tasks.named('build').configure {
+    if (useSiblingCompanion) {
+        dependsOn buildSiblingCompanion
+    }
+}
+
 tasks.named('prepareClientRun').configure {
     if (useSiblingCompanion) {
         dependsOn buildSiblingCompanion
@@ -202,19 +147,6 @@ def minimumNeoForgeVersion = project.neo_version.toString()
 
 tasks.named('processResources').configure {
     inputs.property('neo_version', minimumNeoForgeVersion)
-    if (pairedCompanionJar != null) {
-        if (useSiblingCompanion) {
-            dependsOn buildSiblingCompanion
-        }
-        inputs.file(pairedCompanionJar).withPathSensitivity(PathSensitivity.NONE)
-        filesMatching('META-INF/totaldebug/companion-release.properties') {
-            filter { line ->
-                line.startsWith('sha256=')
-                        ? "sha256=${pairedCompanionSha256.get()}"
-                        : line
-            }
-        }
-    }
     filesMatching('META-INF/neoforge.mods.toml') {
         filter { line -> line.replace('${neo_version}', minimumNeoForgeVersion) }
     }
@@ -229,50 +161,30 @@ modJar.configure {
     )
 }
 
-def verifyCompanionPair = pairedCompanionJar == null
-        ? tasks.register('verifyCompanionPair') {
-            group = 'verification'
-            description = 'Checks that the built TotalDebug JAR pins the selected local Companion JAR.'
-            onlyIf { false }
-        }
-        : tasks.register('verifyCompanionPair', VerifyCompanionPair) {
-            group = 'verification'
-            description = 'Checks that the built TotalDebug JAR pins the selected local Companion JAR.'
-            totalDebugJar = modJar.flatMap { it.archiveFile }
-            companionJar = pairedCompanionJar
-            dependsOn modJar
-        }
-
-tasks.named('check').configure {
-    dependsOn verifyCompanionPair
-}
-
-if (pairedCompanionJar != null) {
-    def localCompanionPair = tasks.register('localCompanionPair', Sync) {
+if (developmentCompanionJar != null) {
+    def localBundle = tasks.register('localBundle', Sync) {
         group = 'build'
-        description = 'Builds and collects matching local TotalDebug and Companion JARs.'
-        dependsOn verifyCompanionPair
+        description = 'Builds and collects the current local TotalDebug and Companion JARs.'
+        dependsOn modJar
+        if (useSiblingCompanion) {
+            dependsOn buildSiblingCompanion
+        }
         from(modJar.flatMap { it.archiveFile })
-        from(pairedCompanionJar)
-        into(layout.buildDirectory.dir('local-companion-pair'))
+        from(developmentCompanionJar)
+        into(layout.buildDirectory.dir('local-bundle'))
     }
 
     tasks.register('installCodexCompanionMcp', Copy) {
         group = 'development'
-        description = 'Builds a verified local pair and installs the Companion MCP sidecar for Codex.'
-        dependsOn localCompanionPair
-        from(layout.buildDirectory.file('local-companion-pair/TotalDebugCompanion.jar'))
+        description = 'Builds and installs the current Companion MCP sidecar for Codex.'
+        dependsOn localBundle
+        from(layout.buildDirectory.file('local-bundle/TotalDebugCompanion.jar'))
         into(codexHome.map { home -> new File(home, 'mcp/totaldebug-companion') })
     }
 }
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
-    if (pairedCompanionJar != null) {
-        def sha256ArgumentProvider = objects.newInstance(CompanionSha256ArgumentProvider)
-        sha256ArgumentProvider.companionJar = pairedCompanionJar
-        jvmArgumentProviders.add(sha256ArgumentProvider)
-    }
 }
 
 tasks.withType(JavaCompile).configureEach {

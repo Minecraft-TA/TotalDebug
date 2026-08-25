@@ -62,6 +62,7 @@ public final class TotalDebugConfig {
 
     public static final class Client {
         public final ModConfigSpec.BooleanValue useCompanionApp;
+        public final ModConfigSpec.ConfigValue<String> companionDevelopmentJar;
         public final ModConfigSpec.ConfigValue<List<? extends String>> blockedPacketClasses;
 
         private Client(ModConfigSpec.Builder builder) {
@@ -69,6 +70,12 @@ public final class TotalDebugConfig {
             this.useCompanionApp = builder
                     .comment("Enable TotalDebug Companion for browsing and decompiling runtime classes.")
                     .define("useCompanionApp", true);
+            this.companionDevelopmentJar = builder
+                    .comment(
+                            "Optional path to a mutable TotalDebugCompanion JAR for development.",
+                            "Rebuild the JAR, close Companion, then press F6 to launch the new build."
+                    )
+                    .define("companionDevelopmentJar", "");
             builder.pop();
 
             builder.push("network");

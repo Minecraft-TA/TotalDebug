@@ -27,15 +27,26 @@ Run a development client or dedicated server with:
 .\gradlew.bat runServer
 ```
 
-When `../TotalDebugCompanion` exists, `runClient` builds its `shadowJar` and uses that JAR automatically. This keeps local Companion changes testable without publishing a release or changing its version.
+When `../TotalDebugCompanion` exists, `build` and `runClient` build its `shadowJar`. The development client reads that mutable JAR whenever it starts Companion. Rebuild Companion while Minecraft is running, close Companion, then press F6 to launch the new build. TotalDebug stages each launch by content hash, so the running process never locks the mutable development JAR.
 
-Build a matching pair for an external Minecraft instance with:
+Build and collect both current artifacts for an external Minecraft instance with:
 
 ```powershell
-.\gradlew.bat localCompanionPair
+.\gradlew.bat localBundle
 ```
 
-The task builds the sibling Companion shadow JAR, embeds its SHA-256 in TotalDebug, verifies the match, and writes both JARs to `build/local-companion-pair`.
+The task writes both JARs to `build/local-bundle`. It does not link their hashes or versions. Runtime compatibility comes from the Companion protocol handshake.
+
+For an external development instance, set `companionDevelopmentJar` in `config/total_debug-client.toml` to the mutable Companion build output. Forward slashes avoid TOML escaping on Windows:
+
+```toml
+[decompilation]
+companionDevelopmentJar = "C:/Users/Admin/IdeaProjects/TotalDebugCompanion/build/libs/TotalDebugCompanion.jar"
+```
+
+Build Companion normally. After it closes, the next F6 reads and launches the current bytes at that path without restarting Minecraft.
+
+You can also replace an installed Companion JAR under `total-debug/companion-app/<version>` directly. TotalDebug verifies JARs while downloading them, then leaves an existing file alone. Close Companion and press F6 to launch the replacement. Delete the file to restore the published release on the next launch.
 
 Install that verified Companion build as the MCP sidecar used by new Codex tasks with:
 
@@ -45,7 +56,7 @@ Install that verified Companion build as the MCP sidecar used by new Codex tasks
 
 The task copies the Companion JAR to the stable Codex-owned path `%USERPROFILE%\.codex\mcp\totaldebug-companion\TotalDebugCompanion.jar`. Moving either repository afterward does not affect Codex. Rebuilding alone does not replace the installed copy; rerun the install task after Companion MCP changes. Override the Codex directory with `-PcodexHome=C:\path\to\.codex` or the `CODEX_HOME` environment variable.
 
-TotalDebug installs Companion builds side by side by content hash. F6 reuses a compatible running Companion or starts one when needed. Closing Minecraft disconnects the live tools but leaves the Companion and its current workspace open Offline.
+TotalDebug stages Companion builds side by side by content hash. The hash identifies immutable launch bytes; protocol and capabilities decide compatibility. F6 reuses a compatible running Companion or starts the current development or published JAR when needed. Closing Minecraft disconnects the live tools but leaves Companion and its current workspace open Offline.
 
 Pass an explicit JAR to override the sibling checkout:
 

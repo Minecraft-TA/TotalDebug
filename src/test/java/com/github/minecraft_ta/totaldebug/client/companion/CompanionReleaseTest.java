@@ -12,7 +12,7 @@ class CompanionReleaseTest {
             "7f09e350acb7dbcc8a8a994d6ba2a8340b7226e67ae6acf69ba9ee61babf7157";
 
     @Test
-    void loadsTheGeneratedImmutableReleaseMetadata() {
+    void loadsTheBundledPublishedReleaseMetadata() {
         CompanionRelease release = CompanionRelease.loadBundled();
 
         assertEquals("2.0.0", release.version());
@@ -25,7 +25,7 @@ class CompanionReleaseTest {
                 release.downloadUri()
         );
         assertEquals(
-                System.getProperty("totaldebug.test.companionSha256", PUBLISHED_SHA256),
+                PUBLISHED_SHA256,
                 release.sha256()
         );
     }

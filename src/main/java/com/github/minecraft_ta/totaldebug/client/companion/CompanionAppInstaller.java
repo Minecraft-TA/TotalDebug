@@ -22,12 +22,18 @@ public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
 
     private final Path appDirectory;
+    private final String configuredDevelopmentJar;
     private final CompanionRelease release;
     private final HttpClient httpClient;
 
     public CompanionAppInstaller(Path appDirectory) {
+        this(appDirectory, "");
+    }
+
+    public CompanionAppInstaller(Path appDirectory, String configuredDevelopmentJar) {
         this(
                 appDirectory,
+                configuredDevelopmentJar,
                 CompanionRelease.loadBundled(),
                 HttpClient.newBuilder()
                         .followRedirects(HttpClient.Redirect.NORMAL)
@@ -36,7 +42,20 @@ public final class CompanionAppInstaller {
     }
 
     CompanionAppInstaller(Path appDirectory, CompanionRelease release, HttpClient httpClient) {
+        this(appDirectory, "", release, httpClient);
+    }
+
+    CompanionAppInstaller(
+            Path appDirectory,
+            String configuredDevelopmentJar,
+            CompanionRelease release,
+            HttpClient httpClient
+    ) {
         this.appDirectory = Objects.requireNonNull(appDirectory, "appDirectory").toAbsolutePath().normalize();
+        this.configuredDevelopmentJar = Objects.requireNonNull(
+                configuredDevelopmentJar,
+                "configuredDevelopmentJar"
+        ).trim();
         this.release = Objects.requireNonNull(release, "release");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     }
@@ -49,7 +68,10 @@ public final class CompanionAppInstaller {
             throws IOException, InterruptedException {
         Objects.requireNonNull(progressListener, "progressListener");
         String developmentJar = System.getProperty(DEV_JAR_PROPERTY);
-        boolean hasDevelopmentJar = developmentJar != null && !developmentJar.isBlank();
+        if (developmentJar == null || developmentJar.isBlank()) {
+            developmentJar = this.configuredDevelopmentJar;
+        }
+        boolean hasDevelopmentJar = !developmentJar.isBlank();
         if (hasDevelopmentJar) {
             Path jarPath = Path.of(developmentJar).toAbsolutePath().normalize();
             requireRegularFile(jarPath, "Configured companion development JAR");
@@ -62,20 +84,11 @@ public final class CompanionAppInstaller {
 
         Path installationDirectory = this.appDirectory.resolve(this.release.version());
         Path jarPath = installationDirectory.resolve(this.release.artifactFileName());
-        if (!Files.isRegularFile(jarPath) || !this.release.sha256().equals(sha256(jarPath))) {
+        if (!Files.isRegularFile(jarPath)) {
             installDistribution(jarPath, progressListener);
         }
 
         requireRegularFile(jarPath, "Companion JAR");
-        String installedHash = sha256(jarPath);
-        if (!this.release.sha256().equals(installedHash)) {
-            throw new IOException(
-                    "Installed companion checksum mismatch: expected "
-                            + this.release.sha256()
-                            + ", got "
-                            + installedHash
-            );
-        }
         return new CompanionInstallation(jarPath);
     }
 

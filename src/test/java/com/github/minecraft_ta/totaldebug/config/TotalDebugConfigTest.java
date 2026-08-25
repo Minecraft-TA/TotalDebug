@@ -11,6 +11,7 @@ class TotalDebugConfigTest {
     @Test
     void keepsTheLegacyDefaultsForRetainedOptions() {
         assertTrue(TotalDebugConfig.CLIENT.useCompanionApp.getDefault());
+        assertTrue(TotalDebugConfig.CLIENT.companionDevelopmentJar.getDefault().isEmpty());
         assertTrue(TotalDebugConfig.CLIENT.blockedPacketClasses.getDefault().isEmpty());
         assertFalse(TotalDebugConfig.SERVER.enableScripts.getDefault());
         assertTrue(TotalDebugConfig.SERVER.enableScriptsOnlyForOp.getDefault());

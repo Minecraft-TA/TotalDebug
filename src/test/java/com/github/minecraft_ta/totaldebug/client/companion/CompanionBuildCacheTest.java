@@ -28,4 +28,18 @@ class CompanionBuildCacheTest {
         assertArrayEquals(new byte[]{4, 5, 6}, Files.readAllBytes(second));
         assertEquals(first, CompanionAppClient.stageLaunchJar(appHome, firstSource));
     }
+
+    @Test
+    void stagesNewBytesAfterTheMutableDevelopmentJarIsRebuilt() throws Exception {
+        Path developmentJar = Files.write(this.temporaryDirectory.resolve("TotalDebugCompanion.jar"), new byte[]{1});
+        Path appHome = this.temporaryDirectory.resolve("app-home");
+
+        Path firstLaunch = CompanionAppClient.stageLaunchJar(appHome, developmentJar);
+        Files.write(developmentJar, new byte[]{2});
+        Path secondLaunch = CompanionAppClient.stageLaunchJar(appHome, developmentJar);
+
+        assertNotEquals(firstLaunch, secondLaunch);
+        assertArrayEquals(new byte[]{1}, Files.readAllBytes(firstLaunch));
+        assertArrayEquals(new byte[]{2}, Files.readAllBytes(secondLaunch));
+    }
 }

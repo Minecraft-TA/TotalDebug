@@ -90,8 +90,13 @@ public final class CompanionAppClient implements AutoCloseable {
     private Future<?> runtimeInventoryTask;
 
     public CompanionAppClient(Path totalDebugDirectory) {
+        this(totalDebugDirectory, "");
+    }
+
+    public CompanionAppClient(Path totalDebugDirectory, String developmentJar) {
         this(
                 totalDebugDirectory,
+                developmentJar,
                 CompanionTimeouts.DEFAULT,
                 new CompanionForegroundHandoff(WindowsForegroundPermission.currentPlatform())
         );
@@ -100,6 +105,7 @@ public final class CompanionAppClient implements AutoCloseable {
     CompanionAppClient(Path totalDebugDirectory, CompanionTimeouts timeouts) {
         this(
                 totalDebugDirectory,
+                "",
                 timeouts,
                 new CompanionForegroundHandoff(WindowsForegroundPermission.currentPlatform())
         );
@@ -107,6 +113,15 @@ public final class CompanionAppClient implements AutoCloseable {
 
     CompanionAppClient(
             Path totalDebugDirectory,
+            CompanionTimeouts timeouts,
+            CompanionForegroundHandoff foregroundHandoff
+    ) {
+        this(totalDebugDirectory, "", timeouts, foregroundHandoff);
+    }
+
+    CompanionAppClient(
+            Path totalDebugDirectory,
+            String developmentJar,
             CompanionTimeouts timeouts,
             CompanionForegroundHandoff foregroundHandoff
     ) {
@@ -123,7 +138,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.instanceDescriptorFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
         this.instanceKeyFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
         this.profileId = profileId(this.workspaceDirectory);
-        this.installer = new CompanionAppInstaller(this.appDirectory);
+        this.installer = new CompanionAppInstaller(this.appDirectory, developmentJar);
         this.runtimeInventoryPublisher = new RuntimeInventoryPublisher(this.dataDirectory);
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
         this.foregroundHandoff = Objects.requireNonNull(foregroundHandoff, "foregroundHandoff");

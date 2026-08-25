@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActi
 import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
+import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import net.minecraft.client.Minecraft;
 
@@ -26,7 +27,10 @@ public final class TotalDebugClient {
                 .resolve("total-debug")
                 .toAbsolutePath()
                 .normalize();
-        CompanionAppClient companionApp = new CompanionAppClient(totalDebugDirectory);
+        CompanionAppClient companionApp = new CompanionAppClient(
+                totalDebugDirectory,
+                TotalDebugConfig.CLIENT.companionDevelopmentJar.get()
+        );
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.codeOpen = new ClientCodeOpenService(companionApp);
         this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {
