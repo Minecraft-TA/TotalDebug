@@ -10,16 +10,19 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
+import javax.swing.JButton;
 import javax.swing.ToolTipManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
@@ -58,7 +61,7 @@ import javax.tools.ToolProvider;
  * it, so what you see is what the app does.
  *
  * <p>No session is negotiated, so capability-gated UI (Tools, Script menus) is absent, and
- * Search Everywhere needs a class index it does not have. Everything else is real.
+     * Search Everywhere uses the generated sample class index. Everything else is real.
  *
  * <p>Press F9 for FlatLaf's component inspector, F10 for the UI defaults inspector.
  */
@@ -294,6 +297,28 @@ public final class UiDevHarness {
                     window.paintAll(popupGraphics);
                     popupGraphics.dispose();
                 }
+                for (javax.swing.MenuElement element : javax.swing.MenuSelectionManager.defaultManager()
+                        .getSelectedPath()) {
+                    if (!(element instanceof javax.swing.JPopupMenu popup) || !popup.isShowing()) {
+                        continue;
+                    }
+                    Point location = popup.getLocationOnScreen();
+                    Component invoker = popup.getInvoker();
+                    if (invoker != null) {
+                        Point invokerLocation = invoker.getLocationOnScreen();
+                        location = new Point(
+                                invokerLocation.x + invoker.getWidth() - popup.getWidth(),
+                                invokerLocation.y + invoker.getHeight()
+                        );
+                    }
+                    Graphics2D popupGraphics = (Graphics2D) graphics.create();
+                    popupGraphics.translate(
+                            location.x - MainWindow.INSTANCE.getX(),
+                            location.y - MainWindow.INSTANCE.getY()
+                    );
+                    popup.paintAll(popupGraphics);
+                    popupGraphics.dispose();
+                }
                 graphics.dispose();
                 ImageIO.write(image, "png", target.toFile());
                 System.out.println("UI screenshot: " + target.toAbsolutePath());
@@ -306,6 +331,52 @@ public final class UiDevHarness {
         });
         timer.setRepeats(false);
         timer.start();
+    }
+
+    private static void scheduleSearchEverywhere(boolean showModuleFilter) {
+        javax.swing.Timer openTimer = new javax.swing.Timer(700, event -> {
+            MainWindow.INSTANCE.openSearchEverywhere();
+            javax.swing.Timer queryTimer = new javax.swing.Timer(350, queryEvent -> {
+                SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
+                        .filter(SearchEverywherePopup.class::isInstance)
+                        .map(SearchEverywherePopup.class::cast)
+                        .filter(java.awt.Window::isShowing)
+                        .findFirst()
+                        .orElseThrow();
+                popup.setLocation(MainWindow.INSTANCE.getX() + 220, MainWindow.INSTANCE.getY() + 70);
+                FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
+                if (search == null) {
+                    throw new IllegalStateException("Search Everywhere query field was not found");
+                }
+                search.setText("Theme");
+                if (showModuleFilter) {
+                    JButton filter = findButton(popup, "All modules");
+                    if (filter == null) {
+                        throw new IllegalStateException("Search Everywhere module filter was not found");
+                    }
+                    filter.doClick();
+                }
+            });
+            queryTimer.setRepeats(false);
+            queryTimer.start();
+        });
+        openTimer.setRepeats(false);
+        openTimer.start();
+    }
+
+    private static JButton findButton(Container root, String text) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof JButton button && text.equals(button.getText())) {
+                return button;
+            }
+            if (component instanceof Container child) {
+                JButton match = findButton(child, text);
+                if (match != null) {
+                    return match;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -742,6 +813,7 @@ public final class UiDevHarness {
                 CompanionProtocol.SUPPORTED_CAPABILITIES
         );
         CompanionApp.configureWithoutSession(profile, indexFile, List.of(sampleClasses), "ui-dev");
+        writeSampleSource(sample);
 
         GlobalConfig.getInstance().loadFrom(root);
         var positionalArguments = Arrays.stream(args).filter(argument -> !argument.startsWith("--")).toList();
@@ -834,6 +906,11 @@ public final class UiDevHarness {
                         null
                 ));
             }
+            boolean showSearchEverywhere = Arrays.asList(args).contains("--show-search-everywhere");
+            boolean showModuleFilter = Arrays.asList(args).contains("--show-module-filter");
+            if (showSearchEverywhere || showModuleFilter) {
+                scheduleSearchEverywhere(showModuleFilter);
+            }
             if (backgroundMode) {
                 MainWindow.INSTANCE.setAutoRequestFocus(false);
                 MainWindow.INSTANCE.setFocusableWindowState(false);
@@ -846,7 +923,9 @@ public final class UiDevHarness {
             ToolTipManager.sharedInstance().setInitialDelay(200);
             if (screenshot != null) {
                 expandTreeForScreenshot();
-                int screenshotDelay = hoverGutter || hoverOverrideGutter
+                int screenshotDelay = showSearchEverywhere || showModuleFilter
+                        ? 2600
+                        : hoverGutter || hoverOverrideGutter
                         ? 2600
                         : Arrays.asList(args).contains("--show-implementations") ? 3200
                                 : Arrays.asList(args).contains("--click-gutter") ? 5000 : 1400;

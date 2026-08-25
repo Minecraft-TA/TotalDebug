@@ -166,6 +166,10 @@ public class MainWindow extends JFrame implements AWTEventListener {
         if (!CompanionApp.hasProfile()) {
             return;
         }
+        openSearchEverywhere();
+    }
+
+    public void openSearchEverywhere() {
         if (this.searchEverywherePopup == null) {
             this.searchEverywherePopup = new SearchEverywherePopup();
         }

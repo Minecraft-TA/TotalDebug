@@ -37,6 +37,7 @@ final class SourceFileNavigationTest {
                     }
                     target.value++;
                     target.run();
+                    System.out.println("indexed text");
                     new Target();
                 }
             }
@@ -74,6 +75,10 @@ final class SourceFileNavigationTest {
         assertEquals(
                 SOURCE.indexOf("Target();", SOURCE.indexOf("new Target")),
                 offset(ReferenceQuery.methodReference("example.Use$Target", "<init>", "()V"))
+        );
+        assertEquals(
+                SOURCE.indexOf("\"indexed text\""),
+                offset(ReferenceQuery.stringLiteral("indexed text"))
         );
     }
 

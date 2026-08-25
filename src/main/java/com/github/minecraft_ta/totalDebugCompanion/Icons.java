@@ -75,6 +75,7 @@ public class Icons {
     public static final FlatSVGIcon TARGET = new FlatSVGIcon("icons/target.svg");
 
     public static final FlatSVGIcon SEARCH_ICON = new FlatSVGIcon("icons/search.svg");
+    public static final FlatSVGIcon FILTER = new FlatSVGIcon("icons/filter.svg");
     public static final FlatSVGIcon MATCH_CASE = new FlatSVGIcon("icons/matchCase.svg");
     public static final FlatSVGIcon REGEX = new FlatSVGIcon("icons/regex.svg");
     public static final FlatSVGIcon PREVIOUS_OCCURRENCE = new FlatSVGIcon("icons/previousOccurrence.svg");

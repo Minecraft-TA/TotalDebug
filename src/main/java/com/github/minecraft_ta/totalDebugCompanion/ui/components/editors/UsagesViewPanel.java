@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
@@ -47,7 +48,9 @@ public final class UsagesViewPanel extends JPanel {
     private static final int INITIAL_RESULT_LIMIT = 200;
     private static final int MAX_RESULT_LIMIT = 5_000;
 
-    private final CodeSymbol symbol;
+    private final ReferenceQuery query;
+    private final String targetDisplayName;
+    private final javax.swing.Icon targetIcon;
     private final ReferenceSearchService searchService;
     private final JLabel targetLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
@@ -69,8 +72,24 @@ public final class UsagesViewPanel extends JPanel {
     private UsageTreeModel.Options groupingOptions = UsageTreeModel.Options.defaults();
 
     public UsagesViewPanel(CodeSymbol symbol, ReferenceSearchService searchService) {
+        this(
+                Objects.requireNonNull(symbol, "symbol").referenceQuery(),
+                symbol.displayName(),
+                symbolIcon(symbol),
+                searchService
+        );
+    }
+
+    public UsagesViewPanel(
+            ReferenceQuery query,
+            String targetDisplayName,
+            javax.swing.Icon targetIcon,
+            ReferenceSearchService searchService
+    ) {
         super(new BorderLayout());
-        this.symbol = Objects.requireNonNull(symbol, "symbol");
+        this.query = Objects.requireNonNull(query, "query");
+        this.targetDisplayName = Objects.requireNonNull(targetDisplayName, "targetDisplayName");
+        this.targetIcon = Objects.requireNonNull(targetIcon, "targetIcon");
         this.searchService = Objects.requireNonNull(searchService, "searchService");
 
         configureHeader();
@@ -120,7 +139,7 @@ public final class UsagesViewPanel extends JPanel {
         this.showMoreButton.setVisible(false);
 
         this.activeSearch = this.searchService.search(
-                this.symbol.referenceQuery(),
+                this.query,
                 this.resultLimit,
                 new ReferenceSearchService.Listener() {
                     @Override
@@ -141,8 +160,8 @@ public final class UsagesViewPanel extends JPanel {
     }
 
     private void configureHeader() {
-        this.targetLabel.setText("Usages of " + this.symbol.displayName());
-        this.targetLabel.setIcon(symbolIcon(this.symbol));
+        this.targetLabel.setText("Usages of " + this.targetDisplayName);
+        this.targetLabel.setIcon(this.targetIcon);
 
         Box firstRow = Box.createHorizontalBox();
         firstRow.add(this.targetLabel);
@@ -357,7 +376,7 @@ public final class UsagesViewPanel extends JPanel {
         if (!(nodeValue instanceof UsageNode usage)) {
             return;
         }
-        CompanionApp.getDecompilationService().openUsage(usage.usage(), this.symbol.referenceQuery());
+        CompanionApp.getDecompilationService().openUsage(usage.usage(), this.query);
     }
 
     private void cancelActiveSearch() {

@@ -18,7 +18,11 @@ public final class IndexedReferenceSearch {
 
     public ReferenceUsagePage search(ReferenceQuery query, int limit) {
         Objects.requireNonNull(query, "query");
-        ReferenceSearchPage page = this.index.findReferences(toTarget(query), limit);
+        ReferenceSearchPage page = switch (query) {
+            case ReferenceQuery.StringLiteralReference literal ->
+                    this.index.findLiteralReferences(literal.value(), limit);
+            default -> this.index.findReferences(toTarget(query), limit);
+        };
         ArrayList<ReferenceUsage> usages = new ArrayList<>(page.results().length);
         for (ReferenceResult result : page.results()) {
             usages.add(new ReferenceUsage(
@@ -46,6 +50,9 @@ public final class IndexedReferenceSearch {
                     internalName(methodReference.ownerClassName()),
                     methodReference.name(),
                     methodReference.descriptor()
+            );
+            case ReferenceQuery.StringLiteralReference ignored -> throw new IllegalArgumentException(
+                    "String literals are not symbol targets"
             );
         };
     }

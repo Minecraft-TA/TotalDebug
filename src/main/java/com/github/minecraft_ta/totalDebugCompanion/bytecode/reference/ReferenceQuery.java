@@ -18,6 +18,10 @@ public sealed interface ReferenceQuery {
         return new MethodReference(ownerClassName, name, descriptor);
     }
 
+    static StringLiteralReference stringLiteral(String value) {
+        return new StringLiteralReference(value);
+    }
+
     record ClassReference(String className) implements ReferenceQuery {
         public ClassReference {
             className = requireBinaryClassName(className, "className");
@@ -37,6 +41,12 @@ public sealed interface ReferenceQuery {
             ownerClassName = requireBinaryClassName(ownerClassName, "ownerClassName");
             name = requireMemberName(name);
             descriptor = requireMethodDescriptor(descriptor);
+        }
+    }
+
+    record StringLiteralReference(String value) implements ReferenceQuery {
+        public StringLiteralReference {
+            Objects.requireNonNull(value, "value");
         }
     }
 

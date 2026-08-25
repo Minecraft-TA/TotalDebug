@@ -13,6 +13,8 @@ import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SuperConstructorInvocation;
+import org.eclipse.jdt.core.dom.StringLiteral;
+import org.eclipse.jdt.core.dom.TextBlock;
 import org.eclipse.jdt.core.dom.VariableDeclaration;
 
 import java.util.Objects;
@@ -96,6 +98,26 @@ public final class SourceReferenceLocator {
         public boolean visit(EnumConstantDeclaration declaration) {
             if (matches(declaration.resolveConstructorBinding())) {
                 this.offset = declaration.getName().getStartPosition();
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public boolean visit(StringLiteral literal) {
+            if (this.query instanceof ReferenceQuery.StringLiteralReference target
+                    && literal.getLiteralValue().equals(target.value())) {
+                this.offset = literal.getStartPosition();
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public boolean visit(TextBlock literal) {
+            if (this.query instanceof ReferenceQuery.StringLiteralReference target
+                    && literal.getLiteralValue().equals(target.value())) {
+                this.offset = literal.getStartPosition();
                 return false;
             }
             return true;

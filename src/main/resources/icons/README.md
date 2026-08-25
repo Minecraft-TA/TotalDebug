@@ -58,7 +58,7 @@ The file-tree polish set uses the following additional New UI assets:
 | manifest | `fileTypes/manifest` | | binaryData | `fileTypes/binaryData` |
 | html | `fileTypes/html` | | css | `fileTypes/css` |
 | javaScript | `fileTypes/javaScript` | | font | `fileTypes/font` |
-| settings | `general/settings` | | | |
+| settings | `general/settings` | | filter | `general/filter` |
 | implementedMethod | `gutter/implementedMethod` | | implementingMethod | `gutter/implementingMethod` |
 | overriddenMethod | `gutter/overridenMethod` | | overridingMethod | `gutter/overridingMethod` |
 

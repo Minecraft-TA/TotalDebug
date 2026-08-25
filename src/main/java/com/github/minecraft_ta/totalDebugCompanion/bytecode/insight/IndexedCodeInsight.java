@@ -177,6 +177,9 @@ public final class IndexedCodeInsight {
             case ReferenceQuery.MethodReference method -> ReferenceTarget.methodTarget(
                     internalName(method.ownerClassName()), method.name(), method.descriptor()
             );
+            case ReferenceQuery.StringLiteralReference ignored -> throw new IllegalArgumentException(
+                    "String literals do not participate in code insight summaries"
+            );
         };
     }
 
