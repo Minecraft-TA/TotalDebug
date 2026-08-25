@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.Token;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -29,6 +31,30 @@ class CustomJavaLinkGeneratorTest {
         assertNotNull(link);
         link.execute();
         assertEquals("java.util in java.util.List", revealedPackage.get());
+    }
+
+    @Test
+    void linkResultStartsAtTheTokenSoRSyntaxTextAreaCanUnderlineIt() {
+        String source = "final class Sample { java.util.List<?> values; }";
+        int hoverOffset = source.indexOf("List") + 2;
+        RSyntaxTextArea textArea = new RSyntaxTextArea(source);
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
+        var generator = new CustomJavaLinkGenerator(
+                offset -> packageFragment("java.util"),
+                offset -> "java.util.List",
+                (packageName, ownerClass) -> {
+                }
+        );
+
+        var link = generator.isLinkAtOffset(textArea, hoverOffset);
+        Token token = textArea.getTokenListForLine(0);
+        while (token != null && !token.containsPosition(hoverOffset)) {
+            token = token.getNextToken();
+        }
+
+        assertNotNull(link);
+        assertNotNull(token);
+        assertEquals(token.getOffset(), link.getSourceOffset());
     }
 
     private static IPackageFragment packageFragment(String name) {

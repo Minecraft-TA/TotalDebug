@@ -12,6 +12,7 @@ import org.eclipse.jdt.internal.core.*;
 import org.fife.ui.rsyntaxtextarea.LinkGenerator;
 import org.fife.ui.rsyntaxtextarea.LinkGeneratorResult;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.Token;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.event.HyperlinkEvent;
@@ -55,7 +56,8 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
             if (element == null) {
                 return null;
             }
-            return new LinkResult(textArea, element, offs);
+            Token token = textArea.modelToToken(offs);
+            return token == null ? null : new LinkResult(textArea, element, offs, token.getOffset());
         } catch (JavaModelException e) {
             e.printStackTrace();
             return null;
@@ -66,12 +68,14 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
         private final RSyntaxTextArea textArea;
         private final IJavaElement el;
-        private final int offs;
+        private final int navigationOffset;
+        private final int sourceOffset;
 
-        public LinkResult(RSyntaxTextArea textArea, IJavaElement el, int offs) {
+        public LinkResult(RSyntaxTextArea textArea, IJavaElement el, int navigationOffset, int sourceOffset) {
             this.textArea = textArea;
             this.el = el;
-            this.offs = offs;
+            this.navigationOffset = navigationOffset;
+            this.sourceOffset = sourceOffset;
         }
 
         @Override
@@ -96,7 +100,10 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                 }
 
                 if (el instanceof IPackageFragment packageFragment) {
-                    packageNavigator.accept(packageFragment.getElementName(), ownerClassResolver.apply(offs));
+                    packageNavigator.accept(
+                            packageFragment.getElementName(),
+                            ownerClassResolver.apply(this.navigationOffset)
+                    );
                     return null;
                 }
 
@@ -131,7 +138,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
         @Override
         public int getSourceOffset() {
-            return offs;
+            return this.sourceOffset;
         }
     }
 }
