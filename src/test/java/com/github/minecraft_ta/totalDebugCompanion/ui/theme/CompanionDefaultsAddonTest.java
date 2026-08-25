@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.UIManager;
@@ -23,7 +24,8 @@ class CompanionDefaultsAddonTest {
         FlatDarculaLaf.setup();
 
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
-        assertEquals(25, UIManager.get("TabbedPane.tabHeight"));
+        assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"));
+        assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"));
         assertEquals(2, UIManager.get("TabbedPane.tabSelectionHeight"));
         assertEquals(1, UIManager.get("TabbedPane.contentSeparatorHeight"));
         assertEquals(Boolean.FALSE, UIManager.get("TitlePane.unifiedBackground"));
@@ -42,6 +44,7 @@ class CompanionDefaultsAddonTest {
         Color focus = UIManager.getColor("Component.focusColor");
         assertNotNull(focus);
         assertEquals(0, focus.getAlpha(), "focus ring is suppressed app wide");
+        assertScrollbarClearingColors();
     }
 
     @Test
@@ -53,12 +56,21 @@ class CompanionDefaultsAddonTest {
         FlatLightLaf.setup();
 
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
-        assertEquals(25, UIManager.get("TabbedPane.tabHeight"));
+        assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"));
+        assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"));
         assertNotNull(UIManager.getBorder("MenuBar.border"));
         assertTrue(UIManager.getInsets("TabbedPane.tabInsets").left == 10);
         assertEquals(
                 UIManager.getColor("Component.accentColor"),
                 UIManager.getColor("CheckBox.icon[filled].selectedBackground")
         );
+        assertScrollbarClearingColors();
+    }
+
+    private static void assertScrollbarClearingColors() {
+        Color background = UIManager.getColor("Panel.background");
+        assertEquals(background, UIManager.getColor("ScrollBar.background"));
+        assertEquals(background, UIManager.getColor("ScrollBar.track"));
+        assertEquals(255, background.getAlpha());
     }
 }

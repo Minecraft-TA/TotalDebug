@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
 import com.formdev.flatlaf.FlatDefaultsAddon;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SimpleMenuBarBorder;
 
 import javax.swing.BorderFactory;
@@ -35,10 +36,15 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         defaults.put("Component.focusColor", transparent);
         defaults.put("Slider.focusedColor", transparent);
 
+        defaults.put("Tree.rowHeight", UiMetrics.TREE_ROW_HEIGHT);
         defaults.put("TabbedPane.tabInsets", new Insets(0, 10, 0, 10));
-        defaults.put("TabbedPane.tabHeight", 25);
+        defaults.put("TabbedPane.tabHeight", UiMetrics.TAB_HEIGHT);
         defaults.put("TabbedPane.tabSelectionHeight", 2);
         defaults.put("TabbedPane.contentSeparatorHeight", 1);
+
+        Color scrollBarBackground = defaults.getColor("Panel.background");
+        defaults.put("ScrollBar.background", scrollBarBackground);
+        defaults.put("ScrollBar.track", scrollBarBackground);
 
         applySelectionControlColors(defaults);
 

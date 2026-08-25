@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -45,8 +46,8 @@ public final class ApplicationStatusBar extends JPanel {
                 DynamicMatteBorder.separatorRule(1, 0, 0, 0),
                 BorderFactory.createEmptyBorder(2, 7, 0, 5)
         ));
-        setMinimumSize(new Dimension(0, 24));
-        setPreferredSize(new Dimension(0, 24));
+        setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
+        setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 
         this.pathLabel.setForeground(ThemeColors.mutedText());
         add(this.pathLabel);

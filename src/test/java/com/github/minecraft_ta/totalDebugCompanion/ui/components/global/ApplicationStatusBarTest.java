@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JProgressBar;
@@ -36,7 +37,7 @@ class ApplicationStatusBarTest {
         assertEquals(new Dimension(88, 3), progress.getPreferredSize());
         assertEquals(new Dimension(88, 3), progress.getMaximumSize());
         assertFalse(progress.isStringPainted());
-        assertEquals(24, bar.getPreferredSize().height);
+        assertEquals(UiMetrics.STATUS_BAR_HEIGHT, bar.getPreferredSize().height);
     }
 
     private static <T extends Component> T find(Container parent, Class<T> type) {

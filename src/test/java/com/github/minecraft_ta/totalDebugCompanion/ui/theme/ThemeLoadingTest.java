@@ -1,13 +1,23 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
 import com.formdev.flatlaf.FlatLaf;
+import com.formdev.flatlaf.util.UIScale;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import javax.swing.JPanel;
+import javax.swing.JScrollBar;
+import javax.swing.JTabbedPane;
+import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Color;
+import java.awt.Rectangle;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -57,6 +67,40 @@ class ThemeLoadingTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource("themes")
+    void themeAppliesTheApplicationDensityContract(CompanionTheme theme) throws Exception {
+        ThemeManager.installTheme(theme);
+
+        AtomicReference<RuntimeMetrics> result = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            JTree tree = new JTree();
+            JTabbedPane tabs = new JTabbedPane();
+            tabs.addTab("One", new JPanel());
+            tabs.setSize(400, 200);
+            tabs.doLayout();
+            Rectangle tabBounds = tabs.getBoundsAt(0);
+
+            ApplicationStatusBar statusBar = new ApplicationStatusBar();
+            JScrollBar scrollBar = new JScrollBar();
+            result.set(new RuntimeMetrics(
+                    tree.getRowHeight(),
+                    tabBounds.height,
+                    statusBar.getPreferredSize().height,
+                    scrollBar.getBackground()
+            ));
+        });
+
+        RuntimeMetrics metrics = result.get();
+        assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"), theme.id());
+        assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"), theme.id());
+        assertEquals(UIScale.scale(UiMetrics.TREE_ROW_HEIGHT), metrics.treeRowHeight(), theme.id());
+        assertEquals(UIScale.scale(UiMetrics.TAB_HEIGHT), metrics.tabHeight(), theme.id());
+        assertEquals(UiMetrics.STATUS_BAR_HEIGHT, metrics.statusBarHeight(), theme.id());
+        assertEquals(UIManager.getColor("Panel.background"), metrics.scrollBarBackground(), theme.id());
+        assertEquals(UIManager.getColor("Panel.background"), UIManager.getColor("ScrollBar.track"), theme.id());
+    }
+
     @Test
     void switchingBackAndForthKeepsCompanionDefaults() {
         ThemeManager.installTheme(CompanionTheme.ISLANDS_DARK);
@@ -64,7 +108,8 @@ class ThemeLoadingTest {
         ThemeManager.installTheme(CompanionTheme.ISLANDS_DARK);
 
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
-        assertEquals(25, UIManager.get("TabbedPane.tabHeight"));
+        assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"));
+        assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"));
     }
 
     @Test
@@ -90,5 +135,13 @@ class ThemeLoadingTest {
 
     private static String hex(Color color) {
         return String.format("#%06X", color.getRGB() & 0xFFFFFF);
+    }
+
+    private record RuntimeMetrics(
+            int treeRowHeight,
+            int tabHeight,
+            int statusBarHeight,
+            Color scrollBarBackground
+    ) {
     }
 }
