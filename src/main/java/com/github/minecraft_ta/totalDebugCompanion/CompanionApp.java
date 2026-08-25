@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntime
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -73,6 +74,7 @@ public final class CompanionApp {
     private static volatile CompanionProfile profile;
     private static volatile CompanionDecompilationService decompilationService;
     private static volatile ReferenceSearchService referenceSearchService;
+    private static volatile CodeInsightService codeInsightService;
     private static RuntimeIndexService runtimeIndexService;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;
@@ -173,6 +175,7 @@ public final class CompanionApp {
             }
             closeDecompilationService();
             closeReferenceSearchService();
+            closeCodeInsightService();
             CompanionClassIndex.close();
             stopUiAfterFailure();
             if (ownsInstance) {
@@ -227,6 +230,7 @@ public final class CompanionApp {
         if (profileChanged) {
             closeDecompilationService();
             closeReferenceSearchService();
+            closeCodeInsightService();
             CompanionClassIndex.close();
             activeIndexFile = null;
             activeRuntimeSignature = null;
@@ -285,9 +289,14 @@ public final class CompanionApp {
 
         closeDecompilationService();
         closeReferenceSearchService();
+        closeCodeInsightService();
         CompanionClassIndex.replace(snapshot.index());
         decompilationService = replacement;
         referenceSearchService = new ReferenceSearchService(
+                CompanionClassIndex::get,
+                new RuntimeSourceCatalog(snapshot.sources())
+        );
+        codeInsightService = new CodeInsightService(
                 CompanionClassIndex::get,
                 new RuntimeSourceCatalog(snapshot.sources())
         );
@@ -583,6 +592,14 @@ public final class CompanionApp {
         return service;
     }
 
+    public static CodeInsightService getCodeInsightService() {
+        CodeInsightService service = codeInsightService;
+        if (service == null) {
+            throw new IllegalStateException("Code insight is unavailable");
+        }
+        return service;
+    }
+
     public static CompanionDecompilationService getDecompilationService() {
         CompanionDecompilationService service = decompilationService;
         if (service == null) {
@@ -626,6 +643,14 @@ public final class CompanionApp {
     private static void closeReferenceSearchService() {
         ReferenceSearchService service = referenceSearchService;
         referenceSearchService = null;
+        if (service != null) {
+            service.close();
+        }
+    }
+
+    private static void closeCodeInsightService() {
+        CodeInsightService service = codeInsightService;
+        codeInsightService = null;
         if (service != null) {
             service.close();
         }

@@ -35,6 +35,7 @@ public class ASTCache {
 
                 entry.version = finalVersion;
                 entry.unit = ast;
+                entry.contents = contents;
 
                 notifyListeners(key, ast, finalVersion);
             }
@@ -76,6 +77,13 @@ public class ASTCache {
         }
     }
 
+    public static String getContents(String key) {
+        synchronized (CACHE) {
+            var entry = CACHE.get(key);
+            return entry == null ? null : entry.contents;
+        }
+    }
+
     private static void notifyListeners(String key, CompilationUnit ast, int version) {
         for (var listener : LISTENERS.getOrDefault(key, Collections.emptyList())) {
             listener.accept(ast, version);
@@ -86,5 +94,6 @@ public class ASTCache {
 
         public int version;
         public CompilationUnit unit;
+        public String contents;
     }
 }

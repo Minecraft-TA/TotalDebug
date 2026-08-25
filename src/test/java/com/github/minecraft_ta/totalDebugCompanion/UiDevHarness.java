@@ -13,10 +13,12 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.ClassIndex;
+import com.github.tth05.jindex.IndexSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Color;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import javax.tools.ToolProvider;
 
 /**
  * Brings the Companion UI up without a Minecraft session, so themes, icons and the settings dialog
@@ -80,6 +83,16 @@ public final class UiDevHarness {
 
                     void apply(ThemeSample other);
                 }
+
+                final class ThemeSampleImpl implements ThemeSample {
+                    private int applications;
+
+                    @Override
+                    public void apply(ThemeSample other) {
+                        applications++;
+                        ThemeSample.describe(applications, other != null);
+                    }
+                }
                 """, java.nio.charset.StandardCharsets.UTF_8);
         return target;
     }
@@ -127,14 +140,42 @@ public final class UiDevHarness {
         return output.toByteArray();
     }
 
-    private static void writeSampleClassIndex(Path target) throws java.io.IOException {
-        try (ClassIndex index = ClassIndex.fromBytes(List.of(
+    private static void writeSampleClassIndex(Path target, Path sampleClasses) throws java.io.IOException {
+        List<byte[]> classes = new java.util.ArrayList<>(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(List.class),
                 classBytes(FunctionalInterface.class)
-        ))) {
+        ));
+        try (var paths = Files.walk(sampleClasses)) {
+            for (Path classFile : paths.filter(path -> path.toString().endsWith(".class")).toList()) {
+                classes.add(Files.readAllBytes(classFile));
+            }
+        }
+        try (ClassIndex index = ClassIndex.fromSources(
+                classes.stream().map(bytes -> IndexSource.classFile(0, bytes)).toList()
+        )) {
             index.saveToFile(target.toString());
+        }
+    }
+
+    private static void compileSampleSource(Path source, Path classes) {
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("UI harness requires a full JDK");
+        }
+        int result = compiler.run(
+                null,
+                null,
+                null,
+                "--release",
+                "21",
+                "-d",
+                classes.toString(),
+                source.toString()
+        );
+        if (result != 0) {
+            throw new IllegalStateException("Unable to compile the UI harness source fixture");
         }
     }
 
@@ -189,6 +230,18 @@ public final class UiDevHarness {
                 );
                 Graphics2D graphics = image.createGraphics();
                 MainWindow.INSTANCE.paintAll(graphics);
+                for (java.awt.Window window : java.awt.Window.getWindows()) {
+                    if (window == MainWindow.INSTANCE || !window.isShowing()) {
+                        continue;
+                    }
+                    Graphics2D popupGraphics = (Graphics2D) graphics.create();
+                    popupGraphics.translate(
+                            window.getX() - MainWindow.INSTANCE.getX(),
+                            window.getY() - MainWindow.INSTANCE.getY()
+                    );
+                    window.paintAll(popupGraphics);
+                    popupGraphics.dispose();
+                }
                 graphics.dispose();
                 ImageIO.write(image, "png", target.toFile());
                 System.out.println("UI screenshot: " + target.toAbsolutePath());
@@ -220,6 +273,22 @@ public final class UiDevHarness {
         timer.start();
     }
 
+    private static void scheduleImplementationPopup(String source) {
+        javax.swing.Timer timer = new javax.swing.Timer(850, event -> {
+            RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+            if (editor == null) {
+                return;
+            }
+            editor.setCaretPosition(source.indexOf("void apply(ThemeSample other)") + "void ".length());
+            javax.swing.Action action = editor.getActionMap().get("findImplementations");
+            if (action != null) {
+                action.actionPerformed(new java.awt.event.ActionEvent(editor, 0, "findImplementations"));
+            }
+        });
+        timer.setRepeats(false);
+        timer.start();
+    }
+
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("companion-ui-harness");
         Files.createDirectories(root.resolve("scripts"));
@@ -228,15 +297,15 @@ public final class UiDevHarness {
         Path mods = Files.createDirectories(workspace.resolve("mods"));
         Path sampleArchive = mods.resolve("companion-ui-sample.jar");
         writeSampleArchive(sampleArchive);
+        Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
+        Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
+        compileSampleSource(sample, sampleClasses);
         Path indexFile = root.resolve("classes.jindex");
-        writeSampleClassIndex(indexFile);
+        writeSampleClassIndex(indexFile, sampleClasses);
         Path runtimeSources = Files.writeString(
                 root.resolve("runtime-sources.txt"),
                 "totaldebug-runtime-sources-v1\n" + workspace.toUri().toASCIIString() + "\n"
         );
-        Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
-        Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
-
         CompanionProfile profile = new CompanionProfile(
                 "ui-dev",
                 root,
@@ -286,6 +355,9 @@ public final class UiDevHarness {
             ));
             if (Arrays.asList(args).contains("--select-code")) {
                 SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(0));
+            }
+            if (Arrays.asList(args).contains("--show-implementations")) {
+                scheduleImplementationPopup(CodeView.readCode(sample));
             }
             if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
                 startThemeCycling();

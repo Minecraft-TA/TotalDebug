@@ -29,7 +29,7 @@ Companion's own name for the icon; the second column is the source path inside t
 | constructor | `nodes/constructor` | | delete | `general/delete` |
 | constant | `nodes/constant` | | download | `general/download` |
 | property | `nodes/property` | | copy | `general/copy` |
-| variable | `nodes/variable` | | information | `general/informationDialog` |
+| variable | `nodes/variable` | | information | `status/info` |
 | javaFile | `fileTypes/java` | | success | `status/success` |
 | classFile | `fileTypes/javaClass` | | warning | `status/warning` |
 | jar | `fileTypes/archive` | | error | `status/error` |
@@ -59,6 +59,7 @@ The file-tree polish set uses the following additional New UI assets:
 | html | `fileTypes/html` | | css | `fileTypes/css` |
 | javaScript | `fileTypes/javaScript` | | font | `fileTypes/font` |
 | settings | `general/settings` | | | |
+| implementedMethod | `gutter/implementedMethod` | | implementingMethod | `gutter/implementingMethod` |
 
 `decompile` and `block` have no exact New UI counterpart; those two are judgement calls and are the
 first place to look if an icon reads wrong.

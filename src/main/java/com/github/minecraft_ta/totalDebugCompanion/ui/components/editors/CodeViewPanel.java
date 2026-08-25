@@ -1,22 +1,25 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.FindImplementationsPopup;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
-import com.github.tth05.jindex.IndexedMethod;
 import org.eclipse.jdt.core.JavaModelException;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rtextarea.RTextScrollPane;
 
-import javax.swing.*;
-import javax.swing.text.TextAction;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.JComponent;
+import javax.swing.JLayer;
+import javax.swing.KeyStroke;
+import javax.swing.border.CompoundBorder;
+import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -24,28 +27,152 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 public class CodeViewPanel extends AbstractCodeViewPanel {
+    private static final String FIND_IMPLEMENTATIONS_KEY = "findImplementations";
+    private static final String FIND_BASE_METHODS_KEY = "findBaseMethods";
+    private static final String FIND_USAGES_KEY = "findUsages";
 
-    private static final FindImplementationsPopup FIND_IMPLEMENTATIONS_POPUP = new FindImplementationsPopup(MainWindow.INSTANCE);
+    private final ImplementationChooserPopup implementationChooser;
+    private final CodeVisionLayerUI codeVisionLayerUI;
+    private final JLayer<RTextScrollPane> codeVisionLayer;
+    private final HierarchyGutterMarkers gutterMarkers;
+    private final CodeVisionController codeVisionController;
+    private boolean codeVisionDisposed;
 
     public CodeViewPanel(CodeView codeView) {
         super(codeView.getPath().toString(), codeView.getTitle());
         this.editorPane.setEditable(false);
+        this.editorPane.setBorder(new CompoundBorder(
+                this.editorPane.getBorder(),
+                BorderFactory.createEmptyBorder(0, 0, 0, 180)
+        ));
         enableSearch();
 
-        this.editorPane.getActionMap().put(FindImplementationsAction.KEY, new FindImplementationsAction());
-        this.editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl T"), FindImplementationsAction.KEY);
-        this.editorPane.getCaret().addChangeListener(e -> FIND_IMPLEMENTATIONS_POPUP.setVisible(false));
+        var insightService = CompanionApp.getCodeInsightService();
+        this.implementationChooser = new ImplementationChooserPopup(MainWindow.INSTANCE, insightService);
+        this.implementationChooser.setListFont(this.editorPane.getFont());
 
-        var findUsagesAction = new FindUsagesAction();
-        this.editorPane.getActionMap().put(FindUsagesAction.KEY, findUsagesAction);
+        this.codeVisionLayerUI = new CodeVisionLayerUI(this.editorPane, new CodeVisionLayerUI.Handler() {
+            @Override
+            public void showUsages(CodeSymbol symbol) {
+                CodeViewPanel.this.showUsages(symbol);
+            }
+
+            @Override
+            public void showImplementations(CodeSymbol symbol, int anchorOffset) {
+                CodeViewPanel.this.showImplementations(symbol, anchorOffset);
+            }
+        });
+        this.codeVisionLayer = new JLayer<>(this.editorScrollPane, this.codeVisionLayerUI);
+        remove(this.editorScrollPane);
+        add(this.codeVisionLayer, BorderLayout.CENTER);
+
+        this.gutterMarkers = new HierarchyGutterMarkers(
+                this.editorScrollPane.getGutter(),
+                new HierarchyGutterMarkers.Handler() {
+                    @Override
+                    public void showImplementations(SourceDeclaration declaration) {
+                        CodeViewPanel.this.showImplementations(
+                                declaration.symbol(),
+                                declaration.markerOffset()
+                        );
+                    }
+
+                    @Override
+                    public void showBaseMethods(SourceDeclaration declaration) {
+                        CodeViewPanel.this.showBaseMethods(
+                                declaration.symbol(),
+                                declaration.markerOffset()
+                        );
+                    }
+                }
+        );
+        this.codeVisionController = new CodeVisionController(
+                this.identifier,
+                insightService,
+                this.codeVisionLayerUI,
+                this.codeVisionLayer,
+                this.gutterMarkers
+        );
+
+        configureActions();
+        configureContextMenuCaret();
+        this.editorPane.getCaret().addChangeListener(event -> this.implementationChooser.setVisible(false));
+    }
+
+    public void setCode(String code) {
+        CodeUtils.initSyntaxScheme(this.editorPane);
+        this.editorPane.setText(code);
+    }
+
+    @Override
+    protected void updateFonts() {
+        super.updateFonts();
+        if (this.implementationChooser != null) {
+            this.implementationChooser.setListFont(this.editorPane.getFont());
+        }
+    }
+
+    @Override
+    public void dispose() {
+        if (!this.codeVisionDisposed) {
+            this.codeVisionDisposed = true;
+            this.codeVisionController.close();
+            this.implementationChooser.dispose();
+        }
+        super.dispose();
+    }
+
+    private void configureActions() {
+        AbstractAction implementations = new AbstractAction("Go to Implementations", Icons.JAVA_INTERFACE) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                resolveSelectedSymbol("implementation navigation", symbol ->
+                        showImplementations(symbol, editorPane.getCaretPosition())
+                );
+            }
+        };
+        AbstractAction bases = new AbstractAction("Go to Base Method", Icons.JAVA_METHOD) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                resolveSelectedSymbol("base-method navigation", symbol ->
+                        showBaseMethods(symbol, editorPane.getCaretPosition())
+                );
+            }
+        };
+        AbstractAction usages = new AbstractAction("Find Usages", Icons.SEARCH_ICON) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                resolveSelectedSymbol("Find Usages", CodeViewPanel.this::showUsages);
+            }
+        };
+
+        this.editorPane.getActionMap().put(FIND_IMPLEMENTATIONS_KEY, implementations);
+        this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK),
+                FIND_IMPLEMENTATIONS_KEY
+        );
+        this.editorPane.getActionMap().put(FIND_BASE_METHODS_KEY, bases);
+        this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK),
+                FIND_BASE_METHODS_KEY
+        );
+        this.editorPane.getActionMap().put(FIND_USAGES_KEY, usages);
         this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK),
-                FindUsagesAction.KEY
+                FIND_USAGES_KEY
         );
-        var popupMenu = this.editorPane.getPopupMenu();
-        popupMenu.addSeparator();
-        var findUsagesItem = popupMenu.add(findUsagesAction);
-        findUsagesItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK));
+
+        var menu = this.editorPane.getPopupMenu();
+        menu.addSeparator();
+        var usageItem = menu.add(usages);
+        usageItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK));
+        var implementationItem = menu.add(implementations);
+        implementationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK));
+        var baseItem = menu.add(bases);
+        baseItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK));
+    }
+
+    private void configureContextMenuCaret() {
         this.editorPane.addMouseListener(new MouseAdapter() {
             private void moveCaretToPopup(MouseEvent event) {
                 if (!event.isPopupTrigger()) {
@@ -67,113 +194,43 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 moveCaretToPopup(event);
             }
         });
-
     }
 
-    public void setCode(String code) {
-        CodeUtils.initSyntaxScheme(this.editorPane);
-        this.editorPane.setText(code);
+    private void showUsages(CodeSymbol symbol) {
+        MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
+                UsagesView.class,
+                view -> view.symbol().equals(symbol),
+                () -> new UsagesView(symbol)
+        ).thenAccept(UsagesView::restartSearch);
     }
 
-    @Override
-    protected void updateFonts() {
-        super.updateFonts();
-        SwingUtilities.invokeLater(() -> {
-            var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
-            FIND_IMPLEMENTATIONS_POPUP.setFont(newFont);
-        });
-    }
-
-    private class FindImplementationsAction extends TextAction {
-
-        private static final String KEY = "findImplementations";
-
-        public FindImplementationsAction() {
-            super(KEY);
+    private void showImplementations(CodeSymbol symbol, int anchorOffset) {
+        if (symbol instanceof CodeSymbol.FieldSymbol) {
+            this.bottomInformationBar.setDefaultInfoText("Fields do not have implementations");
+            return;
         }
+        this.implementationChooser.showImplementations(this.editorPane, symbol, anchorOffset);
+    }
 
-        @Override
-        public void actionPerformed(ActionEvent event) {
-            var textArea = (RSyntaxTextArea) getTextComponent(event);
-
-            try {
-                var offset = textArea.getCaretPosition();
-                var resolution = JavaSymbolResolver.resolve(identifier, offset);
-                if (!resolution.isResolved()) {
-                    bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
-                    return;
-                }
-
-                switch (resolution.symbol()) {
-                    case CodeSymbol.ClassSymbol type -> {
-                        var indexedClass = findIndexedClass(type.className());
-                        if (indexedClass == null) {
-                            bottomInformationBar.setFailureInfoText("Class is not present in the runtime index");
-                            return;
-                        }
-                        FIND_IMPLEMENTATIONS_POPUP.setItems(indexedClass);
-                        FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
-                    }
-                    case CodeSymbol.MethodSymbol target -> showMethodImplementations(target);
-                    case CodeSymbol.FieldSymbol ignored ->
-                            bottomInformationBar.setDefaultInfoText("Fields do not have implementations");
-                }
-            } catch (JavaModelException e) {
-                e.printStackTrace();
-                bottomInformationBar.setFailureInfoText("Unable to resolve the selected Java symbol");
-            }
+    private void showBaseMethods(CodeSymbol symbol, int anchorOffset) {
+        if (!(symbol instanceof CodeSymbol.MethodSymbol method)) {
+            this.bottomInformationBar.setDefaultInfoText("Only methods have base declarations");
+            return;
         }
+        this.implementationChooser.showBaseMethods(this.editorPane, method, anchorOffset);
+    }
 
-        private void showMethodImplementations(CodeSymbol.MethodSymbol target) {
-            var declaringClass = findIndexedClass(target.ownerClassName());
-            if (declaringClass == null) {
-                bottomInformationBar.setFailureInfoText("Declaring class is not present in the runtime index");
+    private void resolveSelectedSymbol(String action, java.util.function.Consumer<CodeSymbol> consumer) {
+        try {
+            var resolution = JavaSymbolResolver.resolve(this.identifier, this.editorPane.getCaretPosition());
+            if (!resolution.isResolved()) {
+                this.bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
                 return;
             }
-            for (IndexedMethod method : declaringClass.getMethods()) {
-                if (method.getName().equals(target.name())
-                        && method.getDescriptorString().equals(target.descriptor())) {
-                    FIND_IMPLEMENTATIONS_POPUP.setItems(method);
-                    FIND_IMPLEMENTATIONS_POPUP.show(editorPane, BasePopup.Alignment.BOTTOM_CENTER);
-                    return;
-                }
-            }
-            bottomInformationBar.setFailureInfoText("Method is not present in the runtime index");
+            consumer.accept(resolution.symbol());
+        } catch (JavaModelException exception) {
+            exception.printStackTrace(System.err);
+            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected symbol for " + action);
         }
-    }
-
-    private class FindUsagesAction extends AbstractAction {
-        private static final String KEY = "findUsages";
-
-        private FindUsagesAction() {
-            super("Find Usages");
-            putValue(SMALL_ICON, Icons.SEARCH_ICON);
-        }
-
-        @Override
-        public void actionPerformed(ActionEvent event) {
-            try {
-                var resolution = JavaSymbolResolver.resolve(identifier, editorPane.getCaretPosition());
-                if (!resolution.isResolved()) {
-                    bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
-                    return;
-                }
-
-                CodeSymbol symbol = resolution.symbol();
-                MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
-                        UsagesView.class,
-                        view -> view.symbol().equals(symbol),
-                        () -> new UsagesView(symbol)
-                ).thenAccept(UsagesView::restartSearch);
-            } catch (JavaModelException exception) {
-                exception.printStackTrace();
-                bottomInformationBar.setFailureInfoText("Unable to resolve the selected Java symbol");
-            }
-        }
-    }
-
-    private static com.github.tth05.jindex.IndexedClass findIndexedClass(String binaryName) {
-        var className = CodeUtils.splitTypeName(binaryName);
-        return CompanionClassIndex.get().findClass(className[0], className[1]);
     }
 }
