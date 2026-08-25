@@ -57,9 +57,6 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         }
     }
 
-    private final List<Path> sources;
-    private final List<Path> archiveSources;
-    private final List<Path> directorySources;
     private final ClassIndex classIndex;
     private final Map<Integer, Source> sourcesById;
 
@@ -78,9 +75,6 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         }
         this.classIndex = Objects.requireNonNull(classIndex, "classIndex");
 
-        List<Path> normalizedSources = new ArrayList<>();
-        List<Path> archives = new ArrayList<>();
-        List<Path> directories = new ArrayList<>();
         Map<Integer, Source> byId = new LinkedHashMap<>();
         for (Source source : requestedSources) {
             Path normalized = source.path();
@@ -88,19 +82,22 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
             if (previous != null && !previous.equals(source)) {
                 throw new IllegalArgumentException("Source id " + source.sourceId() + " maps to more than one path");
             }
-            normalizedSources.add(normalized);
-            if (Files.isDirectory(normalized)) {
-                directories.add(normalized);
-            } else if (Files.isRegularFile(normalized)) {
-                archives.add(normalized);
-            } else {
+            if (!Files.isDirectory(normalized) && !Files.isRegularFile(normalized)) {
                 throw new IllegalArgumentException("Runtime source does not exist: " + normalized);
             }
         }
-        this.sources = List.copyOf(normalizedSources);
-        this.archiveSources = List.copyOf(archives);
-        this.directorySources = List.copyOf(directories);
         this.sourcesById = Map.copyOf(byId);
+    }
+
+    @Override
+    public boolean hasClass(String className) {
+        String internalName = normalizeClassName(className);
+        IndexedClass indexedClass = findIndexedClass(internalName);
+        if (indexedClass == null) {
+            return false;
+        }
+        requireIndexedSource(internalName, indexedClass);
+        return true;
     }
 
     @Override
@@ -108,67 +105,30 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         String internalName = normalizeClassName(className);
         String resourceName = internalName + ".class";
         IndexedClass indexedClass = findIndexedClass(internalName);
-        Path preferredSource = null;
-
-        if (indexedClass != null) {
-            int sourceId = indexedClass.getSourceId();
-            Source indexedSource = this.sourcesById.get(sourceId);
-            preferredSource = indexedSource == null ? null : indexedSource.path();
-            if (indexedSource != null) {
-                if ("jrt:/".equals(indexedSource.logicalUri())) {
-                    return readJdk(resourceName);
-                }
-                byte[] bytes = readSource(indexedSource.path(), resourceName);
-                if (bytes != null) {
-                    return bytes;
-                }
-            } else {
-                byte[] bytes = readDirectories(resourceName);
-                if (bytes != null) {
-                    return bytes;
-                }
-                bytes = readJdk(resourceName);
-                if (bytes != null) {
-                    return bytes;
-                }
-            }
+        if (indexedClass == null) {
+            return null;
         }
 
-        for (Path source : this.sources) {
-            if (source.equals(preferredSource)) {
-                continue;
-            }
-            byte[] bytes = readSource(source, resourceName);
-            if (bytes != null) {
-                return bytes;
-            }
+        Source source = requireIndexedSource(internalName, indexedClass);
+        byte[] bytes = "jrt:/".equals(source.logicalUri())
+                ? readJdk(resourceName)
+                : readSource(source.path(), resourceName);
+        if (bytes == null) {
+            throw new IOException("Runtime index maps " + internalName.replace('/', '.')
+                    + " to " + source.logicalUri() + ", but " + resourceName + " is missing");
         }
-        return readJdk(resourceName);
+        return bytes;
     }
 
     public ClassOrigin findClassOrigin(String className) {
         String internalName = normalizeClassName(className);
         String resourceName = internalName + ".class";
         IndexedClass indexedClass = findIndexedClass(internalName);
-        if (indexedClass != null) {
-            Source source = this.sourcesById.get(indexedClass.getSourceId());
-            if (source != null) {
-                return new ClassOrigin(source.logicalUri(), resourceName, source.module());
-            }
+        if (indexedClass == null) {
+            return null;
         }
-
-        var resource = ClassLoader.getPlatformClassLoader().getResource(resourceName);
-        if (resource != null && "jrt".equalsIgnoreCase(resource.getProtocol())) {
-            String external = resource.toExternalForm();
-            int resourceStart = external.lastIndexOf('/' + resourceName);
-            String moduleRoot = resourceStart < 0 ? external : external.substring(0, resourceStart);
-            return new ClassOrigin(
-                    moduleRoot,
-                    resourceName,
-                    new RuntimeModule("java-runtime", "Java Runtime")
-            );
-        }
-        return null;
+        Source source = requireIndexedSource(internalName, indexedClass);
+        return new ClassOrigin(source.logicalUri(), resourceName, source.module());
     }
 
     private static List<Source> toIndexedSources(List<Path> sources) {
@@ -187,14 +147,14 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         return this.classIndex.findClass(packageName, simpleName);
     }
 
-    private byte[] readDirectories(String resourceName) throws IOException {
-        for (Path directory : this.directorySources) {
-            byte[] bytes = readDirectory(directory, resourceName);
-            if (bytes != null) {
-                return bytes;
-            }
+    private Source requireIndexedSource(String internalName, IndexedClass indexedClass) {
+        int sourceId = indexedClass.getSourceId();
+        Source source = this.sourcesById.get(sourceId);
+        if (source == null) {
+            throw new IllegalStateException("Runtime index maps " + internalName.replace('/', '.')
+                    + " to unknown source id " + sourceId);
         }
-        return null;
+        return source;
     }
 
     private static byte[] readSource(Path source, String resourceName) throws IOException {

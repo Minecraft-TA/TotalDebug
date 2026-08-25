@@ -18,6 +18,8 @@ import java.util.jar.Manifest;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,7 +76,7 @@ class RuntimeSnapshotBytecodeSourceTest {
     }
 
     @Test
-    void readsDirectClassDirectoriesAndJdkClasses() throws Exception {
+    void readsDirectClassDirectories() throws Exception {
         byte[] expected = classBytes(DirectoryFixture.class);
         String resourceName = resourceName(DirectoryFixture.class);
         Path classes = this.temporaryDirectory.resolve("classes");
@@ -86,12 +88,6 @@ class RuntimeSnapshotBytecodeSourceTest {
             RuntimeSnapshotBytecodeSource source = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
 
             assertArrayEquals(expected, source.findClassBytes(resourceName));
-            byte[] stringBytes = source.findClassBytes("java.lang.String");
-            assertTrue(stringBytes.length > 4);
-            assertEquals((byte) 0xCA, stringBytes[0]);
-            assertEquals((byte) 0xFE, stringBytes[1]);
-            assertEquals((byte) 0xBA, stringBytes[2]);
-            assertEquals((byte) 0xBE, stringBytes[3]);
         }
     }
 
@@ -121,9 +117,91 @@ class RuntimeSnapshotBytecodeSourceTest {
         byte[] indexFixture = classBytes(ArchiveFixture.class);
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, indexFixture)))) {
-            RuntimeSnapshotBytecodeSource source = new RuntimeSnapshotBytecodeSource(List.of(archive), index);
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, archive)),
+                    index
+            );
 
-            assertArrayEquals(new byte[]{21}, source.findClassBytes("example.Versioned"));
+            assertArrayEquals(new byte[]{21}, source.findClassBytes(ArchiveFixture.class.getName()));
+        }
+    }
+
+    @Test
+    void indexMissDoesNotTouchUnrelatedArchives() throws Exception {
+        byte[] expected = classBytes(ArchiveFixture.class);
+        Path corruptArchive = this.temporaryDirectory.resolve("unrelated.jar");
+        Files.writeString(corruptArchive, "not a zip");
+
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(7, expected)))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(7, corruptArchive)),
+                    index
+            );
+
+            assertNull(source.findClassBytes("missing.Type"));
+        }
+    }
+
+    @Test
+    void indexedSourceMismatchDoesNotFallBackToAnotherArchive() throws Exception {
+        byte[] expected = classBytes(ArchiveFixture.class);
+        String resourceName = resourceName(ArchiveFixture.class);
+        Path selected = jar("selected-missing-entry.jar", "unrelated/Type.class", expected);
+        Path fallback = jar("fallback.jar", resourceName, expected);
+
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(4, expected)))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(
+                            new RuntimeSnapshotBytecodeSource.Source(4, selected),
+                            new RuntimeSnapshotBytecodeSource.Source(5, fallback)
+                    ),
+                    index
+            );
+
+            IOException failure = assertThrows(
+                    IOException.class,
+                    () -> source.findClassBytes(ArchiveFixture.class.getName())
+            );
+            assertTrue(failure.getMessage().contains("is missing"), failure.getMessage());
+        }
+    }
+
+    @Test
+    void unknownIndexedSourceFailsInsteadOfSearchingAnotherArchive() throws Exception {
+        byte[] expected = classBytes(ArchiveFixture.class);
+        Path unrelated = jar("unrelated-owner.jar", resourceName(ArchiveFixture.class), expected);
+
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(4, expected)))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(5, unrelated)),
+                    index
+            );
+
+            IllegalStateException failure = assertThrows(
+                    IllegalStateException.class,
+                    () -> source.findClassBytes(ArchiveFixture.class.getName())
+            );
+            assertEquals(
+                    "Runtime index maps " + ArchiveFixture.class.getName() + " to unknown source id 4",
+                    failure.getMessage()
+            );
+        }
+    }
+
+    @Test
+    void checksClassExistenceFromTheIndexWithoutReadingArchives() throws Exception {
+        byte[] expected = classBytes(ArchiveFixture.class);
+        Path corruptArchive = this.temporaryDirectory.resolve("indexed-but-unreadable.jar");
+        Files.writeString(corruptArchive, "not a zip");
+
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(9, expected)))) {
+            RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(9, corruptArchive)),
+                    index
+            );
+
+            assertTrue(source.hasClass(ArchiveFixture.class.getName()));
+            assertFalse(source.hasClass("missing.Type"));
         }
     }
 
@@ -155,10 +233,11 @@ class RuntimeSnapshotBytecodeSourceTest {
         manifest.getMainAttributes().putValue("Multi-Release", "true");
         Path jar = this.temporaryDirectory.resolve("multi-release.jar");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar), manifest)) {
-            output.putNextEntry(new JarEntry("example/Versioned.class"));
+            String resourceName = resourceName(ArchiveFixture.class);
+            output.putNextEntry(new JarEntry(resourceName));
             output.write(new byte[]{8});
             output.closeEntry();
-            output.putNextEntry(new JarEntry("META-INF/versions/21/example/Versioned.class"));
+            output.putNextEntry(new JarEntry("META-INF/versions/21/" + resourceName));
             output.write(new byte[]{21});
             output.closeEntry();
         }

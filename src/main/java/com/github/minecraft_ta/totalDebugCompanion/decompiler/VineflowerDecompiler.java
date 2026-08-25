@@ -258,7 +258,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
 
         @Override
         public boolean hasClass(String className) throws IOException {
-            return this.bytecodeSource.findClassBytes(className) != null;
+            return this.bytecodeSource.hasClass(className);
         }
 
         @Override
