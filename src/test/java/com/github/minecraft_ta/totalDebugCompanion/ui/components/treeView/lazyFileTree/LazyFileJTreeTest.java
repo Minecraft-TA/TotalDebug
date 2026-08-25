@@ -88,7 +88,9 @@ class LazyFileJTreeTest {
         LazyFileJTree tree = new LazyFileJTree();
         DirectoryTreeItem mods = directory("mods", List.of(
                 directory("first.jar", List.of(directory("com", List.of(directory("example", List.of()))))),
-                directory("second.jar", List.of(directory("com", List.of(directory("example", List.of()))))),
+                directory("second.jar", List.of(directory("com", List.of(
+                        directory("example", List.of(new TreeItem("Sample.class")))
+                )))),
                 directory("other.jar", List.of(directory("org", List.of())))
         ));
         SwingUtilities.invokeAndWait(() -> tree.setRootNodes(mods));
@@ -104,6 +106,7 @@ class LazyFileJTreeTest {
         var selection = (LazyTreeNode) tree.getSelectionPath().getLastPathComponent();
         assertEquals("example", selection.getUserObject().getName());
         assertEquals("second.jar", ((LazyTreeNode) selection.getParent().getParent()).getUserObject().getName());
+        assertTrue(tree.isExpanded(tree.getSelectionPath()));
     }
 
     private static DirectoryTreeItem emptyDirectory(String name) {

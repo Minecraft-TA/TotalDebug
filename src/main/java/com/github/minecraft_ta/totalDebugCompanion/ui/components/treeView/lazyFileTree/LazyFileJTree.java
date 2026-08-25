@@ -244,6 +244,7 @@ public class LazyFileJTree extends JTree {
         }).thenApply(path -> {
             if (path != null && isAttached((LazyTreeNode) path.getLastPathComponent())) {
                 setSelectionPath(path);
+                expandPath(path);
                 scrollPathToVisible(path);
                 requestFocusInWindow();
                 return true;
