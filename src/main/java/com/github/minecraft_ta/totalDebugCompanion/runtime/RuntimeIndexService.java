@@ -93,6 +93,8 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final Consumer<ReadySnapshot> readyHandler;
     private final CopyOnWriteArrayList<Consumer<Status>> listeners = new CopyOnWriteArrayList<>();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
+    private String activeInventoryId;
+    private Path activeDataDirectory;
     private long generation;
     private boolean closed;
 
@@ -116,6 +118,8 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     public synchronized void restore(Path dataDirectory) {
         ensureOpen();
+        this.activeInventoryId = null;
+        this.activeDataDirectory = null;
         long requestedGeneration = ++this.generation;
         Path root = normalizeDataDirectory(dataDirectory);
         Path activeFile = root.resolve(ACTIVE_FILE_NAME);
@@ -138,13 +142,18 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     public synchronized void accept(Path dataDirectory, String expectedInventoryId, Path inventoryFile) {
         ensureOpen();
-        long requestedGeneration = ++this.generation;
         Path root = normalizeDataDirectory(dataDirectory);
+        String inventoryId = Objects.requireNonNull(expectedInventoryId, "expectedInventoryId");
+        if (inventoryId.equals(this.activeInventoryId) && root.equals(this.activeDataDirectory)) {
+            update(new Status(Phase.READY, "Class index ready", null));
+            return;
+        }
+        long requestedGeneration = ++this.generation;
         update(new Status(Phase.PREPARING, "Reading runtime inventory", null));
         this.worker.execute(() -> buildOrLoad(
                 requestedGeneration,
                 root,
-                Objects.requireNonNull(expectedInventoryId, "expectedInventoryId"),
+                inventoryId,
                 Objects.requireNonNull(inventoryFile, "inventoryFile").toAbsolutePath().normalize()
         ));
     }
@@ -440,8 +449,9 @@ public final class RuntimeIndexService implements AutoCloseable {
         );
     }
 
-    private void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot) throws IOException {
-        if (!isCurrent(requestedGeneration)) {
+    private synchronized void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot)
+            throws IOException {
+        if (this.closed || this.generation != requestedGeneration) {
             snapshot.close();
             return;
         }
@@ -452,6 +462,8 @@ public final class RuntimeIndexService implements AutoCloseable {
             snapshot.close();
             throw exception;
         }
+        this.activeInventoryId = snapshot.inventoryId();
+        this.activeDataDirectory = root;
         update(new Status(Phase.READY, "Class index ready", null));
     }
 
@@ -552,6 +564,8 @@ public final class RuntimeIndexService implements AutoCloseable {
             return;
         }
         this.closed = true;
+        this.activeInventoryId = null;
+        this.activeDataDirectory = null;
         this.generation++;
         this.worker.shutdownNow();
     }

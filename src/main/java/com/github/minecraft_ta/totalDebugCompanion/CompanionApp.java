@@ -151,10 +151,10 @@ public final class CompanionApp {
                 }
             });
             SERVER = session.server();
-            startMcpServer();
             startUi();
             session.bindAndPublish(launchConfiguration);
             updateUiState("Offline");
+            startOptionalMcpServer();
 
             EXIT.await();
             return 0;
@@ -419,6 +419,15 @@ public final class CompanionApp {
         } catch (Exception exception) {
             server.close();
             throw exception;
+        }
+    }
+
+    private static void startOptionalMcpServer() {
+        try {
+            startMcpServer();
+        } catch (Exception exception) {
+            System.err.println("TotalDebug Companion MCP is unavailable: " + exception.getMessage());
+            exception.printStackTrace(System.err);
         }
     }
 
