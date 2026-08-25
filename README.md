@@ -35,7 +35,7 @@ Build and collect both current artifacts for an external Minecraft instance with
 .\gradlew.bat localBundle
 ```
 
-The task writes both JARs to `build/local-bundle`. It does not link their hashes or versions. Runtime compatibility comes from the Companion protocol handshake.
+The task mirrors the Minecraft instance layout under `build/local-bundle`. Copy the directory's contents into the instance root. TotalDebug goes to `mods`; Companion goes to `total-debug/companion-app/TotalDebugCompanion.jar`. The bundle does not link their hashes or versions. Runtime compatibility comes from the Companion protocol handshake.
 
 For an external development instance, set `companionDevelopmentJar` in `config/total_debug-client.toml` to the mutable Companion build output. Forward slashes avoid TOML escaping on Windows:
 
@@ -46,7 +46,7 @@ companionDevelopmentJar = "C:/Users/Admin/IdeaProjects/TotalDebugCompanion/build
 
 Build Companion normally. After it closes, the next F6 reads and launches the current bytes at that path without restarting Minecraft.
 
-You can also replace an installed Companion JAR under `total-debug/companion-app/<version>` directly. TotalDebug verifies JARs while downloading them, then leaves an existing file alone. Close Companion and press F6 to launch the replacement. Delete the file to restore the published release on the next launch.
+You can also replace `total-debug/companion-app/TotalDebugCompanion.jar` directly. TotalDebug verifies JARs while downloading them, then leaves the installed file alone. Close Companion and press F6 to launch the replacement. Delete the file to restore the published release on the next launch.
 
 Install that verified Companion build as the MCP sidecar used by new Codex tasks with:
 

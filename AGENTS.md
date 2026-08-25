@@ -13,7 +13,7 @@ Use the checked-in Gradle wrapper in each repository. The workspace JDKs are:
 
 All four repositories use Java 21. Local coordinated dependency builds are published to Maven Local before verifying their consumers.
 
-When deploying current TotalDebug and Companion builds to an external Minecraft instance, run `.\gradlew.bat localBundle` in TotalDebug and copy both JARs from `build\local-bundle`. For Companion development without restarting Minecraft, point `companionDevelopmentJar` in `config\total_debug-client.toml` at the mutable Companion shadow JAR, rebuild Companion, close it, and press F6.
+When deploying current TotalDebug and Companion builds to an external Minecraft instance, run `.\gradlew.bat localBundle` in TotalDebug and copy the contents of `build\local-bundle` into the instance root. For Companion development without restarting Minecraft, point `companionDevelopmentJar` in `config\total_debug-client.toml` at the mutable Companion shadow JAR, rebuild Companion, close it, and press F6.
 
 # Development compatibility
 

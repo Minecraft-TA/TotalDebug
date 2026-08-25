@@ -82,8 +82,7 @@ public final class CompanionAppInstaller {
             throw new IOException("TotalDebugCompanion " + this.release.version() + " is distributed for Windows only");
         }
 
-        Path installationDirectory = this.appDirectory.resolve(this.release.version());
-        Path jarPath = installationDirectory.resolve(this.release.artifactFileName());
+        Path jarPath = this.appDirectory.resolve(this.release.artifactFileName());
         if (!Files.isRegularFile(jarPath)) {
             installDistribution(jarPath, progressListener);
         }

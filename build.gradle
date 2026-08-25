@@ -169,8 +169,12 @@ if (developmentCompanionJar != null) {
         if (useSiblingCompanion) {
             dependsOn buildSiblingCompanion
         }
-        from(modJar.flatMap { it.archiveFile })
-        from(developmentCompanionJar)
+        from(modJar.flatMap { it.archiveFile }) {
+            into('mods')
+        }
+        from(developmentCompanionJar) {
+            into('total-debug/companion-app')
+        }
         into(layout.buildDirectory.dir('local-bundle'))
     }
 
@@ -178,7 +182,7 @@ if (developmentCompanionJar != null) {
         group = 'development'
         description = 'Builds and installs the current Companion MCP sidecar for Codex.'
         dependsOn localBundle
-        from(layout.buildDirectory.file('local-bundle/TotalDebugCompanion.jar'))
+        from(layout.buildDirectory.file('local-bundle/total-debug/companion-app/TotalDebugCompanion.jar'))
         into(codexHome.map { home -> new File(home, 'mcp/totaldebug-companion') })
     }
 }

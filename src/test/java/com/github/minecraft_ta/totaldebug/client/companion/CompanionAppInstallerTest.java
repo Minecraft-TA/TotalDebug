@@ -75,19 +75,20 @@ class CompanionAppInstallerTest {
     }
 
     @Test
-    void keepsAUserReplacementAtThePublishedInstallationPath() throws Exception {
+    void usesTheSingleInstalledJarInsteadOfAnObsoleteVersionDirectory() throws Exception {
         String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
         try {
             System.clearProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
             Path appDirectory = this.temporaryDirectory.resolve("app");
-            Path replacement = appDirectory.resolve("2.0.0/TotalDebugCompanion.jar");
-            Files.createDirectories(replacement.getParent());
-            Files.writeString(replacement, "local replacement");
+            Path installedJar = appDirectory.resolve("TotalDebugCompanion.jar");
+            Files.createDirectories(appDirectory.resolve("2.0.0"));
+            Files.writeString(installedJar, "current");
+            Files.writeString(appDirectory.resolve("2.0.0/TotalDebugCompanion.jar"), "obsolete");
 
             CompanionInstallation installation = new CompanionAppInstaller(appDirectory).resolveOrInstall();
 
-            assertEquals(replacement.toAbsolutePath().normalize(), installation.companionJar());
-            assertEquals("local replacement", Files.readString(replacement));
+            assertEquals(installedJar.toAbsolutePath().normalize(), installation.companionJar());
+            assertEquals("current", Files.readString(installedJar));
         } finally {
             restoreProperty(CompanionAppInstaller.DEV_JAR_PROPERTY, oldJar);
         }
