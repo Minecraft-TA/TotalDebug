@@ -137,6 +137,36 @@ final class IndexedCodeInsightTest {
         }
     }
 
+    @Test
+    void keepsExistingConsumersUsableAfterRuntimeRebind() throws Exception {
+        try (ClassIndex original = fixtureIndex();
+             ClassIndex replacement = ClassIndex.fromBytes(List.of(actionClass()));
+             CodeInsightService service = new CodeInsightService(() -> original, RuntimeSourceCatalog.empty())) {
+            CountDownLatch completed = new CountDownLatch(1);
+            AtomicReference<HierarchyPage> result = new AtomicReference<>();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+
+            service.rebind(() -> replacement, RuntimeSourceCatalog.empty());
+            service.search(HierarchyQuery.implementations(ACTION), 10, new CodeInsightService.Listener<>() {
+                @Override
+                public void onCompleted(HierarchyPage page) {
+                    result.set(page);
+                    completed.countDown();
+                }
+
+                @Override
+                public void onFailed(Throwable cause) {
+                    failure.set(cause);
+                    completed.countDown();
+                }
+            });
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS));
+            assertNull(failure.get());
+            assertEquals(List.of(), result.get().results());
+        }
+    }
+
     private static ClassIndex fixtureIndex() {
         return ClassIndex.fromBytes(List.of(
                 actionClass(),

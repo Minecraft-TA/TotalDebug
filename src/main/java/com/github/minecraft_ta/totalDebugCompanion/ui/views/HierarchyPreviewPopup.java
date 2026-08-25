@@ -142,28 +142,37 @@ public final class HierarchyPreviewPopup extends JWindow {
 
         setMessage("Looking up the hierarchy...");
         showAtAnchor();
-        this.activeSearch = this.service.search(query, RESULT_LIMIT, new CodeInsightService.Listener<>() {
-            @Override
-            public void onCompleted(HierarchyPage page) {
-                if (searchGeneration != generation) {
-                    return;
+        try {
+            this.activeSearch = this.service.search(query, RESULT_LIMIT, new CodeInsightService.Listener<>() {
+                @Override
+                public void onCompleted(HierarchyPage page) {
+                    if (searchGeneration != generation) {
+                        return;
+                    }
+                    activeSearch = null;
+                    cache.put(query, page);
+                    showResults(page, count);
+                    showAtAnchor();
                 }
-                activeSearch = null;
-                cache.put(query, page);
-                showResults(page, count);
-                showAtAnchor();
-            }
 
-            @Override
-            public void onFailed(Throwable failure) {
-                if (searchGeneration != generation) {
-                    return;
+                @Override
+                public void onFailed(Throwable failure) {
+                    showFailure(searchGeneration, failure);
                 }
-                activeSearch = null;
-                setMessage("Hierarchy lookup failed");
-                showAtAnchor();
-            }
-        });
+            });
+        } catch (RuntimeException failure) {
+            showFailure(searchGeneration, failure);
+        }
+    }
+
+    private void showFailure(long searchGeneration, Throwable failure) {
+        if (searchGeneration != this.generation) {
+            return;
+        }
+        this.activeSearch = null;
+        setMessage("Hierarchy lookup failed");
+        showAtAnchor();
+        failure.printStackTrace(System.err);
     }
 
     private void showResults(HierarchyPage page, int totalCount) {

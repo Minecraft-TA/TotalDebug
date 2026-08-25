@@ -230,7 +230,7 @@ public final class CompanionApp {
         if (profileChanged) {
             closeDecompilationService();
             closeReferenceSearchService();
-            closeCodeInsightService();
+            invalidateCodeInsightService();
             CompanionClassIndex.close();
             activeIndexFile = null;
             activeRuntimeSignature = null;
@@ -289,17 +289,20 @@ public final class CompanionApp {
 
         closeDecompilationService();
         closeReferenceSearchService();
-        closeCodeInsightService();
+        RuntimeSourceCatalog sourceCatalog = new RuntimeSourceCatalog(snapshot.sources());
+        CodeInsightService currentInsightService = codeInsightService;
+        if (currentInsightService != null) {
+            currentInsightService.rebind(() -> snapshot.index(), sourceCatalog);
+        }
         CompanionClassIndex.replace(snapshot.index());
         decompilationService = replacement;
         referenceSearchService = new ReferenceSearchService(
                 CompanionClassIndex::get,
-                new RuntimeSourceCatalog(snapshot.sources())
+                sourceCatalog
         );
-        codeInsightService = new CodeInsightService(
-                CompanionClassIndex::get,
-                new RuntimeSourceCatalog(snapshot.sources())
-        );
+        if (currentInsightService == null) {
+            codeInsightService = new CodeInsightService(() -> snapshot.index(), sourceCatalog);
+        }
         activeIndexFile = snapshot.indexFile();
         activeRuntimeSignature = snapshot.signature();
         prewarmJavaParser();
@@ -653,6 +656,18 @@ public final class CompanionApp {
         codeInsightService = null;
         if (service != null) {
             service.close();
+        }
+    }
+
+    private static void invalidateCodeInsightService() {
+        CodeInsightService service = codeInsightService;
+        if (service != null) {
+            service.rebind(
+                    () -> {
+                        throw new IllegalStateException("Runtime class index is not ready");
+                    },
+                    RuntimeSourceCatalog.empty()
+            );
         }
     }
 

@@ -22,14 +22,12 @@ import java.util.function.Supplier;
 
 /** Runs editor insight and hierarchy queries away from the Swing event thread. */
 public final class CodeInsightService implements AutoCloseable {
-    private final Supplier<ClassIndex> indexSupplier;
-    private final RuntimeSourceCatalog sourceCatalog;
     private final ExecutorService executor;
     private final Set<Operation<?>> operations = ConcurrentHashMap.newKeySet();
+    private volatile RuntimeBinding binding;
 
     public CodeInsightService(Supplier<ClassIndex> indexSupplier, RuntimeSourceCatalog sourceCatalog) {
-        this.indexSupplier = Objects.requireNonNull(indexSupplier, "indexSupplier");
-        this.sourceCatalog = Objects.requireNonNull(sourceCatalog, "sourceCatalog");
+        this.binding = new RuntimeBinding(indexSupplier, sourceCatalog);
         this.executor = Executors.newFixedThreadPool(2, runnable -> Thread.ofPlatform()
                 .daemon(true)
                 .name("totaldebug-code-insight")
@@ -37,12 +35,20 @@ public final class CodeInsightService implements AutoCloseable {
     }
 
     public RuntimeSourceCatalog sourceCatalog() {
-        return this.sourceCatalog;
+        return this.binding.sourceCatalog();
+    }
+
+    public synchronized void rebind(Supplier<ClassIndex> indexSupplier, RuntimeSourceCatalog sourceCatalog) {
+        ensureOpen();
+        for (Operation<?> operation : this.operations) {
+            operation.cancel();
+        }
+        this.binding = new RuntimeBinding(indexSupplier, sourceCatalog);
     }
 
     public SearchHandle summarize(Collection<CodeSymbol> symbols, Listener<Map<CodeSymbol, SymbolInsight>> listener) {
         Collection<CodeSymbol> snapshot = List.copyOf(Objects.requireNonNull(symbols, "symbols"));
-        return submit(() -> new IndexedCodeInsight(this.indexSupplier.get()).summarize(snapshot), listener);
+        return submit(binding -> new IndexedCodeInsight(binding.indexSupplier().get()).summarize(snapshot), listener);
     }
 
     public SearchHandle search(HierarchyQuery query, int limit, Listener<HierarchyPage> listener) {
@@ -50,28 +56,32 @@ public final class CodeInsightService implements AutoCloseable {
         if (limit < 1) {
             throw new IllegalArgumentException("Hierarchy result limit must be positive");
         }
-        return submit(() -> new IndexedCodeInsight(this.indexSupplier.get()).search(query, limit), listener);
+        return submit(binding -> new IndexedCodeInsight(binding.indexSupplier().get()).search(query, limit), listener);
     }
 
-    private <T> SearchHandle submit(Task<T> task, Listener<T> listener) {
+    private synchronized <T> SearchHandle submit(Task<T> task, Listener<T> listener) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(listener, "listener");
-        if (this.executor.isShutdown()) {
-            throw new IllegalStateException("Code insight service is closed");
-        }
-        Operation<T> operation = new Operation<>(task, listener);
+        ensureOpen();
+        Operation<T> operation = new Operation<>(this.binding, task, listener);
         this.operations.add(operation);
         this.executor.execute(operation::run);
         return operation;
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         for (Operation<?> operation : this.operations) {
             operation.cancel();
         }
         this.operations.clear();
         this.executor.shutdownNow();
+    }
+
+    private void ensureOpen() {
+        if (this.executor.isShutdown()) {
+            throw new IllegalStateException("Code insight service is closed");
+        }
     }
 
     public interface Listener<T> {
@@ -88,23 +98,28 @@ public final class CodeInsightService implements AutoCloseable {
 
     @FunctionalInterface
     private interface Task<T> {
-        T run();
+        T run(RuntimeBinding binding);
     }
 
     private final class Operation<T> implements SearchHandle {
+        private final RuntimeBinding binding;
         private final Task<T> task;
         private final Listener<T> listener;
         private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean done = new AtomicBoolean();
 
-        private Operation(Task<T> task, Listener<T> listener) {
+        private Operation(RuntimeBinding binding, Task<T> task, Listener<T> listener) {
+            this.binding = binding;
             this.task = task;
             this.listener = listener;
         }
 
         private void run() {
             try {
-                T result = this.task.run();
+                if (this.cancelled.get()) {
+                    return;
+                }
+                T result = this.task.run(this.binding);
                 dispatch(() -> {
                     if (!this.cancelled.get()) {
                         this.listener.onCompleted(result);
@@ -140,6 +155,16 @@ public final class CodeInsightService implements AutoCloseable {
             callback.run();
         } else {
             SwingUtilities.invokeLater(callback);
+        }
+    }
+
+    private record RuntimeBinding(
+            Supplier<ClassIndex> indexSupplier,
+            RuntimeSourceCatalog sourceCatalog
+    ) {
+        private RuntimeBinding {
+            Objects.requireNonNull(indexSupplier, "indexSupplier");
+            Objects.requireNonNull(sourceCatalog, "sourceCatalog");
         }
     }
 
