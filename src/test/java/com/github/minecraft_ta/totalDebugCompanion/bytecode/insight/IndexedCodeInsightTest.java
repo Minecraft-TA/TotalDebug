@@ -44,10 +44,30 @@ final class IndexedCodeInsightTest {
                     CHILD_RUN
             ));
 
-            assertEquals(2, summaries.get(ACTION).implementationCount());
-            assertEquals(new SymbolInsight(2, 2, 0), summaries.get(ACTION_RUN));
-            assertEquals(new SymbolInsight(0, 1, 1), summaries.get(BASE_RUN));
-            assertEquals(new SymbolInsight(0, 0, 2), summaries.get(CHILD_RUN));
+            assertEquals(
+                    new SymbolInsight(4, List.of(new HierarchyFacet(HierarchyRelation.IMPLEMENTED_BY, 2))),
+                    summaries.get(ACTION)
+            );
+            assertEquals(
+                    new SymbolInsight(2, List.of(new HierarchyFacet(HierarchyRelation.IMPLEMENTED_BY, 2))),
+                    summaries.get(ACTION_RUN)
+            );
+            assertEquals(
+                    new SymbolInsight(0, List.of(
+                            new HierarchyFacet(HierarchyRelation.OVERRIDDEN_BY, 1),
+                            new HierarchyFacet(HierarchyRelation.IMPLEMENTS, 1)
+                    )),
+                    summaries.get(BASE_RUN)
+            );
+            assertEquals(
+                    new SymbolInsight(0, List.of(
+                            new HierarchyFacet(HierarchyRelation.IMPLEMENTS, 1),
+                            new HierarchyFacet(HierarchyRelation.OVERRIDES, 1)
+                    )),
+                    summaries.get(CHILD_RUN)
+            );
+            assertEquals(HierarchyRelation.IMPLEMENTS, summaries.get(BASE_RUN).primaryGutterRelation().orElseThrow());
+            assertEquals(HierarchyRelation.OVERRIDES, summaries.get(CHILD_RUN).primaryGutterRelation().orElseThrow());
         }
     }
 
@@ -94,7 +114,13 @@ final class IndexedCodeInsightTest {
                 @Override
                 public void onCompleted(Map<CodeSymbol, SymbolInsight> result) {
                     callbackOnEdt.set(SwingUtilities.isEventDispatchThread());
-                    assertEquals(new SymbolInsight(2, 2, 0), result.get(ACTION_RUN));
+                    assertEquals(
+                            new SymbolInsight(
+                                    2,
+                                    List.of(new HierarchyFacet(HierarchyRelation.IMPLEMENTED_BY, 2))
+                            ),
+                            result.get(ACTION_RUN)
+                    );
                     completed.countDown();
                 }
 

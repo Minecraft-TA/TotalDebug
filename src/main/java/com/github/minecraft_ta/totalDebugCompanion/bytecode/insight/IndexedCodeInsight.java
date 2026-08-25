@@ -9,6 +9,7 @@ import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.IndexedMethod;
 import com.github.tth05.jindex.ReferenceSummary;
 import com.github.tth05.jindex.ReferenceTarget;
+import org.objectweb.asm.Opcodes;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,23 +42,50 @@ public final class IndexedCodeInsight {
                     ignored -> new ClassDetails(indexedClass)
             );
             ReferenceSummary references = this.index.summarizeReferences(toTarget(symbol.referenceQuery()));
-            int implementations = 0;
-            int bases = 0;
+            List<HierarchyFacet> hierarchy = new ArrayList<>();
             switch (symbol) {
-                case CodeSymbol.ClassSymbol ignored ->
-                        implementations = classDetails.implementationCount();
+                case CodeSymbol.ClassSymbol ignored -> addFacet(
+                        hierarchy,
+                        isInterface(indexedClass)
+                                ? HierarchyRelation.IMPLEMENTED_BY
+                                : HierarchyRelation.SUBTYPES,
+                        classDetails.implementationCount()
+                );
                 case CodeSymbol.MethodSymbol method -> {
                     int methodIndex = classDetails.methodIndex(method);
                     if (methodIndex < 0) {
                         continue;
                     }
-                    implementations = classDetails.methodImplementationCounts()[methodIndex];
-                    bases = classDetails.methodBaseCounts()[methodIndex];
+                    IndexedMethod indexedMethod = classDetails.methods()[methodIndex];
+                    addFacet(
+                            hierarchy,
+                            isAbstract(indexedMethod)
+                                    ? HierarchyRelation.IMPLEMENTED_BY
+                                    : HierarchyRelation.OVERRIDDEN_BY,
+                            classDetails.methodImplementationCounts()[methodIndex]
+                    );
+                    if (classDetails.methodBaseCounts()[methodIndex] > 0) {
+                        int implementedBases = 0;
+                        int overriddenBases = 0;
+                        for (IndexedMethod base : indexedMethod.findBaseMethods()) {
+                            if (isAbstract(base)) {
+                                implementedBases++;
+                            } else {
+                                overriddenBases++;
+                            }
+                        }
+                        if (implementedBases + overriddenBases
+                                != classDetails.methodBaseCounts()[methodIndex]) {
+                            throw new IllegalStateException("JIndex base-method summary changed during lookup");
+                        }
+                        addFacet(hierarchy, HierarchyRelation.IMPLEMENTS, implementedBases);
+                        addFacet(hierarchy, HierarchyRelation.OVERRIDES, overriddenBases);
+                    }
                 }
                 case CodeSymbol.FieldSymbol ignored -> {
                 }
             }
-            result.put(symbol, new SymbolInsight(references.occurrenceCount(), implementations, bases));
+            result.put(symbol, new SymbolInsight(references.occurrenceCount(), hierarchy));
         }
         return Map.copyOf(result);
     }
@@ -154,6 +182,20 @@ public final class IndexedCodeInsight {
 
     private static String internalName(String binaryName) {
         return binaryName.replace('.', '/');
+    }
+
+    private static void addFacet(List<HierarchyFacet> facets, HierarchyRelation relation, int count) {
+        if (count > 0) {
+            facets.add(new HierarchyFacet(relation, count));
+        }
+    }
+
+    private static boolean isInterface(IndexedClass indexedClass) {
+        return (indexedClass.getAccessFlags() & Opcodes.ACC_INTERFACE) != 0;
+    }
+
+    private static boolean isAbstract(IndexedMethod method) {
+        return (method.getAccessFlags() & Opcodes.ACC_ABSTRACT) != 0;
     }
 
     private record ClassDetails(

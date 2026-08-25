@@ -84,8 +84,7 @@ final class CodeVisionController implements AutoCloseable {
                         summaries.getOrDefault(declaration.symbol(), SymbolInsight.EMPTY)
                 ))
                 .filter(entry -> entry.insight().usageCount() > 0
-                        || entry.insight().implementationCount() > 0
-                        || entry.insight().baseCount() > 0)
+                        || !entry.insight().hierarchy().isEmpty())
                 .toList();
         this.layerUI.setEntries(entries, this.layer);
         this.gutterMarkers.setEntries(entries);

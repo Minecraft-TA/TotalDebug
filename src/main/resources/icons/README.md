@@ -60,6 +60,7 @@ The file-tree polish set uses the following additional New UI assets:
 | javaScript | `fileTypes/javaScript` | | font | `fileTypes/font` |
 | settings | `general/settings` | | | |
 | implementedMethod | `gutter/implementedMethod` | | implementingMethod | `gutter/implementingMethod` |
+| overriddenMethod | `gutter/overridenMethod` | | overridingMethod | `gutter/overridingMethod` |
 
 `decompile` and `block` have no exact New UI counterpart; those two are judgement calls and are the
 first place to look if an icon reads wrong.

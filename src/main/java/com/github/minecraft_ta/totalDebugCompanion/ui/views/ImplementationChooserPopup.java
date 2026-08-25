@@ -5,10 +5,12 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQuery;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import org.eclipse.jdt.core.IJavaElement;
@@ -56,7 +58,9 @@ public final class ImplementationChooserPopup extends BasePopup {
     private final JPanel cards = new JPanel(new CardLayout());
 
     private CodeInsightService.SearchHandle activeSearch;
+    private CodeInsightService.SearchHandle directNavigationSearch;
     private HierarchyQuery query;
+    private HierarchyRelation relation;
     private JTextComponent invoker;
     private int anchorOffset;
     private long generation;
@@ -86,31 +90,98 @@ public final class ImplementationChooserPopup extends BasePopup {
         configureUi();
     }
 
-    public void showImplementations(JTextComponent editor, CodeSymbol symbol, int offset) {
+    public void navigate(
+            JTextComponent editor,
+            CodeSymbol symbol,
+            HierarchyRelation relation,
+            int count,
+            int offset
+    ) {
+        Objects.requireNonNull(editor, "editor");
         Objects.requireNonNull(symbol, "symbol");
-        show(editor, offset, HierarchyQuery.implementations(symbol));
-    }
+        Objects.requireNonNull(relation, "relation");
+        if (count < 1) {
+            throw new IllegalArgumentException("Hierarchy target count must be positive");
+        }
+        HierarchyQuery query = queryFor(symbol, relation);
+        if (count != 1) {
+            show(editor, offset, query, relation);
+            return;
+        }
 
-    public void showBaseMethods(JTextComponent editor, CodeSymbol.MethodSymbol symbol, int offset) {
-        show(editor, offset, HierarchyQuery.baseMethods(symbol));
+        if (this.directNavigationSearch != null) {
+            this.directNavigationSearch.cancel();
+        }
+        this.directNavigationSearch = this.service.search(query, 2, new CodeInsightService.Listener<>() {
+            @Override
+            public void onCompleted(HierarchyPage page) {
+                directNavigationSearch = null;
+                if (page.results().size() == 1 && !page.truncated()) {
+                    openResult(page.results().getFirst());
+                } else {
+                    show(editor, offset, query, relation);
+                }
+            }
+
+            @Override
+            public void onFailed(Throwable failure) {
+                directNavigationSearch = null;
+                showDirectFailure(editor, offset, query, relation, failure);
+            }
+        });
     }
 
     public void setListFont(Font font) {
         this.list.setFont(Objects.requireNonNull(font, "font"));
     }
 
-    private void show(JTextComponent editor, int offset, HierarchyQuery nextQuery) {
+    private void show(
+            JTextComponent editor,
+            int offset,
+            HierarchyQuery nextQuery,
+            HierarchyRelation nextRelation
+    ) {
+        prepare(editor, offset, nextQuery, nextRelation);
+        startSearch();
+        showAtAnchor(editor, offset);
+    }
+
+    private void showDirectFailure(
+            JTextComponent editor,
+            int offset,
+            HierarchyQuery query,
+            HierarchyRelation relation,
+            Throwable failure
+    ) {
+        prepare(editor, offset, query, relation);
+        this.listModel.clear();
+        this.message.setText("Hierarchy lookup failed: " + failure.getClass().getSimpleName());
+        showCard(MESSAGE_CARD);
+        updateTitle(null);
+        packForLoading();
+        failure.printStackTrace(System.err);
+        showAtAnchor(editor, offset);
+    }
+
+    private void prepare(
+            JTextComponent editor,
+            int offset,
+            HierarchyQuery nextQuery,
+            HierarchyRelation nextRelation
+    ) {
         Objects.requireNonNull(editor, "editor");
         this.invoker = editor;
         this.anchorOffset = offset;
         this.query = nextQuery;
+        this.relation = nextRelation;
         this.updatingOptions = true;
         this.directOnly.setSelected(nextQuery.directSubtypesOnly());
         this.directOnly.setVisible(nextQuery.symbol() instanceof CodeSymbol.ClassSymbol
                 && nextQuery.direction() == HierarchyDirection.IMPLEMENTATIONS);
         this.updatingOptions = false;
-        startSearch();
+    }
 
+    private void showAtAnchor(JTextComponent editor, int offset) {
         try {
             Rectangle2D anchor = editor.modelToView2D(offset);
             packForLoading();
@@ -198,9 +269,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         this.listModel.addAll(page.results());
         updateTitle(page);
         if (page.results().isEmpty()) {
-            this.message.setText(this.query.direction() == HierarchyDirection.BASE_METHODS
-                    ? "No base declarations found"
-                    : "No implementations found");
+            this.message.setText(HierarchyPresentation.emptyResult(this.relation));
             showCard(MESSAGE_CARD);
         } else {
             this.list.setSelectedIndex(0);
@@ -218,9 +287,7 @@ public final class ImplementationChooserPopup extends BasePopup {
     }
 
     private void updateTitle(HierarchyPage page) {
-        String action = this.query.direction() == HierarchyDirection.BASE_METHODS
-                ? "Choose base declaration of "
-                : "Choose implementation of ";
+        String action = HierarchyPresentation.chooserAction(this.relation);
         String suffix = page == null ? "" : " (" + page.results().size()
                 + (page.truncated() ? "+" : "") + " found)";
         this.title.setText(action + targetLabel(this.query.symbol()) + suffix);
@@ -236,7 +303,12 @@ public final class ImplementationChooserPopup extends BasePopup {
         if (selected == null) {
             return;
         }
-        switch (selected.symbol()) {
+        openResult(selected);
+        setVisible(false);
+    }
+
+    private static void openResult(HierarchyResult result) {
+        switch (result.symbol()) {
             case CodeSymbol.ClassSymbol type -> CompanionApp.openClass(type.className());
             case CodeSymbol.MethodSymbol method -> CompanionApp.openClass(
                     method.ownerClassName(),
@@ -247,12 +319,28 @@ public final class ImplementationChooserPopup extends BasePopup {
                     "Hierarchy result unexpectedly contains a field"
             );
         }
-        setVisible(false);
+    }
+
+    private static HierarchyQuery queryFor(CodeSymbol symbol, HierarchyRelation relation) {
+        if (relation.direction() == HierarchyDirection.IMPLEMENTATIONS) {
+            if (symbol instanceof CodeSymbol.FieldSymbol) {
+                throw new IllegalArgumentException("Fields do not have implementations");
+            }
+            return HierarchyQuery.implementations(symbol);
+        }
+        if (!(symbol instanceof CodeSymbol.MethodSymbol method)) {
+            throw new IllegalArgumentException("Only methods have base declarations");
+        }
+        return HierarchyQuery.baseMethods(method);
     }
 
     @Override
     public void setVisible(boolean visible) {
         super.setVisible(visible);
+        if (!visible && this.directNavigationSearch != null) {
+            this.directNavigationSearch.cancel();
+            this.directNavigationSearch = null;
+        }
         if (!visible && this.activeSearch != null) {
             this.activeSearch.cancel();
             this.activeSearch = null;
@@ -260,6 +348,15 @@ public final class ImplementationChooserPopup extends BasePopup {
         if (!visible && this.invoker != null) {
             this.invoker.removeKeyListener(this.invokerKeys);
         }
+    }
+
+    @Override
+    public void dispose() {
+        if (this.directNavigationSearch != null) {
+            this.directNavigationSearch.cancel();
+            this.directNavigationSearch = null;
+        }
+        super.dispose();
     }
 
     private void showCard(String card) {

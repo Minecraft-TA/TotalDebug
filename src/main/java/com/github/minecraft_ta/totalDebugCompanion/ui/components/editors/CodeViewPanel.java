@@ -2,11 +2,15 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
+import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -28,6 +32,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
+import java.util.Map;
 
 public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_IMPLEMENTATIONS_KEY = "findImplementations";
@@ -36,11 +42,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private final ImplementationChooserPopup implementationChooser;
     private final HierarchyPreviewPopup hierarchyPreview;
+    private final CodeInsightService insightService;
     private final CodeVisionLayerUI codeVisionLayerUI;
     private final JLayer<RTextScrollPane> codeVisionLayer;
     private final HierarchyGutterMarkers gutterMarkers;
     private final CodeVisionController codeVisionController;
     private boolean codeVisionDisposed;
+    private CodeInsightService.SearchHandle actionSearch;
 
     public CodeViewPanel(CodeView codeView) {
         super(codeView.getPath().toString(), codeView.getTitle());
@@ -51,10 +59,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         ));
         enableSearch();
 
-        var insightService = CompanionApp.getCodeInsightService();
-        this.implementationChooser = new ImplementationChooserPopup(MainWindow.INSTANCE, insightService);
+        this.insightService = CompanionApp.getCodeInsightService();
+        this.implementationChooser = new ImplementationChooserPopup(MainWindow.INSTANCE, this.insightService);
         this.implementationChooser.setListFont(this.editorPane.getFont());
-        this.hierarchyPreview = new HierarchyPreviewPopup(MainWindow.INSTANCE, insightService);
+        this.hierarchyPreview = new HierarchyPreviewPopup(MainWindow.INSTANCE, this.insightService);
         this.hierarchyPreview.setContentFont(this.editorPane.getFont());
 
         this.codeVisionLayerUI = new CodeVisionLayerUI(this.editorPane, new CodeVisionLayerUI.Handler() {
@@ -64,8 +72,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             }
 
             @Override
-            public void showImplementations(CodeSymbol symbol, int anchorOffset) {
-                CodeViewPanel.this.showImplementations(symbol, anchorOffset);
+            public void showHierarchy(
+                    CodeSymbol symbol,
+                    HierarchyRelation relation,
+                    int count,
+                    int anchorOffset
+            ) {
+                CodeViewPanel.this.navigateHierarchy(symbol, relation, count, anchorOffset);
             }
         });
         this.codeVisionLayer = new JLayer<>(this.editorScrollPane, this.codeVisionLayerUI);
@@ -76,31 +89,36 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 this.editorScrollPane.getGutter(),
                 new HierarchyGutterMarkers.Handler() {
                     @Override
-                    public void showImplementations(SourceDeclaration declaration) {
-                        CodeViewPanel.this.showImplementations(
+                    public void navigate(
+                            SourceDeclaration declaration,
+                            HierarchyRelation relation,
+                            int count
+                    ) {
+                        CodeViewPanel.this.navigateHierarchy(
                                 declaration.symbol(),
+                                relation,
+                                count,
                                 declaration.markerOffset()
                         );
                     }
 
                     @Override
-                    public void showBaseMethods(SourceDeclaration declaration) {
-                        CodeViewPanel.this.showBaseMethods(
+                    public void preview(
+                            SourceDeclaration declaration,
+                            HierarchyRelation relation,
+                            int count,
+                            boolean mixedBaseRelations,
+                            Component invoker,
+                            Point point
+                    ) {
+                        hierarchyPreview.showHierarchy(
+                                invoker,
+                                point,
                                 declaration.symbol(),
-                                declaration.markerOffset()
+                                relation,
+                                count,
+                                mixedBaseRelations
                         );
-                    }
-
-                    @Override
-                    public void previewImplementations(SourceDeclaration declaration, Component invoker, Point point) {
-                        hierarchyPreview.showImplementations(invoker, point, declaration.symbol());
-                    }
-
-                    @Override
-                    public void previewBaseMethods(SourceDeclaration declaration, Component invoker, Point point) {
-                        if (declaration.symbol() instanceof CodeSymbol.MethodSymbol method) {
-                            hierarchyPreview.showBaseMethods(invoker, point, method);
-                        }
                     }
 
                     @Override
@@ -111,7 +129,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         );
         this.codeVisionController = new CodeVisionController(
                 this.identifier,
-                insightService,
+                this.insightService,
                 this.codeVisionLayerUI,
                 this.codeVisionLayer,
                 this.gutterMarkers
@@ -146,6 +164,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         if (!this.codeVisionDisposed) {
             this.codeVisionDisposed = true;
             this.codeVisionController.close();
+            if (this.actionSearch != null) {
+                this.actionSearch.cancel();
+                this.actionSearch = null;
+            }
             this.implementationChooser.dispose();
             this.hierarchyPreview.dispose();
         }
@@ -239,7 +261,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.bottomInformationBar.setDefaultInfoText("Fields do not have implementations");
             return;
         }
-        this.implementationChooser.showImplementations(this.editorPane, symbol, anchorOffset);
+        resolveHierarchyAction(symbol, HierarchyDirection.IMPLEMENTATIONS, anchorOffset);
     }
 
     private void showBaseMethods(CodeSymbol symbol, int anchorOffset) {
@@ -247,7 +269,53 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.bottomInformationBar.setDefaultInfoText("Only methods have base declarations");
             return;
         }
-        this.implementationChooser.showBaseMethods(this.editorPane, method, anchorOffset);
+        resolveHierarchyAction(method, HierarchyDirection.BASE_METHODS, anchorOffset);
+    }
+
+    private void resolveHierarchyAction(
+            CodeSymbol symbol,
+            HierarchyDirection direction,
+            int anchorOffset
+    ) {
+        if (this.actionSearch != null) {
+            this.actionSearch.cancel();
+        }
+        this.actionSearch = this.insightService.summarize(List.of(symbol), new CodeInsightService.Listener<>() {
+            @Override
+            public void onCompleted(Map<CodeSymbol, SymbolInsight> result) {
+                actionSearch = null;
+                var insight = result.get(symbol);
+                int count = insight == null ? 0 : insight.count(direction);
+                if (count == 0) {
+                    bottomInformationBar.setDefaultInfoText(direction == HierarchyDirection.BASE_METHODS
+                            ? "No base declarations found"
+                            : "No implementations or overrides found");
+                    return;
+                }
+                HierarchyRelation relation = direction == HierarchyDirection.IMPLEMENTATIONS
+                        ? insight.descendantFacet().orElseThrow().relation()
+                        : insight.count(HierarchyRelation.OVERRIDES) > 0
+                                ? HierarchyRelation.OVERRIDES
+                                : HierarchyRelation.IMPLEMENTS;
+                navigateHierarchy(symbol, relation, count, anchorOffset);
+            }
+
+            @Override
+            public void onFailed(Throwable failure) {
+                actionSearch = null;
+                failure.printStackTrace(System.err);
+                bottomInformationBar.setFailureInfoText("Unable to inspect the selected hierarchy");
+            }
+        });
+    }
+
+    private void navigateHierarchy(
+            CodeSymbol symbol,
+            HierarchyRelation relation,
+            int count,
+            int anchorOffset
+    ) {
+        this.implementationChooser.navigate(this.editorPane, symbol, relation, count, anchorOffset);
     }
 
     private void resolveSelectedSymbol(String action, java.util.function.Consumer<CodeSymbol> consumer) {

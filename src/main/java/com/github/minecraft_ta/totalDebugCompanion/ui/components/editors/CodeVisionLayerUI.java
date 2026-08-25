@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyFacet;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -31,7 +34,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
     interface Handler {
         void showUsages(CodeSymbol symbol);
 
-        void showImplementations(CodeSymbol symbol, int anchorOffset);
+        void showHierarchy(CodeSymbol symbol, HierarchyRelation relation, int count, int anchorOffset);
     }
 
     private enum Action {
@@ -127,7 +130,8 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
                         baseline
                 );
             }
-            if (entry.insight().implementationCount() > 0) {
+            HierarchyFacet descendants = entry.insight().descendantFacet().orElse(null);
+            if (descendants != null) {
                 if (x > point.x + 10) {
                     x += 12;
                 }
@@ -136,7 +140,7 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
                         metrics,
                         entry,
                         Action.IMPLEMENTATIONS,
-                        formatCount(entry.insight().implementationCount(), "implementation", "implementations"),
+                        HierarchyPresentation.codeVisionCount(descendants.relation(), descendants.count()),
                         x,
                         baseline
                 );
@@ -198,10 +202,15 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
         }
         switch (target.action()) {
             case USAGES -> this.handler.showUsages(target.entry().declaration().symbol());
-            case IMPLEMENTATIONS -> this.handler.showImplementations(
+            case IMPLEMENTATIONS -> {
+                HierarchyFacet facet = target.entry().insight().descendantFacet().orElseThrow();
+                this.handler.showHierarchy(
                     target.entry().declaration().symbol(),
+                    facet.relation(),
+                    facet.count(),
                     target.entry().declaration().anchorOffset()
-            );
+                );
+            }
         }
         event.consume();
     }
@@ -236,8 +245,11 @@ final class CodeVisionLayerUI extends LayerUI<RTextScrollPane> {
         private String tooltip() {
             return switch (this.action) {
                 case USAGES -> "Find usages of " + this.entry.declaration().symbol().displayName();
-                case IMPLEMENTATIONS -> "Show implementations of "
-                        + this.entry.declaration().symbol().displayName();
+                case IMPLEMENTATIONS -> {
+                    HierarchyFacet facet = this.entry.insight().descendantFacet().orElseThrow();
+                    yield "Show " + HierarchyPresentation.codeVisionCount(facet.relation(), facet.count())
+                            + " of " + this.entry.declaration().symbol().displayName();
+                }
             };
         }
     }

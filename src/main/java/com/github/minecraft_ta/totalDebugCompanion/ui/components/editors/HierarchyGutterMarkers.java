@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.GutterIconInfo;
 import org.fife.ui.rtextarea.IconRowHeader;
@@ -26,13 +27,16 @@ import java.util.Objects;
 /** Owns the implementation and override markers installed in one editor gutter. */
 final class HierarchyGutterMarkers implements IconRowListener {
     interface Handler {
-        void showImplementations(SourceDeclaration declaration);
+        void navigate(SourceDeclaration declaration, HierarchyRelation relation, int count);
 
-        void showBaseMethods(SourceDeclaration declaration);
-
-        void previewImplementations(SourceDeclaration declaration, Component invoker, Point point);
-
-        void previewBaseMethods(SourceDeclaration declaration, Component invoker, Point point);
+        void preview(
+                SourceDeclaration declaration,
+                HierarchyRelation relation,
+                int count,
+                boolean mixedBaseRelations,
+                Component invoker,
+                Point point
+        );
 
         void hidePreview();
     }
@@ -75,16 +79,22 @@ final class HierarchyGutterMarkers implements IconRowListener {
         updateHovered(null, null);
         clear();
         for (CodeVisionEntry entry : entries) {
-            int implementations = entry.insight().implementationCount();
-            int bases = entry.insight().baseCount();
-            if (implementations == 0 && bases == 0) {
+            HierarchyRelation relation = entry.insight().primaryGutterRelation().orElse(null);
+            if (relation == null) {
                 continue;
             }
-            Marker marker = new Marker(entry.declaration(), implementations, bases);
+            int count = entry.insight().count(relation.direction());
+            Marker marker = new Marker(
+                    entry.declaration(),
+                    relation,
+                    count,
+                    entry.insight().count(HierarchyRelation.IMPLEMENTS) > 0
+                            && entry.insight().count(HierarchyRelation.OVERRIDES) > 0
+            );
             try {
                 GutterIconInfo info = this.gutter.addOffsetTrackingIcon(
                         entry.declaration().markerOffset(),
-                        implementations > 0 ? Icons.IMPLEMENTED_METHOD : Icons.IMPLEMENTING_METHOD,
+                        HierarchyPresentation.gutterIcon(relation),
                         null
                 );
                 this.installed.add(info);
@@ -125,11 +135,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
             return;
         }
         updateHovered(null, null);
-        if (marker.implementations() > 0) {
-            this.handler.showImplementations(marker.declaration());
-        } else {
-            this.handler.showBaseMethods(marker.declaration());
-        }
+        this.handler.navigate(marker.declaration(), marker.relation(), marker.count());
         event.consume();
     }
 
@@ -157,11 +163,14 @@ final class HierarchyGutterMarkers implements IconRowListener {
             return;
         }
         Point popupPoint = new Point(this.iconRowHeader.getWidth() + 8, point.y + 4);
-        if (marker.implementations() > 0) {
-            this.handler.previewImplementations(marker.declaration(), this.iconRowHeader, popupPoint);
-        } else {
-            this.handler.previewBaseMethods(marker.declaration(), this.iconRowHeader, popupPoint);
-        }
+        this.handler.preview(
+                marker.declaration(),
+                marker.relation(),
+                marker.count(),
+                marker.mixedBaseRelations(),
+                this.iconRowHeader,
+                popupPoint
+        );
     }
 
     private Marker markerAt(Point iconPoint) {
@@ -192,7 +201,12 @@ final class HierarchyGutterMarkers implements IconRowListener {
         throw new IllegalStateException("RSyntaxTextArea gutter has no icon row header");
     }
 
-    private record Marker(SourceDeclaration declaration, int implementations, int bases) {
+    private record Marker(
+            SourceDeclaration declaration,
+            HierarchyRelation relation,
+            int count,
+            boolean mixedBaseRelations
+    ) {
     }
 
 }

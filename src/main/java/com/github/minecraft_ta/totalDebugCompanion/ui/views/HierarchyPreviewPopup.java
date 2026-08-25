@@ -3,10 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQuery;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
@@ -48,12 +50,29 @@ public final class HierarchyPreviewPopup extends JWindow {
         configureUi();
     }
 
-    public void showImplementations(Component invoker, Point point, CodeSymbol symbol) {
-        showPreview(invoker, point, HierarchyQuery.implementations(symbol));
-    }
-
-    public void showBaseMethods(Component invoker, Point point, CodeSymbol.MethodSymbol symbol) {
-        showPreview(invoker, point, HierarchyQuery.baseMethods(symbol));
+    public void showHierarchy(
+            Component invoker,
+            Point point,
+            CodeSymbol symbol,
+            HierarchyRelation relation,
+            int count,
+            boolean mixedBaseRelations
+    ) {
+        Objects.requireNonNull(symbol, "symbol");
+        Objects.requireNonNull(relation, "relation");
+        if (count < 1) {
+            throw new IllegalArgumentException("Hierarchy target count must be positive");
+        }
+        HierarchyQuery query;
+        if (relation.direction() == HierarchyDirection.BASE_METHODS) {
+            if (!(symbol instanceof CodeSymbol.MethodSymbol method)) {
+                throw new IllegalArgumentException("Only methods have base declarations");
+            }
+            query = HierarchyQuery.baseMethods(method);
+        } else {
+            query = HierarchyQuery.implementations(symbol);
+        }
+        showPreview(invoker, point, query, relation, count, mixedBaseRelations);
     }
 
     public void setContentFont(Font font) {
@@ -91,26 +110,38 @@ public final class HierarchyPreviewPopup extends JWindow {
 
     }
 
-    private void showPreview(Component nextInvoker, Point point, HierarchyQuery query) {
+    private void showPreview(
+            Component nextInvoker,
+            Point point,
+            HierarchyQuery query,
+            HierarchyRelation relation,
+            int count,
+            boolean mixedBaseRelations
+    ) {
         this.invoker = Objects.requireNonNull(nextInvoker, "invoker");
         this.anchor = new Point(Objects.requireNonNull(point, "point"));
-        this.title.setText(query.direction() == HierarchyDirection.BASE_METHODS
-                ? "Overrides"
-                : "Is implemented in");
+        this.title.setText(HierarchyPresentation.previewTitle(relation, count, mixedBaseRelations));
+        long searchGeneration = ++this.generation;
+        if (this.activeSearch != null) {
+            this.activeSearch.cancel();
+            this.activeSearch = null;
+        }
+
+        if (query.direction() == HierarchyDirection.IMPLEMENTATIONS && count > 1) {
+            this.rows.removeAll();
+            showAtAnchor();
+            return;
+        }
 
         HierarchyPage cached = this.cache.get(query);
         if (cached != null) {
-            showResults(cached);
+            showResults(cached, count);
             showAtAnchor();
             return;
         }
 
         setMessage("Looking up the hierarchy...");
         showAtAnchor();
-        long searchGeneration = ++this.generation;
-        if (this.activeSearch != null) {
-            this.activeSearch.cancel();
-        }
         this.activeSearch = this.service.search(query, RESULT_LIMIT, new CodeInsightService.Listener<>() {
             @Override
             public void onCompleted(HierarchyPage page) {
@@ -119,7 +150,7 @@ public final class HierarchyPreviewPopup extends JWindow {
                 }
                 activeSearch = null;
                 cache.put(query, page);
-                showResults(page);
+                showResults(page, count);
                 showAtAnchor();
             }
 
@@ -135,7 +166,7 @@ public final class HierarchyPreviewPopup extends JWindow {
         });
     }
 
-    private void showResults(HierarchyPage page) {
+    private void showResults(HierarchyPage page, int totalCount) {
         this.rows.removeAll();
         if (page.results().isEmpty()) {
             addMessageRow("No declarations found");
@@ -145,7 +176,8 @@ public final class HierarchyPreviewPopup extends JWindow {
             }
         }
         if (page.truncated()) {
-            addMessageRow("More results...");
+            int remaining = Math.max(0, totalCount - page.results().size());
+            addMessageRow(remaining > 0 ? "+" + remaining + " more" : "Additional declarations");
         }
     }
 

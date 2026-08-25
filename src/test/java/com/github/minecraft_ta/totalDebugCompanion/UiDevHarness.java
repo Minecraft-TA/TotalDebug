@@ -100,7 +100,34 @@ public final class UiDevHarness {
                         ThemeSample.describe(applications, other != null);
                     }
                 }
-                """, java.nio.charset.StandardCharsets.UTF_8);
+
+                final class ThemeSampleOther implements ThemeSample {
+                    @Override
+                    public void apply(ThemeSample other) {
+                    }
+                }
+
+                interface SingleAction {
+                    void execute();
+                }
+
+                final class SingleActionImpl implements SingleAction {
+                    @Override
+                    public void execute() {
+                    }
+                }
+
+                class OverrideBase {
+                    public void overrideMe() {
+                    }
+                }
+
+                final class OverrideChild extends OverrideBase {
+                    @Override
+                    public void overrideMe() {
+                    }
+                }
+                """ + "\n".repeat(20), java.nio.charset.StandardCharsets.UTF_8);
         return target;
     }
 
@@ -387,7 +414,97 @@ public final class UiDevHarness {
         setupTimer.start();
     }
 
-    private static void scheduleGutterHover(String source, boolean verify) {
+    private static void scheduleGutterClick(String source) {
+        javax.swing.Timer timer = new javax.swing.Timer(1000, event -> {
+            try {
+                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                if (editor == null || iconRow == null) {
+                    throw new IllegalStateException("Code editor gutter was not found");
+                }
+                Rectangle2D declaration = editor.modelToView2D(source.indexOf("public interface ThemeSample"));
+                Point target = SwingUtilities.convertPoint(
+                        editor,
+                        0,
+                        (int) Math.floor(declaration.getY() + declaration.getHeight() / 2),
+                        iconRow
+                );
+                target.x = iconRow.getWidth() / 2;
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                javax.swing.Timer clickTimer = new javax.swing.Timer(250, clickEvent -> {
+                    if (isShowing(ImplementationChooserPopup.class)) {
+                        ((javax.swing.Timer) clickEvent.getSource()).stop();
+                        return;
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        ((javax.swing.Timer) clickEvent.getSource()).stop();
+                        System.err.println("GUTTER_CHOOSER_SCREENSHOT_MISSED");
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(2);
+                    }
+                    dispatchMouseMove(iconRow, target);
+                    dispatchLeftClick(iconRow, target);
+                });
+                clickTimer.setInitialDelay(0);
+                clickTimer.start();
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(3);
+            }
+        });
+        timer.setRepeats(false);
+        timer.start();
+    }
+
+    private static void scheduleSingleGutterNavigationVerification(String source) {
+        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+            try {
+                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                if (editor == null || iconRow == null) {
+                    throw new IllegalStateException("Code editor gutter was not found");
+                }
+                Rectangle2D declaration = editor.modelToView2D(source.indexOf("interface SingleAction"));
+                Point target = SwingUtilities.convertPoint(
+                        editor,
+                        0,
+                        (int) Math.floor(declaration.getY() + declaration.getHeight() / 2),
+                        iconRow
+                );
+                target.x = iconRow.getWidth() / 2;
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                    if (selected instanceof CodeView codeView && "SingleActionImpl".equals(codeView.getTitle())) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.out.println("GUTTER_DIRECT_NAVIGATION_OK");
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(0);
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        System.err.println("GUTTER_DIRECT_NAVIGATION_MISSED selected="
+                                + (selected == null ? "null" : selected.getTitle()));
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(2);
+                    }
+                    dispatchMouseMove(iconRow, target);
+                    dispatchLeftClick(iconRow, target);
+                });
+                resultTimer.setInitialDelay(0);
+                resultTimer.start();
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(3);
+            }
+        });
+        setupTimer.setRepeats(false);
+        setupTimer.start();
+    }
+
+    private static void scheduleGutterHover(String source, int declarationOffset, boolean verify) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
         javax.swing.Timer hoverTimer = new javax.swing.Timer(150, event -> {
             try {
@@ -396,7 +513,7 @@ public final class UiDevHarness {
                 if (editor == null || iconRow == null) {
                     return;
                 }
-                int line = editor.getLineOfOffset(source.indexOf("public interface ThemeSample"));
+                int line = editor.getLineOfOffset(declarationOffset);
                 if (iconRow.getTrackingIcons(line).length == 0) {
                     if (System.nanoTime() >= deadline && verify) {
                         throw new IllegalStateException("Hierarchy marker was not installed");
@@ -407,7 +524,16 @@ public final class UiDevHarness {
                 if (verify) {
                     ((javax.swing.Timer) event.getSource()).stop();
                 }
-                Rectangle2D declaration = editor.modelToView2D(source.indexOf("public interface ThemeSample"));
+                Rectangle2D declaration = editor.modelToView2D(declarationOffset);
+                var viewport = (javax.swing.JViewport) SwingUtilities.getAncestorOfClass(
+                        javax.swing.JViewport.class,
+                        editor
+                );
+                if (viewport != null) {
+                    int targetY = Math.max(0, (int) declaration.getY() - viewport.getExtentSize().height / 2);
+                    viewport.setViewPosition(new Point(viewport.getViewPosition().x, targetY));
+                }
+                declaration = editor.modelToView2D(declarationOffset);
                 Point target = SwingUtilities.convertPoint(
                         editor,
                         0,
@@ -517,17 +643,13 @@ public final class UiDevHarness {
         compileSampleSource(sample, sampleClasses);
         Path indexFile = root.resolve("classes.jindex");
         writeSampleClassIndex(indexFile, sampleClasses);
-        Path runtimeSources = Files.writeString(
-                root.resolve("runtime-sources.txt"),
-                "totaldebug-runtime-sources-v1\n" + workspace.toUri().toASCIIString() + "\n"
-        );
         CompanionProfile profile = new CompanionProfile(
                 "ui-dev",
                 root,
                 workspace,
                 CompanionProtocol.SUPPORTED_CAPABILITIES
         );
-        CompanionApp.configureWithoutSession(profile, indexFile, List.of(workspace), "ui-dev");
+        CompanionApp.configureWithoutSession(profile, indexFile, List.of(sampleClasses), "ui-dev");
 
         GlobalConfig.getInstance().loadFrom(root);
         var positionalArguments = Arrays.stream(args).filter(argument -> !argument.startsWith("--")).toList();
@@ -542,6 +664,7 @@ public final class UiDevHarness {
         boolean backgroundMode = screenshot != null
                 || Arrays.asList(args).contains("--verify-code-vision-click")
                 || Arrays.asList(args).contains("--verify-gutter-click")
+                || Arrays.asList(args).contains("--verify-gutter-direct")
                 || Arrays.asList(args).contains("--verify-gutter-hover");
         CompanionApp.configureLookAndFeel();
 
@@ -584,10 +707,24 @@ public final class UiDevHarness {
             if (Arrays.asList(args).contains("--verify-gutter-click")) {
                 scheduleGutterClickVerification(CodeView.readCode(sample));
             }
+            if (Arrays.asList(args).contains("--click-gutter")) {
+                scheduleGutterClick(CodeView.readCode(sample));
+            }
+            if (Arrays.asList(args).contains("--verify-gutter-direct")) {
+                scheduleSingleGutterNavigationVerification(CodeView.readCode(sample));
+            }
             boolean hoverGutter = Arrays.asList(args).contains("--hover-gutter");
+            boolean hoverOverrideGutter = Arrays.asList(args).contains("--hover-override-gutter");
             boolean verifyGutterHover = Arrays.asList(args).contains("--verify-gutter-hover");
-            if (hoverGutter || verifyGutterHover) {
-                scheduleGutterHover(CodeView.readCode(sample), verifyGutterHover);
+            if (hoverGutter || hoverOverrideGutter || verifyGutterHover) {
+                String source = CodeView.readCode(sample);
+                int declarationOffset = hoverOverrideGutter
+                        ? source.indexOf(
+                                "public void overrideMe()",
+                                source.indexOf("class OverrideBase")
+                        )
+                        : source.indexOf("public interface ThemeSample");
+                scheduleGutterHover(source, declarationOffset, verifyGutterHover);
             }
             if (positionalArguments.size() > 1 && "cycle".equals(positionalArguments.get(1))) {
                 startThemeCycling();
@@ -612,7 +749,11 @@ public final class UiDevHarness {
             ToolTipManager.sharedInstance().setInitialDelay(200);
             if (screenshot != null) {
                 expandTreeForScreenshot();
-                scheduleScreenshot(screenshot, hoverGutter ? 2600 : 1400);
+                int screenshotDelay = hoverGutter || hoverOverrideGutter
+                        ? 2600
+                        : Arrays.asList(args).contains("--show-implementations") ? 3200
+                                : Arrays.asList(args).contains("--click-gutter") ? 5000 : 1400;
+                scheduleScreenshot(screenshot, screenshotDelay);
             }
         });
     }

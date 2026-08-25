@@ -27,6 +27,8 @@ public class Icons {
     public static final FlatSVGIcon JAVA_CONSTRUCTOR = new FlatSVGIcon("icons/constructor.svg");
     public static final FlatSVGIcon IMPLEMENTED_METHOD = new FlatSVGIcon("icons/implementedMethod.svg");
     public static final FlatSVGIcon IMPLEMENTING_METHOD = new FlatSVGIcon("icons/implementingMethod.svg");
+    public static final FlatSVGIcon OVERRIDDEN_METHOD = new FlatSVGIcon("icons/overriddenMethod.svg");
+    public static final FlatSVGIcon OVERRIDING_METHOD = new FlatSVGIcon("icons/overridingMethod.svg");
 
     public static final FlatSVGIcon INFORMATION = new FlatSVGIcon("icons/information.svg");
     public static final FlatSVGIcon SUCCESS = new FlatSVGIcon("icons/success.svg");
