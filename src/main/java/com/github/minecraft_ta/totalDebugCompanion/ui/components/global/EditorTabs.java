@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.LabelWithButtonTabComponent;
 
 import javax.swing.*;
 import java.awt.*;
@@ -23,7 +22,10 @@ public class EditorTabs extends JTabbedPane {
         super();
         setTabLayoutPolicy(SCROLL_TAB_LAYOUT);
         setBorder(BorderFactory.createEmptyBorder());
-        addChangeListener(event -> notifySelectedEditorChanged());
+        addChangeListener(event -> {
+            refreshTabHeaders();
+            notifySelectedEditorChanged();
+        });
     }
 
     /**
@@ -55,6 +57,7 @@ public class EditorTabs extends JTabbedPane {
             return;
         super.removeTabAt(index);
         editors.remove(index);
+        refreshTabHeaders();
         editor.dispose();
         notifySelectedEditorChanged();
     }
@@ -67,8 +70,10 @@ public class EditorTabs extends JTabbedPane {
             addTab(editorPanel.getTitle(), component);
             int index = indexOfComponent(component);
             setToolTipTextAt(index, editorPanel.getTooltip());
-            setTabComponentAt(index, new LabelWithButtonTabComponent(this, editorPanel.getIcon()));
+            EditorTabHeader header = new EditorTabHeader(this, editorPanel.getIcon());
+            setTabComponentAt(index, header);
             setSelectedIndex(index);
+            header.refreshState();
 
             future.complete(null);
         });
@@ -107,6 +112,14 @@ public class EditorTabs extends JTabbedPane {
         IEditorPanel selected = getSelectedEditor();
         for (Consumer<IEditorPanel> listener : this.selectedEditorListeners) {
             listener.accept(selected);
+        }
+    }
+
+    private void refreshTabHeaders() {
+        for (int index = 0; index < getTabCount(); index++) {
+            if (getTabComponentAt(index) instanceof EditorTabHeader header) {
+                header.refreshState();
+            }
         }
     }
 }

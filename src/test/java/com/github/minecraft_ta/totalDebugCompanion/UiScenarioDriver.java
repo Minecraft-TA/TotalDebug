@@ -3,9 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
@@ -83,6 +86,7 @@ final class UiScenarioDriver {
                 int lastTab = MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
                 MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(lastTab);
             });
+            case TAB_HOVER -> advanceTabHover(context);
             case EDITOR_CURRENT_LINE -> {
                 selectCodeEditor(context);
                 RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
@@ -116,6 +120,7 @@ final class UiScenarioDriver {
                     settings.setVisible(true);
                 });
             }
+            case SERVICE_STATUS -> advanceServiceStatus(context);
             case INDEXING -> {
                 selectCodeEditor(context);
                 context.once("indexing", () -> MainWindow.INSTANCE.setRuntimeIndexStatus(
@@ -134,6 +139,13 @@ final class UiScenarioDriver {
             case MAIN -> MainWindow.INSTANCE.getEditorTabs().getSelectedIndex() == 0;
             case INACTIVE_TABS -> MainWindow.INSTANCE.getEditorTabs().getSelectedIndex()
                     == MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
+            case TAB_HOVER -> {
+                Component header = MainWindow.INSTANCE.getEditorTabs().getTabComponentAt(0);
+                CloseButton close = header instanceof Container container
+                        ? findComponent(container, CloseButton.class)
+                        : null;
+                yield header != null && header.isOpaque() && close != null && close.isVisible();
+            }
             case EDITOR_CURRENT_LINE -> {
                 RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
                 IconRowHeader gutter = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
@@ -170,8 +182,55 @@ final class UiScenarioDriver {
                 yield tree != null && tree.getRowCount() > 0;
             }
             case SETTINGS -> findShowingWindow(SettingsWindow.class) != null;
+            case SERVICE_STATUS -> visibleMenuPopup() != null
+                    && findButton(MainWindow.INSTANCE, "Game: Connected") != null
+                    && findButton(MainWindow.INSTANCE, "MCP: Listening") != null;
             case INDEXING -> findLabelContaining(MainWindow.INSTANCE, "Building class index") != null;
         };
+    }
+
+    private static void advanceTabHover(ScenarioContext context) {
+        int lastTab = MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
+        if (lastTab < 1) {
+            return;
+        }
+        context.once("select-last-tab", () -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(lastTab));
+        Component header = MainWindow.INSTANCE.getEditorTabs().getTabComponentAt(0);
+        if (header != null) {
+            context.once("hover-first-tab", () -> header.dispatchEvent(new MouseEvent(
+                    header,
+                    MouseEvent.MOUSE_ENTERED,
+                    System.currentTimeMillis(),
+                    0,
+                    2,
+                    2,
+                    0,
+                    false,
+                    MouseEvent.NOBUTTON
+            )));
+        }
+    }
+
+    private static void advanceServiceStatus(ScenarioContext context) {
+        context.once("publish-service-status", () -> {
+            MainWindow.INSTANCE.setGameStatus(new ServiceStatus(
+                    ServiceStatus.State.AVAILABLE,
+                    "Connected",
+                    "Minecraft is connected and authenticated."
+            ));
+            MainWindow.INSTANCE.setMcpStatus(new ServiceStatus(
+                    ServiceStatus.State.AVAILABLE,
+                    "Listening",
+                    "MCP is listening at http://127.0.0.1:32123/mcp"
+            ));
+        });
+        JButton mcp = findButton(MainWindow.INSTANCE, "MCP: Listening");
+        if (mcp != null) {
+            context.once("open-mcp-status", () -> {
+                mcp.getModel().setRollover(true);
+                mcp.doClick();
+            });
+        }
     }
 
     private static void advanceImplementationChooser(ScenarioContext context) {
@@ -381,11 +440,17 @@ final class UiScenarioDriver {
         if (menuPopup != null) {
             Point location = menuPopup.getLocationOnScreen();
             Component invoker = menuPopup.getInvoker();
-            if (invoker != null) {
+            if (invoker != null && location.equals(new Point())) {
                 Point invokerLocation = invoker.getLocationOnScreen();
+                boolean statusBarPopup = SwingUtilities.getAncestorOfClass(
+                        ApplicationStatusBar.class,
+                        invoker
+                ) != null;
                 location = new Point(
                         invokerLocation.x + invoker.getWidth() - menuPopup.getWidth(),
-                        invokerLocation.y + invoker.getHeight()
+                        statusBarPopup
+                                ? invokerLocation.y - menuPopup.getHeight()
+                                : invokerLocation.y + invoker.getHeight()
                 );
             }
             Graphics2D popupGraphics = (Graphics2D) graphics.create();

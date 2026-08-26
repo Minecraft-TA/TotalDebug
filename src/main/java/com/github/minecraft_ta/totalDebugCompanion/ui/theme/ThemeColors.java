@@ -50,6 +50,16 @@ public final class ThemeColors {
         return first(new Color(0xDB5860), "Actions.Red");
     }
 
+    /** Available / successful state green. */
+    public static Color success() {
+        return first(new Color(0x59A869), "Actions.Green");
+    }
+
+    /** Pending state amber. */
+    public static Color warning() {
+        return first(new Color(0xD9A343), "Actions.Yellow");
+    }
+
     /** Background of a secondary surface such as a header strip. */
     public static Color headerBackground() {
         return first(new Color(0x2B2D30), "ToolBar.background", "Panel.background");

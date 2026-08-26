@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
+import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
@@ -31,6 +32,22 @@ public final class ApplicationStatusBar extends JPanel {
     private final JProgressBar taskProgress = new JProgressBar();
     private final JButton taskState = new JButton();
     private final JPanel taskCards = new JPanel(new java.awt.CardLayout());
+    private final ServiceStatusWidget gameStatus = new ServiceStatusWidget(
+            "Game",
+            new ServiceStatus(
+                    ServiceStatus.State.INACTIVE,
+                    "Offline",
+                    "Minecraft is not connected."
+            )
+    );
+    private final ServiceStatusWidget mcpStatus = new ServiceStatusWidget(
+            "MCP",
+            new ServiceStatus(
+                    ServiceStatus.State.INACTIVE,
+                    "Stopped",
+                    "The MCP server has not started."
+            )
+    );
     private final AnimatedFlatSVGIcon processIcon = new AnimatedFlatSVGIcon("icons/process");
     private final Consumer<BottomInformationBar.State> editorStatusListener = this::setEditorStatus;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
@@ -79,6 +96,8 @@ public final class ApplicationStatusBar extends JPanel {
         this.taskState.setHorizontalAlignment(JButton.RIGHT);
         this.taskState.addActionListener(event -> showTaskPopup());
         this.taskCards.add(this.taskState, "state");
+        add(this.gameStatus);
+        add(this.mcpStatus);
         add(this.taskCards);
         applyTheme();
         ThemeManager.addThemeChangeListener(this.themeListener);
@@ -122,6 +141,14 @@ public final class ApplicationStatusBar extends JPanel {
         this.taskState.setText(status.detail());
         this.taskState.setToolTipText("Show background activity");
         cards.show(this.taskCards, "state");
+    }
+
+    public void setGameStatus(ServiceStatus status) {
+        this.gameStatus.setStatus(status);
+    }
+
+    public void setMcpStatus(ServiceStatus status) {
+        this.mcpStatus.setStatus(status);
     }
 
     private void setEditorStatus(BottomInformationBar.State state) {
@@ -171,7 +198,11 @@ public final class ApplicationStatusBar extends JPanel {
             retry.addActionListener(event -> CompanionApp.retryRuntimeIndex());
             popup.add(retry);
         }
-        popup.show(this.taskState, Math.max(0, this.taskState.getWidth() - popup.getPreferredSize().width), 0);
+        popup.show(
+                this.taskState,
+                Math.min(0, this.taskState.getWidth() - popup.getPreferredSize().width),
+                -popup.getPreferredSize().height
+        );
     }
 
 }

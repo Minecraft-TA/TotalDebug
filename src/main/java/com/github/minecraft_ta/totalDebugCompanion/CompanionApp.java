@@ -14,6 +14,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
@@ -128,17 +129,29 @@ public final class CompanionApp {
             session = new CompanionSession(token, CompanionApp::attach, new CompanionSession.Listener() {
                 @Override
                 public void connecting() {
-                    updateUiState("Connecting");
+                    updateGameStatus(new ServiceStatus(
+                            ServiceStatus.State.PENDING,
+                            "Connecting",
+                            "Waiting for Minecraft to finish the authenticated connection."
+                    ));
                 }
 
                 @Override
                 public void connected(long capabilities) {
-                    updateUiState("Connected");
+                    updateGameStatus(new ServiceStatus(
+                            ServiceStatus.State.AVAILABLE,
+                            "Connected",
+                            "Minecraft is connected and authenticated."
+                    ));
                 }
 
                 @Override
                 public void disconnected() {
-                    updateUiState("Offline");
+                    updateGameStatus(new ServiceStatus(
+                            ServiceStatus.State.INACTIVE,
+                            "Offline",
+                            "Minecraft is not connected."
+                    ));
                     CompanionMcpServer current = mcpServer;
                     if (current != null) {
                         current.runtimeDisconnected();
@@ -152,8 +165,12 @@ public final class CompanionApp {
             });
             SERVER = session.server();
             startUi();
+            updateGameStatus(new ServiceStatus(
+                    ServiceStatus.State.INACTIVE,
+                    "Offline",
+                    "Minecraft is not connected."
+            ));
             session.bindAndPublish(launchConfiguration);
-            updateUiState("Offline");
             startOptionalMcpServer();
 
             EXIT.await();
@@ -423,9 +440,24 @@ public final class CompanionApp {
     }
 
     private static void startOptionalMcpServer() {
+        updateMcpStatus(new ServiceStatus(
+                ServiceStatus.State.PENDING,
+                "Starting",
+                "Starting the loopback MCP server."
+        ));
         try {
             startMcpServer();
+            updateMcpStatus(new ServiceStatus(
+                    ServiceStatus.State.AVAILABLE,
+                    "Listening",
+                    "MCP is listening at " + mcpServer.endpointUrl()
+            ));
         } catch (Exception exception) {
+            updateMcpStatus(new ServiceStatus(
+                    ServiceStatus.State.FAILED,
+                    "Unavailable",
+                    "MCP startup failed: " + exception
+            ));
             System.err.println("TotalDebug Companion MCP is unavailable: " + exception.getMessage());
             exception.printStackTrace(System.err);
         }
@@ -437,6 +469,11 @@ public final class CompanionApp {
         if (server != null) {
             server.close();
         }
+        updateMcpStatus(new ServiceStatus(
+                ServiceStatus.State.INACTIVE,
+                "Stopped",
+                "The MCP server is stopped."
+        ));
     }
 
     private static Map<String, Object> runtimeContext() {
@@ -483,11 +520,18 @@ public final class CompanionApp {
         }
     }
 
-    private static void updateUiState(String state) {
+    private static void updateGameStatus(ServiceStatus status) {
         if (!uiStarted) {
             return;
         }
-        SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setConnectionState(state));
+        SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setGameStatus(status));
+    }
+
+    private static void updateMcpStatus(ServiceStatus status) {
+        if (!uiStarted) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setMcpStatus(status));
     }
 
     private static void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
@@ -542,15 +586,6 @@ public final class CompanionApp {
 
     public static boolean isConnected() {
         return session != null && session.isConnected();
-    }
-
-    public static boolean isMcpListening() {
-        return mcpServer != null;
-    }
-
-    public static String getMcpEndpoint() {
-        CompanionMcpServer current = mcpServer;
-        return current == null ? "unavailable" : current.endpointUrl();
     }
 
     public static boolean hasProfile() {

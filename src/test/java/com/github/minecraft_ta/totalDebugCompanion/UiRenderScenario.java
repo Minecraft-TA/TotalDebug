@@ -6,6 +6,7 @@ import java.util.Arrays;
 enum UiRenderScenario {
     MAIN("main", "Main window with the code editor selected"),
     INACTIVE_TABS("inactive-tabs", "Main window with inactive editor tabs visible"),
+    TAB_HOVER("tab-hover", "Inactive editor tab with its hover and close affordance visible"),
     EDITOR_CURRENT_LINE("editor-current-line", "Current editor line and hierarchy gutter markers"),
     HIERARCHY_ONE("hierarchy-one", "Hierarchy preview with one implementation"),
     HIERARCHY_MANY("hierarchy-many", "Hierarchy preview with several implementations"),
@@ -15,6 +16,7 @@ enum UiRenderScenario {
     MODULE_FILTER("module-filter", "Search Everywhere module selection popup"),
     USAGES_RESULTS("usages-results", "Find Usages with indexed results"),
     SETTINGS("settings", "Settings controls"),
+    SERVICE_STATUS("service-status", "Published Game and MCP states with the MCP detail popup"),
     INDEXING("indexing", "Runtime index activity in the status bar");
 
     private final String id;
