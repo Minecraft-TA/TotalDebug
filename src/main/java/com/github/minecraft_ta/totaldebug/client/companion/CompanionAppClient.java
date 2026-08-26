@@ -33,6 +33,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -45,6 +46,8 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
+    private static final String SWING_TEXT_ANTIALIASING_JVM_OPTION = "-Dawt.useSystemAAFontSettings=on";
+
     private final Path workspaceDirectory;
     private final Path dataDirectory;
     private final Path appDirectory;
@@ -466,11 +469,7 @@ public final class CompanionAppClient implements AutoCloseable {
         Path javaExecutable = CompanionJavaRuntime.resolveCurrentExecutable();
 
         ProcessBuilder processBuilder = new ProcessBuilder(
-                javaExecutable.toString(),
-                "-jar",
-                launchJar.toString(),
-                CompanionLaunchContract.APP_HOME_ARGUMENT,
-                this.appHome.toString()
+                buildLaunchCommand(javaExecutable, launchJar, this.appHome)
         );
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(this.processLog.toFile());
@@ -570,6 +569,17 @@ public final class CompanionAppClient implements AutoCloseable {
             Files.deleteIfExists(staged);
         }
         return launchJar;
+    }
+
+    static List<String> buildLaunchCommand(Path javaExecutable, Path launchJar, Path appHome) {
+        return List.of(
+                javaExecutable.toString(),
+                SWING_TEXT_ANTIALIASING_JVM_OPTION,
+                "-jar",
+                launchJar.toString(),
+                CompanionLaunchContract.APP_HOME_ARGUMENT,
+                appHome.toString()
+        );
     }
 
     private void reportProgress(CompanionStartupProgress progress) {
