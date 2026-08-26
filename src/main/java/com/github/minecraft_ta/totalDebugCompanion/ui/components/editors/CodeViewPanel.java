@@ -155,7 +155,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         } else {
             DebuggerSessionController debugger = CompanionApp.getDebuggerController();
             debugger.registerSource(this.debugSource);
-            this.breakpointMarkers = new BreakpointGutterMarkers(this.editorScrollPane.getGutter());
+            this.breakpointMarkers = new BreakpointGutterMarkers(
+                    this.editorScrollPane.getGutter(),
+                    this.editorPane,
+                    this::toggleBreakpointAtLine
+            );
             updateBreakpointMarkers(debugger);
             this.debuggerListener = new DebuggerSessionController.Listener() {
                 @Override
@@ -324,25 +328,29 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private void toggleBreakpointAtCaret() {
         try {
             int displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
-            this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
-            CompanionApp.getDebuggerController().toggleBreakpoint(this.debugSource, displayedLine)
-                    .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
-                        if (failure != null) {
-                            failure.printStackTrace(System.err);
-                            String detail = failure.getMessage();
-                            this.bottomInformationBar.setFailureInfoText(
-                                    detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
-                            );
-                        } else {
-                            this.bottomInformationBar.setSuccessInfoText(
-                                    (enabled ? "Breakpoint set at line " : "Breakpoint removed from line ")
-                                            + displayedLine
-                            );
-                        }
-                    }));
+            toggleBreakpointAtLine(displayedLine);
         } catch (BadLocationException exception) {
             this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
         }
+    }
+
+    private void toggleBreakpointAtLine(int displayedLine) {
+        this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
+        CompanionApp.getDebuggerController().toggleBreakpoint(this.debugSource, displayedLine)
+                .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (failure != null) {
+                        failure.printStackTrace(System.err);
+                        String detail = failure.getMessage();
+                        this.bottomInformationBar.setFailureInfoText(
+                                detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
+                        );
+                    } else {
+                        this.bottomInformationBar.setSuccessInfoText(
+                                (enabled ? "Breakpoint set at line " : "Breakpoint removed from line ")
+                                        + displayedLine
+                        );
+                    }
+                }));
     }
 
     private void editBreakpointAtCaret() {

@@ -12,12 +12,16 @@ import org.junit.jupiter.api.Test;
 import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,8 +66,11 @@ class HierarchyGutterMarkersTest {
             gutter.setOpaque(false);
 
             var hierarchyMarkers = new HierarchyGutterMarkers(gutter, new EmptyHandler());
-            var breakpointMarkers = new BreakpointGutterMarkers(gutter);
+            var breakpointMarkers = new BreakpointGutterMarkers(gutter, editor, ignored -> {
+            });
             breakpointMarkers.setBreakpoints(List.of(new DebugEngine.SourceBreakpoint(2)));
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
 
             LineNumberList lineNumbers = null;
             for (Component component : gutter.getComponents()) {
@@ -73,7 +80,8 @@ class HierarchyGutterMarkersTest {
                 }
             }
             assertInstanceOf(LineNumberList.class, lineNumbers);
-            lineNumbers.setSize(Math.max(1, lineNumbers.getPreferredSize().width), editor.getHeight());
+            assertTrue(lineNumbers.getWidth() > 0, "The laid-out line-number column has no width");
+            assertTrue(lineNumbers.getHeight() > 0, "The laid-out line-number column has no height");
 
             BufferedImage image = new BufferedImage(
                     lineNumbers.getWidth(),
@@ -93,6 +101,61 @@ class HierarchyGutterMarkersTest {
             breakpointMarkers.dispose();
             hierarchyMarkers.dispose();
         });
+    }
+
+    @Test
+    void clickingALineNumberRequestsABreakpointForThatDisplayedLine() throws Exception {
+        AtomicInteger requestedLine = new AtomicInteger(-1);
+
+        SwingUtilities.invokeAndWait(() -> {
+            var editor = new RSyntaxTextArea("first\nsecond\nthird");
+            var scrollPane = new RTextScrollPane(editor);
+            var gutter = scrollPane.getGutter();
+            var hierarchyMarkers = new HierarchyGutterMarkers(gutter, new EmptyHandler());
+            var breakpointMarkers = new BreakpointGutterMarkers(gutter, editor, requestedLine::set);
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
+
+            LineNumberList lineNumbers = null;
+            for (Component component : gutter.getComponents()) {
+                if (component instanceof LineNumberList candidate) {
+                    lineNumbers = candidate;
+                    break;
+                }
+            }
+            assertInstanceOf(LineNumberList.class, lineNumbers);
+            try {
+                int secondLineOffset = editor.getLineStartOffset(1);
+                int y = (int) editor.modelToView2D(secondLineOffset).getCenterY();
+                lineNumbers.dispatchEvent(new MouseEvent(
+                        lineNumbers,
+                        MouseEvent.MOUSE_CLICKED,
+                        System.currentTimeMillis(),
+                        0,
+                        Math.max(0, lineNumbers.getWidth() / 2),
+                        y,
+                        1,
+                        false,
+                        MouseEvent.BUTTON1
+                ));
+            } catch (javax.swing.text.BadLocationException exception) {
+                throw new AssertionError(exception);
+            }
+
+            breakpointMarkers.dispose();
+            hierarchyMarkers.dispose();
+        });
+
+        assertEquals(2, requestedLine.get());
+    }
+
+    private static void layoutRecursively(Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container nested) {
+                layoutRecursively(nested);
+            }
+        }
     }
 
     private static final class EmptyHandler implements HierarchyGutterMarkers.Handler {
