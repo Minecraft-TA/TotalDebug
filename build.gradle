@@ -63,6 +63,18 @@ def useSiblingCompanion = !explicitCompanionJar.isPresent()
 def developmentCompanionJar = explicitCompanionJar.isPresent()
         ? file(explicitCompanionJar.get())
         : useSiblingCompanion ? siblingCompanionJar.asFile : null
+def minecraftDebugPort = providers.gradleProperty('totaldebugMinecraftDebugPort').map { value ->
+    int port
+    try {
+        port = Integer.parseInt(value)
+    } catch (NumberFormatException exception) {
+        throw new GradleException("totaldebugMinecraftDebugPort must be an integer", exception)
+    }
+    if (port < 1 || port > 65535) {
+        throw new GradleException("totaldebugMinecraftDebugPort must be between 1 and 65535")
+    }
+    return port
+}
 
 neoForge {
     version = project.neo_version
@@ -75,6 +87,10 @@ neoForge {
     runs {
         client {
             client()
+            if (minecraftDebugPort.isPresent()) {
+                jvmArgument "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
+                        + "address=127.0.0.1:${minecraftDebugPort.get()}"
+            }
             if (explicitCompanionJar.isPresent()) {
                 systemProperty 'totaldebug.companionJar', file(explicitCompanionJar.get()).absolutePath
             } else if (useSiblingCompanion) {
@@ -139,6 +155,7 @@ dependencies {
 
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.ow2.asm:asm:9.8'
     testImplementation "mezz.jei:jei-1.21.1-neoforge-api:${jei_version}"
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
