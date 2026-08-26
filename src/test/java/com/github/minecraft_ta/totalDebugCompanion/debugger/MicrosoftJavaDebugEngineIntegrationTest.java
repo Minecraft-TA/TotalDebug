@@ -1,0 +1,37 @@
+package com.github.minecraft_ta.totalDebugCompanion.debugger;
+
+import com.github.minecraft_ta.totalDebugCompanion.debugger.harness.DebuggerScenarios;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+class MicrosoftJavaDebugEngineIntegrationTest {
+    @Test
+    @Timeout(30)
+    void attachesBreaksInspectsStepsAndResumes() throws Exception {
+        DebuggerScenarios.breakpointInspectionAndStep();
+    }
+
+    @Test
+    @Timeout(30)
+    void stepsIntoAndOutOfAMethod() throws Exception {
+        DebuggerScenarios.stepIntoAndOut();
+    }
+
+    @Test
+    @Timeout(30)
+    void evaluatesConditionalAndHitCountBreakpoints() throws Exception {
+        DebuggerScenarios.conditionalAndHitCountBreakpoints();
+    }
+
+    @Test
+    @Timeout(30)
+    void pausesARunningThreadAndInspectsItsFrame() throws Exception {
+        DebuggerScenarios.pauseAndDetach();
+    }
+
+    @Test
+    @Timeout(30)
+    void stopsOnAndDescribesAnUncaughtException() throws Exception {
+        DebuggerScenarios.uncaughtException();
+    }
+}
