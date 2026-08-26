@@ -32,6 +32,7 @@ class PreparedRuntimeSourcesTest {
 
         RuntimeSnapshotBytecodeSource.Source restored = PreparedRuntimeSources.read(file).getFirst();
         assertEquals(logical, restored.logicalUri());
-        assertEquals("Example Mod (example)", restored.module().label());
+        assertEquals("example", restored.module().id());
+        assertEquals("Example Mod", restored.module().displayName());
     }
 }

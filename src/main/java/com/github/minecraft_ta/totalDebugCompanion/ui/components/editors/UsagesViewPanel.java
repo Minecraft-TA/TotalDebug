@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceU
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import org.objectweb.asm.Type;
 
@@ -305,7 +306,9 @@ public final class UsagesViewPanel extends JPanel {
             node.add(new DefaultMutableTreeNode(new UsageNode(
                     usage,
                     includeClassName,
-                    this.searchService.sourceCatalog().moduleFor(usage.sourceId()).label()
+                    RuntimeModulePresentation.of(
+                            this.searchService.sourceCatalog().sourceFor(usage.sourceId())
+                    ).tooltip()
             )));
         }
         return node;
@@ -487,7 +490,7 @@ public final class UsagesViewPanel extends JPanel {
         }
     }
 
-    private record UsageNode(ReferenceUsage usage, boolean includeClassName, String moduleLabel) {
+    private record UsageNode(ReferenceUsage usage, boolean includeClassName, String moduleTooltip) {
         @Override
         public String toString() {
             return usageLabel(this.usage, this.includeClassName);
@@ -521,7 +524,7 @@ public final class UsagesViewPanel extends JPanel {
                 ReferenceLocation location = usage.usage().location();
                 setIcon(locationIcon(location.site()));
                 setToolTipText(
-                        usage.moduleLabel() + " | " + location.className() + '#'
+                        usage.moduleTooltip() + " | " + location.className() + '#'
                                 + usageLabel(usage.usage(), false)
                 );
             }

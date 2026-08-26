@@ -11,11 +11,11 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TextFieldWithInlineLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.*;
 
 import javax.swing.*;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Area;
@@ -45,8 +45,8 @@ public class ChunkGridWindow extends JFrame {
             throw new IllegalStateException("Chunk grid support was not negotiated for this session");
         }
         setTitle("Chunk Grid");
-        updateWindowIcon(ThemeManager.current());
-        ThemeManager.addThemeChangeListener(this::updateWindowIcon);
+        applyTheme(ThemeManager.current());
+        ThemeManager.addThemeChangeListener(this::applyTheme);
         setLayout(new BorderLayout());
         add(this.chunkGridPanel, BorderLayout.CENTER);
 
@@ -175,6 +175,11 @@ public class ChunkGridWindow extends JFrame {
         pack();
     }
 
+    private void applyTheme(CompanionTheme theme) {
+        updateWindowIcon(theme);
+        this.chunkGridPanel.applyTheme();
+    }
+
     private void updateWindowIcon(CompanionTheme theme) {
         setIconImages(Icons.createWindowIconImages(theme));
     }
@@ -263,9 +268,7 @@ public class ChunkGridWindow extends JFrame {
 
     private class ChunkGridPanel extends JPanel {
 
-        private static final Color[] COLORS = new Color[]{
-                new Color(40, 40, 40),
-                new Color(35, 35, 35),
+        private static final Color[] STATE_COLORS = new Color[]{
                 new Color(165, 65, 150),
                 new Color(150, 50, 133),
                 new Color(65, 115, 165),
@@ -404,6 +407,12 @@ public class ChunkGridWindow extends JFrame {
             SwingUtilities.invokeLater(this::requestFocus);
         }
 
+        private void applyTheme() {
+            setBackground(ThemeColors.chunkGridBackground());
+            generateCachedBackground();
+            repaint();
+        }
+
         private void updateGridSize() {
             this.chunkGridRequestInfo.setSize(
                     getWidth() / this.chunkRenderSize,
@@ -506,7 +515,7 @@ public class ChunkGridWindow extends JFrame {
                 }
             }
 
-            g.setColor(Color.BLACK);
+            g.setColor(ThemeColors.chunkGridLine());
 
             if (this.gridStyle == GridStyle.LINES) {
                 g.setStroke(new BasicStroke(1f));
@@ -525,6 +534,7 @@ public class ChunkGridWindow extends JFrame {
             var clipArea = new Area(new Rectangle(0, 0, getWidth(), getHeight()));
             clipArea.subtract(new Area(new Rectangle(outerPaddingX, outerPaddingY, getWidth() - outerPaddingX * 2, getHeight() - outerPaddingY * 2)));
             g.setClip(clipArea);
+            g.setColor(ThemeColors.chunkGridBackground());
             g.fillRect(0, 0, getWidth(), getHeight());
 
             //Draw overlay mode exit button
@@ -548,10 +558,28 @@ public class ChunkGridWindow extends JFrame {
         }
 
         private Paint getChunkColor(int chunkX, int chunkZ, byte state, int renderX, int renderZ) {
+            if (state == 0) {
+                return this.gridStyle == GridStyle.CHECKER_BOARD && (chunkX % 2 == 0) == (chunkZ % 2 == 0)
+                        ? ThemeColors.chunkGridAlternateBackground()
+                        : ThemeColors.chunkGridBackground();
+            }
+            int colorIndex = (state - 1) * 2;
             if (this.gridStyle == GridStyle.GRADIENT) {
-                return new GradientPaint(renderX, renderZ, COLORS[state * 2 + 1], renderX + this.chunkRenderSize, renderZ + this.chunkRenderSize, COLORS[state * 2]);
+                return new GradientPaint(
+                        renderX,
+                        renderZ,
+                        STATE_COLORS[colorIndex + 1],
+                        renderX + this.chunkRenderSize,
+                        renderZ + this.chunkRenderSize,
+                        STATE_COLORS[colorIndex]
+                );
             } else {
-                return COLORS[this.gridStyle == GridStyle.CHECKER_BOARD && (chunkX % 2 == 0) == (chunkZ % 2 == 0) ? (state * 2) + 1 : (state * 2)];
+                return STATE_COLORS[
+                        this.gridStyle == GridStyle.CHECKER_BOARD
+                                && (chunkX % 2 == 0) == (chunkZ % 2 == 0)
+                                ? colorIndex + 1
+                                : colorIndex
+                ];
             }
         }
 

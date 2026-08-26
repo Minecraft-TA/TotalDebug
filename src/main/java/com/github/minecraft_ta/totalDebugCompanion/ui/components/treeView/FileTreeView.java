@@ -11,7 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
-import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 
 import javax.swing.*;
 import java.awt.Color;
@@ -91,9 +91,8 @@ public class FileTreeView extends JScrollPane {
                 if (fileName.toLowerCase(Locale.ROOT).endsWith(".java")) {
                     var splitIndex = fileName.lastIndexOf('.', fileName.length() - ".java".length() - 1);
                     if (splitIndex != -1) {
-                        item.setRenderedName(TextUtils.htmlPrimarySecondaryString(
+                        item.setPresentation(new PrimarySecondaryText(
                                 fileName.substring(splitIndex + 1),
-                                "  ",
                                 fileName.substring(0, splitIndex)
                         ));
                     }

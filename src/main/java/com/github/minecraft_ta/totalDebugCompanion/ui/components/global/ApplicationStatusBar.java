@@ -6,7 +6,9 @@ import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -18,7 +20,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.util.function.Consumer;
@@ -30,7 +31,9 @@ public final class ApplicationStatusBar extends JPanel {
     private final JProgressBar taskProgress = new JProgressBar();
     private final JButton taskState = new JButton();
     private final JPanel taskCards = new JPanel(new java.awt.CardLayout());
+    private final AnimatedFlatSVGIcon processIcon = new AnimatedFlatSVGIcon("icons/process");
     private final Consumer<BottomInformationBar.State> editorStatusListener = this::setEditorStatus;
+    private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
     private BottomInformationBar selectedEditorStatus;
     private RuntimeIndexService.Status runtimeStatus = new RuntimeIndexService.Status(
@@ -45,7 +48,6 @@ public final class ApplicationStatusBar extends JPanel {
         setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
         setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 
-        this.pathLabel.setForeground(ThemeColors.mutedText());
         add(this.pathLabel);
         add(Box.createHorizontalStrut(12));
         add(this.editorStatusLabel);
@@ -59,7 +61,6 @@ public final class ApplicationStatusBar extends JPanel {
         this.taskProgress.setPreferredSize(progressSize);
         this.taskProgress.setMaximumSize(progressSize);
         this.taskProgress.setAlignmentY(Component.CENTER_ALIGNMENT);
-        this.taskLabel.setForeground(ThemeColors.mutedText());
         this.taskLabel.setAlignmentY(Component.CENTER_ALIGNMENT);
         JPanel activity = new JPanel();
         activity.setOpaque(false);
@@ -79,6 +80,8 @@ public final class ApplicationStatusBar extends JPanel {
         this.taskState.addActionListener(event -> showTaskPopup());
         this.taskCards.add(this.taskState, "state");
         add(this.taskCards);
+        applyTheme();
+        ThemeManager.addThemeChangeListener(this.themeListener);
         setRuntimeStatus(this.runtimeStatus);
     }
 
@@ -92,7 +95,7 @@ public final class ApplicationStatusBar extends JPanel {
         this.pathLabel.setText(location.breadcrumb());
         this.pathLabel.setToolTipText(location.tooltip().isBlank() ? null : location.tooltip());
         if (this.selectedEditorStatus == null) {
-            setEditorStatus(new BottomInformationBar.State("", ThemeColors.mutedText(), BottomInformationBar.Style.PLAIN));
+            setEditorStatus(new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN));
         } else {
             this.selectedEditorStatus.addListener(this.editorStatusListener);
         }
@@ -127,14 +130,28 @@ public final class ApplicationStatusBar extends JPanel {
             return;
         }
         this.editorStatusLabel.setText(state.text());
-        this.editorStatusLabel.setForeground(state.color() == null ? getForeground() : state.color());
+        this.editorStatusLabel.setForeground(
+                state.style() == BottomInformationBar.Style.PLAIN ? ThemeColors.mutedText() : getForeground()
+        );
+        if (state.style() != BottomInformationBar.Style.PROCESS) {
+            this.processIcon.stop();
+        }
         this.editorStatusLabel.setIcon(switch (state.style()) {
             case INFORMATION -> Icons.INFORMATION;
-            case PROCESS -> new AnimatedFlatSVGIcon("icons/process");
+            case PROCESS -> this.processIcon;
             case SUCCESS -> Icons.SUCCESS;
             case FAILURE -> Icons.ERROR;
             case PLAIN -> null;
         });
+    }
+
+    private void applyTheme() {
+        this.pathLabel.setForeground(ThemeColors.mutedText());
+        this.taskLabel.setForeground(ThemeColors.mutedText());
+        setEditorStatus(this.selectedEditorStatus == null
+                ? new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN)
+                : this.selectedEditorStatus.state());
+        repaint();
     }
 
     private void showTaskPopup() {

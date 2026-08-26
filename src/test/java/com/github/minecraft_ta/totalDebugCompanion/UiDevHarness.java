@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -626,30 +627,34 @@ public final class UiDevHarness {
                     : findLabelContaining(popup, "OverrideChild.overrideMe");
             if (declaration != null) {
                 ((javax.swing.Timer) event.getSource()).stop();
-                Container row = declaration.getParent();
-                javax.swing.JLabel module = Arrays.stream(row.getComponents())
-                        .filter(javax.swing.JLabel.class::isInstance)
-                        .map(javax.swing.JLabel.class::cast)
-                        .filter(label -> label != declaration)
+                PrimarySecondaryLabel declarationPresentation = (PrimarySecondaryLabel) declaration.getParent();
+                Container row = declarationPresentation.getParent();
+                PrimarySecondaryLabel modulePresentation = Arrays.stream(row.getComponents())
+                        .filter(PrimarySecondaryLabel.class::isInstance)
+                        .map(PrimarySecondaryLabel.class::cast)
+                        .filter(presentation -> presentation != declarationPresentation)
                         .findFirst()
                         .orElseThrow();
-                int declarationBaseline = declaration.getY()
+                javax.swing.JLabel module = firstLabel(modulePresentation);
+                Point declarationOrigin = SwingUtilities.convertPoint(declaration, 0, 0, row);
+                Point moduleOrigin = SwingUtilities.convertPoint(module, 0, 0, row);
+                int declarationBaseline = declarationOrigin.y
                         + declaration.getBaseline(declaration.getWidth(), declaration.getHeight());
-                int moduleBaseline = module.getY() + module.getBaseline(module.getWidth(), module.getHeight());
-                if (declaration.getPreferredSize().height > declaration.getHeight()
-                        || module.getPreferredSize().height > module.getHeight()
-                        || declaration.getY() + declaration.getHeight() > row.getHeight()
-                        || module.getY() + module.getHeight() > row.getHeight()
+                int moduleBaseline = moduleOrigin.y + module.getBaseline(module.getWidth(), module.getHeight());
+                if (declarationPresentation.getPreferredSize().height > declarationPresentation.getHeight()
+                        || modulePresentation.getPreferredSize().height > modulePresentation.getHeight()
+                        || declarationPresentation.getY() + declarationPresentation.getHeight() > row.getHeight()
+                        || modulePresentation.getY() + modulePresentation.getHeight() > row.getHeight()
                         || Math.abs(declarationBaseline - moduleBaseline) > 2) {
                     System.err.printf(
                             "HIERARCHY_ROW_LAYOUT_CLIPPED: row=%s declaration=%s preferred=%s baseline=%d "
                                     + "module=%s preferred=%s baseline=%d%n",
                             row.getSize(),
-                            declaration.getSize(),
-                            declaration.getPreferredSize(),
+                            declarationPresentation.getSize(),
+                            declarationPresentation.getPreferredSize(),
                             declarationBaseline,
-                            module.getSize(),
-                            module.getPreferredSize(),
+                            modulePresentation.getSize(),
+                            modulePresentation.getPreferredSize(),
                             moduleBaseline
                     );
                     MainWindow.INSTANCE.dispose();
@@ -684,6 +689,14 @@ public final class UiDevHarness {
             }
         }
         return null;
+    }
+
+    private static javax.swing.JLabel firstLabel(Container root) {
+        return Arrays.stream(root.getComponents())
+                .filter(javax.swing.JLabel.class::isInstance)
+                .map(javax.swing.JLabel.class::cast)
+                .findFirst()
+                .orElseThrow();
     }
 
     private static void dispatchMouseMove(Component component, Point point) {

@@ -104,11 +104,10 @@ public final class ImageViewPanel extends JPanel {
     }
 
     private void updateStatus() {
-        this.informationBar.setDefaultInfoText(
+        this.informationBar.setMutedInfoText(
                 this.image.getWidth() + " x " + this.image.getHeight()
                         + "  |  PNG  |  " + formatBytes(this.byteCount)
-                        + "  |  " + Math.round(this.canvas.scale() * 100) + "%",
-                com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors.mutedText()
+                        + "  |  " + Math.round(this.canvas.scale() * 100) + "%"
         );
     }
 

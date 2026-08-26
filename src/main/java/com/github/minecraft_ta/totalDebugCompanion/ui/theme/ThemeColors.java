@@ -65,6 +65,21 @@ public final class ThemeColors {
         return first(new Color(0x43454A), "Button.toolbar.selectedBackground", "Button.toolbar.hoverBackground");
     }
 
+    /** Empty-cell and padding background used by the Chunk Grid. */
+    public static Color chunkGridBackground() {
+        return first(new Color(0x232427), "Panel.background");
+    }
+
+    /** Alternating empty-cell color used by the Chunk Grid checkerboard. */
+    public static Color chunkGridAlternateBackground() {
+        return blend(chunkGridBackground(), text(), 0.045f);
+    }
+
+    /** Grid lines around Chunk Grid cells. */
+    public static Color chunkGridLine() {
+        return separator();
+    }
+
     private static Color first(Color fallback, String... keys) {
         for (String key : keys) {
             Color color = UIManager.getColor(key);
@@ -73,5 +88,14 @@ public final class ThemeColors {
             }
         }
         return fallback;
+    }
+
+    private static Color blend(Color first, Color second, float secondWeight) {
+        float firstWeight = 1f - secondWeight;
+        return new Color(
+                Math.round(first.getRed() * firstWeight + second.getRed() * secondWeight),
+                Math.round(first.getGreen() * firstWeight + second.getGreen() * secondWeight),
+                Math.round(first.getBlue() * firstWeight + second.getBlue() * secondWeight)
+        );
     }
 }

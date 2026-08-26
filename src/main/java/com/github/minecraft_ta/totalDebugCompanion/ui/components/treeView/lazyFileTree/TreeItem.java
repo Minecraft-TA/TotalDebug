@@ -1,12 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+
 import javax.swing.*;
 
 public class TreeItem {
 
     private final boolean isHiddenRoot;
     private final String name;
-    private String renderedName;
+    private PrimarySecondaryText presentation;
     private Icon icon;
 
     protected TreeItem(String name) {
@@ -38,14 +40,12 @@ public class TreeItem {
         return name;
     }
 
-    public void setRenderedName(String renderedName) {
-        this.renderedName = renderedName;
+    public void setPresentation(PrimarySecondaryText presentation) {
+        this.presentation = presentation;
     }
 
-    public String getRenderedName() {
-        if (this.renderedName == null)
-            return this.name;
-        return renderedName;
+    public PrimarySecondaryText getPresentation() {
+        return this.presentation == null ? PrimarySecondaryText.primary(this.name) : this.presentation;
     }
 
     public String getTooltip() {

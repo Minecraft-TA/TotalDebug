@@ -33,10 +33,6 @@ public record RuntimeInventory(
                 throw new IllegalArgumentException("Runtime module display name is blank");
             }
         }
-
-        public String label() {
-            return id.equals(displayName) ? displayName : displayName + " (" + id + ')';
-        }
     }
 
     public record Source(SourceKind kind, Path path, String logicalUri, RuntimeModule module) {

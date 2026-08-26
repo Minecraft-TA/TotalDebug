@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -94,7 +95,7 @@ final class SourceFileNavigation {
                 : EditorLocation.forRuntimeClass(
                         binaryName,
                         origin.logicalSource(),
-                        origin.module().displayName()
+                        RuntimeModulePresentation.of(origin.module()).label()
                 );
     }
 

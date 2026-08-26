@@ -8,9 +8,11 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQue
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import org.eclipse.jdt.core.IJavaElement;
@@ -442,18 +444,14 @@ public final class ImplementationChooserPopup extends BasePopup {
         return separator < 0 ? "" : binaryName.substring(0, separator);
     }
 
-    static String resultLabel(CodeSymbol symbol) {
+    static PrimarySecondaryText resultPresentation(CodeSymbol symbol) {
         String owner = symbol.ownerClassName();
         String primary = switch (symbol) {
             case CodeSymbol.ClassSymbol ignored -> simpleClassName(owner);
             case CodeSymbol.MethodSymbol method -> simpleClassName(owner) + '.' + displayMethod(method);
             case CodeSymbol.FieldSymbol field -> simpleClassName(owner) + '.' + field.name();
         };
-        String packageName = packageName(owner);
-        return packageName.isEmpty()
-                ? primary
-                : "<html><nobr>" + primary + " <span style='color:#8c8f94'>"
-                        + packageName + "</span></nobr></html>";
+        return new PrimarySecondaryText(primary, packageName(owner));
     }
 
     static Icon symbolIcon(CodeSymbol symbol) {
@@ -487,16 +485,28 @@ public final class ImplementationChooserPopup extends BasePopup {
             Color foreground = selected ? owner.getSelectionForeground() : ThemeColors.text();
             row.setBackground(background);
 
-            JLabel declaration = new JLabel(resultLabel(result.symbol()), symbolIcon(result.symbol()), JLabel.LEFT);
-            declaration.setForeground(foreground);
-            declaration.setFont(owner.getFont());
+            PrimarySecondaryLabel declaration = new PrimarySecondaryLabel();
+            declaration.configure(
+                    resultPresentation(result.symbol()),
+                    symbolIcon(result.symbol()),
+                    owner.getFont(),
+                    selected,
+                    foreground
+            );
             row.add(declaration, BorderLayout.CENTER);
 
-            RuntimeInventory.RuntimeModule module = service.sourceCatalog().moduleFor(result.sourceId());
-            JLabel moduleLabel = new JLabel(module.displayName());
-            moduleLabel.setForeground(selected ? foreground : ThemeColors.mutedText());
-            moduleLabel.setFont(owner.getFont().deriveFont(Font.PLAIN, Math.max(10f, owner.getFont().getSize2D() - 1f)));
-            moduleLabel.setToolTipText(module.label());
+            RuntimeModulePresentation module = RuntimeModulePresentation.of(
+                    service.sourceCatalog().sourceFor(result.sourceId())
+            );
+            PrimarySecondaryLabel moduleLabel = new PrimarySecondaryLabel();
+            moduleLabel.configure(
+                    module.text(),
+                    null,
+                    owner.getFont().deriveFont(Font.PLAIN, Math.max(10f, owner.getFont().getSize2D() - 1f)),
+                    selected,
+                    foreground
+            );
+            moduleLabel.setToolTipText(module.tooltip());
             row.add(moduleLabel, BorderLayout.EAST);
             return row;
         }

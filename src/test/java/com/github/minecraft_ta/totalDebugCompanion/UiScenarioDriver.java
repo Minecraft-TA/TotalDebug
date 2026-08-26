@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
@@ -176,6 +178,10 @@ final class UiScenarioDriver {
         selectCodeEditor(context);
         RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
         if (editor == null) {
+            return;
+        }
+        if (!(MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)
+                || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
             return;
         }
         context.once("open-chooser", () -> {

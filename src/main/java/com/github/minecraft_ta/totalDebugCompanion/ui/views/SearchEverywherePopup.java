@@ -14,8 +14,13 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEvery
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.SymbolResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.SymbolKind;
@@ -38,6 +43,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
@@ -57,11 +63,13 @@ public class SearchEverywherePopup extends JFrame {
     private final JLabel messageLabel = new JLabel("Type to search the runtime index", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
     private final JLabel resultCount = new JLabel(" ");
+    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Enter Open    Esc Close");
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton moduleFilterButton = new JButton(Icons.FILTER);
     private final Map<Category, JToggleButton> categoryButtons = new LinkedHashMap<>();
     private final LinkedHashSet<String> selectedModuleIds = new LinkedHashSet<>();
     private final ModuleFilterPopup moduleFilterPopup;
+    private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
     private RuntimeSourceCatalog sourceCatalog = RuntimeSourceCatalog.empty();
     private List<RuntimeInventory.RuntimeModule> modules = List.of();
@@ -89,6 +97,8 @@ public class SearchEverywherePopup extends JFrame {
         this.resultCards.add(this.messageLabel, MESSAGE_CARD);
         add(this.resultCards, BorderLayout.CENTER);
         add(createFooter(), BorderLayout.SOUTH);
+        applyTheme();
+        ThemeManager.addThemeChangeListener(this.themeListener);
 
         getRootPane().registerKeyboardAction(
                 event -> setVisible(false),
@@ -142,6 +152,7 @@ public class SearchEverywherePopup extends JFrame {
 
     @Override
     public void dispose() {
+        ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {
             this.pendingSearch.cancel(false);
@@ -184,12 +195,15 @@ public class SearchEverywherePopup extends JFrame {
                 DynamicMatteBorder.rule(1, 0, 0, 0),
                 BorderFactory.createEmptyBorder(5, 9, 5, 9)
         ));
-        this.resultCount.setForeground(ThemeColors.mutedText());
-        JLabel shortcuts = new JLabel("↑↓ Navigate    Enter Open    Esc Close");
-        shortcuts.setForeground(ThemeColors.mutedText());
         footer.add(this.resultCount, BorderLayout.WEST);
-        footer.add(shortcuts, BorderLayout.EAST);
+        footer.add(this.shortcutsLabel, BorderLayout.EAST);
         return footer;
+    }
+
+    private void applyTheme() {
+        this.resultCount.setForeground(ThemeColors.mutedText());
+        this.shortcutsLabel.setForeground(ThemeColors.mutedText());
+        this.resultList.repaint();
     }
 
     private void configureResultList() {
@@ -485,17 +499,24 @@ public class SearchEverywherePopup extends JFrame {
         }
     }
 
-    private String moduleLabel(Result result) {
-        List<String> labels = Arrays.stream(result.sourceIds())
-                .mapToObj(this.sourceCatalog::moduleFor)
+    private ModuleSummary moduleSummary(Result result) {
+        var sources = Arrays.stream(result.sourceIds())
+                .mapToObj(this.sourceCatalog::sourceFor)
                 .distinct()
-                .map(RuntimeInventory.RuntimeModule::displayName)
-                .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
-        if (labels.size() <= 2) {
-            return String.join(", ", labels);
-        }
-        return labels.get(0) + ", " + labels.get(1) + " +" + (labels.size() - 2);
+        List<RuntimeInventory.RuntimeModule> resultModules = sources.stream()
+                .map(com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source::module)
+                .distinct()
+                .toList();
+        PrimarySecondaryText text = resultModules.size() == 1
+                ? RuntimeModulePresentation.of(resultModules.getFirst()).text()
+                : PrimarySecondaryText.primary(RuntimeModulePresentation.compactSummary(resultModules));
+        String tooltip = sources.stream()
+                .map(RuntimeModulePresentation::of)
+                .map(RuntimeModulePresentation::tooltip)
+                .distinct()
+                .collect(Collectors.joining(" | "));
+        return new ModuleSummary(text, tooltip);
     }
 
     private static String identity(Result result) {
@@ -553,47 +574,40 @@ public class SearchEverywherePopup extends JFrame {
             Color background = selected ? list.getSelectionBackground() : list.getBackground();
             Color foreground = selected ? list.getSelectionForeground() : ThemeColors.text();
 
-            JLabel primary = new JLabel();
-            primary.setForeground(foreground);
-            primary.setFont(primary.getFont().deriveFont(Font.PLAIN));
-            JLabel secondary = new JLabel();
-            secondary.setForeground(selected ? foreground : ThemeColors.mutedText());
-
+            PrimarySecondaryText presentation;
             Icon icon;
             switch (value) {
                 case ClassResult type -> {
-                    primary.setText(type.simpleName());
-                    secondary.setText(type.packageName());
+                    presentation = new PrimarySecondaryText(type.simpleName(), type.packageName());
                     icon = type.isInterface() ? Icons.JAVA_INTERFACE
                             : type.isEnum() ? Icons.JAVA_ENUM : Icons.JAVA_CLASS;
                 }
                 case SymbolResult symbol -> {
-                    primary.setText(symbolPrimary(symbol));
                     String owner = simpleClassName(symbol.ownerBinaryName());
                     String ownerPackage = packageName(symbol.ownerBinaryName());
-                    secondary.setText("in " + owner + (ownerPackage.isEmpty() ? "" : "  " + ownerPackage));
+                    presentation = new PrimarySecondaryText(
+                            symbolPrimary(symbol),
+                            "in " + owner + (ownerPackage.isEmpty() ? "" : "  " + ownerPackage)
+                    );
                     icon = symbol.kind() == SymbolKind.FIELD ? Icons.FIELD
                             : "<init>".equals(symbol.name()) ? Icons.JAVA_CONSTRUCTOR : Icons.JAVA_METHOD;
                 }
                 case TextResult text -> {
-                    primary.setText(textPreview(text.value()));
-                    primary.setToolTipText(text.value());
-                    secondary.setText("String literal");
+                    presentation = new PrimarySecondaryText(textPreview(text.value()), "String literal");
                     icon = Icons.VALUE;
                 }
             }
 
-            JPanel left = new JPanel();
-            left.setOpaque(false);
-            left.setLayout(new BoxLayout(left, BoxLayout.X_AXIS));
-            primary.setIcon(icon);
-            primary.setIconTextGap(7);
-            left.add(primary);
-            left.add(Box.createHorizontalStrut(8));
-            left.add(secondary);
+            PrimarySecondaryLabel left = new PrimarySecondaryLabel();
+            left.configure(presentation, icon, list.getFont(), selected, foreground);
+            if (value instanceof TextResult text) {
+                left.setToolTipText(text.value());
+            }
 
-            JLabel module = new JLabel(moduleLabel(value), SwingConstants.RIGHT);
-            module.setForeground(selected ? foreground : ThemeColors.mutedText());
+            ModuleSummary moduleSummary = moduleSummary(value);
+            PrimarySecondaryLabel module = new PrimarySecondaryLabel();
+            module.configure(moduleSummary.text(), null, list.getFont(), selected, foreground);
+            module.setToolTipText(moduleSummary.tooltip());
             module.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 8));
 
             JPanel row = new JPanel(new BorderLayout());
@@ -604,6 +618,9 @@ public class SearchEverywherePopup extends JFrame {
             row.add(module, BorderLayout.EAST);
             return row;
         }
+    }
+
+    private record ModuleSummary(PrimarySecondaryText text, String tooltip) {
     }
 
     private static final class SearchCategoryButton extends JToggleButton {

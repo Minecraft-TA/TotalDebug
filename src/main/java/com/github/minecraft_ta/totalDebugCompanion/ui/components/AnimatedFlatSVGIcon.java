@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.*;
 import java.awt.*;
@@ -13,7 +14,7 @@ public class AnimatedFlatSVGIcon implements Icon {
     private int currentIndex;
 
     private final FlatSVGIcon[] icons;
-    private Timer timer = null;
+    private final Timer timer;
 
     public AnimatedFlatSVGIcon(String folderName) {
         List<FlatSVGIcon> icons = new ArrayList<>();
@@ -21,6 +22,7 @@ public class AnimatedFlatSVGIcon implements Icon {
         int i = 1;
         while (AnimatedFlatSVGIcon.class.getClassLoader().getResource(folderName + "/step_" + i + ".svg") != null) {
             var icon = new FlatSVGIcon(folderName + "/step_" + i + ".svg");
+            icon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> ThemeColors.mutedText()));
             icons.add(icon);
             i++;
         }
@@ -30,27 +32,37 @@ public class AnimatedFlatSVGIcon implements Icon {
 
         this.icons = icons.toArray(new FlatSVGIcon[0]);
 
-        this.timer = new Timer(100, e -> {
-            if (this.component == null) {
+        this.timer = new Timer(100, null);
+        this.timer.addActionListener(e -> {
+            Component target = this.component;
+            this.component = null;
+            if (target == null) {
                 this.timer.stop();
-            } else {
-                this.component.repaint();
-                this.component = null;
+                return;
             }
+            this.currentIndex = (this.currentIndex + 1) % this.icons.length;
+            target.repaint();
         });
-        this.timer.start();
     }
 
     @Override
     public void paintIcon(Component c, Graphics g, int x, int y) {
-        if (this.component == null)
-            this.component = c;
+        this.component = c;
+        if (!this.timer.isRunning()) {
+            this.timer.start();
+        }
 
         this.icons[this.currentIndex].paintIcon(c, g, x, y);
-        this.currentIndex++;
+    }
 
-        if (this.currentIndex >= this.icons.length)
-            this.currentIndex = 0;
+    public void stop() {
+        this.timer.stop();
+        this.component = null;
+        this.currentIndex = 0;
+    }
+
+    boolean isRunning() {
+        return this.timer.isRunning();
     }
 
     @Override

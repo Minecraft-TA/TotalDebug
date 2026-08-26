@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceL
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.tth05.jindex.ReferenceKind;
 
 import java.util.ArrayList;
@@ -83,7 +84,11 @@ final class UsageTreeModel {
         }
         if (options.module()) {
             RuntimeInventory.RuntimeModule module = sourceCatalog.moduleFor(usage.sourceId());
-            path.add(new GroupKey(GroupKind.MODULE, module.id(), module.label()));
+            path.add(new GroupKey(
+                    GroupKind.MODULE,
+                    module.id(),
+                    RuntimeModulePresentation.of(module).label()
+            ));
         }
         ReferenceLocation location = usage.location();
         if (options.packageName()) {

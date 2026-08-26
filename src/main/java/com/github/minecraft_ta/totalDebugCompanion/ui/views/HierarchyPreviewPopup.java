@@ -6,9 +6,10 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQue
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
@@ -194,22 +195,31 @@ public final class HierarchyPreviewPopup extends JWindow {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
 
-        JLabel declaration = new JLabel(
-                ImplementationChooserPopup.resultLabel(result.symbol()),
+        PrimarySecondaryLabel declaration = new PrimarySecondaryLabel();
+        declaration.configure(
+                ImplementationChooserPopup.resultPresentation(result.symbol()),
                 ImplementationChooserPopup.symbolIcon(result.symbol()),
-                JLabel.LEFT
+                this.rows.getFont(),
+                false,
+                null
         );
-        declaration.setFont(this.rows.getFont());
         row.add(declaration, BorderLayout.CENTER);
 
-        RuntimeInventory.RuntimeModule module = this.service.sourceCatalog().moduleFor(result.sourceId());
-        JLabel moduleLabel = new JLabel(module.displayName());
-        moduleLabel.setForeground(ThemeColors.mutedText());
-        moduleLabel.setFont(this.rows.getFont().deriveFont(
-                Font.PLAIN,
-                Math.max(10f, this.rows.getFont().getSize2D() - 1f)
-        ));
-        moduleLabel.setToolTipText(module.label());
+        RuntimeModulePresentation module = RuntimeModulePresentation.of(
+                this.service.sourceCatalog().sourceFor(result.sourceId())
+        );
+        PrimarySecondaryLabel moduleLabel = new PrimarySecondaryLabel();
+        moduleLabel.configure(
+                module.text(),
+                null,
+                this.rows.getFont().deriveFont(
+                        Font.PLAIN,
+                        Math.max(10f, this.rows.getFont().getSize2D() - 1f)
+                ),
+                false,
+                null
+        );
+        moduleLabel.setToolTipText(module.tooltip());
         row.add(moduleLabel, BorderLayout.EAST);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
         return row;

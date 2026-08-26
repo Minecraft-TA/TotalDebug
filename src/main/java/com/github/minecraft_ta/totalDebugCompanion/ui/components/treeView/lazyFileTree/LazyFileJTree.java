@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+
 import javax.swing.*;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
@@ -95,17 +97,25 @@ public class LazyFileJTree extends JTree {
         });
 
         setCellRenderer(new DefaultTreeCellRenderer() {
+            private final PrimarySecondaryLabel presentation = new PrimarySecondaryLabel();
+
             @Override
             public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
                 super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
                 if (!(value instanceof LazyTreeNode treeNode))
                     return this;
 
-                setText(treeNode.getUserObject().getRenderedName());
-                setIcon(treeNode.getUserObject().getIcon());
-                setIconTextGap(5);
-                setToolTipText(treeNode.getUserObject().getTooltip());
-                return this;
+                TreeItem item = treeNode.getUserObject();
+                this.presentation.configure(
+                        item.getPresentation(),
+                        item.getIcon(),
+                        getFont(),
+                        sel,
+                        getTextSelectionColor(),
+                        getBackgroundSelectionColor()
+                );
+                this.presentation.setToolTipText(item.getTooltip());
+                return this.presentation;
             }
         });
     }

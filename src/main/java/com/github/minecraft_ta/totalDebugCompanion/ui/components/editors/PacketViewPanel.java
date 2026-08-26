@@ -6,7 +6,8 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.Capture
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.PacketContentMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
-import com.github.minecraft_ta.totalDebugCompanion.util.TextUtils;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
@@ -33,11 +34,21 @@ public class PacketViewPanel extends JPanel {
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
         tree.setCellRenderer(new DefaultTreeCellRenderer() {
+            private final PrimarySecondaryLabel presentation = new PrimarySecondaryLabel();
+
             @Override
             public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
                 super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
                 if (value instanceof DefaultMutableTreeNode treeNode && treeNode.getUserObject() instanceof TreeItem treeItem) {
-                    setIcon(treeItem.getType().getIcon());
+                    this.presentation.configure(
+                            treeItem.getPresentation(),
+                            treeItem.getType().getIcon(),
+                            getFont(),
+                            sel,
+                            getTextSelectionColor(),
+                            getBackgroundSelectionColor()
+                    );
+                    return this.presentation;
                 }
                 return this;
             }
@@ -91,7 +102,10 @@ public class PacketViewPanel extends JPanel {
             if (!isCapturing || root.getChildCount() >= (int) packetCountSelector.getSelectedItem()) return;
 
             if (message.getPacketName().equals(packetView.getPacket())) {
-                String packetName = TextUtils.htmlPrimarySecondaryString(message.getPacketName(), " ", "channel: " + message.getChannel() + ", size: " + message.getBytes() + "B");
+                PrimarySecondaryText packetName = new PrimarySecondaryText(
+                        message.getPacketName(),
+                        "channel: " + message.getChannel() + ", size: " + message.getBytes() + "B"
+                );
                 DefaultMutableTreeNode packetNode = jsonToTree(JsonParser.parseString(message.getPacketData()), packetName, Type.VALUE);
                 DefaultTreeModel model = (DefaultTreeModel) tree.getModel();
                 model.insertNodeInto(packetNode, root, root.getChildCount());
@@ -111,21 +125,34 @@ public class PacketViewPanel extends JPanel {
      * @param jsonElement The json element to convert.
      * @return The tree made of nodes.
      */
-    private DefaultMutableTreeNode jsonToTree(JsonElement jsonElement, String name, Type type) {
+    private DefaultMutableTreeNode jsonToTree(JsonElement jsonElement, PrimarySecondaryText name, Type type) {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode(new TreeItem(name, type));
         if (jsonElement.isJsonObject()) {
             for (String key : jsonElement.getAsJsonObject().keySet()) {
-                root.add(jsonToTree(jsonElement.getAsJsonObject().get(key), key, Type.FIELD));
+                root.add(jsonToTree(
+                        jsonElement.getAsJsonObject().get(key),
+                        PrimarySecondaryText.primary(key),
+                        Type.FIELD
+                ));
             }
         } else if (jsonElement.isJsonArray()) {
             int i = 0;
             for (JsonElement element : jsonElement.getAsJsonArray()) {
-                root.add(jsonToTree(element, String.valueOf(i), Type.VALUE));
+                root.add(jsonToTree(element, PrimarySecondaryText.primary(String.valueOf(i)), Type.VALUE));
                 i++;
             }
-            root.setUserObject(new TreeItem(TextUtils.htmlPrimarySecondaryString(name, " ", "size = " + jsonElement.getAsJsonArray().size()), Type.ARRAY));
+            String arrayDetails = name.secondary().isBlank()
+                    ? "size = " + jsonElement.getAsJsonArray().size()
+                    : name.secondary() + ", entries: " + jsonElement.getAsJsonArray().size();
+            root.setUserObject(new TreeItem(
+                    new PrimarySecondaryText(name.primary(), arrayDetails),
+                    Type.ARRAY
+            ));
         } else {
-            root.setUserObject(new TreeItem(name + " = " + jsonElement.getAsString(), Type.PRIMITIVE));
+            root.setUserObject(new TreeItem(
+                    PrimarySecondaryText.primary(name.primary() + " = " + jsonElement.getAsString()),
+                    Type.PRIMITIVE
+            ));
         }
         return root;
     }
@@ -156,15 +183,15 @@ public class PacketViewPanel extends JPanel {
     private static final class TreeItem {
 
         private final Type type;
-        private final String value;
+        private final PrimarySecondaryText presentation;
 
-        public TreeItem(String value, Type icon) {
-            this.value = value;
+        public TreeItem(PrimarySecondaryText presentation, Type icon) {
+            this.presentation = presentation;
             this.type = icon;
         }
 
-        public String getValue() {
-            return value;
+        public PrimarySecondaryText getPresentation() {
+            return this.presentation;
         }
 
         public Type getType() {
@@ -173,7 +200,9 @@ public class PacketViewPanel extends JPanel {
 
         @Override
         public String toString() {
-            return value;
+            return this.presentation.secondary().isBlank()
+                    ? this.presentation.primary()
+                    : this.presentation.primary() + ' ' + this.presentation.secondary();
         }
 
     }

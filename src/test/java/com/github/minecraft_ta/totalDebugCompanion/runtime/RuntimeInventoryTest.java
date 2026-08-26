@@ -36,7 +36,8 @@ class RuntimeInventoryTest {
         assertEquals("abc", inventory.id());
         assertEquals(classes, inventory.sources().getFirst().path());
         assertEquals(RuntimeInventory.SourceKind.DIRECTORY, inventory.sources().getFirst().kind());
-        assertEquals("TotalDebug (total_debug)", inventory.sources().getFirst().module().label());
+        assertEquals("total_debug", inventory.sources().getFirst().module().id());
+        assertEquals("TotalDebug", inventory.sources().getFirst().module().displayName());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.BorderFactory;
@@ -119,8 +120,12 @@ final class ModuleFilterPopup extends JPopupMenu {
                     && !module.id().toLowerCase(Locale.ROOT).contains(query)) {
                 continue;
             }
-            JCheckBox checkBox = new JCheckBox(module.label(), this.selectedModuleIds.contains(module.id()));
-            checkBox.setToolTipText(module.id());
+            RuntimeModulePresentation presentation = RuntimeModulePresentation.of(module);
+            JCheckBox checkBox = new JCheckBox(
+                    presentation.label(),
+                    this.selectedModuleIds.contains(module.id())
+            );
+            checkBox.setToolTipText(presentation.tooltip());
             checkBox.setAlignmentX(LEFT_ALIGNMENT);
             checkBox.addActionListener(event -> {
                 if (checkBox.isSelected()) {
