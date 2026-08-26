@@ -70,8 +70,8 @@ def minecraftDebugPort = providers.gradleProperty('totaldebugMinecraftDebugPort'
     } catch (NumberFormatException exception) {
         throw new GradleException("totaldebugMinecraftDebugPort must be an integer", exception)
     }
-    if (port < 1 || port > 65535) {
-        throw new GradleException("totaldebugMinecraftDebugPort must be between 1 and 65535")
+    if (port < 0 || port > 65535) {
+        throw new GradleException("totaldebugMinecraftDebugPort must be between 0 and 65535")
     }
     return port
 }
@@ -88,8 +88,10 @@ neoForge {
         client {
             client()
             if (minecraftDebugPort.isPresent()) {
-                jvmArgument "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
-                        + "address=127.0.0.1:${minecraftDebugPort.get()}"
+                jvmArgument(
+                        "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
+                                + "address=127.0.0.1:${minecraftDebugPort.get()}"
+                )
             }
             if (explicitCompanionJar.isPresent()) {
                 systemProperty 'totaldebug.companionJar', file(explicitCompanionJar.get()).absolutePath

@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.CompanionReadyMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
@@ -261,6 +262,10 @@ public final class CompanionAppClient implements AutoCloseable {
                 RetryRuntimeInventoryMessage.class,
                 RetryRuntimeInventoryMessage::new
         );
+        this.client.getMessageProcessor().registerMessage(
+                CompanionProtocol.DEBUG_TARGET,
+                DebugTargetMessage.class
+        );
 
         this.client.getMessageBus().listenAlways(ServerHelloMessage.class, this::handleServerHello);
         this.client.getMessageBus().listenAlways(
@@ -358,7 +363,20 @@ public final class CompanionAppClient implements AutoCloseable {
         this.negotiatedCapabilities = message.capabilities();
         this.sessionToken = null;
         authentication.complete(null);
+        sendDebugTarget();
         startRuntimeInventoryPreparation(false);
+    }
+
+    private void sendDebugTarget() {
+        if (!hasCapability(CompanionProtocol.CAPABILITY_DEBUGGER) || !this.client.isConnected()) {
+            return;
+        }
+        this.client.getMessageProcessor().enqueueMessage(new DebugTargetMessage(
+                "minecraft-client",
+                "Minecraft Client",
+                DebugTargetMessage.LOCAL_JVM,
+                ProcessHandle.current().pid()
+        ));
     }
 
     private boolean hasCapability(long capability) {
