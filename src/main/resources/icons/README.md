@@ -16,8 +16,9 @@ light or dark SVG.
 
 ## Where they came from
 
-`lib/intellij.platform.ide.jar` in a JetBrains IDE install, under `expui/`. The file name here is the
-Companion's own name for the icon; the second column is the source path inside that jar.
+The assets are from `lib/intellij.platform.ide.jar` in a JetBrains IDE install or the corresponding
+[IntelliJ Platform Icons](https://intellij-icons.jetbrains.design/) entry. The file name here is the
+Companion's own name for the icon; the second column is the upstream `expui` path.
 
 | here | expui | | here | expui |
 |---|---|---|---|---|
@@ -37,6 +38,11 @@ Companion's own name for the icon; the second column is the source path inside t
 | run | `run/run` | | value | `debugger/value` |
 | stop | `run/stop` | | array | `json/array` |
 | pause | `run/pause` | | clock | `general/history` |
+| debug | `run/debug` | | resume | `run/resume` |
+| stepOver | `run/stepOver` | | stepInto | `run/stepInto` |
+| stepOut | `run/stepOut` | | breakpoint | `breakpoints/breakpoint` |
+| breakpointDependent | `breakpoints/breakpointDependent` | | | |
+| detach | `CidrDebuggerIcons/icons/expui/detach` | | | |
 | clear | `actions/clearCash` | | upDown | `diff/arrowLeftRight` |
 | runServer | `actions/deploy` | | overlayMode | `general/layout` |
 | arrow_right | `general/chevronRight` | | arrow_down | `general/chevronDown` |

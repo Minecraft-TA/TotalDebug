@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.decompiler;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.naming.SelectiveVariableNamingPlugin;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import org.jetbrains.java.decompiler.api.Decompiler;
 import org.jetbrains.java.decompiler.api.plugin.PluginSource;
 import org.jetbrains.java.decompiler.main.extern.IContextSource;
@@ -65,6 +66,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                     .option(IFernflowerPreferences.INCLUDE_JAVA_RUNTIME, "current")
                     .option(IFernflowerPreferences.DECOMPILER_COMMENTS, true)
                     .option(IFernflowerPreferences.DUMP_EXCEPTION_ON_ERROR, true)
+                    .option(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING, true)
                     .build()
                     .decompile();
         } catch (RuntimeException failure) {
@@ -82,7 +84,12 @@ public final class VineflowerDecompiler implements JavaDecompiler {
         DecompilationResult.Status status = hasErrors || source.contains(PARTIAL_OUTPUT_MARKER)
                 ? DecompilationResult.Status.PARTIAL
                 : DecompilationResult.Status.COMPLETE;
-        return new DecompilationResult(source, status, diagnostics);
+        return new DecompilationResult(
+                source,
+                status,
+                diagnostics,
+                SourceLineMap.fromOriginalToDisplayed(resultSaver.mappingFor(binaryName))
+        );
     }
 
     private static byte[] readTargetBytes(String binaryName, ClassBytecodeSource bytecodeSource)
@@ -279,16 +286,27 @@ public final class VineflowerDecompiler implements JavaDecompiler {
 
     private static final class InMemoryResultSaver implements IResultSaver {
         private final Map<String, String> sources = new LinkedHashMap<>();
+        private final Map<String, int[]> mappings = new LinkedHashMap<>();
 
         private String sourceFor(String binaryName) {
             return this.sources.get(binaryName);
         }
 
-        private void save(String qualifiedName, String content) {
+        private int[] mappingFor(String binaryName) {
+            int[] mapping = this.mappings.get(binaryName);
+            return mapping == null ? null : mapping.clone();
+        }
+
+        private void save(String qualifiedName, String content, int[] mapping) {
             String binaryName = qualifiedName.replace('/', '.');
             String previous = this.sources.putIfAbsent(binaryName, content);
             if (previous != null && !previous.equals(content)) {
                 throw new IllegalStateException("Vineflower emitted multiple sources for " + binaryName);
+            }
+            int[] normalizedMapping = mapping == null ? new int[0] : mapping.clone();
+            int[] previousMapping = this.mappings.putIfAbsent(binaryName, normalizedMapping);
+            if (previousMapping != null && !java.util.Arrays.equals(previousMapping, normalizedMapping)) {
+                throw new IllegalStateException("Vineflower emitted multiple line maps for " + binaryName);
             }
         }
 
@@ -308,7 +326,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 String content,
                 int[] mapping
         ) {
-            save(qualifiedName, content);
+            save(qualifiedName, content, mapping);
         }
 
         @Override
@@ -331,7 +349,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 String entryName,
                 String content
         ) {
-            save(qualifiedName, content);
+            save(qualifiedName, content, null);
         }
 
         @Override

@@ -70,6 +70,14 @@ public class Icons {
     public static final FlatSVGIcon RUN = new FlatSVGIcon("icons/run.svg");
     public static final FlatSVGIcon RUN_SERVER = new FlatSVGIcon("icons/runServer.svg");
     public static final FlatSVGIcon STOP = new FlatSVGIcon("icons/stop.svg");
+    public static final FlatSVGIcon DEBUG = new FlatSVGIcon("icons/debug.svg");
+    public static final FlatSVGIcon DEBUG_RESUME = new FlatSVGIcon("icons/resume.svg");
+    public static final FlatSVGIcon DEBUG_STEP_OVER = new FlatSVGIcon("icons/stepOver.svg");
+    public static final FlatSVGIcon DEBUG_STEP_INTO = new FlatSVGIcon("icons/stepInto.svg");
+    public static final FlatSVGIcon DEBUG_STEP_OUT = new FlatSVGIcon("icons/stepOut.svg");
+    public static final FlatSVGIcon DEBUG_DETACH = new FlatSVGIcon("icons/detach.svg");
+    public static final FlatSVGIcon BREAKPOINT = new FlatSVGIcon("icons/breakpoint.svg");
+    public static final FlatSVGIcon BREAKPOINT_DEPENDENT = new FlatSVGIcon("icons/breakpointDependent.svg");
 
     public static final FlatSVGIcon OVERLAY_MODE = new FlatSVGIcon("icons/overlayMode.svg");
     public static final FlatSVGIcon TARGET = new FlatSVGIcon("icons/target.svg");

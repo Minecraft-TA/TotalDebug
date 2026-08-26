@@ -124,6 +124,7 @@ dependencies {
     implementation('com.google.code.gson:gson:2.14.0')
     implementation('org.ow2.asm:asm:9.9.1')
     implementation("org.vineflower:vineflower:${vineflower_version}:slim")
+    implementation("com.microsoft.java:com.microsoft.java.debug.core:${java_debug_version}")
     implementation('org.eclipse.jdt:org.eclipse.jdt.core:3.46.0') {
         exclude group: "org.eclipse.platform", module: "org.eclipse.equinox.app"
         exclude group: "org.eclipse.platform", module: "org.eclipse.core.filesystem"
@@ -212,4 +213,12 @@ tasks.register('uiContactSheet', JavaExec) {
     description = 'Renders every named Companion UI state in both themes.'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiCaptureSuite'
+}
+
+// Runs the debugger engine against real child JVMs without starting the Companion UI.
+tasks.register('debuggerHarness', JavaExec) {
+    group = 'verification'
+    description = 'Runs the reusable real-JDWP debugger scenario suite (see DebuggerDevHarness).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.DebuggerDevHarness'
 }

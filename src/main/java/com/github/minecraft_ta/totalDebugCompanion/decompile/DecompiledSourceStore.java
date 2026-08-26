@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +16,8 @@ import java.util.Properties;
 import java.util.stream.Stream;
 
 final class DecompiledSourceStore {
+    private static final int LINE_MAP_MAGIC = 0x54444C4D;
+    private static final int LINE_MAP_VERSION = 1;
     private static final String DIRECTORY_NAME = "decompiled-files";
     private static final String STATE_FILE_NAME = "decompiled-files.properties";
     private final Path directory;
@@ -41,27 +47,98 @@ final class DecompiledSourceStore {
 
     Path find(String binaryName) {
         Path sourceFile = sourceFile(binaryName);
-        return Files.isRegularFile(sourceFile) ? sourceFile : null;
+        return Files.isRegularFile(sourceFile) && Files.isRegularFile(lineMapFile(binaryName))
+                ? sourceFile
+                : null;
     }
 
-    Path write(String binaryName, String source) throws IOException {
+    SourceLineMap readLineMap(String binaryName) throws IOException {
+        Path path = lineMapFile(binaryName);
+        if (!Files.isRegularFile(path)) {
+            throw new IOException("No decompiled source line map exists for " + binaryName);
+        }
+        try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
+            int magic = input.readInt();
+            if (magic != LINE_MAP_MAGIC) {
+                throw new IOException("Invalid decompiled source line map magic: " + path);
+            }
+            int version = input.readInt();
+            if (version != LINE_MAP_VERSION) {
+                throw new IOException("Unsupported decompiled source line map version " + version + ": " + path);
+            }
+            int length = input.readInt();
+            if (length < 0 || length % 2 != 0) {
+                throw new IOException("Invalid decompiled source line map length " + length + ": " + path);
+            }
+            int[] mapping = new int[length];
+            for (int i = 0; i < length; i++) {
+                mapping[i] = input.readInt();
+            }
+            if (input.read() != -1) {
+                throw new IOException("Trailing data in decompiled source line map: " + path);
+            }
+            try {
+                return SourceLineMap.fromOriginalToDisplayed(mapping);
+            } catch (IllegalArgumentException exception) {
+                throw new IOException("Invalid decompiled source line map: " + path, exception);
+            }
+        }
+    }
+
+    Path write(String binaryName, String source, SourceLineMap lineMap) throws IOException {
+        Objects.requireNonNull(lineMap, "lineMap");
         Path target = sourceFile(binaryName);
-        Path staged = Files.createTempFile(this.directory, ".decompiled-", ".tmp");
+        Path mappingTarget = lineMapFile(binaryName);
+        Path stagedSource = Files.createTempFile(this.directory, ".decompiled-", ".tmp");
+        Path stagedMapping = Files.createTempFile(this.directory, ".decompiled-lines-", ".tmp");
         try {
-            Files.writeString(staged, source, StandardCharsets.UTF_8);
-            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            Files.writeString(stagedSource, source, StandardCharsets.UTF_8);
+            writeLineMap(stagedMapping, lineMap);
+            Files.move(
+                    stagedMapping,
+                    mappingTarget,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+            Files.move(
+                    stagedSource,
+                    target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
         } finally {
-            Files.deleteIfExists(staged);
+            Files.deleteIfExists(stagedSource);
+            Files.deleteIfExists(stagedMapping);
         }
         return target;
     }
 
     private Path sourceFile(String binaryName) {
-        Path sourceFile = this.directory.resolve(binaryName + ".java").normalize();
-        if (!sourceFile.getParent().equals(this.directory)) {
+        return resolveFile(binaryName, ".java");
+    }
+
+    private Path lineMapFile(String binaryName) {
+        return resolveFile(binaryName, ".lines");
+    }
+
+    private Path resolveFile(String binaryName, String extension) {
+        Path file = this.directory.resolve(binaryName + extension).normalize();
+        if (!file.getParent().equals(this.directory)) {
             throw new IllegalArgumentException("Binary name escapes the decompiled source directory: " + binaryName);
         }
-        return sourceFile;
+        return file;
+    }
+
+    private static void writeLineMap(Path path, SourceLineMap lineMap) throws IOException {
+        int[] mapping = lineMap.originalToDisplayed();
+        try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
+            output.writeInt(LINE_MAP_MAGIC);
+            output.writeInt(LINE_MAP_VERSION);
+            output.writeInt(mapping.length);
+            for (int line : mapping) {
+                output.writeInt(line);
+            }
+        }
     }
 
     private static boolean matches(Path stateFile, String runtimeSignature, String decompilerFormat)

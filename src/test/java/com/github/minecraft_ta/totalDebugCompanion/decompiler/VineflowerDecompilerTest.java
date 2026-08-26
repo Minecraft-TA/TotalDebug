@@ -40,6 +40,9 @@ class VineflowerDecompilerTest {
         assertTrue(result.source().contains("stream()"), result.source());
         assertTrue(result.source().contains("class Nested"), result.source());
         assertTrue(result.source().contains("inspect(Object value)"), result.source());
+        assertFalse(result.lineMap().isEmpty(), "Vineflower returned no source line mapping");
+        assertSortedPairs(result.lineMap().originalToDisplayed());
+        assertSortedPairs(result.lineMap().displayedToOriginal());
         assertCompiles(ModernJavaFixture.class.getName(), result.source(), outputDirectory);
     }
 
@@ -117,6 +120,13 @@ class VineflowerDecompilerTest {
                     List.of(sourceFile)
             ).call();
             assertTrue(success, diagnostics.getDiagnostics().toString() + System.lineSeparator() + source);
+        }
+    }
+
+    private static void assertSortedPairs(int[] pairs) {
+        assertTrue(pairs.length > 0 && pairs.length % 2 == 0);
+        for (int i = 2; i < pairs.length; i += 2) {
+            assertTrue(pairs[i - 2] <= pairs[i], "Line mapping keys are not sorted");
         }
     }
 

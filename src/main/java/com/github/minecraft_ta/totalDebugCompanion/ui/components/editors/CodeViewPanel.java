@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
@@ -21,16 +23,23 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLayer;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Point;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import javax.swing.text.BadLocationException;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +47,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_IMPLEMENTATIONS_KEY = "findImplementations";
     private static final String FIND_BASE_METHODS_KEY = "findBaseMethods";
     private static final String FIND_USAGES_KEY = "findUsages";
+    private static final String TOGGLE_BREAKPOINT_KEY = "toggleBreakpoint";
 
     private final ImplementationChooserPopup implementationChooser;
     private final HierarchyPreviewPopup hierarchyPreview;
@@ -46,8 +56,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final JLayer<JComponent> codeVisionLayer;
     private final HierarchyGutterMarkers gutterMarkers;
     private final CodeVisionController codeVisionController;
+    private final DebugEngine.Source debugSource;
+    private final BreakpointGutterMarkers breakpointMarkers;
+    private final DebuggerSessionController.Listener debuggerListener;
     private boolean codeVisionDisposed;
     private CodeInsightService.SearchHandle actionSearch;
+    private Object executionLineHighlight;
 
     public CodeViewPanel(CodeView codeView) {
         super(codeView.getPath().toString(), codeView.getTitle());
@@ -134,6 +148,34 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 this.gutterMarkers
         );
 
+        this.debugSource = codeView.getDebugSource().orElse(null);
+        if (this.debugSource == null) {
+            this.breakpointMarkers = null;
+            this.debuggerListener = null;
+        } else {
+            DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+            debugger.registerSource(this.debugSource);
+            this.breakpointMarkers = new BreakpointGutterMarkers(this.editorScrollPane.getGutter());
+            updateBreakpointMarkers(debugger);
+            this.debuggerListener = new DebuggerSessionController.Listener() {
+                @Override
+                public void statusChanged(DebuggerSessionController.Status status) {
+                    if (status.phase() != DebuggerSessionController.Phase.PAUSED) {
+                        SwingUtilities.invokeLater(CodeViewPanel.this::clearExecutionLine);
+                    }
+                }
+
+                @Override
+                public void breakpointsChanged(java.net.URI sourceUri, List<Integer> lines) {
+                    if (!debugSource.uri().equals(sourceUri)) {
+                        return;
+                    }
+                    SwingUtilities.invokeLater(() -> updateBreakpointMarkers(debugger));
+                }
+            };
+            debugger.addListener(this.debuggerListener);
+        }
+
         configureActions();
         configureContextMenuCaret();
         this.editorPane.getCaret().addChangeListener(event -> {
@@ -145,6 +187,31 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     public void setCode(String code) {
         CodeUtils.initSyntaxScheme(this.editorPane);
         this.editorPane.setText(code);
+    }
+
+    public void showExecutionLine(int displayedLine) {
+        if (displayedLine < 1) {
+            throw new IllegalArgumentException("Displayed source line must be positive");
+        }
+        try {
+            if (this.executionLineHighlight != null) {
+                this.editorPane.removeLineHighlight(this.executionLineHighlight);
+            }
+            this.executionLineHighlight = this.editorPane.addLineHighlight(
+                    displayedLine - 1,
+                    new java.awt.Color(242, 182, 63, 72)
+            );
+            centerViewportOnOffset(this.editorPane.getLineStartOffset(displayedLine - 1));
+        } catch (BadLocationException exception) {
+            throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
+        }
+    }
+
+    private void clearExecutionLine() {
+        if (this.executionLineHighlight != null) {
+            this.editorPane.removeLineHighlight(this.executionLineHighlight);
+            this.executionLineHighlight = null;
+        }
     }
 
     @Override
@@ -169,6 +236,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             }
             this.implementationChooser.dispose();
             this.hierarchyPreview.dispose();
+            if (this.debuggerListener != null) {
+                CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
+            }
+            if (this.breakpointMarkers != null) {
+                this.breakpointMarkers.dispose();
+            }
         }
         super.dispose();
     }
@@ -196,6 +269,18 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 resolveSelectedSymbol("Find Usages", CodeViewPanel.this::showUsages);
             }
         };
+        AbstractAction toggleBreakpoint = new AbstractAction("Toggle Breakpoint", Icons.BREAKPOINT) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                toggleBreakpointAtCaret();
+            }
+        };
+        AbstractAction editBreakpoint = new AbstractAction("Edit Breakpoint Condition…", Icons.BREAKPOINT_DEPENDENT) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                editBreakpointAtCaret();
+            }
+        };
 
         this.editorPane.getActionMap().put(FIND_IMPLEMENTATIONS_KEY, implementations);
         this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
@@ -212,8 +297,21 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK),
                 FIND_USAGES_KEY
         );
+        if (this.debugSource != null) {
+            this.editorPane.getActionMap().put(TOGGLE_BREAKPOINT_KEY, toggleBreakpoint);
+            this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
+                    KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0),
+                    TOGGLE_BREAKPOINT_KEY
+            );
+        }
 
         var menu = this.editorPane.getPopupMenu();
+        if (this.debugSource != null) {
+            menu.addSeparator();
+            var breakpointItem = menu.add(toggleBreakpoint);
+            breakpointItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0));
+            menu.add(editBreakpoint);
+        }
         menu.addSeparator();
         var usageItem = menu.add(usages);
         usageItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK));
@@ -221,6 +319,105 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         implementationItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK));
         var baseItem = menu.add(bases);
         baseItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.CTRL_DOWN_MASK));
+    }
+
+    private void toggleBreakpointAtCaret() {
+        try {
+            int displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
+            this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
+            CompanionApp.getDebuggerController().toggleBreakpoint(this.debugSource, displayedLine)
+                    .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
+                        if (failure != null) {
+                            failure.printStackTrace(System.err);
+                            String detail = failure.getMessage();
+                            this.bottomInformationBar.setFailureInfoText(
+                                    detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
+                            );
+                        } else {
+                            this.bottomInformationBar.setSuccessInfoText(
+                                    (enabled ? "Breakpoint set at line " : "Breakpoint removed from line ")
+                                            + displayedLine
+                            );
+                        }
+                    }));
+        } catch (BadLocationException exception) {
+            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
+        }
+    }
+
+    private void editBreakpointAtCaret() {
+        int displayedLine;
+        try {
+            displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
+        } catch (BadLocationException exception) {
+            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
+            return;
+        }
+
+        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        DebugEngine.SourceBreakpoint current = debugger.breakpoint(this.debugSource.uri(), displayedLine);
+        JTextField condition = new JTextField(current == null || current.condition() == null
+                ? ""
+                : current.condition());
+        JTextField hitCount = new JTextField(current == null || current.hitCondition() == null
+                ? ""
+                : current.hitCondition());
+        JPanel fields = new JPanel(new GridLayout(0, 1, 0, 4));
+        fields.add(new JLabel("Condition (Java expression)"));
+        fields.add(condition);
+        fields.add(new JLabel("Hit count (positive integer, optional)"));
+        fields.add(hitCount);
+
+        int choice = JOptionPane.showConfirmDialog(
+                this.editorPane,
+                fields,
+                "Breakpoint at line " + displayedLine,
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE,
+                Icons.BREAKPOINT_DEPENDENT
+        );
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        String hitCountText = hitCount.getText().trim();
+        if (!hitCountText.isEmpty()) {
+            try {
+                if (Integer.parseInt(hitCountText) < 1) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException exception) {
+                JOptionPane.showMessageDialog(
+                        this.editorPane,
+                        "Hit count must be a positive integer.",
+                        "Invalid breakpoint",
+                        JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        }
+
+        this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
+        debugger.configureBreakpoint(this.debugSource, displayedLine, condition.getText(), hitCountText)
+                .whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (failure != null) {
+                        failure.printStackTrace(System.err);
+                        String detail = failure.getMessage();
+                        this.bottomInformationBar.setFailureInfoText(
+                                detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
+                        );
+                    } else {
+                        this.bottomInformationBar.setSuccessInfoText(
+                                "Breakpoint configured at line " + displayedLine
+                        );
+                    }
+                }));
+    }
+
+    private void updateBreakpointMarkers(DebuggerSessionController debugger) {
+        this.breakpointMarkers.setBreakpoints(debugger.breakpoints(this.debugSource.uri()).stream()
+                .map(line -> debugger.breakpoint(this.debugSource.uri(), line))
+                .filter(java.util.Objects::nonNull)
+                .toList());
     }
 
     private void configureContextMenuCaret() {

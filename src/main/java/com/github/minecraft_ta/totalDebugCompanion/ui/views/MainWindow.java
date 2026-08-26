@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
@@ -36,10 +37,13 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final FileTreeView fileTreeView;
     private final JMenu toolsMenu = new JMenu("Tools");
     private final JMenu scriptMenu = new JMenu("Script");
+    private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
     private final ApplicationStatusBar statusBar = new ApplicationStatusBar();
     private final Action chunkGridAction;
     private final Action packetLoggerAction;
     private final Action newScriptAction;
+    private DebuggerWindow debuggerWindow;
+    private final DebuggerSessionController.Listener debuggerListener;
 
     private long lastShiftReleasedTime = 0;
     private SearchEverywherePopup searchEverywherePopup;
@@ -95,6 +99,22 @@ public class MainWindow extends JFrame implements AWTEventListener {
         };
         this.scriptMenu.add(this.newScriptAction);
         menuBar.add(this.scriptMenu);
+        menuBar.add(Box.createHorizontalGlue());
+        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        this.debuggerListener = new DebuggerSessionController.Listener() {
+            @Override
+            public void statusChanged(DebuggerSessionController.Status status) {
+                SwingUtilities.invokeLater(() -> {
+                    setDebuggerState(status);
+                    if (status.phase() == DebuggerSessionController.Phase.PAUSED) {
+                        debuggerWindow(debugger);
+                    }
+                });
+            }
+        };
+        debugger.addListener(this.debuggerListener);
+        configureDebuggerButton(debugger);
+        menuBar.add(this.debuggerState);
 
         setJMenuBar(menuBar);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -114,6 +134,109 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private void updateWindowIcon(CompanionTheme theme) {
         setIconImages(Icons.createWindowIconImages(theme));
+    }
+
+    private void configureDebuggerButton(DebuggerSessionController debugger) {
+        this.debuggerState.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        this.debuggerState.setContentAreaFilled(false);
+        this.debuggerState.setFocusable(false);
+        this.debuggerState.addActionListener(event -> showDebuggerMenu(debugger));
+    }
+
+    private void showDebuggerMenu(DebuggerSessionController debugger) {
+        DebuggerSessionController.Status status = debugger.status();
+        JPopupMenu popup = new JPopupMenu();
+        JMenuItem heading = new JMenuItem(status.target() == null
+                ? "Minecraft debugger"
+                : status.target().displayName());
+        heading.setEnabled(false);
+        popup.add(heading);
+        JMenuItem detail = new JMenuItem(status.detail());
+        detail.setEnabled(false);
+        popup.add(detail);
+        popup.addSeparator();
+
+        switch (status.phase()) {
+            case DETACHED, FAILED -> popup.add(new AbstractAction("Attach", Icons.DEBUG) {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    debugger.attach();
+                }
+            });
+            case RUNNING, ATTACHING, DETACHING -> popup.add(new AbstractAction("Detach", Icons.DEBUG_DETACH) {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    debugger.detach();
+                }
+            });
+            case PAUSED -> {
+                popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debuggerWindow(debugger).showWindow();
+                    }
+                });
+                popup.add(new AbstractAction("Continue", Icons.DEBUG_RESUME) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debugger.resume();
+                    }
+                });
+                popup.add(new AbstractAction("Step Over", Icons.DEBUG_STEP_OVER) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debugger.stepOver();
+                    }
+                });
+                popup.add(new AbstractAction("Step Into", Icons.DEBUG_STEP_INTO) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debugger.stepInto();
+                    }
+                });
+                popup.add(new AbstractAction("Step Out", Icons.DEBUG_STEP_OUT) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debugger.stepOut();
+                    }
+                });
+                popup.addSeparator();
+                popup.add(new AbstractAction("Detach", Icons.DEBUG_DETACH) {
+                    @Override
+                    public void actionPerformed(ActionEvent event) {
+                        debugger.detach();
+                    }
+                });
+            }
+            case UNAVAILABLE -> {
+            }
+        }
+        popup.show(
+                this.debuggerState,
+                Math.max(0, this.debuggerState.getWidth() - popup.getPreferredSize().width),
+                this.debuggerState.getHeight()
+        );
+    }
+
+    private void setDebuggerState(DebuggerSessionController.Status status) {
+        String label = switch (status.phase()) {
+            case UNAVAILABLE -> "Unavailable";
+            case DETACHED -> "Detached";
+            case ATTACHING -> "Attaching";
+            case RUNNING -> "Running";
+            case PAUSED -> "Paused";
+            case DETACHING -> "Detaching";
+            case FAILED -> "Failed";
+        };
+        this.debuggerState.setText("Debugger: " + label);
+        this.debuggerState.setToolTipText(status.detail());
+    }
+
+    private DebuggerWindow debuggerWindow(DebuggerSessionController debugger) {
+        if (this.debuggerWindow == null) {
+            this.debuggerWindow = new DebuggerWindow(this, debugger);
+        }
+        return this.debuggerWindow;
     }
 
     @Override
@@ -237,11 +360,13 @@ public class MainWindow extends JFrame implements AWTEventListener {
         boolean chunkGrid = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID);
         boolean packetLogger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER);
         boolean scripts = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION);
+        boolean debugger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_DEBUGGER);
         this.toolsMenu.setVisible(chunkGrid || packetLogger);
         this.chunkGridAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID));
         this.packetLoggerAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER));
         this.scriptMenu.setVisible(scripts);
         this.newScriptAction.setEnabled(scripts);
+        this.debuggerState.setVisible(debugger);
     }
 
     public void setGameStatus(ServiceStatus status) {

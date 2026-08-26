@@ -41,48 +41,76 @@ final class SourceFileNavigation {
     }
 
     static void open(
-            Path filePath,
+            DecompiledSource source,
             int targetType,
             String targetIdentifier,
-            String binaryName,
-            RuntimeSnapshotBytecodeSource.ClassOrigin origin
+            String binaryName
     ) {
-        int offset = targetOffset(filePath, targetType, targetIdentifier);
-        openAt(filePath, offset, location(filePath, binaryName, origin));
+        int offset = targetOffset(source.path(), targetType, targetIdentifier);
+        openAt(source, offset, location(source.path(), binaryName, source.origin()), -1);
     }
 
     static void openUsage(
-            Path filePath,
+            DecompiledSource source,
             ReferenceLocation referenceLocation,
             ReferenceQuery query,
-            String binaryName,
-            RuntimeSnapshotBytecodeSource.ClassOrigin origin
+            String binaryName
     ) {
         openAt(
-                filePath,
-                usageOffset(CodeView.readCode(filePath), referenceLocation, query),
-                location(filePath, binaryName, origin)
+                source,
+                usageOffset(source.contents(), referenceLocation, query),
+                location(source.path(), binaryName, source.origin()),
+                -1
         );
     }
 
-    private static void openAt(Path filePath, int offset, EditorLocation location) {
+    static void openLine(DecompiledSource source, int displayedLine) {
+        openAt(
+                source,
+                lineOffset(source.contents(), displayedLine),
+                location(source.path(), source.binaryName(), source.origin()),
+                displayedLine
+        );
+    }
+
+    private static void openAt(DecompiledSource source, int offset, EditorLocation location, int executionLine) {
         SwingUtilities.invokeLater(() -> {
             MainWindow window = MainWindow.INSTANCE;
             AtomicBoolean created = new AtomicBoolean();
             window.getEditorTabs().focusOrCreateIfAbsent(
                     CodeView.class,
-                    view -> view.getPath().equals(filePath),
+                    view -> view.getPath().equals(source.path()),
                     () -> {
                         created.set(true);
-                        return new CodeView(filePath, offset, location);
+                        return new CodeView(source, offset, location);
                     }
             ).thenAccept(codeView -> {
                 if (!created.get()) {
                     codeView.centerViewportOnOffset(offset);
                 }
+                if (executionLine > 0) {
+                    codeView.showExecutionLine(executionLine);
+                }
                 UIUtils.focusWindow(window);
             });
         });
+    }
+
+    static int lineOffset(String source, int line) {
+        if (line < 1) {
+            throw new IllegalArgumentException("Source line must be positive");
+        }
+        int currentLine = 1;
+        int offset = 0;
+        while (currentLine < line) {
+            int newline = source.indexOf('\n', offset);
+            if (newline < 0) {
+                throw new IllegalArgumentException("Source has no line " + line);
+            }
+            offset = newline + 1;
+            currentLine++;
+        }
+        return offset;
     }
 
     private static EditorLocation location(

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.session;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
@@ -18,12 +19,12 @@ class SessionProtocolCodecTest {
 
     @Test
     void clientHelloReadsTheSharedGoldenBytes() {
-        byte[] golden = HEX.parseHex("00000005000000036162630000000000000007000000017000000001640000000177");
+        byte[] golden = HEX.parseHex("00000006000000036162630000000000000007000000017000000001640000000177");
         ClientHelloMessage message = new ClientHelloMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
-        assertEquals(5, message.protocolVersion());
+        assertEquals(6, message.protocolVersion());
         assertEquals("abc", message.token());
         assertEquals(7, message.requestedCapabilities());
         assertEquals("p", message.profileId());
@@ -39,7 +40,7 @@ class SessionProtocolCodecTest {
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("0000000501000000000000000700000000"),
+                HEX.parseHex("0000000601000000000000000700000000"),
                 writtenBytes(output)
         );
     }
@@ -56,6 +57,20 @@ class SessionProtocolCodecTest {
         assertEquals("id", message.inventoryId());
         assertEquals("file", message.inventoryFile());
         assertEquals("", message.detail());
+    }
+
+    @Test
+    void debugTargetReadsTheSharedGoldenBytes() {
+        DebugTargetMessage message = new DebugTargetMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
+                HEX.parseHex("0000000269640000000467616d6501000000000000002a")
+        )));
+
+        assertEquals("id", message.targetId());
+        assertEquals("game", message.displayName());
+        assertEquals(DebugTargetMessage.LOCAL_JVM, message.targetKind());
+        assertEquals(42, message.processId());
     }
 
     private static byte[] writtenBytes(ByteBufferOutputStream output) {

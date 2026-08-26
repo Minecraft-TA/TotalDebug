@@ -1,0 +1,13 @@
+package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
+
+public final class ConditionalDebuggeeMain {
+    private ConditionalDebuggeeMain() {
+    }
+
+    public static void main(String[] args) {
+        for (int iteration = 0; iteration < 3; iteration++) {
+            int snapshot = iteration; // DEBUG_CONDITIONAL_BREAKPOINT
+            System.out.println(snapshot);
+        }
+    }
+}
