@@ -21,6 +21,8 @@ final class CompanionJavaRuntime {
             "java.sql",
             "java.transaction.xa",
             "java.xml",
+            "jdk.attach",
+            "jdk.jdi",
             "jdk.unsupported",
             "jdk.zipfs"
     );

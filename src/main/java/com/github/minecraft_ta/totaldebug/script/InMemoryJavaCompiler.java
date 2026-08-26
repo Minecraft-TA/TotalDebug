@@ -42,6 +42,7 @@ public final class InMemoryJavaCompiler {
         ); InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(standardFileManager)) {
             List<String> options = new ArrayList<>();
             options.add("-proc:none");
+            options.add("-g:source,lines,vars");
             if (!classpath.isBlank()) {
                 options.add("-classpath");
                 options.add(classpath);

@@ -83,7 +83,7 @@ class CompanionStaleDescriptorTest {
                     () -> invokeReadLiveDescriptor(client)
             );
 
-            assertTrue(failure.getMessage().contains("Close the running Companion before using protocol 5"));
+            assertTrue(failure.getMessage().contains("Close the running Companion before using protocol 6"));
             assertTrue(Files.isRegularFile(descriptorFile));
             assertTrue(Files.isRegularFile(keyFile));
         } finally {
