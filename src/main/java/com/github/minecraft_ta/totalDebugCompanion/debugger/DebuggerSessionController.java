@@ -6,8 +6,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -63,13 +64,18 @@ public final class DebuggerSessionController implements AutoCloseable {
         DebugEngine.Target resolve(DebugTargetDescriptor target, Duration timeout) throws Exception;
     }
 
+    @FunctionalInterface
+    public interface SourceLoader {
+        DebugEngine.Source load(String binaryName) throws Exception;
+    }
+
     private final Object modelLock = new Object();
     private final Supplier<DebugEngine> engineFactory;
     private final TargetResolver targetResolver;
     private final ExecutorService worker;
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Map<URI, DebugEngine.Source> sources = new HashMap<>();
-    private final Map<URI, TreeSet<Integer>> breakpoints = new HashMap<>();
+    private final Map<URI, NavigableMap<Integer, DebugEngine.SourceBreakpoint>> breakpoints = new HashMap<>();
 
     private volatile Status status = new Status(Phase.UNAVAILABLE, null, "No Minecraft debug target", null);
     private volatile DebugTargetDescriptor target;
@@ -78,7 +84,14 @@ public final class DebuggerSessionController implements AutoCloseable {
     private volatile boolean closed;
 
     public DebuggerSessionController() {
-        this(MicrosoftJavaDebugEngine::new, new LocalJvmDebugTargetResolver()::resolve);
+        this(binaryName -> null);
+    }
+
+    public DebuggerSessionController(SourceLoader sourceLoader) {
+        this(
+                () -> new MicrosoftJavaDebugEngine(Objects.requireNonNull(sourceLoader, "sourceLoader")),
+                new LocalJvmDebugTargetResolver()::resolve
+        );
     }
 
     DebuggerSessionController(Supplier<DebugEngine> engineFactory, TargetResolver targetResolver) {
@@ -215,8 +228,15 @@ public final class DebuggerSessionController implements AutoCloseable {
 
     public List<Integer> breakpoints(URI sourceUri) {
         synchronized (this.modelLock) {
-            TreeSet<Integer> lines = this.breakpoints.get(sourceUri);
-            return lines == null ? List.of() : List.copyOf(lines);
+            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            return sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.navigableKeySet());
+        }
+    }
+
+    public DebugEngine.SourceBreakpoint breakpoint(URI sourceUri, int line) {
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            return sourceBreakpoints == null ? null : sourceBreakpoints.get(line);
         }
     }
 
@@ -228,17 +248,18 @@ public final class DebuggerSessionController implements AutoCloseable {
         boolean enabled;
         List<Integer> snapshot;
         synchronized (this.modelLock) {
-            TreeSet<Integer> lines = this.breakpoints.computeIfAbsent(source.uri(), ignored -> new TreeSet<>());
-            if (lines.remove(line)) {
+            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints =
+                    this.breakpoints.computeIfAbsent(source.uri(), ignored -> new TreeMap<>());
+            if (sourceBreakpoints.remove(line) != null) {
                 enabled = false;
             } else {
-                lines.add(line);
+                sourceBreakpoints.put(line, new DebugEngine.SourceBreakpoint(line));
                 enabled = true;
             }
-            if (lines.isEmpty()) {
+            if (sourceBreakpoints.isEmpty()) {
                 this.breakpoints.remove(source.uri());
             }
-            snapshot = List.copyOf(lines);
+            snapshot = List.copyOf(sourceBreakpoints.navigableKeySet());
         }
         for (Listener listener : this.listeners) {
             listener.breakpointsChanged(source.uri(), snapshot);
@@ -250,6 +271,41 @@ public final class DebuggerSessionController implements AutoCloseable {
                 applyBreakpoints(current, source.uri());
             }
         }).thenApply(ignored -> result);
+    }
+
+    public CompletableFuture<Void> configureBreakpoint(
+            DebugEngine.Source source,
+            int line,
+            String condition,
+            String hitCondition
+    ) {
+        if (line < 1) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Breakpoint line must be positive"));
+        }
+        DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
+        registerSource(checkedSource);
+        DebugEngine.SourceBreakpoint breakpoint = new DebugEngine.SourceBreakpoint(
+                line,
+                normalizeExpression(condition),
+                normalizeExpression(hitCondition),
+                null
+        );
+        List<Integer> snapshot;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints =
+                    this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
+            sourceBreakpoints.put(line, breakpoint);
+            snapshot = List.copyOf(sourceBreakpoints.navigableKeySet());
+        }
+        for (Listener listener : this.listeners) {
+            listener.breakpointsChanged(checkedSource.uri(), snapshot);
+        }
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) {
+                applyBreakpoints(current, checkedSource.uri());
+            }
+        });
     }
 
     public CompletableFuture<Void> resume() {
@@ -270,7 +326,31 @@ public final class DebuggerSessionController implements AutoCloseable {
 
     public CompletableFuture<List<DebugEngine.Variable>> variablesForFrame(DebugEngine.StackFrame frame) {
         Objects.requireNonNull(frame, "frame");
-        return submitValue(() -> loadVariables(requireEngine(), frame));
+        return submitValue(() -> {
+            requirePausedFrame(frame);
+            return loadVariables(requireEngine(), frame);
+        });
+    }
+
+    public CompletableFuture<List<DebugEngine.Variable>> variables(int variablesReference) {
+        if (variablesReference <= 0) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+        return submitValue(() -> {
+            requirePausedState();
+            return requireEngine().variables(variablesReference).join();
+        });
+    }
+
+    public CompletableFuture<DebugEngine.EvaluationResult> evaluate(
+            String expression,
+            DebugEngine.StackFrame frame
+    ) {
+        Objects.requireNonNull(frame, "frame");
+        return submitValue(() -> {
+            requirePausedFrame(frame);
+            return requireEngine().evaluate(expression, frame.id()).join();
+        });
     }
 
     private CompletableFuture<Void> control(String detail, ThreadControl control) {
@@ -381,7 +461,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private void applyAllBreakpoints(DebugEngine sourceEngine) {
-        Map<URI, List<Integer>> snapshot = breakpointSnapshot();
+        Map<URI, List<DebugEngine.SourceBreakpoint>> snapshot = breakpointSnapshot();
         for (URI sourceUri : snapshot.keySet()) {
             applyBreakpoints(sourceEngine, sourceUri);
         }
@@ -391,9 +471,11 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (source(sourceUri) == null) {
             return;
         }
-        List<DebugEngine.SourceBreakpoint> requested = breakpoints(sourceUri).stream()
-                .map(DebugEngine.SourceBreakpoint::new)
-                .toList();
+        List<DebugEngine.SourceBreakpoint> requested;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            requested = sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.values());
+        }
         sourceEngine.setBreakpoints(sourceUri, requested).join();
     }
 
@@ -403,14 +485,34 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
-    private Map<URI, List<Integer>> breakpointSnapshot() {
+    private Map<URI, List<DebugEngine.SourceBreakpoint>> breakpointSnapshot() {
         synchronized (this.modelLock) {
-            Map<URI, List<Integer>> result = new HashMap<>();
-            for (Map.Entry<URI, TreeSet<Integer>> entry : this.breakpoints.entrySet()) {
-                result.put(entry.getKey(), List.copyOf(entry.getValue()));
+            Map<URI, List<DebugEngine.SourceBreakpoint>> result = new HashMap<>();
+            for (Map.Entry<URI, NavigableMap<Integer, DebugEngine.SourceBreakpoint>> entry
+                    : this.breakpoints.entrySet()) {
+                result.put(entry.getKey(), List.copyOf(entry.getValue().values()));
             }
             return result;
         }
+    }
+
+    private PausedState requirePausedState() {
+        PausedState pause = this.pausedState;
+        if (this.status.phase() != Phase.PAUSED || pause == null) {
+            throw new IllegalStateException("Debugger inspection requires state PAUSED");
+        }
+        return pause;
+    }
+
+    private void requirePausedFrame(DebugEngine.StackFrame frame) {
+        PausedState pause = requirePausedState();
+        if (!pause.frames().contains(frame)) {
+            throw new IllegalArgumentException("Stack frame does not belong to the current pause");
+        }
+    }
+
+    private static String normalizeExpression(String expression) {
+        return expression == null || expression.isBlank() ? null : expression.trim();
     }
 
     private DebugTargetDescriptor requireTarget() {

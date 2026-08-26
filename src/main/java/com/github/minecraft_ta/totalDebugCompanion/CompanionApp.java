@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.Cust
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
@@ -127,7 +128,7 @@ public final class CompanionApp {
             configureLookAndFeel();
             runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
-            debuggerController = new DebuggerSessionController();
+            debuggerController = new DebuggerSessionController(CompanionApp::loadDebugSource);
             restoreProfile();
 
             session = new CompanionSession(token, CompanionApp::activateSessionProfile, new CompanionSession.Listener() {
@@ -606,16 +607,18 @@ public final class CompanionApp {
     }
 
     public static void openDebugFrame(com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame) {
-        if (frame.sourceUri() == null || frame.line() < 1) {
+        if (frame.binaryName().isBlank() || frame.line() < 1) {
             return;
         }
-        DebuggerSessionController controller = getDebuggerController();
-        com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.Source source =
-                controller.source(frame.sourceUri());
         CompanionDecompilationService service = decompilationService;
-        if (source != null && service != null) {
-            service.openClassAtLine(source.binaryName(), frame.line());
+        if (service != null) {
+            service.openClassAtLine(frame.binaryName(), frame.line());
         }
+    }
+
+    private static DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
+        CompanionDecompilationService service = decompilationService;
+        return service == null ? null : service.loadDebugSource(binaryName);
     }
 
     public static Path getRootPath() {
@@ -661,7 +664,7 @@ public final class CompanionApp {
     public static synchronized DebuggerSessionController getDebuggerController() {
         DebuggerSessionController controller = debuggerController;
         if (controller == null) {
-            controller = new DebuggerSessionController();
+            controller = new DebuggerSessionController(CompanionApp::loadDebugSource);
             debuggerController = controller;
         }
         return controller;

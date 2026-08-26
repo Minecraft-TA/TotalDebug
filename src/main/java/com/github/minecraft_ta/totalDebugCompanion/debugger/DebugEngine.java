@@ -129,9 +129,10 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record StackFrame(int id, String name, URI sourceUri, int line, int column) {
+    record StackFrame(int id, String name, String binaryName, URI sourceUri, int line, int column) {
         public StackFrame {
             name = Objects.requireNonNullElse(name, "");
+            binaryName = Objects.requireNonNullElse(binaryName, "");
         }
     }
 

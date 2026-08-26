@@ -93,7 +93,14 @@ class DebuggerSessionControllerTest {
 
             RecordingEngine engine = engines.getFirst();
             URI sourceUri = URI.create("decompiled:///net/minecraft/world/level/block/Block.java");
-            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(7, "Block.getId", sourceUri, 28, 1);
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    7,
+                    "Block.getId",
+                    "net.minecraft.world.level.block.Block",
+                    sourceUri,
+                    28,
+                    1
+            );
             DebugEngine.Variable local = new DebugEngine.Variable("block", "StoneBlock", "Block", 0, 0, 0);
             engine.frames = List.of(frame);
             engine.scopes = List.of(new DebugEngine.Scope("Local", 9, false));
@@ -105,9 +112,58 @@ class DebuggerSessionControllerTest {
             assertEquals(List.of(frame), controller.pausedState().frames());
             assertEquals(List.of(local), controller.pausedState().variables());
 
+            DebugEngine.Variable child = new DebugEngine.Variable("name", "stone", "String", 0, 0, 0);
+            engine.variables.put(15, List.of(child));
+            assertEquals(
+                    List.of(child),
+                    controller.variables(15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+            );
+            engine.evaluationResult = new DebugEngine.EvaluationResult("true", "boolean", 0, 0);
+            assertEquals(
+                    engine.evaluationResult,
+                    controller.evaluate("block != null", frame)
+                            .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+            );
+
             controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertEquals(DebuggerSessionController.Phase.RUNNING, controller.status().phase());
             assertEquals(73, engine.resumedThread);
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void configuredBreakpointPreservesConditionAndHitCountWhenAttached() throws Exception {
+        List<RecordingEngine> engines = new ArrayList<>();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                () -> {
+                    RecordingEngine engine = new RecordingEngine();
+                    engines.add(engine);
+                    return engine.proxy();
+                },
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            DebugEngine.Source source = new DebugEngine.Source(
+                    URI.create("decompiled:///net/minecraft/world/level/block/Block.java"),
+                    "net.minecraft.world.level.block.Block",
+                    "class Block {}"
+            );
+            controller.configureBreakpoint(source, 19, "state != null", "3")
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(
+                    new DebugEngine.SourceBreakpoint(19, "state != null", "3", null),
+                    controller.breakpoint(source.uri(), 19)
+            );
+
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(
+                    List.of(new DebugEngine.SourceBreakpoint(19, "state != null", "3", null)),
+                    engines.getFirst().breakpoints.get(source.uri())
+            );
         } finally {
             controller.close();
         }
@@ -152,6 +208,8 @@ class DebuggerSessionControllerTest {
         private boolean disconnected;
         private boolean closed;
         private long resumedThread = -1;
+        private DebugEngine.EvaluationResult evaluationResult =
+                new DebugEngine.EvaluationResult("", "", 0, 0);
 
         DebugEngine proxy() {
             return (DebugEngine) Proxy.newProxyInstance(
@@ -199,7 +257,7 @@ class DebuggerSessionControllerTest {
                         case "scopes" -> completed(this.scopes);
                         case "variables" -> completed(this.variables.getOrDefault((Integer) arguments[0], List.of()));
                         case "threads" -> completed(List.of());
-                        case "evaluate" -> completed(new DebugEngine.EvaluationResult("", "", 0, 0));
+                        case "evaluate" -> completed(this.evaluationResult);
                         case "exceptionInfo" -> completed(new DebugEngine.ExceptionInfo("", "", ""));
                         case "setExceptionBreakpoints", "pause", "stepOver", "stepInto", "stepOut" -> completed(null);
                         case "resume" -> {

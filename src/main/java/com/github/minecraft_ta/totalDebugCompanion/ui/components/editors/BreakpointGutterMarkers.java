@@ -17,14 +17,18 @@ final class BreakpointGutterMarkers {
         this.gutter.setIconRowHeaderEnabled(true);
     }
 
-    void setLines(List<Integer> displayedLines) {
+    void setBreakpoints(List<com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.SourceBreakpoint> breakpoints) {
         clear();
-        for (int line : displayedLines) {
+        for (var breakpoint : breakpoints) {
             try {
+                boolean dependent = breakpoint.condition() != null && !breakpoint.condition().isBlank()
+                        || breakpoint.hitCondition() != null && !breakpoint.hitCondition().isBlank();
                 this.installed.add(this.gutter.addLineTrackingIcon(
-                        line - 1,
-                        Icons.BREAKPOINT,
-                        "Breakpoint at line " + line
+                        breakpoint.line() - 1,
+                        dependent ? Icons.BREAKPOINT_DEPENDENT : Icons.BREAKPOINT,
+                        dependent
+                                ? "Conditional breakpoint at line " + breakpoint.line()
+                                : "Breakpoint at line " + breakpoint.line()
                 ));
             } catch (javax.swing.text.BadLocationException ignored) {
             }

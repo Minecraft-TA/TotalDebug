@@ -13,6 +13,7 @@ import com.microsoft.java.debug.core.adapter.IProviderContext;
 import com.microsoft.java.debug.core.adapter.ISourceLookUpProvider;
 import com.microsoft.java.debug.core.adapter.IVirtualMachineManagerProvider;
 import com.microsoft.java.debug.core.adapter.ProviderContext;
+import com.microsoft.java.debug.core.adapter.SourceType;
 import com.microsoft.java.debug.core.protocol.Events;
 import com.microsoft.java.debug.core.protocol.IProtocolServer;
 import com.microsoft.java.debug.core.protocol.JsonUtils;
@@ -42,11 +43,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final AtomicInteger requestSequence = new AtomicInteger();
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
-    private final SourceRegistry sourceRegistry = new SourceRegistry();
+    private final SourceRegistry sourceRegistry;
     private final IDebugAdapter adapter;
 
     public MicrosoftJavaDebugEngine() {
+        this(binaryName -> null);
+    }
+
+    public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader) {
         configureInitialCoreSettings();
+        this.sourceRegistry = new SourceRegistry(sourceLoader);
 
         IProviderContext providers = new ProviderContext();
         providers.registerProvider(
@@ -211,6 +217,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         result.add(new StackFrame(
                                 frame.id,
                                 frame.name,
+                                this.sourceRegistry.binaryName(frame.source),
                                 sourceUri(frame.source),
                                 frame.line,
                                 frame.column
@@ -536,8 +543,13 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     }
 
     private static final class SourceRegistry implements ISourceLookUpProvider {
+        private final DebuggerSessionController.SourceLoader sourceLoader;
         private final Map<URI, Source> sourcesByUri = new ConcurrentHashMap<>();
         private final Map<String, Source> sourcesByBinaryName = new ConcurrentHashMap<>();
+
+        private SourceRegistry(DebuggerSessionController.SourceLoader sourceLoader) {
+            this.sourceLoader = Objects.requireNonNull(sourceLoader, "sourceLoader");
+        }
 
         private void register(Source source) {
             URI normalizedUri = source.uri().normalize();
@@ -560,6 +572,15 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             }
             int nestedSeparator = binaryName.indexOf('$');
             return nestedSeparator < 0 ? null : this.sourcesByBinaryName.get(binaryName.substring(0, nestedSeparator));
+        }
+
+        private String binaryName(Types.Source protocolSource) {
+            URI uri = sourceUri(protocolSource);
+            if (uri == null) {
+                return "";
+            }
+            Source source = this.sourcesByUri.get(uri.normalize());
+            return source == null ? "" : source.binaryName();
         }
 
         @Override
@@ -599,6 +620,30 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         public String getSourceFileURI(String fullyQualifiedName, String sourcePath) {
             Source source = sourceForClass(fullyQualifiedName);
             return source == null ? null : source.uri().toString();
+        }
+
+        @Override
+        public com.microsoft.java.debug.core.adapter.Source getSource(
+                String fullyQualifiedName,
+                String sourcePath
+        ) {
+            Source source = sourceForClass(fullyQualifiedName);
+            if (source == null) {
+                try {
+                    source = this.sourceLoader.load(fullyQualifiedName);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(
+                            "Unable to resolve debugger source for " + fullyQualifiedName,
+                            exception
+                    );
+                }
+                if (source != null) {
+                    register(source);
+                }
+            }
+            return source == null
+                    ? null
+                    : new com.microsoft.java.debug.core.adapter.Source(source.uri().toString(), SourceType.LOCAL);
         }
 
         @Override

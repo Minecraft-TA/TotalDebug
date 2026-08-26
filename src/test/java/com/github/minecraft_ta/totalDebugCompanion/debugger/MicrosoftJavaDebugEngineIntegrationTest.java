@@ -43,6 +43,12 @@ class MicrosoftJavaDebugEngineIntegrationTest {
 
     @Test
     @Timeout(30)
+    void resolvesSourceForAStackFrameWhoseClassWasNotPreviouslyOpened() throws Exception {
+        DebuggerScenarios.unopenedCallerFrameNavigation();
+    }
+
+    @Test
+    @Timeout(30)
     void attachesDetachesAndReattachesByPublishedProcessId() throws Exception {
         DebuggerScenarios.lateAttach();
     }

@@ -41,6 +41,7 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | debug | `run/debug` | | resume | `run/resume` |
 | stepOver | `run/stepOver` | | stepInto | `run/stepInto` |
 | stepOut | `run/stepOut` | | breakpoint | `breakpoints/breakpoint` |
+| breakpointDependent | `breakpoints/breakpointDependent` | | | |
 | detach | `CidrDebuggerIcons/icons/expui/detach` | | | |
 | clear | `actions/clearCash` | | upDown | `diff/arrowLeftRight` |
 | runServer | `actions/deploy` | | overlayMode | `general/layout` |

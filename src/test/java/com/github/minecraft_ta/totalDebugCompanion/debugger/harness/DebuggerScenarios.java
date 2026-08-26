@@ -8,11 +8,16 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ConditionalD
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DecompiledDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExceptionDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +48,11 @@ public final class DebuggerScenarios {
                         "decompiled-lines",
                         "Vineflower decompiled-source line mapping",
                         DebuggerScenarios::decompiledSourceLineMapping
+                ),
+                new Scenario(
+                        "frame-navigation",
+                        "source resolution and line mapping for unopened caller frames",
+                        DebuggerScenarios::unopenedCallerFrameNavigation
                 ),
                 new Scenario(
                         "late-attach",
@@ -219,6 +229,33 @@ public final class DebuggerScenarios {
         }
     }
 
+    public static void unopenedCallerFrameNavigation() throws Exception {
+        DebugEngine.Source targetSource = sourceFor(FrameNavigationTarget.class);
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(
+                FrameNavigationDebuggeeMain.class,
+                targetSource
+        )) {
+            int breakpointLine = harness.lineContaining("DEBUG_CALLEE_FRAME");
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
+            harness.start();
+
+            DebugEngine.StoppedEvent stop = harness.awaitStop("frame-navigation breakpoint");
+            List<DebugEngine.StackFrame> frames = harness.engine().stackTrace(stop.threadId())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebugEngine.StackFrame caller = frames.stream()
+                    .filter(frame -> frame.name().contains("FrameNavigationDebuggeeMain.main"))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Debugger returned no caller frame"));
+            DebugEngine.Source callerSource = decompiledSourceFor(FrameNavigationDebuggeeMain.class);
+            equal(callerSource.uri(), caller.sourceUri(), "unopened caller source");
+            int callerLine = lineContaining(callerSource.contents(), "FrameNavigationTarget.stopHere(41)");
+            equal(callerLine, caller.line(), "unopened caller mapped line");
+
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "frame-navigation debuggee exit code");
+        }
+    }
+
     public static void lateAttach() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launchRunningByProcessId(LateAttachDebuggeeMain.class)) {
             int breakpointLine = harness.lineContaining("DEBUG_LATE_ATTACH");
@@ -282,6 +319,41 @@ public final class DebuggerScenarios {
                 return input == null ? null : input.readAllBytes();
             }
         };
+    }
+
+    private static DebugEngine.Source sourceFor(Class<?> type) throws Exception {
+        Path path = Path.of(System.getProperty("user.dir"), "src", "test", "java")
+                .resolve(type.getName().replace('.', '/') + ".java")
+                .toAbsolutePath()
+                .normalize();
+        return new DebugEngine.Source(
+                path.toUri(),
+                type.getName(),
+                Files.readString(path, StandardCharsets.UTF_8)
+        );
+    }
+
+    private static DebugEngine.Source decompiledSourceFor(Class<?> type) throws Exception {
+        DecompilationResult result = new VineflowerDecompiler().decompile(
+                type.getName(),
+                classPathSource(type.getClassLoader())
+        );
+        return new DebugEngine.Source(
+                URI.create("decompiled:///" + type.getName().replace('.', '/') + ".java"),
+                type.getName(),
+                result.source(),
+                result.lineMap()
+        );
+    }
+
+    private static int lineContaining(String source, String marker) {
+        String[] lines = source.split("\\R", -1);
+        for (int index = 0; index < lines.length; index++) {
+            if (lines[index].contains(marker)) {
+                return index + 1;
+            }
+        }
+        throw new AssertionError("Missing source marker " + marker + System.lineSeparator() + source);
     }
 
     private static String normalizeClassName(String className) {

@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.LocalJvmDebugTargetResolver;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.MicrosoftJavaDebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
+import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -314,7 +316,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
     }
 
     private void installEngine() {
-        MicrosoftJavaDebugEngine replacement = new MicrosoftJavaDebugEngine();
+        MicrosoftJavaDebugEngine replacement = new MicrosoftJavaDebugEngine(this::resolveSource);
         CompletableFuture<Void> engineTermination = new CompletableFuture<>();
         this.engine = replacement;
         this.termination = engineTermination;
@@ -330,6 +332,34 @@ public final class DebuggerTestHarness implements AutoCloseable {
             }
         });
         replacement.registerSource(this.source);
+    }
+
+    private DebugEngine.Source resolveSource(String binaryName) throws Exception {
+        String fixturePackage = DebuggerTestHarness.class.getPackageName().replace(".harness", ".fixture");
+        if (!binaryName.startsWith(fixturePackage + '.')) {
+            return null;
+        }
+        DecompilationResult result = new VineflowerDecompiler().decompile(
+                binaryName,
+                className -> {
+                    String resourceName = className.replace('.', '/');
+                    if (!resourceName.endsWith(".class")) {
+                        resourceName += ".class";
+                    }
+                    try (var input = DebuggerTestHarness.class.getClassLoader().getResourceAsStream(resourceName)) {
+                        return input == null ? null : input.readAllBytes();
+                    }
+                }
+        );
+        if (!result.isComplete()) {
+            throw new IOException("Unable to decompile debugger fixture " + binaryName);
+        }
+        return new DebugEngine.Source(
+                URI.create("decompiled:///" + binaryName.replace('.', '/') + ".java"),
+                binaryName,
+                result.source(),
+                result.lineMap()
+        );
     }
 
     private int readDebugPort() throws Exception {

@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResul
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilerDiagnostic;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.JavaDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -159,6 +160,25 @@ public final class CompanionDecompilationService implements AutoCloseable {
                 }
             });
             return task;
+        }
+    }
+
+    public DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
+        String normalizedName = requireBinaryName(binaryName);
+        if (!this.bytecodeSource.hasClass(normalizedName)) {
+            return null;
+        }
+        try {
+            return load(normalizedName).join().debugSource();
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw exception;
         }
     }
 
