@@ -4,9 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.awt.Rectangle;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +29,8 @@ class GlobalConfigPersistenceTest {
         config.setThemeId("islands-light");
         config.setEditorFontSize(21f);
         config.setUiFontSize(15f);
+        config.setDebuggerWindowBounds(new Rectangle(120, 80, 1100, 620));
+        config.setDebuggerWatches(List.of("player", "level.gameTime", "player"));
         config.saveNow();
 
         assertTrue(Files.isRegularFile(dataDirectory.resolve(SETTINGS_FILE)));
@@ -35,11 +39,15 @@ class GlobalConfigPersistenceTest {
         config.setThemeId("islands-dark");
         config.setEditorFontSize(14f);
         config.setUiFontSize(13f);
+        config.setDebuggerWindowBounds(null);
+        config.setDebuggerWatches(List.of());
         config.loadFrom(dataDirectory);
 
         assertEquals("islands-light", config.themeId());
         assertEquals(21f, config.editorFontSize());
         assertEquals(15f, config.uiFontSize());
+        assertEquals(new Rectangle(120, 80, 1100, 620), config.debuggerWindowBounds());
+        assertEquals(List.of("player", "level.gameTime"), config.debuggerWatches());
     }
 
     @Test

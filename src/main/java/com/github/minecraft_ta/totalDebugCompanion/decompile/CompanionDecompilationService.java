@@ -73,11 +73,19 @@ public final class CompanionDecompilationService implements AutoCloseable {
     }
 
     public CompletableFuture<Path> openClassAtLine(String binaryName, int displayedLine) {
+        return openClassAtLine(binaryName, displayedLine, true);
+    }
+
+    public CompletableFuture<Path> openClassAtLine(
+            String binaryName,
+            int displayedLine,
+            boolean activateEditor
+    ) {
         if (displayedLine < 1) {
             throw new IllegalArgumentException("Displayed source line must be positive");
         }
         String normalizedName = requireBinaryName(binaryName);
-        return open(normalizedName, source -> SourceFileNavigation.openLine(source, displayedLine));
+        return open(normalizedName, source -> SourceFileNavigation.openLine(source, displayedLine, activateEditor));
     }
 
     public CompletableFuture<Path> openUsage(ReferenceUsage usage, ReferenceQuery query) {

@@ -642,12 +642,19 @@ public final class CompanionApp {
     }
 
     public static void openDebugFrame(com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame) {
+        openDebugFrame(frame, true);
+    }
+
+    public static void openDebugFrame(
+            com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame,
+            boolean activateEditor
+    ) {
         if (frame.binaryName().isBlank() || frame.line() < 1) {
             return;
         }
         CompanionDecompilationService service = decompilationService;
         if (service != null) {
-            service.openClassAtLine(frame.binaryName(), frame.line());
+            service.openClassAtLine(frame.binaryName(), frame.line(), activateEditor);
         }
     }
 

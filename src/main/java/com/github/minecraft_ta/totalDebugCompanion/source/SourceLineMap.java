@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.source;
 
 import java.util.Arrays;
+import java.util.OptionalInt;
 
 /** Immutable line pairs connecting class-file lines with displayed source lines. */
 public final class SourceLineMap {
@@ -63,6 +64,49 @@ public final class SourceLineMap {
 
     public int[] displayedToOriginal() {
         return this.displayedToOriginal.clone();
+    }
+
+    /** Returns whether Vineflower mapped the displayed source line to class-file code. */
+    public boolean containsDisplayedLine(int displayedLine) {
+        if (displayedLine < 1) {
+            return false;
+        }
+        int low = 0;
+        int high = this.displayedToOriginal.length / 2 - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            int candidate = this.displayedToOriginal[middle * 2];
+            if (candidate < displayedLine) {
+                low = middle + 1;
+            } else if (candidate > displayedLine) {
+                high = middle - 1;
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Returns the first mapped displayed line within the inclusive source range. */
+    public OptionalInt firstMappedDisplayedLine(int firstLine, int lastLine) {
+        if (firstLine < 1 || lastLine < firstLine) {
+            throw new IllegalArgumentException("Displayed line range is invalid");
+        }
+        int low = 0;
+        int high = this.displayedToOriginal.length / 2;
+        while (low < high) {
+            int middle = (low + high) >>> 1;
+            if (this.displayedToOriginal[middle * 2] < firstLine) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if (low >= this.displayedToOriginal.length / 2) {
+            return OptionalInt.empty();
+        }
+        int displayedLine = this.displayedToOriginal[low * 2];
+        return displayedLine <= lastLine ? OptionalInt.of(displayedLine) : OptionalInt.empty();
     }
 
     private static int comparePair(int[] left, int[] right) {

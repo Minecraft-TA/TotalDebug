@@ -99,15 +99,80 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record SourceBreakpoint(int line, String condition, String hitCondition, String logMessage) {
+    record MethodTarget(String ownerClassName, String name, String descriptor) {
+        public MethodTarget {
+            ownerClassName = requireText(ownerClassName, "Method owner class name");
+            name = requireText(name, "Method name");
+            descriptor = requireText(descriptor, "Method descriptor");
+        }
+
+        private static String requireText(String value, String description) {
+            Objects.requireNonNull(value, description);
+            if (value.isBlank()) {
+                throw new IllegalArgumentException(description + " must not be blank");
+            }
+            return value;
+        }
+    }
+
+    record SourceBreakpoint(
+            int line,
+            int debuggerLine,
+            MethodTarget method,
+            String condition,
+            String hitCondition,
+            String logMessage
+    ) {
         public SourceBreakpoint {
             if (line < 1) {
                 throw new IllegalArgumentException("Breakpoint line must be positive");
             }
+            if (debuggerLine < 0) {
+                throw new IllegalArgumentException("Debugger breakpoint line must not be negative");
+            }
+            if (method == null && debuggerLine != line) {
+                throw new IllegalArgumentException("Line breakpoints must use their displayed line");
+            }
+        }
+
+        public SourceBreakpoint(int line, String condition, String hitCondition, String logMessage) {
+            this(line, line, null, condition, hitCondition, logMessage);
         }
 
         public SourceBreakpoint(int line) {
             this(line, null, null, null);
+        }
+
+        public static SourceBreakpoint methodEntry(
+                int declarationLine,
+                int debuggerLine,
+                MethodTarget method,
+                String condition,
+                String hitCondition
+        ) {
+            return new SourceBreakpoint(
+                    declarationLine,
+                    debuggerLine,
+                    Objects.requireNonNull(method, "method"),
+                    condition,
+                    hitCondition,
+                    null
+            );
+        }
+
+        public boolean isMethodEntry() {
+            return this.method != null;
+        }
+
+        public SourceBreakpoint withConditions(String condition, String hitCondition) {
+            return new SourceBreakpoint(
+                    this.line,
+                    this.debuggerLine,
+                    this.method,
+                    condition,
+                    hitCondition,
+                    this.logMessage
+            );
         }
     }
 
@@ -180,6 +245,9 @@ public interface DebugEngine extends AutoCloseable {
         }
 
         default void continued(long threadId, boolean allThreadsContinued) {
+        }
+
+        default void breakpointChanged(Breakpoint breakpoint) {
         }
 
         default void terminated() {

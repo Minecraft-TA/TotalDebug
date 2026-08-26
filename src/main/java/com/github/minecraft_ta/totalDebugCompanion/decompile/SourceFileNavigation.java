@@ -47,7 +47,7 @@ final class SourceFileNavigation {
             String binaryName
     ) {
         int offset = targetOffset(source.path(), targetType, targetIdentifier);
-        openAt(source, offset, location(source.path(), binaryName, source.origin()), -1);
+        openAt(source, offset, location(source.path(), binaryName, source.origin()), -1, true);
     }
 
     static void openUsage(
@@ -60,20 +60,32 @@ final class SourceFileNavigation {
                 source,
                 usageOffset(source.contents(), referenceLocation, query),
                 location(source.path(), binaryName, source.origin()),
-                -1
+                -1,
+                true
         );
     }
 
     static void openLine(DecompiledSource source, int displayedLine) {
+        openLine(source, displayedLine, true);
+    }
+
+    static void openLine(DecompiledSource source, int displayedLine, boolean activateEditor) {
         openAt(
                 source,
                 lineOffset(source.contents(), displayedLine),
                 location(source.path(), source.binaryName(), source.origin()),
-                displayedLine
+                displayedLine,
+                activateEditor
         );
     }
 
-    private static void openAt(DecompiledSource source, int offset, EditorLocation location, int executionLine) {
+    private static void openAt(
+            DecompiledSource source,
+            int offset,
+            EditorLocation location,
+            int executionLine,
+            boolean activateEditor
+    ) {
         SwingUtilities.invokeLater(() -> {
             MainWindow window = MainWindow.INSTANCE;
             AtomicBoolean created = new AtomicBoolean();
@@ -91,7 +103,9 @@ final class SourceFileNavigation {
                 if (executionLine > 0) {
                     codeView.showExecutionLine(executionLine);
                 }
-                UIUtils.focusWindow(window);
+                if (activateEditor) {
+                    UIUtils.focusWindow(window);
+                }
             });
         });
     }

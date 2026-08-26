@@ -7,7 +7,9 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRel
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
@@ -23,17 +25,12 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLayer;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Point;
-import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -58,6 +55,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final CodeVisionController codeVisionController;
     private final DebugEngine.Source debugSource;
     private final BreakpointGutterMarkers breakpointMarkers;
+    private final BreakpointEditorPopup breakpointEditor = new BreakpointEditorPopup();
     private final DebuggerSessionController.Listener debuggerListener;
     private boolean codeVisionDisposed;
     private CodeInsightService.SearchHandle actionSearch;
@@ -98,8 +96,9 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         remove(this.editorLayer);
         add(this.codeVisionLayer, BorderLayout.CENTER);
 
+        EditorGutter editorGutter = new EditorGutter(this.editorScrollPane.getGutter());
         this.gutterMarkers = new HierarchyGutterMarkers(
-                this.editorScrollPane.getGutter(),
+                editorGutter,
                 new HierarchyGutterMarkers.Handler() {
                     @Override
                     public void navigate(
@@ -156,21 +155,37 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             DebuggerSessionController debugger = CompanionApp.getDebuggerController();
             debugger.registerSource(this.debugSource);
             this.breakpointMarkers = new BreakpointGutterMarkers(
-                    this.editorScrollPane.getGutter(),
+                    editorGutter,
                     this.editorPane,
-                    this::toggleBreakpointAtLine
+                    new BreakpointGutterMarkers.Handler() {
+                        @Override
+                        public void toggle(int displayedLine) {
+                            toggleBreakpointAtLine(displayedLine);
+                        }
+
+                        @Override
+                        public void configure(int displayedLine, Component invoker, Point location) {
+                            showBreakpointEditor(displayedLine, invoker, location);
+                        }
+                    }
             );
             updateBreakpointMarkers(debugger);
             this.debuggerListener = new DebuggerSessionController.Listener() {
                 @Override
                 public void statusChanged(DebuggerSessionController.Status status) {
-                    if (status.phase() != DebuggerSessionController.Phase.PAUSED) {
-                        SwingUtilities.invokeLater(CodeViewPanel.this::clearExecutionLine);
-                    }
+                    SwingUtilities.invokeLater(() -> {
+                        updateBreakpointMarkers(debugger);
+                        if (status.phase() != DebuggerSessionController.Phase.PAUSED) {
+                            clearExecutionLine();
+                        }
+                    });
                 }
 
                 @Override
-                public void breakpointsChanged(java.net.URI sourceUri, List<Integer> lines) {
+                public void breakpointsChanged(
+                        java.net.URI sourceUri,
+                        List<DebuggerSessionController.Breakpoint> breakpoints
+                ) {
                     if (!debugSource.uri().equals(sourceUri)) {
                         return;
                     }
@@ -240,6 +255,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             }
             this.implementationChooser.dispose();
             this.hierarchyPreview.dispose();
+            this.breakpointEditor.hide();
             if (this.debuggerListener != null) {
                 CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
             }
@@ -279,7 +295,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 toggleBreakpointAtCaret();
             }
         };
-        AbstractAction editBreakpoint = new AbstractAction("Edit Breakpoint Condition…", Icons.BREAKPOINT_DEPENDENT) {
+        AbstractAction editBreakpoint = new AbstractAction("Edit Breakpoint Condition…", Icons.BREAKPOINT) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 editBreakpointAtCaret();
@@ -335,19 +351,27 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void toggleBreakpointAtLine(int displayedLine) {
-        this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
-        CompanionApp.getDebuggerController().toggleBreakpoint(this.debugSource, displayedLine)
+        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        DebugEngine.SourceBreakpoint request;
+        try {
+            DebuggerSessionController.Breakpoint existing = debugger.breakpoint(
+                    this.debugSource.uri(),
+                    displayedLine
+            );
+            request = existing == null
+                    ? breakpointRequestAtLine(displayedLine, null, null)
+                    : existing.request();
+        } catch (RuntimeException exception) {
+            this.bottomInformationBar.setFailureInfoText(exception.getMessage());
+            return;
+        }
+        debugger.toggleBreakpoint(this.debugSource, request)
                 .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
                         String detail = failure.getMessage();
                         this.bottomInformationBar.setFailureInfoText(
                                 detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
-                        );
-                    } else {
-                        this.bottomInformationBar.setSuccessInfoText(
-                                (enabled ? "Breakpoint set at line " : "Breakpoint removed from line ")
-                                        + displayedLine
                         );
                     }
                 }));
@@ -357,55 +381,61 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         int displayedLine;
         try {
             displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
+            var bounds = this.editorPane.modelToView2D(this.editorPane.getLineStartOffset(displayedLine - 1));
+            showBreakpointEditor(
+                    displayedLine,
+                    this.editorPane,
+                    new Point(16, (int) (bounds.getY() + bounds.getHeight()))
+            );
         } catch (BadLocationException exception) {
             this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
-            return;
         }
+    }
 
+    private void showBreakpointEditor(int displayedLine, Component invoker, Point location) {
         DebuggerSessionController debugger = CompanionApp.getDebuggerController();
-        DebugEngine.SourceBreakpoint current = debugger.breakpoint(this.debugSource.uri(), displayedLine);
-        JTextField condition = new JTextField(current == null || current.condition() == null
-                ? ""
-                : current.condition());
-        JTextField hitCount = new JTextField(current == null || current.hitCondition() == null
-                ? ""
-                : current.hitCondition());
-        JPanel fields = new JPanel(new GridLayout(0, 1, 0, 4));
-        fields.add(new JLabel("Condition (Java expression)"));
-        fields.add(condition);
-        fields.add(new JLabel("Hit count (positive integer, optional)"));
-        fields.add(hitCount);
-
-        int choice = JOptionPane.showConfirmDialog(
-                this.editorPane,
-                fields,
-                "Breakpoint at line " + displayedLine,
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE,
-                Icons.BREAKPOINT_DEPENDENT
+        DebuggerSessionController.Breakpoint managed = debugger.breakpoint(
+                this.debugSource.uri(),
+                displayedLine
         );
-        if (choice != JOptionPane.OK_OPTION) {
+        DebugEngine.SourceBreakpoint current;
+        try {
+            current = managed == null
+                    ? breakpointRequestAtLine(displayedLine, null, null)
+                    : managed.request();
+        } catch (RuntimeException exception) {
+            this.bottomInformationBar.setFailureInfoText(exception.getMessage());
             return;
         }
-        String hitCountText = hitCount.getText().trim();
-        if (!hitCountText.isEmpty()) {
-            try {
-                if (Integer.parseInt(hitCountText) < 1) {
-                    throw new NumberFormatException();
-                }
-            } catch (NumberFormatException exception) {
-                JOptionPane.showMessageDialog(
-                        this.editorPane,
-                        "Hit count must be a positive integer.",
-                        "Invalid breakpoint",
-                        JOptionPane.ERROR_MESSAGE
-                );
-                return;
-            }
-        }
+        DebugEngine.SourceBreakpoint template = current;
+        this.breakpointEditor.open(
+                invoker,
+                location,
+                displayedLine,
+                current,
+                managed != null,
+                new BreakpointEditorPopup.Handler() {
+                    @Override
+                    public void save(int line, String condition, String hitCount) {
+                        configureBreakpoint(
+                                debugger,
+                                template.withConditions(condition, hitCount)
+                        );
+                    }
 
-        this.bottomInformationBar.setProcessInfoText("Updating breakpoint at line " + displayedLine);
-        debugger.configureBreakpoint(this.debugSource, displayedLine, condition.getText(), hitCountText)
+                    @Override
+                    public void remove(int line) {
+                        toggleBreakpointAtLine(line);
+                    }
+                }
+        );
+    }
+
+    private void configureBreakpoint(
+            DebuggerSessionController debugger,
+            DebugEngine.SourceBreakpoint request
+    ) {
+        debugger.configureBreakpoint(this.debugSource, request)
                 .whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
@@ -413,19 +443,71 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                         this.bottomInformationBar.setFailureInfoText(
                                 detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
                         );
-                    } else {
-                        this.bottomInformationBar.setSuccessInfoText(
-                                "Breakpoint configured at line " + displayedLine
-                        );
                     }
                 }));
     }
 
+    private DebugEngine.SourceBreakpoint breakpointRequestAtLine(
+            int displayedLine,
+            String condition,
+            String hitCount
+    ) {
+        String source = ASTCache.getContents(this.identifier);
+        var unit = ASTCache.getFromCache(this.identifier);
+        if (source == null || unit == null) {
+            throw new IllegalStateException("Source analysis is still loading");
+        }
+        int lineStart;
+        int lineEnd;
+        try {
+            lineStart = this.editorPane.getLineStartOffset(displayedLine - 1);
+            lineEnd = this.editorPane.getLineEndOffset(displayedLine - 1);
+        } catch (BadLocationException exception) {
+            throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
+        }
+
+        SourceDeclaration methodDeclaration = SourceDeclarationAnalyzer.analyze(unit, source).stream()
+                .filter(declaration -> declaration.symbol() instanceof CodeSymbol.MethodSymbol)
+                .filter(declaration -> declaration.markerOffset() >= lineStart
+                        && declaration.markerOffset() < lineEnd)
+                .findFirst()
+                .orElse(null);
+        if (methodDeclaration == null) {
+            return new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null);
+        }
+        if (this.debugSource.lineMap().isEmpty()) {
+            throw new IllegalStateException("Method breakpoints require decompiled line information");
+        }
+
+        CodeSymbol.MethodSymbol method = (CodeSymbol.MethodSymbol) methodDeclaration.symbol();
+        int methodEndLine;
+        try {
+            int lastMethodOffset = Math.max(
+                    methodDeclaration.markerOffset(),
+                    methodDeclaration.endOffset() - 1
+            );
+            methodEndLine = this.editorPane.getLineOfOffset(lastMethodOffset) + 1;
+        } catch (BadLocationException exception) {
+            throw new IllegalStateException("Unable to resolve method source range", exception);
+        }
+        int debuggerLine = this.debugSource.lineMap()
+                .firstMappedDisplayedLine(displayedLine, methodEndLine)
+                .orElse(0);
+        return DebugEngine.SourceBreakpoint.methodEntry(
+                displayedLine,
+                debuggerLine,
+                new DebugEngine.MethodTarget(
+                        method.ownerClassName(),
+                        method.name(),
+                        method.descriptor()
+                ),
+                condition,
+                hitCount
+        );
+    }
+
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {
-        this.breakpointMarkers.setBreakpoints(debugger.breakpoints(this.debugSource.uri()).stream()
-                .map(line -> debugger.breakpoint(this.debugSource.uri(), line))
-                .filter(java.util.Objects::nonNull)
-                .toList());
+        this.breakpointMarkers.setBreakpoints(debugger.breakpoints(this.debugSource.uri()));
     }
 
     private void configureContextMenuCaret() {

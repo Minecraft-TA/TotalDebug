@@ -8,15 +8,17 @@ import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SettingsWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindowPreview;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
+import org.fife.ui.rtextarea.LineNumberList;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
@@ -97,6 +99,13 @@ final class UiScenarioDriver {
                     }
                 }
             }
+            case BREAKPOINT_EDITOR -> advanceBreakpointEditor(context);
+            case METHOD_BREAKPOINT -> advanceMethodBreakpoint(context);
+            case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(MainWindow.INSTANCE));
+            case DEBUGGER_WATCHES -> context.once(
+                    "open-debugger-watches",
+                    () -> DebuggerWindowPreview.open(MainWindow.INSTANCE, true)
+            );
             case HIERARCHY_ONE -> advanceHierarchyPreview(
                     context,
                     context.source().indexOf("interface SingleAction")
@@ -153,6 +162,29 @@ final class UiScenarioDriver {
                         && editor.getCaretPosition() == context.source().indexOf("double ratio")
                         && gutter.isShowing();
             }
+            case BREAKPOINT_EDITOR -> visibleMenuPopup() != null
+                    && findLabelContaining(visibleMenuPopup(), "Line breakpoint") != null;
+            case METHOD_BREAKPOINT -> {
+                var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                if (!(selected instanceof CodeView codeView)) {
+                    yield false;
+                }
+                int declarationLine = context.source()
+                        .substring(0, context.source().indexOf("static List<String> describe"))
+                        .split("\\n", -1).length;
+                int entryLine = context.source()
+                        .substring(0, context.source().indexOf("double ratio"))
+                        .split("\\n", -1).length;
+                yield codeView.getDebugSource()
+                        .map(source -> CompanionApp.getDebuggerController()
+                                .breakpoint(source.uri(), declarationLine))
+                        .map(breakpoint -> breakpoint.request().isMethodEntry()
+                                && breakpoint.request().debuggerLine() == entryLine
+                                && breakpoint.request().method().descriptor()
+                                        .equals("(IZ)Ljava/util/List;"))
+                        .orElse(false);
+            }
+            case DEBUGGER, DEBUGGER_WATCHES -> findShowingWindow(DebuggerWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);
                 yield popup != null && findLabelContaining(popup, "Looking up") == null;
@@ -211,6 +243,67 @@ final class UiScenarioDriver {
         }
     }
 
+    private static void advanceBreakpointEditor(ScenarioContext context) throws Exception {
+        selectCodeEditor(context);
+        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+        LineNumberList lineNumbers = findComponent(MainWindow.INSTANCE, LineNumberList.class);
+        if (editor == null || lineNumbers == null) {
+            return;
+        }
+        int offset = context.source().indexOf("double ratio");
+        Rectangle2D row = editor.modelToView2D(offset);
+        if (row == null) {
+            return;
+        }
+        context.once("open-breakpoint-editor", () -> {
+            OffscreenPopupFactory.expectAt(
+                    lineNumbers,
+                    new Point(lineNumbers.getWidth() + 6, (int) row.getY())
+            );
+            lineNumbers.dispatchEvent(new MouseEvent(
+                    lineNumbers,
+                    MouseEvent.MOUSE_RELEASED,
+                    System.currentTimeMillis(),
+                    0,
+                    Math.max(0, lineNumbers.getWidth() / 2),
+                    (int) row.getCenterY(),
+                    1,
+                    true,
+                    MouseEvent.BUTTON3
+            ));
+        });
+    }
+
+    private static void advanceMethodBreakpoint(ScenarioContext context) throws Exception {
+        selectCodeEditor(context);
+        var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+        if (!(selected instanceof CodeView codeView)
+                || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
+            return;
+        }
+        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+        LineNumberList lineNumbers = findComponent(MainWindow.INSTANCE, LineNumberList.class);
+        if (editor == null || lineNumbers == null) {
+            return;
+        }
+        int offset = context.source().indexOf("static List<String> describe");
+        Rectangle2D row = editor.modelToView2D(offset);
+        if (row == null) {
+            return;
+        }
+        context.once("toggle-method-breakpoint", () -> lineNumbers.dispatchEvent(new MouseEvent(
+                lineNumbers,
+                MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(),
+                0,
+                Math.max(0, lineNumbers.getWidth() / 2),
+                (int) row.getCenterY(),
+                1,
+                false,
+                MouseEvent.BUTTON1
+        )));
+    }
+
     private static void advanceServiceStatus(ScenarioContext context) {
         context.once("publish-service-status", () -> {
             MainWindow.INSTANCE.setGameStatus(new ServiceStatus(
@@ -228,6 +321,7 @@ final class UiScenarioDriver {
         if (mcp != null) {
             context.once("open-mcp-status", () -> {
                 mcp.getModel().setRollover(true);
+                OffscreenPopupFactory.expectAboveEnd(mcp);
                 mcp.doClick();
             });
         }
@@ -305,7 +399,10 @@ final class UiScenarioDriver {
         } else if (scenario == UiRenderScenario.MODULE_FILTER) {
             JButton filter = findButton(popup, "All modules");
             if (filter != null) {
-                context.once("module-filter", filter::doClick);
+                context.once("module-filter", () -> {
+                    OffscreenPopupFactory.expectBelowEnd(filter);
+                    filter.doClick();
+                });
             }
         }
     }
@@ -436,31 +533,7 @@ final class UiScenarioDriver {
             window.paintAll(popupGraphics);
             popupGraphics.dispose();
         }
-        javax.swing.JPopupMenu menuPopup = visibleMenuPopup();
-        if (menuPopup != null) {
-            Point location = menuPopup.getLocationOnScreen();
-            Component invoker = menuPopup.getInvoker();
-            if (invoker != null && location.equals(new Point())) {
-                Point invokerLocation = invoker.getLocationOnScreen();
-                boolean statusBarPopup = SwingUtilities.getAncestorOfClass(
-                        ApplicationStatusBar.class,
-                        invoker
-                ) != null;
-                location = new Point(
-                        invokerLocation.x + invoker.getWidth() - menuPopup.getWidth(),
-                        statusBarPopup
-                                ? invokerLocation.y - menuPopup.getHeight()
-                                : invokerLocation.y + invoker.getHeight()
-                );
-            }
-            Graphics2D popupGraphics = (Graphics2D) graphics.create();
-            popupGraphics.translate(
-                    location.x - MainWindow.INSTANCE.getX(),
-                    location.y - MainWindow.INSTANCE.getY()
-            );
-            menuPopup.paintAll(popupGraphics);
-            popupGraphics.dispose();
-        }
+        OffscreenPopupFactory.paintActivePopups(graphics, MainWindow.INSTANCE);
         graphics.dispose();
         ImageIO.write(image, "png", target.toFile());
         System.out.println("UI screenshot: " + target.toAbsolutePath());

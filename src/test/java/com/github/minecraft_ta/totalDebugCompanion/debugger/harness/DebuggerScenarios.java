@@ -70,9 +70,11 @@ public final class DebuggerScenarios {
                     new DebugEngine.SourceBreakpoint(breakpointLine)
             );
             equal(1, breakpoints.size(), "breakpoint count");
-            check(breakpoints.getFirst().verified(), "Deferred breakpoint was not verified");
+            check(!breakpoints.getFirst().verified(), "Breakpoint was reported bound before JDI installed it");
 
             harness.start();
+            DebugEngine.Breakpoint verified = harness.awaitBreakpointChange("class preparation");
+            check(verified.verified(), "Breakpoint was not verified after JDI installed it");
             DebugEngine.StoppedEvent breakpointStop = harness.awaitStop("deferred breakpoint");
             equal("breakpoint", breakpointStop.reason(), "stop reason");
 
@@ -206,6 +208,39 @@ public final class DebuggerScenarios {
                 decompiled.lineMap()
         );
 
+        int invalidLine = lineContaining(decompiled.source(), "package ");
+        check(
+                !containsMappedLine(decompiled.lineMap().displayedToOriginal(), invalidLine),
+                "Vineflower unexpectedly mapped the package declaration to bytecode"
+        );
+        check(
+                hasTrimmedLineWithMapping(
+                        decompiled.source(),
+                        "}",
+                        decompiled.lineMap().displayedToOriginal(),
+                        true
+                ),
+                "Fixture has no executable closing brace" + System.lineSeparator() + decompiled.source()
+        );
+        check(
+                hasTrimmedLineWithMapping(
+                        decompiled.source(),
+                        "}",
+                        decompiled.lineMap().displayedToOriginal(),
+                        false
+                ),
+                "Fixture has no non-executable closing brace" + System.lineSeparator() + decompiled.source()
+        );
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(DecompiledDebuggeeMain.class, source)) {
+            List<DebugEngine.Breakpoint> breakpoints = harness.setBreakpoints(
+                    new DebugEngine.SourceBreakpoint(invalidLine)
+            );
+            equal(1, breakpoints.size(), "invalid decompiled breakpoint count");
+            check(!breakpoints.getFirst().verified(), "Source-only line was incorrectly reported as verified");
+            harness.start();
+            equal(0, harness.awaitExit(), "debuggee with an invalid breakpoint exit code");
+        }
+
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(DecompiledDebuggeeMain.class, source)) {
             int displayedLine = harness.lineContaining("System.out.println(++value);");
             int originalLine = mappedLine(decompiled.lineMap().displayedToOriginal(), displayedLine);
@@ -215,8 +250,13 @@ public final class DebuggerScenarios {
                     new DebugEngine.SourceBreakpoint(displayedLine)
             );
             equal(1, breakpoints.size(), "decompiled breakpoint count");
-            equal(displayedLine, breakpoints.getFirst().line(), "verified decompiled breakpoint line");
+            check(!breakpoints.getFirst().verified(), "Decompiled breakpoint was bound before class preparation");
+            equal(displayedLine, breakpoints.getFirst().line(), "pending decompiled breakpoint line");
             harness.start();
+
+            DebugEngine.Breakpoint verified = harness.awaitBreakpointChange("decompiled class preparation");
+            check(verified.verified(), "Decompiled breakpoint was not verified after JDI installation");
+            equal(displayedLine, verified.line(), "verified decompiled breakpoint line");
 
             DebugEngine.StoppedEvent stop = harness.awaitStop("decompiled-source breakpoint");
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
@@ -226,6 +266,41 @@ public final class DebuggerScenarios {
 
             harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal(0, harness.awaitExit(), "decompiled debuggee exit code");
+        }
+
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(DecompiledDebuggeeMain.class, source)) {
+            int declarationLine = harness.lineContaining("public static void main(String[]");
+            int lastLine = decompiled.source().split("\\R", -1).length;
+            int entryLine = decompiled.lineMap()
+                    .firstMappedDisplayedLine(declarationLine, lastLine)
+                    .orElseThrow(() -> new AssertionError("Decompiled main method has no executable line"));
+            check(entryLine != declarationLine, "Fixture method declaration unexpectedly has bytecode");
+
+            DebugEngine.SourceBreakpoint methodBreakpoint = DebugEngine.SourceBreakpoint.methodEntry(
+                    declarationLine,
+                    entryLine,
+                    new DebugEngine.MethodTarget(
+                            DecompiledDebuggeeMain.class.getName(),
+                            "main",
+                            "([Ljava/lang/String;)V"
+                    ),
+                    null,
+                    null
+            );
+            List<DebugEngine.Breakpoint> breakpoints = harness.setBreakpoints(methodBreakpoint);
+            equal(1, breakpoints.size(), "method breakpoint count");
+            check(!breakpoints.getFirst().verified(), "Method breakpoint bound before class preparation");
+            harness.start();
+
+            DebugEngine.Breakpoint verified = harness.awaitBreakpointChange("method class preparation");
+            check(verified.verified(), "Method breakpoint was not verified after JDI installation");
+            DebugEngine.StoppedEvent stop = harness.awaitStop("method-entry breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+            equal(sourceUri, frame.sourceUri(), "method breakpoint source");
+            equal(entryLine, frame.line(), "method breakpoint entry line");
+
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "method breakpoint debuggee exit code");
         }
     }
 
@@ -310,6 +385,31 @@ public final class DebuggerScenarios {
             }
         }
         throw new AssertionError("No line mapping for displayed line " + sourceLine);
+    }
+
+    private static boolean containsMappedLine(int[] pairs, int sourceLine) {
+        for (int i = 0; i < pairs.length; i += 2) {
+            if (pairs[i] == sourceLine) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasTrimmedLineWithMapping(
+            String source,
+            String expected,
+            int[] mappings,
+            boolean expectedMapped
+    ) {
+        String[] lines = source.split("\\R", -1);
+        for (int index = 0; index < lines.length; index++) {
+            if (lines[index].trim().equals(expected)
+                    && containsMappedLine(mappings, index + 1) == expectedMapped) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ClassBytecodeSource classPathSource(ClassLoader loader) {

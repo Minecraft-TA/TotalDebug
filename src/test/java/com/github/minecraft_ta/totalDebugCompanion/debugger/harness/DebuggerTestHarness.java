@@ -41,6 +41,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
     private final Process process;
     private final BufferedReader output;
     private final LinkedBlockingQueue<DebugEngine.StoppedEvent> stops = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<DebugEngine.Breakpoint> breakpointChanges = new LinkedBlockingQueue<>();
     private MicrosoftJavaDebugEngine engine;
     private CompletableFuture<Void> termination;
 
@@ -173,6 +174,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
     public void reattachByProcessId() throws Exception {
         this.engine.close();
         this.stops.clear();
+        this.breakpointChanges.clear();
         installEngine();
         DebugEngine.Target target = new LocalJvmDebugTargetResolver().resolve(
                 new DebugTargetDescriptor("debuggee", this.source.binaryName(), this.process.pid()),
@@ -187,6 +189,17 @@ public final class DebuggerTestHarness implements AutoCloseable {
             throw new AssertionError("Debugger did not stop after " + operation);
         }
         return stop;
+    }
+
+    public DebugEngine.Breakpoint awaitBreakpointChange(String operation) throws InterruptedException {
+        DebugEngine.Breakpoint breakpoint = this.breakpointChanges.poll(
+                OPERATION_TIMEOUT.toSeconds(),
+                TimeUnit.SECONDS
+        );
+        if (breakpoint == null) {
+            throw new AssertionError("Debugger did not update breakpoint verification after " + operation);
+        }
+        return breakpoint;
     }
 
     public DebugEngine.StackFrame firstFrame(long threadId) throws Exception {
@@ -324,6 +337,11 @@ public final class DebuggerTestHarness implements AutoCloseable {
             @Override
             public void stopped(DebugEngine.StoppedEvent event) {
                 stops.add(event);
+            }
+
+            @Override
+            public void breakpointChanged(DebugEngine.Breakpoint breakpoint) {
+                breakpointChanges.add(breakpoint);
             }
 
             @Override

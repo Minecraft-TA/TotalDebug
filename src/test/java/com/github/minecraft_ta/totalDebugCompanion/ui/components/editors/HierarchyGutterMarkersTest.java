@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
@@ -23,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HierarchyGutterMarkersTest {
@@ -35,20 +38,16 @@ class HierarchyGutterMarkersTest {
         SwingUtilities.invokeAndWait(() -> {
             RTextScrollPane scrollPane = new RTextScrollPane(new RSyntaxTextArea("class Sample {}"));
             var gutter = scrollPane.getGutter();
-            var markers = new HierarchyGutterMarkers(gutter, new EmptyHandler());
+            var editorGutter = new EditorGutter(gutter);
+            var markers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
             gutter.setSize(gutter.getPreferredSize());
             gutter.doLayout();
-            for (Component component : gutter.getComponents()) {
-                if (component instanceof LineNumberList) {
-                    lineNumbers.set(component);
-                } else if (component instanceof IconRowHeader) {
-                    hierarchyIcons.set(component);
-                }
-            }
+            lineNumbers.set(editorGutter.lineNumberLayer());
+            hierarchyIcons.set(editorGutter.hierarchyIcons());
             markers.dispose();
         });
 
-        assertInstanceOf(LineNumberList.class, lineNumbers.get());
+        assertInstanceOf(javax.swing.JLayer.class, lineNumbers.get());
         assertInstanceOf(IconRowHeader.class, hierarchyIcons.get());
         assertTrue(lineNumbers.get().getX() < hierarchyIcons.get().getX());
     }
@@ -65,20 +64,26 @@ class HierarchyGutterMarkersTest {
             gutter.setBackground(new Color(0, 0, 0, 0));
             gutter.setOpaque(false);
 
-            var hierarchyMarkers = new HierarchyGutterMarkers(gutter, new EmptyHandler());
-            var breakpointMarkers = new BreakpointGutterMarkers(gutter, editor, ignored -> {
-            });
-            breakpointMarkers.setBreakpoints(List.of(new DebugEngine.SourceBreakpoint(2)));
+            var editorGutter = new EditorGutter(gutter);
+            var hierarchyMarkers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
+            var breakpointMarkers = new BreakpointGutterMarkers(editorGutter, editor, new EmptyBreakpointHandler());
+            breakpointMarkers.setBreakpoints(List.of(new DebuggerSessionController.Breakpoint(
+                    new DebugEngine.SourceBreakpoint(2),
+                    DebuggerSessionController.BreakpointState.UNBOUND,
+                    ""
+            )));
             scrollPane.setSize(320, 120);
             layoutRecursively(scrollPane);
 
-            LineNumberList lineNumbers = null;
-            for (Component component : gutter.getComponents()) {
-                if (component instanceof LineNumberList candidate) {
-                    lineNumbers = candidate;
-                    break;
-                }
+            try {
+                int y = (int) editor.modelToView2D(editor.getLineStartOffset(1)).getCenterY();
+                assertEquals(0, gutter.getTrackingIcons(new Point(1, y)).length,
+                        "Breakpoint icons must not occupy the hierarchy icon column");
+            } catch (javax.swing.text.BadLocationException exception) {
+                throw new AssertionError(exception);
             }
+
+            LineNumberList lineNumbers = editorGutter.lineNumbers();
             assertInstanceOf(LineNumberList.class, lineNumbers);
             assertTrue(lineNumbers.getWidth() > 0, "The laid-out line-number column has no width");
             assertTrue(lineNumbers.getHeight() > 0, "The laid-out line-number column has no height");
@@ -111,18 +116,26 @@ class HierarchyGutterMarkersTest {
             var editor = new RSyntaxTextArea("first\nsecond\nthird");
             var scrollPane = new RTextScrollPane(editor);
             var gutter = scrollPane.getGutter();
-            var hierarchyMarkers = new HierarchyGutterMarkers(gutter, new EmptyHandler());
-            var breakpointMarkers = new BreakpointGutterMarkers(gutter, editor, requestedLine::set);
+            var editorGutter = new EditorGutter(gutter);
+            var hierarchyMarkers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    new BreakpointGutterMarkers.Handler() {
+                        @Override
+                        public void toggle(int displayedLine) {
+                            requestedLine.set(displayedLine);
+                        }
+
+                        @Override
+                        public void configure(int displayedLine, Component invoker, Point location) {
+                        }
+                    }
+            );
             scrollPane.setSize(320, 120);
             layoutRecursively(scrollPane);
 
-            LineNumberList lineNumbers = null;
-            for (Component component : gutter.getComponents()) {
-                if (component instanceof LineNumberList candidate) {
-                    lineNumbers = candidate;
-                    break;
-                }
-            }
+            LineNumberList lineNumbers = editorGutter.lineNumbers();
             assertInstanceOf(LineNumberList.class, lineNumbers);
             try {
                 int secondLineOffset = editor.getLineStartOffset(1);
@@ -147,6 +160,115 @@ class HierarchyGutterMarkersTest {
         });
 
         assertEquals(2, requestedLine.get());
+    }
+
+    @Test
+    void rightClickingALineNumberRequestsBreakpointConfigurationForThatLine() throws Exception {
+        AtomicInteger requestedLine = new AtomicInteger(-1);
+
+        SwingUtilities.invokeAndWait(() -> {
+            var editor = new RSyntaxTextArea("first\nsecond\nthird");
+            var scrollPane = new RTextScrollPane(editor);
+            var editorGutter = new EditorGutter(scrollPane.getGutter());
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    new BreakpointGutterMarkers.Handler() {
+                        @Override
+                        public void toggle(int displayedLine) {
+                        }
+
+                        @Override
+                        public void configure(int displayedLine, Component invoker, Point location) {
+                            requestedLine.set(displayedLine);
+                        }
+                    }
+            );
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
+
+            try {
+                int y = (int) editor.modelToView2D(editor.getLineStartOffset(1)).getCenterY();
+                editorGutter.lineNumbers().dispatchEvent(new MouseEvent(
+                        editorGutter.lineNumbers(),
+                        MouseEvent.MOUSE_RELEASED,
+                        System.currentTimeMillis(),
+                        0,
+                        Math.max(0, editorGutter.lineNumbers().getWidth() / 2),
+                        y,
+                        1,
+                        true,
+                        MouseEvent.BUTTON3
+                ));
+            } catch (javax.swing.text.BadLocationException exception) {
+                throw new AssertionError(exception);
+            }
+
+            breakpointMarkers.dispose();
+        });
+
+        assertEquals(2, requestedLine.get());
+    }
+
+    @Test
+    void selectsBreakpointIconsFromBindingStateAndCondition() {
+        var plain = new DebugEngine.SourceBreakpoint(7);
+        var conditional = new DebugEngine.SourceBreakpoint(8, "value > 2", null, null);
+        var method = DebugEngine.SourceBreakpoint.methodEntry(
+                9,
+                10,
+                new DebugEngine.MethodTarget("sample.Target", "run", "()V"),
+                null,
+                null
+        );
+
+        assertSame(Icons.BREAKPOINT, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.UNBOUND
+        )));
+        assertSame(Icons.BREAKPOINT, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.PENDING
+        )));
+        assertSame(Icons.BREAKPOINT_VALID, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.BOUND
+        )));
+        assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.INVALID
+        )));
+        assertEquals(14, BreakpointGutterMarkers.iconFor(managed(
+                conditional,
+                DebuggerSessionController.BreakpointState.UNBOUND
+        )).getIconWidth());
+        assertEquals(14, BreakpointGutterMarkers.iconFor(managed(
+                conditional,
+                DebuggerSessionController.BreakpointState.BOUND
+        )).getIconWidth());
+        assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
+                conditional,
+                DebuggerSessionController.BreakpointState.INVALID
+        )));
+        assertSame(Icons.BREAKPOINT_METHOD, BreakpointGutterMarkers.iconFor(managed(
+                method,
+                DebuggerSessionController.BreakpointState.UNBOUND
+        )));
+        assertSame(Icons.BREAKPOINT_METHOD_VALID, BreakpointGutterMarkers.iconFor(managed(
+                method,
+                DebuggerSessionController.BreakpointState.BOUND
+        )));
+        assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
+                method,
+                DebuggerSessionController.BreakpointState.INVALID
+        )));
+    }
+
+    private static DebuggerSessionController.Breakpoint managed(
+            DebugEngine.SourceBreakpoint request,
+            DebuggerSessionController.BreakpointState state
+    ) {
+        return new DebuggerSessionController.Breakpoint(request, state, "");
     }
 
     private static void layoutRecursively(Container container) {
@@ -176,6 +298,16 @@ class HierarchyGutterMarkersTest {
 
         @Override
         public void hidePreview() {
+        }
+    }
+
+    private static final class EmptyBreakpointHandler implements BreakpointGutterMarkers.Handler {
+        @Override
+        public void toggle(int displayedLine) {
+        }
+
+        @Override
+        public void configure(int displayedLine, Component invoker, Point location) {
         }
     }
 }

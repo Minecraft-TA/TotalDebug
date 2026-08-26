@@ -48,11 +48,42 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
+    public enum BreakpointState {
+        UNBOUND,
+        PENDING,
+        BOUND,
+        INVALID
+    }
+
+    public record Breakpoint(
+            DebugEngine.SourceBreakpoint request,
+            BreakpointState state,
+            int resolvedLine,
+            String detail
+    ) {
+        public Breakpoint {
+            Objects.requireNonNull(request, "request");
+            Objects.requireNonNull(state, "state");
+            if (resolvedLine < 0) {
+                throw new IllegalArgumentException("Resolved breakpoint line must not be negative");
+            }
+            detail = Objects.requireNonNullElse(detail, "");
+        }
+
+        public Breakpoint(DebugEngine.SourceBreakpoint request, BreakpointState state, String detail) {
+            this(request, state, 0, detail);
+        }
+
+        public int line() {
+            return this.request.line();
+        }
+    }
+
     public interface Listener {
         default void statusChanged(Status status) {
         }
 
-        default void breakpointsChanged(URI sourceUri, List<Integer> lines) {
+        default void breakpointsChanged(URI sourceUri, List<Breakpoint> breakpoints) {
         }
 
         default void paused(PausedState state) {
@@ -75,7 +106,8 @@ public final class DebuggerSessionController implements AutoCloseable {
     private final ExecutorService worker;
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Map<URI, DebugEngine.Source> sources = new HashMap<>();
-    private final Map<URI, NavigableMap<Integer, DebugEngine.SourceBreakpoint>> breakpoints = new HashMap<>();
+    private final Map<URI, NavigableMap<Integer, Breakpoint>> breakpoints = new HashMap<>();
+    private final Map<Integer, BreakpointKey> engineBreakpointIds = new HashMap<>();
 
     private volatile Status status = new Status(Phase.UNAVAILABLE, null, "No Minecraft debug target", null);
     private volatile DebugTargetDescriptor target;
@@ -208,8 +240,13 @@ public final class DebuggerSessionController implements AutoCloseable {
 
     public void registerSource(DebugEngine.Source source) {
         DebugEngine.Source checked = Objects.requireNonNull(source, "source");
+        List<Breakpoint> changedBreakpoints;
         synchronized (this.modelLock) {
             this.sources.put(checked.uri(), checked);
+            changedBreakpoints = revalidateBreakpointsLocked(checked);
+        }
+        if (changedBreakpoints != null) {
+            notifyBreakpointsChanged(checked.uri(), changedBreakpoints);
         }
         submit(() -> {
             DebugEngine current = this.engine;
@@ -226,49 +263,57 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
-    public List<Integer> breakpoints(URI sourceUri) {
+    public List<Breakpoint> breakpoints(URI sourceUri) {
         synchronized (this.modelLock) {
-            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
-            return sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.navigableKeySet());
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            return sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.values());
         }
     }
 
-    public DebugEngine.SourceBreakpoint breakpoint(URI sourceUri, int line) {
+    public Breakpoint breakpoint(URI sourceUri, int line) {
         synchronized (this.modelLock) {
-            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
             return sourceBreakpoints == null ? null : sourceBreakpoints.get(line);
         }
     }
 
     public CompletableFuture<Boolean> toggleBreakpoint(DebugEngine.Source source, int line) {
-        if (line < 1) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("Breakpoint line must be positive"));
-        }
-        registerSource(source);
+        return toggleBreakpoint(source, new DebugEngine.SourceBreakpoint(line));
+    }
+
+    public CompletableFuture<Boolean> toggleBreakpoint(
+            DebugEngine.Source source,
+            DebugEngine.SourceBreakpoint request
+    ) {
+        DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
+        DebugEngine.SourceBreakpoint checkedRequest = Objects.requireNonNull(request, "request");
+        registerSource(checkedSource);
         boolean enabled;
-        List<Integer> snapshot;
+        List<Breakpoint> snapshot;
         synchronized (this.modelLock) {
-            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints =
-                    this.breakpoints.computeIfAbsent(source.uri(), ignored -> new TreeMap<>());
-            if (sourceBreakpoints.remove(line) != null) {
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints =
+                    this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
+            if (sourceBreakpoints.remove(checkedRequest.line()) != null) {
+                removeBreakpointBindingLocked(checkedSource.uri(), checkedRequest.line());
                 enabled = false;
             } else {
-                sourceBreakpoints.put(line, new DebugEngine.SourceBreakpoint(line));
+                sourceBreakpoints.put(
+                        checkedRequest.line(),
+                        createdBreakpoint(checkedSource, checkedRequest)
+                );
                 enabled = true;
             }
             if (sourceBreakpoints.isEmpty()) {
-                this.breakpoints.remove(source.uri());
+                this.breakpoints.remove(checkedSource.uri());
             }
-            snapshot = List.copyOf(sourceBreakpoints.navigableKeySet());
+            snapshot = List.copyOf(sourceBreakpoints.values());
         }
-        for (Listener listener : this.listeners) {
-            listener.breakpointsChanged(source.uri(), snapshot);
-        }
+        notifyBreakpointsChanged(checkedSource.uri(), snapshot);
         boolean result = enabled;
         return submitFuture(() -> {
             DebugEngine current = this.engine;
             if (current != null) {
-                applyBreakpoints(current, source.uri());
+                applyBreakpoints(current, checkedSource.uri());
             }
         }).thenApply(ignored -> result);
     }
@@ -279,27 +324,41 @@ public final class DebuggerSessionController implements AutoCloseable {
             String condition,
             String hitCondition
     ) {
-        if (line < 1) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("Breakpoint line must be positive"));
-        }
         DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
-        registerSource(checkedSource);
-        DebugEngine.SourceBreakpoint breakpoint = new DebugEngine.SourceBreakpoint(
-                line,
-                normalizeExpression(condition),
-                normalizeExpression(hitCondition),
-                null
-        );
-        List<Integer> snapshot;
+        DebugEngine.SourceBreakpoint request;
         synchronized (this.modelLock) {
-            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints =
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedSource.uri());
+            Breakpoint existing = sourceBreakpoints == null ? null : sourceBreakpoints.get(line);
+            request = existing == null
+                    ? new DebugEngine.SourceBreakpoint(line, condition, hitCondition, null)
+                    : existing.request().withConditions(condition, hitCondition);
+        }
+        return configureBreakpoint(checkedSource, request);
+    }
+
+    public CompletableFuture<Void> configureBreakpoint(
+            DebugEngine.Source source,
+            DebugEngine.SourceBreakpoint request
+    ) {
+        DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
+        DebugEngine.SourceBreakpoint checkedRequest = Objects.requireNonNull(request, "request");
+        registerSource(checkedSource);
+        checkedRequest = checkedRequest.withConditions(
+                normalizeExpression(checkedRequest.condition()),
+                normalizeExpression(checkedRequest.hitCondition())
+        );
+        List<Breakpoint> snapshot;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints =
                     this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
-            sourceBreakpoints.put(line, breakpoint);
-            snapshot = List.copyOf(sourceBreakpoints.navigableKeySet());
+            removeBreakpointBindingLocked(checkedSource.uri(), checkedRequest.line());
+            sourceBreakpoints.put(
+                    checkedRequest.line(),
+                    createdBreakpoint(checkedSource, checkedRequest)
+            );
+            snapshot = List.copyOf(sourceBreakpoints.values());
         }
-        for (Listener listener : this.listeners) {
-            listener.breakpointsChanged(checkedSource.uri(), snapshot);
-        }
+        notifyBreakpointsChanged(checkedSource.uri(), snapshot);
         return submitFuture(() -> {
             DebugEngine current = this.engine;
             if (current != null) {
@@ -396,11 +455,17 @@ public final class DebuggerSessionController implements AutoCloseable {
             }
 
             @Override
+            public void breakpointChanged(DebugEngine.Breakpoint breakpoint) {
+                submit(() -> handleBreakpointChanged(sourceEngine, breakpoint));
+            }
+
+            @Override
             public void terminated() {
                 submit(() -> {
                     if (engine == sourceEngine) {
                         engine = null;
                         pausedState = null;
+                        resetBreakpointBindings();
                         try {
                             sourceEngine.close();
                         } catch (Throwable failure) {
@@ -418,6 +483,37 @@ public final class DebuggerSessionController implements AutoCloseable {
                 });
             }
         };
+    }
+
+    private void handleBreakpointChanged(DebugEngine sourceEngine, DebugEngine.Breakpoint changed) {
+        if (this.engine != sourceEngine || changed.id() <= 0) {
+            return;
+        }
+        URI sourceUri;
+        List<Breakpoint> snapshot;
+        synchronized (this.modelLock) {
+            BreakpointKey key = this.engineBreakpointIds.get(changed.id());
+            if (key == null) {
+                return;
+            }
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(key.sourceUri());
+            Breakpoint current = sourceBreakpoints == null ? null : sourceBreakpoints.get(key.line());
+            if (current == null || !current.request().equals(key.request())
+                    || current.state() == BreakpointState.INVALID) {
+                return;
+            }
+            BreakpointState state = changed.verified()
+                    ? BreakpointState.BOUND
+                    : changed.message().isBlank() ? BreakpointState.PENDING : BreakpointState.INVALID;
+            int resolvedLine = changed.line() > 0 ? changed.line() : current.resolvedLine();
+            sourceBreakpoints.put(
+                    current.line(),
+                    new Breakpoint(current.request(), state, resolvedLine, changed.message())
+            );
+            sourceUri = key.sourceUri();
+            snapshot = List.copyOf(sourceBreakpoints.values());
+        }
+        notifyBreakpointsChanged(sourceUri, snapshot);
     }
 
     private void handleStopped(DebugEngine sourceEngine, DebugEngine.StoppedEvent event) {
@@ -461,7 +557,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private void applyAllBreakpoints(DebugEngine sourceEngine) {
-        Map<URI, List<DebugEngine.SourceBreakpoint>> snapshot = breakpointSnapshot();
+        Map<URI, List<Breakpoint>> snapshot = breakpointSnapshot();
         for (URI sourceUri : snapshot.keySet()) {
             applyBreakpoints(sourceEngine, sourceUri);
         }
@@ -471,12 +567,75 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (source(sourceUri) == null) {
             return;
         }
-        List<DebugEngine.SourceBreakpoint> requested;
+        List<Breakpoint> requested;
+        List<Breakpoint> pendingSnapshot;
         synchronized (this.modelLock) {
-            NavigableMap<Integer, DebugEngine.SourceBreakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
-            requested = sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.values());
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            removeSourceBindingsLocked(sourceUri);
+            if (sourceBreakpoints == null) {
+                requested = List.of();
+                pendingSnapshot = List.of();
+            } else {
+                requested = sourceBreakpoints.values().stream()
+                        .filter(breakpoint -> breakpoint.state() != BreakpointState.INVALID)
+                        .toList();
+                for (Breakpoint breakpoint : requested) {
+                    Breakpoint current = sourceBreakpoints.get(breakpoint.line());
+                    if (current != null && current.request().equals(breakpoint.request())) {
+                        sourceBreakpoints.put(
+                                current.line(),
+                                new Breakpoint(current.request(), BreakpointState.PENDING, 0, "")
+                        );
+                    }
+                }
+                pendingSnapshot = List.copyOf(sourceBreakpoints.values());
+            }
         }
-        sourceEngine.setBreakpoints(sourceUri, requested).join();
+        notifyBreakpointsChanged(sourceUri, pendingSnapshot);
+
+        List<DebugEngine.Breakpoint> responses = sourceEngine.setBreakpoints(
+                sourceUri,
+                requested.stream().map(Breakpoint::request).toList()
+        ).join();
+        if (responses.size() != requested.size()) {
+            throw new IllegalStateException(
+                    "Debugger returned " + responses.size() + " breakpoint responses for "
+                            + requested.size() + " requests"
+            );
+        }
+
+        List<Breakpoint> responseSnapshot;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
+            if (sourceBreakpoints == null) {
+                return;
+            }
+            for (int index = 0; index < requested.size(); index++) {
+                Breakpoint requestedBreakpoint = requested.get(index);
+                DebugEngine.Breakpoint response = responses.get(index);
+                Breakpoint current = sourceBreakpoints.get(requestedBreakpoint.line());
+                if (current == null || !current.request().equals(requestedBreakpoint.request())
+                        || current.state() == BreakpointState.INVALID) {
+                    continue;
+                }
+                if (response.id() > 0) {
+                    this.engineBreakpointIds.put(
+                            response.id(),
+                            new BreakpointKey(sourceUri, current.line(), current.request())
+                    );
+                }
+                BreakpointState state = response.verified()
+                        ? BreakpointState.BOUND
+                        : response.message().isBlank() ? BreakpointState.PENDING : BreakpointState.INVALID;
+                int resolvedLine = response.line() > 0 ? response.line() : 0;
+                sourceBreakpoints.put(
+                        current.line(),
+                        new Breakpoint(current.request(), state, resolvedLine, response.message())
+                );
+            }
+            responseSnapshot = List.copyOf(sourceBreakpoints.values());
+        }
+        notifyBreakpointsChanged(sourceUri, responseSnapshot);
     }
 
     private List<DebugEngine.Source> sourcesSnapshot() {
@@ -485,14 +644,108 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
-    private Map<URI, List<DebugEngine.SourceBreakpoint>> breakpointSnapshot() {
+    private Map<URI, List<Breakpoint>> breakpointSnapshot() {
         synchronized (this.modelLock) {
-            Map<URI, List<DebugEngine.SourceBreakpoint>> result = new HashMap<>();
-            for (Map.Entry<URI, NavigableMap<Integer, DebugEngine.SourceBreakpoint>> entry
+            Map<URI, List<Breakpoint>> result = new HashMap<>();
+            for (Map.Entry<URI, NavigableMap<Integer, Breakpoint>> entry
                     : this.breakpoints.entrySet()) {
                 result.put(entry.getKey(), List.copyOf(entry.getValue().values()));
             }
             return result;
+        }
+    }
+
+    private Breakpoint createdBreakpoint(DebugEngine.Source source, DebugEngine.SourceBreakpoint request) {
+        if (isStaticallyInvalid(source, request)) {
+            return invalidBreakpoint(request);
+        }
+        BreakpointState state = this.engine == null ? BreakpointState.UNBOUND : BreakpointState.PENDING;
+        return new Breakpoint(request, state, "");
+    }
+
+    private List<Breakpoint> revalidateBreakpointsLocked(DebugEngine.Source source) {
+        NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(source.uri());
+        if (sourceBreakpoints == null) {
+            return null;
+        }
+        boolean changed = false;
+        for (Map.Entry<Integer, Breakpoint> entry : sourceBreakpoints.entrySet()) {
+            Breakpoint current = entry.getValue();
+            if (isStaticallyInvalid(source, current.request())) {
+                if (current.state() != BreakpointState.INVALID) {
+                    removeBreakpointBindingLocked(source.uri(), current.line());
+                    entry.setValue(invalidBreakpoint(current.request()));
+                    changed = true;
+                }
+            } else if (current.state() == BreakpointState.INVALID
+                    && current.detail().equals(staticInvalidDetail(current.request()))) {
+                BreakpointState state = this.engine == null ? BreakpointState.UNBOUND : BreakpointState.PENDING;
+                entry.setValue(new Breakpoint(current.request(), state, ""));
+                changed = true;
+            }
+        }
+        return changed ? List.copyOf(sourceBreakpoints.values()) : null;
+    }
+
+    private static boolean isStaticallyInvalid(
+            DebugEngine.Source source,
+            DebugEngine.SourceBreakpoint request
+    ) {
+        if (request.isMethodEntry() && request.debuggerLine() == 0) {
+            return true;
+        }
+        return !source.lineMap().isEmpty()
+                && !source.lineMap().containsDisplayedLine(request.debuggerLine());
+    }
+
+    private static Breakpoint invalidBreakpoint(DebugEngine.SourceBreakpoint request) {
+        return new Breakpoint(
+                request,
+                BreakpointState.INVALID,
+                staticInvalidDetail(request)
+        );
+    }
+
+    private static String staticInvalidDetail(DebugEngine.SourceBreakpoint request) {
+        return request.isMethodEntry()
+                ? "Method has no executable bytecode"
+                : "No executable bytecode is mapped to line " + request.line();
+    }
+
+    private void removeBreakpointBindingLocked(URI sourceUri, int line) {
+        this.engineBreakpointIds.values().removeIf(
+                key -> key.sourceUri().equals(sourceUri) && key.line() == line
+        );
+    }
+
+    private void removeSourceBindingsLocked(URI sourceUri) {
+        this.engineBreakpointIds.values().removeIf(key -> key.sourceUri().equals(sourceUri));
+    }
+
+    private void resetBreakpointBindings() {
+        Map<URI, List<Breakpoint>> changed = new HashMap<>();
+        synchronized (this.modelLock) {
+            this.engineBreakpointIds.clear();
+            for (Map.Entry<URI, NavigableMap<Integer, Breakpoint>> sourceEntry : this.breakpoints.entrySet()) {
+                boolean sourceChanged = false;
+                for (Map.Entry<Integer, Breakpoint> breakpointEntry : sourceEntry.getValue().entrySet()) {
+                    Breakpoint current = breakpointEntry.getValue();
+                    if (current.state() == BreakpointState.BOUND || current.state() == BreakpointState.PENDING) {
+                        breakpointEntry.setValue(new Breakpoint(current.request(), BreakpointState.UNBOUND, ""));
+                        sourceChanged = true;
+                    }
+                }
+                if (sourceChanged) {
+                    changed.put(sourceEntry.getKey(), List.copyOf(sourceEntry.getValue().values()));
+                }
+            }
+        }
+        changed.forEach(this::notifyBreakpointsChanged);
+    }
+
+    private void notifyBreakpointsChanged(URI sourceUri, List<Breakpoint> snapshot) {
+        for (Listener listener : this.listeners) {
+            listener.breakpointsChanged(sourceUri, snapshot);
         }
     }
 
@@ -534,6 +787,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     private void closeEngine() {
         DebugEngine current = this.engine;
         this.engine = null;
+        resetBreakpointBindings();
         if (current == null) {
             return;
         }
@@ -639,5 +893,8 @@ public final class DebuggerSessionController implements AutoCloseable {
     @FunctionalInterface
     private interface ThreadControl {
         CompletableFuture<Void> apply(DebugEngine engine, long threadId);
+    }
+
+    private record BreakpointKey(URI sourceUri, int line, DebugEngine.SourceBreakpoint request) {
     }
 }

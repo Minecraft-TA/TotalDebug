@@ -138,6 +138,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         Objects.requireNonNull(sourceUri, "sourceUri");
         List<SourceBreakpoint> requested = List.copyOf(breakpoints);
         this.sourceRegistry.require(sourceUri);
+        if (requested.stream().anyMatch(breakpoint -> breakpoint.debuggerLine() < 1)) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Debugger breakpoint line must be positive"
+            ));
+        }
         if (requested.stream().anyMatch(breakpoint -> breakpoint.logMessage() != null
                 && !breakpoint.logMessage().isBlank())) {
             return CompletableFuture.failedFuture(new UnsupportedOperationException(
@@ -151,7 +156,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
         Types.SourceBreakpoint[] coreBreakpoints = requested.stream().map(breakpoint -> {
             Types.SourceBreakpoint core = new Types.SourceBreakpoint(
-                    breakpoint.line(),
+                    breakpoint.debuggerLine(),
                     breakpoint.condition(),
                     breakpoint.hitCondition()
             );
@@ -456,6 +461,17 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             ));
             return;
         }
+        if (event instanceof Events.BreakpointEvent changed) {
+            Types.Breakpoint breakpoint = changed.breakpoint;
+            Breakpoint converted = new Breakpoint(
+                    breakpoint.id,
+                    breakpoint.line,
+                    breakpoint.verified,
+                    breakpoint.message
+            );
+            this.listeners.forEach(listener -> listener.breakpointChanged(converted));
+            return;
+        }
         if (event instanceof Events.OutputEvent output) {
             boolean error = output.category == Events.OutputEvent.Category.stderr;
             this.listeners.forEach(listener -> listener.output(output.output, error));
@@ -585,7 +601,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
         @Override
         public boolean supportsRealtimeBreakpointVerification() {
-            return true;
+            return false;
         }
 
         @Override

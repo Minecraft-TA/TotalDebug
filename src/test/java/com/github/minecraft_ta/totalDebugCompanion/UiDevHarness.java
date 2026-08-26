@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
@@ -10,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
@@ -776,6 +778,16 @@ public final class UiDevHarness {
         Path sampleArchive = mods.resolve("companion-ui-sample.jar");
         writeSampleArchive(sampleArchive);
         Path sample = writeSampleSource(root.resolve("decompiled-files").resolve("ThemeSample.java"));
+        String sampleSource = CodeView.readCode(sample);
+        int sampleEntryLine = sampleSource.substring(0, sampleSource.indexOf("double ratio"))
+                .split("\\n", -1).length;
+        DecompiledSource decompiledSample = new DecompiledSource(
+                sample,
+                "sample.ThemeSample",
+                sampleSource,
+                SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}),
+                null
+        );
         Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
         compileSampleSource(sample, sampleClasses);
         Path indexFile = root.resolve("classes.jindex");
@@ -797,6 +809,14 @@ public final class UiDevHarness {
         UiRenderScenario scenario = argument(args, "--scenario=")
                 .map(UiRenderScenario::parse)
                 .orElse(UiRenderScenario.MAIN);
+        if (scenario == UiRenderScenario.BREAKPOINT_EDITOR) {
+            CompanionApp.getDebuggerController().configureBreakpoint(
+                    decompiledSample.debugSource(),
+                    sampleEntryLine,
+                    "count > 2",
+                    ""
+            ).join();
+        }
         Path screenshot = Arrays.stream(args)
                 .filter(argument -> argument.startsWith("--screenshot="))
                 .map(argument -> Path.of(argument.substring("--screenshot=".length())))
@@ -810,6 +830,9 @@ public final class UiDevHarness {
                 || Arrays.asList(args).contains("--verify-hierarchy-row-layout")
                 || Arrays.asList(args).contains("--verify-search-everywhere-interactions");
         CompanionApp.configureLookAndFeel();
+        if (backgroundMode) {
+            javax.swing.PopupFactory.setSharedInstance(new OffscreenPopupFactory());
+        }
 
         System.out.println("UI dev harness data directory: " + root);
         System.out.println("theme: " + com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current().id());
@@ -819,7 +842,7 @@ public final class UiDevHarness {
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(
-                    sample,
+                    decompiledSample,
                     0,
                     EditorLocation.forRuntimeClass(
                             "com.github.minecraft_ta.totaldebug.ThemeSample",

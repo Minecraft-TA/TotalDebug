@@ -6,11 +6,15 @@ import com.google.gson.JsonParseException;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import java.awt.Rectangle;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +49,8 @@ public final class GlobalConfig {
     private volatile String themeId = "islands-dark";
     private volatile float editorFontSize = 14f;
     private volatile float uiFontSize = 13f;
+    private volatile Rectangle debuggerWindowBounds;
+    private volatile List<String> debuggerWatches = List.of();
     private volatile Path settingsFile;
     private volatile ScheduledExecutorService saveExecutor;
 
@@ -88,6 +94,34 @@ public final class GlobalConfig {
             return;
         }
         this.uiFontSize = value;
+        scheduleSave();
+    }
+
+    public Rectangle debuggerWindowBounds() {
+        Rectangle bounds = this.debuggerWindowBounds;
+        return bounds == null ? null : new Rectangle(bounds);
+    }
+
+    public void setDebuggerWindowBounds(Rectangle debuggerWindowBounds) {
+        Rectangle replacement = debuggerWindowBounds == null ? null : new Rectangle(debuggerWindowBounds);
+        Rectangle previous = this.debuggerWindowBounds;
+        if (Objects.equals(previous, replacement)) {
+            return;
+        }
+        this.debuggerWindowBounds = replacement;
+        scheduleSave();
+    }
+
+    public List<String> debuggerWatches() {
+        return this.debuggerWatches;
+    }
+
+    public void setDebuggerWatches(List<String> expressions) {
+        List<String> replacement = normalizeWatches(expressions);
+        if (replacement.equals(this.debuggerWatches)) {
+            return;
+        }
+        this.debuggerWatches = replacement;
         scheduleSave();
     }
 
@@ -139,10 +173,43 @@ public final class GlobalConfig {
         if (persisted.uiFontSize != null) {
             this.uiFontSize = clampFontSize(persisted.uiFontSize);
         }
+        if (persisted.debuggerWindowX != null
+                && persisted.debuggerWindowY != null
+                && persisted.debuggerWindowWidth != null
+                && persisted.debuggerWindowHeight != null
+                && persisted.debuggerWindowWidth > 0
+                && persisted.debuggerWindowHeight > 0) {
+            this.debuggerWindowBounds = new Rectangle(
+                    persisted.debuggerWindowX,
+                    persisted.debuggerWindowY,
+                    persisted.debuggerWindowWidth,
+                    persisted.debuggerWindowHeight
+            );
+        }
+        if (persisted.debuggerWatches != null) {
+            this.debuggerWatches = normalizeWatches(persisted.debuggerWatches);
+        }
     }
 
     private static float clampFontSize(float value) {
         return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value));
+    }
+
+    private static List<String> normalizeWatches(List<String> expressions) {
+        if (expressions == null || expressions.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String expression : expressions) {
+            if (expression == null) {
+                continue;
+            }
+            String trimmed = expression.trim();
+            if (!trimmed.isEmpty()) {
+                normalized.add(trimmed);
+            }
+        }
+        return List.copyOf(normalized);
     }
 
     private void scheduleSave() {
@@ -178,11 +245,17 @@ public final class GlobalConfig {
             return;
         }
 
+        Rectangle debuggerBounds = this.debuggerWindowBounds;
         PersistedSettings snapshot = new PersistedSettings(
                 SETTINGS_VERSION,
                 this.themeId,
                 this.editorFontSize,
-                this.uiFontSize
+                this.uiFontSize,
+                debuggerBounds == null ? null : debuggerBounds.x,
+                debuggerBounds == null ? null : debuggerBounds.y,
+                debuggerBounds == null ? null : debuggerBounds.width,
+                debuggerBounds == null ? null : debuggerBounds.height,
+                this.debuggerWatches
         );
 
         Path parent = target.toAbsolutePath().normalize().getParent();
@@ -210,7 +283,17 @@ public final class GlobalConfig {
     }
 
     /** On-disk shape. Boxed fields so an absent entry falls back to the in-memory default. */
-    private record PersistedSettings(int version, String theme, Float editorFontSize, Float uiFontSize) {
+    private record PersistedSettings(
+            int version,
+            String theme,
+            Float editorFontSize,
+            Float uiFontSize,
+            Integer debuggerWindowX,
+            Integer debuggerWindowY,
+            Integer debuggerWindowWidth,
+            Integer debuggerWindowHeight,
+            List<String> debuggerWatches
+    ) {
     }
 
     // ---------------------------------------------------------------- singleton

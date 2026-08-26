@@ -66,6 +66,10 @@ final class SourceDeclarationAnalyzerTest {
                 declaration.symbol().equals(new CodeSymbol.MethodSymbol(
                         "sample.Implementation", "run", "()V"
                 )) && SOURCE.charAt(declaration.anchorOffset() - 1) == '{'
+                        && SOURCE.substring(
+                        declaration.markerOffset(),
+                        declaration.endOffset()
+                ).contains("run()")
         ));
         assertEquals(5, declarations.size());
     }

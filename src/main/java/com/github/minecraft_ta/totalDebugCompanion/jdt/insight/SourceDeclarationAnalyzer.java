@@ -31,25 +31,45 @@ public final class SourceDeclarationAnalyzer {
         unit.accept(new ASTVisitor() {
             @Override
             public boolean visit(TypeDeclaration declaration) {
-                add(declaration.resolveBinding(), declaration.getName(), typeAnchor(declaration.getName(), declaration));
+                add(
+                        declaration.resolveBinding(),
+                        declaration.getName(),
+                        typeAnchor(declaration.getName(), declaration),
+                        declaration.getStartPosition() + declaration.getLength()
+                );
                 return true;
             }
 
             @Override
             public boolean visit(EnumDeclaration declaration) {
-                add(declaration.resolveBinding(), declaration.getName(), typeAnchor(declaration.getName(), declaration));
+                add(
+                        declaration.resolveBinding(),
+                        declaration.getName(),
+                        typeAnchor(declaration.getName(), declaration),
+                        declaration.getStartPosition() + declaration.getLength()
+                );
                 return true;
             }
 
             @Override
             public boolean visit(AnnotationTypeDeclaration declaration) {
-                add(declaration.resolveBinding(), declaration.getName(), typeAnchor(declaration.getName(), declaration));
+                add(
+                        declaration.resolveBinding(),
+                        declaration.getName(),
+                        typeAnchor(declaration.getName(), declaration),
+                        declaration.getStartPosition() + declaration.getLength()
+                );
                 return true;
             }
 
             @Override
             public boolean visit(RecordDeclaration declaration) {
-                add(declaration.resolveBinding(), declaration.getName(), typeAnchor(declaration.getName(), declaration));
+                add(
+                        declaration.resolveBinding(),
+                        declaration.getName(),
+                        typeAnchor(declaration.getName(), declaration),
+                        declaration.getStartPosition() + declaration.getLength()
+                );
                 return true;
             }
 
@@ -58,7 +78,12 @@ public final class SourceDeclarationAnalyzer {
                 int anchor = declaration.getBody() == null
                         ? declaration.getStartPosition() + declaration.getLength()
                         : declaration.getBody().getStartPosition() + 1;
-                add(declaration.resolveBinding(), declaration.getName(), anchor);
+                add(
+                        declaration.resolveBinding(),
+                        declaration.getName(),
+                        anchor,
+                        declaration.getStartPosition() + declaration.getLength()
+                );
                 return true;
             }
 
@@ -70,7 +95,12 @@ public final class SourceDeclarationAnalyzer {
                     int anchor = declaration.fragments().size() == 1
                             ? declarationAnchor
                             : fragment.getName().getStartPosition() + fragment.getName().getLength();
-                    add(fragment.resolveBinding(), fragment.getName(), anchor);
+                    add(
+                            fragment.resolveBinding(),
+                            fragment.getName(),
+                            anchor,
+                            declaration.getStartPosition() + declaration.getLength()
+                    );
                 }
                 return false;
             }
@@ -80,6 +110,7 @@ public final class SourceDeclarationAnalyzer {
                 add(
                         declaration.resolveVariable(),
                         declaration.getName(),
+                        declaration.getStartPosition() + declaration.getLength(),
                         declaration.getStartPosition() + declaration.getLength()
                 );
                 return true;
@@ -92,12 +123,23 @@ public final class SourceDeclarationAnalyzer {
                 return brace >= 0 && brace < searchEnd ? brace + 1 : searchStart;
             }
 
-            private void add(org.eclipse.jdt.core.dom.IBinding binding, SimpleName name, int anchor) {
+            private void add(
+                    org.eclipse.jdt.core.dom.IBinding binding,
+                    SimpleName name,
+                    int anchor,
+                    int endOffset
+            ) {
                 CodeSymbol symbol = JavaSymbolResolver.trySymbolForBinding(binding);
-                if (symbol == null || anchor < 0 || anchor > source.length()) {
+                if (symbol == null || anchor < 0 || anchor > source.length()
+                        || endOffset < name.getStartPosition() || endOffset > source.length()) {
                     return;
                 }
-                declarations.add(new SourceDeclaration(symbol, anchor, name.getStartPosition()));
+                declarations.add(new SourceDeclaration(
+                        symbol,
+                        anchor,
+                        name.getStartPosition(),
+                        endOffset
+                ));
             }
         });
         declarations.sort(Comparator.comparingInt(SourceDeclaration::anchorOffset));
