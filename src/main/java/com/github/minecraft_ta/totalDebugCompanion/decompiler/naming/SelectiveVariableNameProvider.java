@@ -56,14 +56,9 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                 .thenComparingInt(variable -> variable.version));
 
         Map<VarVersionPair, String> replacements = new LinkedHashMap<>();
+        Map<VarVersionPair, String> runtimeNames = new HashMap<>();
         for (VarVersionPair variable : variablesInSlotOrder) {
             if (variable.var == 0 && !this.method.hasModifier(CodeConstants.ACC_STATIC)) {
-                continue;
-            }
-
-            String mappedName = variable.var < parameterEnd ? this.parchmentNames.get(variable.var) : null;
-            if (mappedName != null) {
-                replacements.put(variable, mappedName);
                 continue;
             }
 
@@ -71,6 +66,17 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             if (existingName == null && variable.var < parameterEnd) {
                 existingName = this.methodParameterNames.get(variable.var);
             }
+            String runtimeName = existingName == null
+                    ? uniqueGeneratedName(localVariableNamesBySlot.get(variable.var))
+                    : existingName;
+            runtimeNames.put(variable, runtimeName == null ? variables.get(variable).b : runtimeName);
+
+            String mappedName = variable.var < parameterEnd ? this.parchmentNames.get(variable.var) : null;
+            if (mappedName != null) {
+                replacements.put(variable, mappedName);
+                continue;
+            }
+
             if (existingName == null && hasMeaningfulName(localVariableNamesBySlot.get(variable.var))) {
                 continue;
             }
@@ -81,6 +87,11 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                 replacements.put(variable, replacement);
             }
         }
+        runtimeNames.forEach((variable, runtimeName) -> VariableNameCapture.record(
+                this.method.getClassQualifiedName(),
+                runtimeName,
+                replacements.getOrDefault(variable, runtimeName)
+        ));
         return replacements.isEmpty() ? null : replacements;
     }
 
@@ -91,9 +102,12 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         }
         String mappedName = this.parchmentNames.get(index);
         if (mappedName != null) {
+            VariableNameCapture.record(this.method.getClassQualifiedName(), name, mappedName);
             return mappedName;
         }
-        return isGenerated(name) ? generatedParameterName(index, parameterType(index)) : name;
+        String renamed = isGenerated(name) ? generatedParameterName(index, parameterType(index)) : name;
+        VariableNameCapture.record(this.method.getClassQualifiedName(), name, renamed);
+        return renamed;
     }
 
     @Override
@@ -103,11 +117,14 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         }
         String mappedName = this.parchmentNames.get(index);
         if (mappedName != null) {
+            VariableNameCapture.record(this.method.getClassQualifiedName(), name, mappedName);
             return mappedName;
         }
-        return isGenerated(name)
+        String renamed = isGenerated(name)
                 ? generatedParameterName(index, ExprProcessor.getCastTypeName(type))
                 : name;
+        VariableNameCapture.record(this.method.getClassQualifiedName(), name, renamed);
+        return renamed;
     }
 
     @Override
@@ -141,6 +158,24 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
 
     private static boolean hasMeaningfulName(List<String> names) {
         return names != null && names.stream().anyMatch(name -> !isGenerated(name));
+    }
+
+    private static String uniqueGeneratedName(List<String> names) {
+        if (names == null) {
+            return null;
+        }
+        String unique = null;
+        for (String name : names) {
+            if (name == null || !GeneratedVariableNames.matches(name)) {
+                continue;
+            }
+            if (unique == null) {
+                unique = name;
+            } else if (!unique.equals(name)) {
+                return null;
+            }
+        }
+        return unique;
     }
 
     private static int parameterEnd(StructMethod method) {

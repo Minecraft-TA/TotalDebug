@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigat
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
+import net.minecraft.test.GeneratedNamesDebuggeeMain;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -48,6 +49,11 @@ public final class DebuggerScenarios {
                         "decompiled-lines",
                         "Vineflower decompiled-source line mapping",
                         DebuggerScenarios::decompiledSourceLineMapping
+                ),
+                new Scenario(
+                        "decompiled-variable-names",
+                        "decompiled parameter and local variable names",
+                        DebuggerScenarios::decompiledVariableNames
                 ),
                 new Scenario(
                         "frame-navigation",
@@ -301,6 +307,50 @@ public final class DebuggerScenarios {
 
             harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal(0, harness.awaitExit(), "method breakpoint debuggee exit code");
+        }
+    }
+
+    public static void decompiledVariableNames() throws Exception {
+        DecompilationResult decompiled = new VineflowerDecompiler().decompile(
+                GeneratedNamesDebuggeeMain.class.getName(),
+                classPathSource(GeneratedNamesDebuggeeMain.class.getClassLoader())
+        );
+        URI sourceUri = URI.create("decompiled:///" + GeneratedNamesDebuggeeMain.class.getName()
+                .replace('.', '/') + ".java");
+        DebugEngine.Source source = new DebugEngine.Source(
+                sourceUri,
+                GeneratedNamesDebuggeeMain.class.getName(),
+                decompiled.source(),
+                decompiled.lineMap(),
+                decompiled.variableNames()
+        );
+        int breakpointLine = lineContaining(decompiled.source(), "System.out.println");
+
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(GeneratedNamesDebuggeeMain.class, source)) {
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
+            harness.start();
+            DebugEngine.StoppedEvent stopped = harness.awaitStop("decompiled variable names");
+            DebugEngine.StackFrame frame = harness.firstFrame(stopped.threadId());
+            Map<String, DebugEngine.Variable> variables = harness.variables(frame);
+
+            check(variables.containsKey("s"), "Debugger did not expose Vineflower parameter name 's': "
+                    + variables.keySet());
+            check(variables.containsKey("i"), "Debugger did not expose Vineflower parameter name 'i': "
+                    + variables.keySet());
+            check(variables.containsKey("s1") && variables.containsKey("j"),
+                    "Debugger did not expose Vineflower local names: " + variables.keySet());
+            check(variables.keySet().stream().noneMatch(name -> name.startsWith("p_") || name.startsWith("var")),
+                    "Debugger leaked raw generated variable names: " + variables.keySet());
+            equal(
+                    "true",
+                    harness.engine().evaluate("i == 42 && j == i && s1 == s", frame.id())
+                            .thenApply(DebugEngine.EvaluationResult::value)
+                            .get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                    "displayed-name evaluation"
+            );
+
+            harness.engine().resume(stopped.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "generated-name debuggee exit code");
         }
     }
 

@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-line-maps-2";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-3";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
@@ -202,12 +202,18 @@ public final class CompanionDecompilationService implements AutoCloseable {
         if (this.closed) {
             throw new IOException("Decompilation service closed before source could be stored");
         }
-        Path path = this.sourceStore.write(binaryName, result.source(), result.lineMap());
+        Path path = this.sourceStore.write(
+                binaryName,
+                result.source(),
+                result.lineMap(),
+                result.variableNames()
+        );
         return new DecompiledSource(
                 path,
                 binaryName,
                 result.source(),
                 result.lineMap(),
+                result.variableNames(),
                 this.bytecodeSource.findClassOrigin(binaryName)
         );
     }
@@ -218,6 +224,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
                 binaryName,
                 java.nio.file.Files.readString(path, StandardCharsets.UTF_8),
                 this.sourceStore.readLineMap(binaryName),
+                this.sourceStore.readVariableNames(binaryName),
                 this.bytecodeSource.findClassOrigin(binaryName)
         );
     }

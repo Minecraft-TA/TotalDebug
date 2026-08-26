@@ -43,6 +43,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 final class SimpleJdiEvaluationProvider implements IEvaluationProvider {
+    private final VariableNameResolver variableNameResolver;
+
+    SimpleJdiEvaluationProvider(VariableNameResolver variableNameResolver) {
+        this.variableNameResolver = variableNameResolver;
+    }
+
     @Override
     public boolean isInEvaluation(ThreadReference thread) {
         return false;
@@ -52,7 +58,10 @@ final class SimpleJdiEvaluationProvider implements IEvaluationProvider {
     public CompletableFuture<Value> evaluate(String expression, ThreadReference thread, int depth) {
         try {
             StackFrame frame = thread.frame(depth);
-            return CompletableFuture.completedFuture(evaluate(parse(expression), new Context(frame, frame.thisObject())));
+            return CompletableFuture.completedFuture(evaluate(
+                    parse(expression),
+                    new Context(frame, frame.thisObject(), this.variableNameResolver)
+            ));
         } catch (Exception exception) {
             return CompletableFuture.failedFuture(exception);
         }
@@ -67,7 +76,7 @@ final class SimpleJdiEvaluationProvider implements IEvaluationProvider {
         try {
             return CompletableFuture.completedFuture(evaluate(
                     parse(expression),
-                    new Context(thread.frame(0), thisContext)
+                    new Context(thread.frame(0), thisContext, this.variableNameResolver)
             ));
         } catch (Exception exception) {
             return CompletableFuture.failedFuture(exception);
@@ -180,6 +189,24 @@ final class SimpleJdiEvaluationProvider implements IEvaluationProvider {
     private static Value simpleName(String name, Context context) throws Exception {
         if (context.frame() != null) {
             LocalVariable local = context.frame().visibleVariableByName(name);
+            if (local == null) {
+                String binaryName = context.frame().location().declaringType().name();
+                for (LocalVariable candidate : context.frame().visibleVariables()) {
+                    String displayedName = context.variableNameResolver().displayedName(
+                            binaryName,
+                            candidate.name()
+                    );
+                    if (!displayedName.equals(name)) {
+                        continue;
+                    }
+                    if (local != null) {
+                        throw new IllegalArgumentException(
+                                "Displayed variable name is ambiguous in the selected frame: " + name
+                        );
+                    }
+                    local = candidate;
+                }
+            }
             if (local != null) {
                 return context.frame().getValue(local);
             }
@@ -417,7 +444,16 @@ final class SimpleJdiEvaluationProvider implements IEvaluationProvider {
         return isFloating(number) ? vm.mirrorOf(number.doubleValue()) : vm.mirrorOf(number.longValue());
     }
 
-    private record Context(StackFrame frame, ObjectReference thisObject) {
+    @FunctionalInterface
+    interface VariableNameResolver {
+        String displayedName(String binaryName, String runtimeName);
+    }
+
+    private record Context(
+            StackFrame frame,
+            ObjectReference thisObject,
+            VariableNameResolver variableNameResolver
+    ) {
         private VirtualMachine vm() {
             if (this.frame != null) {
                 return this.frame.virtualMachine();

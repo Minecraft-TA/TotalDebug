@@ -40,11 +40,11 @@ public final class DebuggerWindowPreview {
                 frame(9, "run", "java.lang.Thread", 1583)
         );
         List<DebugEngine.Variable> variables = List.of(
-                variable("this", "Block{minecraft:stone}", "net.minecraft.world.level.block.Block", 11, 8),
-                variable("oldState", "BlockState{minecraft:stone}", "BlockState", 12, 6),
-                variable("newState", "BlockState{minecraft:air}", "BlockState", 13, 6),
-                variable("level", "ServerLevel[ServerLevel[world]]", "ServerLevel", 14, 42),
-                variable("pos", "BlockPos{x=14, y=64, z=-8}", "BlockPos", 15, 3),
+                variable("this", "Block@11", "Block", 11, 8),
+                variable("oldState", "BlockState@12", "BlockState", 12, 6),
+                variable("newState", "BlockState@13", "BlockState", 13, 6),
+                variable("level", "ServerLevel@14", "ServerLevel", 14, 42),
+                variable("pos", "BlockPos@15", "BlockPos", 15, 3),
                 variable("flags", "3", "int", 0, 0),
                 variable("depth", "512", "int", 0, 0)
         );

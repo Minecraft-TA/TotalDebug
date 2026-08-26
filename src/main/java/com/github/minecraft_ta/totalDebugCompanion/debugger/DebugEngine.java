@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 
 import java.net.URI;
 import java.time.Duration;
@@ -81,7 +82,13 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record Source(URI uri, String binaryName, String contents, SourceLineMap lineMap) {
+    record Source(
+            URI uri,
+            String binaryName,
+            String contents,
+            SourceLineMap lineMap,
+            SourceVariableNames variableNames
+    ) {
         public Source {
             Objects.requireNonNull(uri, "uri");
             if (!uri.isAbsolute()) {
@@ -92,10 +99,15 @@ public interface DebugEngine extends AutoCloseable {
             }
             Objects.requireNonNull(contents, "contents");
             Objects.requireNonNull(lineMap, "lineMap");
+            Objects.requireNonNull(variableNames, "variableNames");
+        }
+
+        public Source(URI uri, String binaryName, String contents, SourceLineMap lineMap) {
+            this(uri, binaryName, contents, lineMap, SourceVariableNames.empty());
         }
 
         public Source(URI uri, String binaryName, String contents) {
-            this(uri, binaryName, contents, SourceLineMap.empty());
+            this(uri, binaryName, contents, SourceLineMap.empty(), SourceVariableNames.empty());
         }
     }
 

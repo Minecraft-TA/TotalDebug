@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
 import com.google.gson.JsonObject;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.microsoft.java.debug.core.DebugSettings;
 import com.microsoft.java.debug.core.JavaBreakpointLocation;
 import com.microsoft.java.debug.core.adapter.DebugAdapter;
@@ -43,6 +44,8 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final AtomicInteger requestSequence = new AtomicInteger();
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
+    private final Map<Integer, SourceVariableNames> variableNamesByFrame = new ConcurrentHashMap<>();
+    private final Map<Integer, SourceVariableNames> variableNamesByScope = new ConcurrentHashMap<>();
     private final SourceRegistry sourceRegistry;
     private final IDebugAdapter adapter;
 
@@ -60,7 +63,10 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 (IVirtualMachineManagerProvider) Bootstrap::virtualMachineManager
         );
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
-        providers.registerProvider(IEvaluationProvider.class, new SimpleJdiEvaluationProvider());
+        providers.registerProvider(
+                IEvaluationProvider.class,
+                new SimpleJdiEvaluationProvider(this.sourceRegistry::displayedVariableName)
+        );
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
         providers.registerProvider(ICompletionsProvider.class, new NoCompletionsProvider());
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
@@ -219,11 +225,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 .thenApply(body -> {
                     List<StackFrame> result = new ArrayList<>(body.stackFrames.length);
                     for (Types.StackFrame frame : body.stackFrames) {
+                        URI uri = sourceUri(frame.source);
+                        SourceVariableNames variableNames = this.sourceRegistry.variableNames(uri);
+                        if (!variableNames.isEmpty()) {
+                            this.variableNamesByFrame.put(frame.id, variableNames);
+                        }
                         result.add(new StackFrame(
                                 frame.id,
                                 frame.name,
                                 this.sourceRegistry.binaryName(frame.source),
-                                sourceUri(frame.source),
+                                uri,
                                 frame.line,
                                 frame.column
                         ));
@@ -241,7 +252,14 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return request(Requests.Command.SCOPES, arguments, Responses.ScopesResponseBody.class)
                 .thenApply(body -> {
                     List<Scope> result = new ArrayList<>(body.scopes.length);
+                    SourceVariableNames variableNames = this.variableNamesByFrame.getOrDefault(
+                            frameId,
+                            SourceVariableNames.empty()
+                    );
                     for (Types.Scope scope : body.scopes) {
+                        if (!scope.expensive && !variableNames.isEmpty()) {
+                            this.variableNamesByScope.put(scope.variablesReference, variableNames);
+                        }
                         result.add(new Scope(scope.name, scope.variablesReference, scope.expensive));
                     }
                     return List.copyOf(result);
@@ -257,9 +275,13 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return request(Requests.Command.VARIABLES, arguments, Responses.VariablesResponseBody.class)
                 .thenApply(body -> {
                     List<Variable> result = new ArrayList<>(body.variables.length);
+                    SourceVariableNames variableNames = this.variableNamesByScope.getOrDefault(
+                            variablesReference,
+                            SourceVariableNames.empty()
+                    );
                     for (Types.Variable variable : body.variables) {
                         result.add(new Variable(
-                                variable.name,
+                                variableNames.displayedName(variable.name),
                                 variable.value,
                                 variable.type,
                                 variable.variablesReference,
@@ -444,6 +466,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.StoppedEvent stopped) {
+            clearVariableNameContexts();
             this.state.set(State.STOPPED);
             StoppedEvent converted = new StoppedEvent(
                     stopped.reason,
@@ -454,6 +477,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.ContinuedEvent continued) {
+            clearVariableNameContexts();
             this.state.set(State.RUNNING);
             this.listeners.forEach(listener -> listener.continued(
                     continued.threadId,
@@ -478,11 +502,17 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.ExitedEvent || event instanceof Events.TerminatedEvent) {
+            clearVariableNameContexts();
             State previous = this.state.getAndSet(State.TERMINATED);
             if (previous != State.TERMINATED && previous != State.CLOSED) {
                 this.listeners.forEach(Listener::terminated);
             }
         }
+    }
+
+    private void clearVariableNameContexts() {
+        this.variableNamesByFrame.clear();
+        this.variableNamesByScope.clear();
     }
 
     private void requireState(State... allowed) {
@@ -602,6 +632,19 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         @Override
         public boolean supportsRealtimeBreakpointVerification() {
             return false;
+        }
+
+        private SourceVariableNames variableNames(URI sourceUri) {
+            if (sourceUri == null) {
+                return SourceVariableNames.empty();
+            }
+            Source source = this.sourcesByUri.get(sourceUri.normalize());
+            return source == null ? SourceVariableNames.empty() : source.variableNames();
+        }
+
+        private String displayedVariableName(String binaryName, String runtimeName) {
+            Source source = sourceForClass(binaryName);
+            return source == null ? runtimeName : source.variableNames().displayedName(runtimeName);
         }
 
         @Override

@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
@@ -786,6 +787,7 @@ public final class UiDevHarness {
                 "sample.ThemeSample",
                 sampleSource,
                 SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}),
+                SourceVariableNames.empty(),
                 null
         );
         Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));

@@ -124,8 +124,8 @@ public final class DebuggerPanel extends JPanel {
         this.inspectorTabs.addTab("Variables", scroll(this.variables));
         this.inspectorTabs.addTab("Watches", this.watchesPanel);
 
-        JSplitPane split = new JSplitPane(
-                JSplitPane.HORIZONTAL_SPLIT,
+        JSplitPane split = new InitialProportionSplitPane(
+                0.42,
                 createFramesPanel(),
                 this.inspectorTabs
         );
@@ -136,7 +136,6 @@ public final class DebuggerPanel extends JPanel {
         add(split, BorderLayout.CENTER);
 
         this.controller.addListener(this.listener);
-        SwingUtilities.invokeLater(() -> split.setDividerLocation(0.42));
     }
 
     private JComponent createToolbar() {
@@ -683,6 +682,8 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private static final class DebugValueRenderer extends DefaultTreeCellRenderer {
+        private final PrimarySecondaryLabel valueLabel = new PrimarySecondaryLabel();
+
         @Override
         public Component getTreeCellRendererComponent(
                 JTree tree,
@@ -707,15 +708,25 @@ public final class DebuggerPanel extends JPanel {
             }
             DebugValue debugValue = debugValue(node.getUserObject());
             if (debugValue != null) {
-                setText(debugValue.name() + " = " + debugValue.value()
-                        + (debugValue.type().isBlank() ? "" : "    " + debugValue.type()));
-                setToolTipText(debugValue.type().isBlank()
+                String visibleValue = withoutObjectIdentity(debugValue.value(), debugValue.type());
+                String secondary = visibleValue.equals(debugValue.type()) ? "" : debugValue.type();
+                this.valueLabel.configure(
+                        new PrimarySecondaryText(
+                                debugValue.name() + " = " + visibleValue,
+                                secondary
+                        ),
+                        debugValue.indexedVariables() > 0 || debugValue.type().endsWith("[]")
+                                ? Icons.ARRAY
+                                : debugValue.variablesReference() > 0 ? Icons.VALUE : Icons.PRIMITIVE,
+                        tree.getFont(),
+                        selected,
+                        getTextSelectionColor(),
+                        getBackgroundSelectionColor()
+                );
+                this.valueLabel.setToolTipText(debugValue.type().isBlank()
                         ? debugValue.value()
                         : debugValue.type() + " · " + debugValue.value());
-                setIcon(debugValue.indexedVariables() > 0 || debugValue.type().endsWith("[]")
-                        ? Icons.ARRAY
-                        : debugValue.variablesReference() > 0 ? Icons.VALUE : Icons.PRIMITIVE);
-                return component;
+                return this.valueLabel;
             }
             switch (node.getUserObject()) {
                 case ExpressionStatus status -> {
@@ -736,6 +747,29 @@ public final class DebuggerPanel extends JPanel {
                 }
             }
             return component;
+        }
+
+        private static String withoutObjectIdentity(String value, String type) {
+            if (value.isBlank() || type.isBlank()) {
+                return value;
+            }
+            int separator = value.lastIndexOf('@');
+            if (separator <= 0 || separator == value.length() - 1) {
+                return value;
+            }
+            for (int index = separator + 1; index < value.length(); index++) {
+                if (!Character.isDigit(value.charAt(index))) {
+                    return value;
+                }
+            }
+            String identityOwner = value.substring(0, separator);
+            String arrayElementType = type;
+            while (arrayElementType.endsWith("[]")) {
+                arrayElementType = arrayElementType.substring(0, arrayElementType.length() - 2);
+            }
+            return identityOwner.equals(type) || identityOwner.startsWith(arrayElementType + "[")
+                    ? identityOwner
+                    : value;
         }
     }
 
@@ -812,6 +846,29 @@ public final class DebuggerPanel extends JPanel {
         protected void paintComponent(Graphics graphics) {
             setForeground(ThemeColors.mutedText());
             super.paintComponent(graphics);
+        }
+    }
+
+    private static final class InitialProportionSplitPane extends JSplitPane {
+        private final double initialProportion;
+        private boolean initialized;
+
+        private InitialProportionSplitPane(
+                double initialProportion,
+                Component leftComponent,
+                Component rightComponent
+        ) {
+            super(JSplitPane.HORIZONTAL_SPLIT, leftComponent, rightComponent);
+            this.initialProportion = initialProportion;
+        }
+
+        @Override
+        public void doLayout() {
+            if (!this.initialized && getWidth() > 0) {
+                setDividerLocation(this.initialProportion);
+                this.initialized = true;
+            }
+            super.doLayout();
         }
     }
 }

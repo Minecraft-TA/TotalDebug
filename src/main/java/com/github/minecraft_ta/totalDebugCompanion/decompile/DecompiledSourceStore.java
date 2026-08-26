@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -18,6 +20,8 @@ import java.util.stream.Stream;
 final class DecompiledSourceStore {
     private static final int LINE_MAP_MAGIC = 0x54444C4D;
     private static final int LINE_MAP_VERSION = 1;
+    private static final int VARIABLE_NAMES_MAGIC = 0x5444564E;
+    private static final int VARIABLE_NAMES_VERSION = 1;
     private static final String DIRECTORY_NAME = "decompiled-files";
     private static final String STATE_FILE_NAME = "decompiled-files.properties";
     private final Path directory;
@@ -47,7 +51,9 @@ final class DecompiledSourceStore {
 
     Path find(String binaryName) {
         Path sourceFile = sourceFile(binaryName);
-        return Files.isRegularFile(sourceFile) && Files.isRegularFile(lineMapFile(binaryName))
+        return Files.isRegularFile(sourceFile)
+                && Files.isRegularFile(lineMapFile(binaryName))
+                && Files.isRegularFile(variableNamesFile(binaryName))
                 ? sourceFile
                 : null;
     }
@@ -85,18 +91,69 @@ final class DecompiledSourceStore {
         }
     }
 
-    Path write(String binaryName, String source, SourceLineMap lineMap) throws IOException {
+    SourceVariableNames readVariableNames(String binaryName) throws IOException {
+        Path path = variableNamesFile(binaryName);
+        if (!Files.isRegularFile(path)) {
+            throw new IOException("No decompiled source variable names exist for " + binaryName);
+        }
+        try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
+            if (input.readInt() != VARIABLE_NAMES_MAGIC) {
+                throw new IOException("Invalid decompiled variable-name magic: " + path);
+            }
+            int version = input.readInt();
+            if (version != VARIABLE_NAMES_VERSION) {
+                throw new IOException("Unsupported decompiled variable-name version " + version + ": " + path);
+            }
+            int count = input.readInt();
+            if (count < 0) {
+                throw new IOException("Invalid decompiled variable-name count " + count + ": " + path);
+            }
+            Map<String, String> mappings = new java.util.LinkedHashMap<>(count);
+            for (int index = 0; index < count; index++) {
+                String runtimeName = input.readUTF();
+                String previous = mappings.put(runtimeName, input.readUTF());
+                if (previous != null) {
+                    throw new IOException("Duplicate runtime variable name " + runtimeName + ": " + path);
+                }
+            }
+            if (input.read() != -1) {
+                throw new IOException("Trailing data in decompiled variable names: " + path);
+            }
+            try {
+                return SourceVariableNames.of(mappings);
+            } catch (IllegalArgumentException exception) {
+                throw new IOException("Invalid decompiled variable names: " + path, exception);
+            }
+        }
+    }
+
+    Path write(
+            String binaryName,
+            String source,
+            SourceLineMap lineMap,
+            SourceVariableNames variableNames
+    ) throws IOException {
         Objects.requireNonNull(lineMap, "lineMap");
+        Objects.requireNonNull(variableNames, "variableNames");
         Path target = sourceFile(binaryName);
         Path mappingTarget = lineMapFile(binaryName);
+        Path variableNamesTarget = variableNamesFile(binaryName);
         Path stagedSource = Files.createTempFile(this.directory, ".decompiled-", ".tmp");
         Path stagedMapping = Files.createTempFile(this.directory, ".decompiled-lines-", ".tmp");
+        Path stagedVariableNames = Files.createTempFile(this.directory, ".decompiled-names-", ".tmp");
         try {
             Files.writeString(stagedSource, source, StandardCharsets.UTF_8);
             writeLineMap(stagedMapping, lineMap);
+            writeVariableNames(stagedVariableNames, variableNames);
             Files.move(
                     stagedMapping,
                     mappingTarget,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+            Files.move(
+                    stagedVariableNames,
+                    variableNamesTarget,
                     StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING
             );
@@ -109,6 +166,7 @@ final class DecompiledSourceStore {
         } finally {
             Files.deleteIfExists(stagedSource);
             Files.deleteIfExists(stagedMapping);
+            Files.deleteIfExists(stagedVariableNames);
         }
         return target;
     }
@@ -119,6 +177,10 @@ final class DecompiledSourceStore {
 
     private Path lineMapFile(String binaryName) {
         return resolveFile(binaryName, ".lines");
+    }
+
+    private Path variableNamesFile(String binaryName) {
+        return resolveFile(binaryName, ".names");
     }
 
     private Path resolveFile(String binaryName, String extension) {
@@ -137,6 +199,18 @@ final class DecompiledSourceStore {
             output.writeInt(mapping.length);
             for (int line : mapping) {
                 output.writeInt(line);
+            }
+        }
+    }
+
+    private static void writeVariableNames(Path path, SourceVariableNames variableNames) throws IOException {
+        try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
+            output.writeInt(VARIABLE_NAMES_MAGIC);
+            output.writeInt(VARIABLE_NAMES_VERSION);
+            output.writeInt(variableNames.mappings().size());
+            for (Map.Entry<String, String> mapping : variableNames.mappings().entrySet()) {
+                output.writeUTF(mapping.getKey());
+                output.writeUTF(mapping.getValue());
             }
         }
     }

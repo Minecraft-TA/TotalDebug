@@ -376,7 +376,8 @@ public final class DebuggerTestHarness implements AutoCloseable {
                 URI.create("decompiled:///" + binaryName.replace('.', '/') + ".java"),
                 binaryName,
                 result.source(),
-                result.lineMap()
+                result.lineMap(),
+                result.variableNames()
         );
     }
 

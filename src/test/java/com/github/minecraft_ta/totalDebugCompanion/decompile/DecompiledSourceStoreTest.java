@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -17,7 +18,8 @@ class DecompiledSourceStoreTest {
         SourceLineMap lineMap = SourceLineMap.fromOriginalToDisplayed(new int[]{20, 8, 10, 4, 21, 8});
         DecompiledSourceStore store = DecompiledSourceStore.open(directory, "runtime", "format");
 
-        Path source = store.write("sample.Target", "class Target {}", lineMap);
+        SourceVariableNames variableNames = SourceVariableNames.of(java.util.Map.of("p_1_", "level"));
+        Path source = store.write("sample.Target", "class Target {}", lineMap, variableNames);
 
         assertEquals(source, store.find("sample.Target"));
         assertEquals("class Target {}", Files.readString(source));
@@ -25,6 +27,8 @@ class DecompiledSourceStoreTest {
                 .readLineMap("sample.Target");
         assertArrayEquals(new int[]{10, 4, 20, 8, 21, 8}, restored.originalToDisplayed());
         assertArrayEquals(new int[]{4, 10, 8, 20, 8, 21}, restored.displayedToOriginal());
+        assertEquals(variableNames, DecompiledSourceStore.open(directory, "runtime", "format")
+                .readVariableNames("sample.Target"));
     }
 
     @Test

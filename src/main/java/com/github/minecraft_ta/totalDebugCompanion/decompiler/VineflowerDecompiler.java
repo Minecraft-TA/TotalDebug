@@ -2,7 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.decompiler;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.naming.SelectiveVariableNamingPlugin;
+import com.github.minecraft_ta.totalDebugCompanion.decompiler.naming.VariableNameCapture;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import org.jetbrains.java.decompiler.api.Decompiler;
 import org.jetbrains.java.decompiler.api.plugin.PluginSource;
 import org.jetbrains.java.decompiler.main.extern.IContextSource;
@@ -56,21 +58,25 @@ public final class VineflowerDecompiler implements JavaDecompiler {
         InMemoryResultSaver resultSaver = new InMemoryResultSaver();
         DiagnosticLogger logger = new DiagnosticLogger();
 
-        try {
-            Decompiler.builder()
-                    .inputs(new TargetClassContext(internalName, targetClasses, bytecodeSource))
-                    .libraries(new BytecodeLookupContext(bytecodeSource))
-                    .output(resultSaver)
-                    .logger(logger)
-                    .option(IFernflowerPreferences.THREADS, "1")
-                    .option(IFernflowerPreferences.INCLUDE_JAVA_RUNTIME, "current")
-                    .option(IFernflowerPreferences.DECOMPILER_COMMENTS, true)
-                    .option(IFernflowerPreferences.DUMP_EXCEPTION_ON_ERROR, true)
-                    .option(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING, true)
-                    .build()
-                    .decompile();
-        } catch (RuntimeException failure) {
-            throw new DecompilationException("Vineflower failed to decompile " + binaryName, failure);
+        SourceVariableNames variableNames;
+        try (VariableNameCapture capture = VariableNameCapture.open(internalName)) {
+            try {
+                Decompiler.builder()
+                        .inputs(new TargetClassContext(internalName, targetClasses, bytecodeSource))
+                        .libraries(new BytecodeLookupContext(bytecodeSource))
+                        .output(resultSaver)
+                        .logger(logger)
+                        .option(IFernflowerPreferences.THREADS, "1")
+                        .option(IFernflowerPreferences.INCLUDE_JAVA_RUNTIME, "current")
+                        .option(IFernflowerPreferences.DECOMPILER_COMMENTS, true)
+                        .option(IFernflowerPreferences.DUMP_EXCEPTION_ON_ERROR, true)
+                        .option(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING, true)
+                        .build()
+                        .decompile();
+            } catch (RuntimeException failure) {
+                throw new DecompilationException("Vineflower failed to decompile " + binaryName, failure);
+            }
+            variableNames = capture.result();
         }
 
         String source = resultSaver.sourceFor(binaryName);
@@ -88,7 +94,8 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 source,
                 status,
                 diagnostics,
-                SourceLineMap.fromOriginalToDisplayed(resultSaver.mappingFor(binaryName))
+                SourceLineMap.fromOriginalToDisplayed(resultSaver.mappingFor(binaryName)),
+                variableNames
         );
     }
 
