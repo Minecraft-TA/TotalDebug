@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 import com.formdev.flatlaf.util.StringUtils;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.CodeViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
@@ -12,11 +14,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 
 public class CodeView implements IEditorPanel {
 
     private final Path path;
     private final EditorLocation location;
+    private final DebugEngine.Source debugSource;
     private final CodeViewPanel codeViewPanel;
     private volatile CompletableFuture<Void> ready = CompletableFuture.completedFuture(null);
 
@@ -27,8 +31,17 @@ public class CodeView implements IEditorPanel {
     public CodeView(Path path, int offset, EditorLocation location) {
         this.path = path;
         this.location = location;
+        this.debugSource = null;
         this.codeViewPanel = new CodeViewPanel(this);
         reload(offset);
+    }
+
+    public CodeView(DecompiledSource source, int offset, EditorLocation location) {
+        this.path = source.path();
+        this.location = location;
+        this.debugSource = source.debugSource();
+        this.codeViewPanel = new CodeViewPanel(this);
+        setCode(source.contents(), offset);
     }
 
     public CompletableFuture<Void> reload(int offset) {
@@ -46,6 +59,17 @@ public class CodeView implements IEditorPanel {
         return task;
     }
 
+    private void setCode(String code, int offset) {
+        CompletableFuture<Void> task = CompletableFuture.runAsync(
+                () -> {
+                    this.codeViewPanel.setCode(code);
+                    this.codeViewPanel.centerViewportOnOffset(offset);
+                },
+                SwingUtilities::invokeLater
+        );
+        this.ready = task;
+    }
+
     @Override
     public CompletableFuture<Void> ready() {
         return this.ready;
@@ -59,6 +83,10 @@ public class CodeView implements IEditorPanel {
             throw new IllegalArgumentException();
 
         this.codeViewPanel.centerViewportOnOffset(offset);
+    }
+
+    public void showExecutionLine(int displayedLine) {
+        this.codeViewPanel.showExecutionLine(displayedLine);
     }
 
     @Override
@@ -99,6 +127,10 @@ public class CodeView implements IEditorPanel {
 
     public Path getPath() {
         return this.path;
+    }
+
+    public Optional<DebugEngine.Source> getDebugSource() {
+        return Optional.ofNullable(this.debugSource);
     }
 
     public static String readCode(Path path) {

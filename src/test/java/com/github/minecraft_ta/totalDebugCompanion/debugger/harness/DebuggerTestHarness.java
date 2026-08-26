@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.harness;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.LocalJvmDebugTargetResolver;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.MicrosoftJavaDebugEngine;
 
 import java.io.BufferedReader;
@@ -33,26 +35,26 @@ public final class DebuggerTestHarness implements AutoCloseable {
     private final Path sourcePath;
     private final String sourceText;
     private final URI sourceUri;
+    private final DebugEngine.Source source;
     private final Process process;
     private final BufferedReader output;
-    private final MicrosoftJavaDebugEngine engine;
     private final LinkedBlockingQueue<DebugEngine.StoppedEvent> stops = new LinkedBlockingQueue<>();
-    private final CompletableFuture<Void> termination = new CompletableFuture<>();
+    private MicrosoftJavaDebugEngine engine;
+    private CompletableFuture<Void> termination;
 
     private DebuggerTestHarness(
             Path sourcePath,
-            URI sourceUri,
-            String sourceText,
+            DebugEngine.Source source,
             Process process,
-            BufferedReader output,
-            MicrosoftJavaDebugEngine engine
+            BufferedReader output
     ) {
         this.sourcePath = sourcePath;
-        this.sourceText = sourceText;
-        this.sourceUri = sourceUri;
+        this.sourceText = source.contents();
+        this.sourceUri = source.uri();
+        this.source = source;
         this.process = process;
         this.output = output;
-        this.engine = engine;
+        installEngine();
     }
 
     public static DebuggerTestHarness launch(Class<?> mainClass) throws Exception {
@@ -69,13 +71,14 @@ public final class DebuggerTestHarness implements AutoCloseable {
         return launch(mainClass, source, true);
     }
 
-    public static DebuggerTestHarness launchRunning(Class<?> mainClass) throws Exception {
+    public static DebuggerTestHarness launchRunningByProcessId(Class<?> mainClass) throws Exception {
         Path sourcePath = sourcePath(mainClass);
         String sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
         return launch(
                 mainClass,
                 new DebugEngine.Source(sourcePath.toUri(), mainClass.getName(), sourceText),
-                false
+                false,
+                true
         );
     }
 
@@ -84,36 +87,36 @@ public final class DebuggerTestHarness implements AutoCloseable {
             DebugEngine.Source source,
             boolean initiallySuspended
     ) throws Exception {
+        return launch(mainClass, source, initiallySuspended, false);
+    }
+
+    private static DebuggerTestHarness launch(
+            Class<?> mainClass,
+            DebugEngine.Source source,
+            boolean initiallySuspended,
+            boolean attachByProcessId
+    ) throws Exception {
         Path sourcePath = sourcePath(mainClass);
         Process process = launchDebuggee(mainClass, initiallySuspended);
         BufferedReader output = new BufferedReader(new InputStreamReader(
                 process.getInputStream(),
                 StandardCharsets.UTF_8
         ));
-        MicrosoftJavaDebugEngine engine = new MicrosoftJavaDebugEngine();
         DebuggerTestHarness harness = new DebuggerTestHarness(
                 sourcePath,
-                source.uri(),
-                source.contents(),
+                source,
                 process,
-                output,
-                engine
+                output
         );
         try {
-            engine.addListener(new DebugEngine.Listener() {
-                @Override
-                public void stopped(DebugEngine.StoppedEvent event) {
-                    harness.stops.add(event);
-                }
-
-                @Override
-                public void terminated() {
-                    harness.termination.complete(null);
-                }
-            });
-            engine.registerSource(source);
             int debugPort = harness.readDebugPort();
-            engine.attach(DebugEngine.Target.local(debugPort, OPERATION_TIMEOUT))
+            DebugEngine.Target target = attachByProcessId
+                    ? new LocalJvmDebugTargetResolver().resolve(
+                            new DebugTargetDescriptor("debuggee", mainClass.getSimpleName(), process.pid()),
+                            OPERATION_TIMEOUT
+                    )
+                    : DebugEngine.Target.local(debugPort, OPERATION_TIMEOUT);
+            harness.engine.attach(target)
                     .get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
             return harness;
         } catch (Throwable failure) {
@@ -163,6 +166,17 @@ public final class DebuggerTestHarness implements AutoCloseable {
 
     public void start() throws Exception {
         this.engine.start().get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+    }
+
+    public void reattachByProcessId() throws Exception {
+        this.engine.close();
+        this.stops.clear();
+        installEngine();
+        DebugEngine.Target target = new LocalJvmDebugTargetResolver().resolve(
+                new DebugTargetDescriptor("debuggee", this.source.binaryName(), this.process.pid()),
+                OPERATION_TIMEOUT
+        );
+        this.engine.attach(target).get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
     }
 
     public DebugEngine.StoppedEvent awaitStop(String operation) throws InterruptedException {
@@ -297,6 +311,25 @@ public final class DebuggerTestHarness implements AutoCloseable {
             }
         }
         return result;
+    }
+
+    private void installEngine() {
+        MicrosoftJavaDebugEngine replacement = new MicrosoftJavaDebugEngine();
+        CompletableFuture<Void> engineTermination = new CompletableFuture<>();
+        this.engine = replacement;
+        this.termination = engineTermination;
+        replacement.addListener(new DebugEngine.Listener() {
+            @Override
+            public void stopped(DebugEngine.StoppedEvent event) {
+                stops.add(event);
+            }
+
+            @Override
+            public void terminated() {
+                engineTermination.complete(null);
+            }
+        });
+        replacement.registerSource(this.source);
     }
 
     private int readDebugPort() throws Exception {

@@ -10,10 +10,13 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
@@ -80,6 +83,7 @@ public final class CompanionApp {
     private static volatile String activeRuntimeSignature;
     private static final List<PendingClassOpen> pendingClassOpens = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
+    private static DebuggerSessionController debuggerController;
     private static volatile boolean uiStarted;
 
     private record PendingClassOpen(String binaryName, int targetType, String targetIdentifier) {
@@ -123,9 +127,10 @@ public final class CompanionApp {
             configureLookAndFeel();
             runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
+            debuggerController = new DebuggerSessionController();
             restoreProfile();
 
-            session = new CompanionSession(token, CompanionApp::attach, new CompanionSession.Listener() {
+            session = new CompanionSession(token, CompanionApp::activateSessionProfile, new CompanionSession.Listener() {
                 @Override
                 public void connecting() {
                     updateUiState("Connecting");
@@ -139,6 +144,7 @@ public final class CompanionApp {
                 @Override
                 public void disconnected() {
                     updateUiState("Offline");
+                    debuggerController.clearTarget();
                     CompanionMcpServer current = mcpServer;
                     if (current != null) {
                         current.runtimeDisconnected();
@@ -148,6 +154,11 @@ public final class CompanionApp {
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
+                }
+
+                @Override
+                public void debugTarget(DebugTargetMessage message) {
+                    handleDebugTarget(message);
                 }
             });
             SERVER = session.server();
@@ -172,6 +183,9 @@ public final class CompanionApp {
             }
             if (runtimeIndexService != null) {
                 runtimeIndexService.close();
+            }
+            if (debuggerController != null) {
+                debuggerController.close();
             }
             closeDecompilationService();
             closeReferenceSearchService();
@@ -198,7 +212,7 @@ public final class CompanionApp {
         }
     }
 
-    private static synchronized void attach(
+    private static synchronized void activateSessionProfile(
             com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage hello,
             long capabilities
     ) throws IOException {
@@ -209,6 +223,17 @@ public final class CompanionApp {
             throw new IOException("Invalid Minecraft profile", exception);
         }
         activateProfile(requested, true);
+    }
+
+    private static void handleDebugTarget(DebugTargetMessage message) {
+        if (message.targetKind() != DebugTargetMessage.LOCAL_JVM) {
+            throw new IllegalArgumentException("Unknown debug target kind: " + message.targetKind());
+        }
+        debuggerController.acceptTarget(new DebugTargetDescriptor(
+                message.targetId(),
+                message.displayName(),
+                message.processId()
+        ));
     }
 
     private static void restoreProfile() {
@@ -580,6 +605,19 @@ public final class CompanionApp {
         service.openClass(binaryName, targetType, targetIdentifier);
     }
 
+    public static void openDebugFrame(com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame) {
+        if (frame.sourceUri() == null || frame.line() < 1) {
+            return;
+        }
+        DebuggerSessionController controller = getDebuggerController();
+        com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.Source source =
+                controller.source(frame.sourceUri());
+        CompanionDecompilationService service = decompilationService;
+        if (source != null && service != null) {
+            service.openClassAtLine(source.binaryName(), frame.line());
+        }
+    }
+
     public static Path getRootPath() {
         return requireProfile().dataDirectory();
     }
@@ -618,6 +656,15 @@ public final class CompanionApp {
             throw new IllegalStateException("Decompilation is unavailable");
         }
         return service;
+    }
+
+    public static synchronized DebuggerSessionController getDebuggerController() {
+        DebuggerSessionController controller = debuggerController;
+        if (controller == null) {
+            controller = new DebuggerSessionController();
+            debuggerController = controller;
+        }
+        return controller;
     }
 
     public static RuntimeIndexService.Status getRuntimeIndexStatus() {

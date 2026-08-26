@@ -46,7 +46,7 @@ public final class DebuggerScenarios {
                 ),
                 new Scenario(
                         "late-attach",
-                        "late attach to a running JVM",
+                        "attach, detach and reattach to a running JVM by published process id",
                         DebuggerScenarios::lateAttach
                 )
         );
@@ -220,9 +220,12 @@ public final class DebuggerScenarios {
     }
 
     public static void lateAttach() throws Exception {
-        try (DebuggerTestHarness harness = DebuggerTestHarness.launchRunning(LateAttachDebuggeeMain.class)) {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launchRunningByProcessId(LateAttachDebuggeeMain.class)) {
             int breakpointLine = harness.lineContaining("DEBUG_LATE_ATTACH");
             equal("ready", harness.readOutputLine("late-attach readiness"), "late-attach readiness output");
+            harness.engine().disconnect().get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(DebugEngine.State.TERMINATED, harness.engine().state(), "state after first PID detach");
+            harness.reattachByProcessId();
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
             harness.start();
             harness.closeInput();

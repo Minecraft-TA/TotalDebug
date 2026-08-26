@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridR
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ReceiveDataStateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.UpdateFollowPlayerStateMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.OpenClassMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.BlockPacketMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.CapturePacketMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.ChannelListMessage;
@@ -60,6 +61,9 @@ public final class CompanionSession implements AutoCloseable {
         }
 
         default void runtimeInventory(RuntimeInventoryMessage message) {
+        }
+
+        default void debugTarget(DebugTargetMessage message) {
         }
     }
 
@@ -161,6 +165,11 @@ public final class CompanionSession implements AutoCloseable {
                 CompanionProtocol.RETRY_RUNTIME_INVENTORY,
                 RetryRuntimeInventoryMessage.class
         );
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.DEBUG_TARGET,
+                DebugTargetMessage.class,
+                DebugTargetMessage::new
+        );
     }
 
     private void registerHandlers() {
@@ -169,6 +178,11 @@ public final class CompanionSession implements AutoCloseable {
                 CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY,
                 "RuntimeInventory",
                 () -> this.listener.runtimeInventory(message)
+        ));
+        this.server.getMessageBus().listenAlways(DebugTargetMessage.class, message -> runFeature(
+                CompanionProtocol.CAPABILITY_DEBUGGER,
+                "DebugTarget",
+                () -> this.listener.debugTarget(message)
         ));
         this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> runFeature(
                 CompanionProtocol.CAPABILITY_CODE_VIEW,

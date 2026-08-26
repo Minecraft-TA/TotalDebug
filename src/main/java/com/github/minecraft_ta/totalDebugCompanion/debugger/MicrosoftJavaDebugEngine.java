@@ -21,6 +21,7 @@ import com.microsoft.java.debug.core.protocol.Requests;
 import com.microsoft.java.debug.core.protocol.Responses;
 import com.microsoft.java.debug.core.protocol.Types;
 import com.sun.jdi.Bootstrap;
+import com.sun.jdi.VMDisconnectedException;
 import io.reactivex.Observable;
 
 import java.net.URI;
@@ -361,6 +362,13 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 .handle((ignored, failure) -> {
                     this.state.updateAndGet(state -> state == State.CLOSED ? State.CLOSED : State.TERMINATED);
                     if (failure != null) {
+                        Throwable cause = failure;
+                        while (cause instanceof CompletionException && cause.getCause() != null) {
+                            cause = cause.getCause();
+                        }
+                        if (cause instanceof VMDisconnectedException) {
+                            return null;
+                        }
                         if (failure instanceof CompletionException completionException) {
                             throw completionException;
                         }

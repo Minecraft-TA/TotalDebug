@@ -43,7 +43,7 @@ class MicrosoftJavaDebugEngineIntegrationTest {
 
     @Test
     @Timeout(30)
-    void attachesAfterTheTargetJVMIsAlreadyRunning() throws Exception {
+    void attachesDetachesAndReattachesByPublishedProcessId() throws Exception {
         DebuggerScenarios.lateAttach();
     }
 }
