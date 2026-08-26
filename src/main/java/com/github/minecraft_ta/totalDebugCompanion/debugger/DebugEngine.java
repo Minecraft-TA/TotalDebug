@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
@@ -79,7 +81,7 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record Source(URI uri, String binaryName, String contents) {
+    record Source(URI uri, String binaryName, String contents, SourceLineMap lineMap) {
         public Source {
             Objects.requireNonNull(uri, "uri");
             if (!uri.isAbsolute()) {
@@ -89,6 +91,11 @@ public interface DebugEngine extends AutoCloseable {
                 throw new IllegalArgumentException("Debug source binary name must not be blank");
             }
             Objects.requireNonNull(contents, "contents");
+            Objects.requireNonNull(lineMap, "lineMap");
+        }
+
+        public Source(URI uri, String binaryName, String contents) {
+            this(uri, binaryName, contents, SourceLineMap.empty());
         }
     }
 

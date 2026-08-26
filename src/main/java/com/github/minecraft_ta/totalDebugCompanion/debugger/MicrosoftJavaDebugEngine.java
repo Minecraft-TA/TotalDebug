@@ -63,6 +63,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         DebugSettings settings = DebugSettings.getCurrent();
         settings.showLogicalStructure = false;
         settings.showToString = false;
+        settings.debugSupportOnDecompiledSource = DebugSettings.Switch.ON;
     }
 
     @Override
@@ -596,6 +597,18 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         public String getSourceContents(String uri) {
             Source source = this.sourcesByUri.get(URI.create(uri).normalize());
             return source == null ? null : source.contents();
+        }
+
+        @Override
+        public int[] getOriginalLineMappings(String uri) {
+            Source source = this.sourcesByUri.get(URI.create(uri).normalize());
+            return source == null ? null : source.lineMap().originalToDisplayed();
+        }
+
+        @Override
+        public int[] getDecompiledLineMappings(String uri) {
+            Source source = this.sourcesByUri.get(URI.create(uri).normalize());
+            return source == null ? null : source.lineMap().displayedToOriginal();
         }
 
         @Override

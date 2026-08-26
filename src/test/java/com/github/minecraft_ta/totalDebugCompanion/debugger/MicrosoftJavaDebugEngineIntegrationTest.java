@@ -34,4 +34,16 @@ class MicrosoftJavaDebugEngineIntegrationTest {
     void stopsOnAndDescribesAnUncaughtException() throws Exception {
         DebuggerScenarios.uncaughtException();
     }
+
+    @Test
+    @Timeout(30)
+    void mapsBreakpointsAndFramesToVineflowerSourceLines() throws Exception {
+        DebuggerScenarios.decompiledSourceLineMapping();
+    }
+
+    @Test
+    @Timeout(30)
+    void attachesAfterTheTargetJVMIsAlreadyRunning() throws Exception {
+        DebuggerScenarios.lateAttach();
+    }
 }

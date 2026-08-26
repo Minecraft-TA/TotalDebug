@@ -1,11 +1,18 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.harness;
 
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
+import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ConditionalDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DecompiledDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExceptionDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
 
+import java.io.InputStream;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +38,17 @@ public final class DebuggerScenarios {
                         DebuggerScenarios::conditionalAndHitCountBreakpoints
                 ),
                 new Scenario("pause-detach", "pause and detach", DebuggerScenarios::pauseAndDetach),
-                new Scenario("exceptions", "uncaught exception", DebuggerScenarios::uncaughtException)
+                new Scenario("exceptions", "uncaught exception", DebuggerScenarios::uncaughtException),
+                new Scenario(
+                        "decompiled-lines",
+                        "Vineflower decompiled-source line mapping",
+                        DebuggerScenarios::decompiledSourceLineMapping
+                ),
+                new Scenario(
+                        "late-attach",
+                        "late attach to a running JVM",
+                        DebuggerScenarios::lateAttach
+                )
         );
     }
 
@@ -165,6 +182,61 @@ public final class DebuggerScenarios {
         }
     }
 
+    public static void decompiledSourceLineMapping() throws Exception {
+        DecompilationResult decompiled = new VineflowerDecompiler().decompile(
+                DecompiledDebuggeeMain.class.getName(),
+                classPathSource(DecompiledDebuggeeMain.class.getClassLoader())
+        );
+        URI sourceUri = URI.create("decompiled:///" + DecompiledDebuggeeMain.class.getName()
+                .replace('.', '/') + ".java");
+        DebugEngine.Source source = new DebugEngine.Source(
+                sourceUri,
+                DecompiledDebuggeeMain.class.getName(),
+                decompiled.source(),
+                decompiled.lineMap()
+        );
+
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(DecompiledDebuggeeMain.class, source)) {
+            int displayedLine = harness.lineContaining("System.out.println(++value);");
+            int originalLine = mappedLine(decompiled.lineMap().displayedToOriginal(), displayedLine);
+            check(displayedLine != originalLine, "Fixture did not produce different original and decompiled lines");
+
+            List<DebugEngine.Breakpoint> breakpoints = harness.setBreakpoints(
+                    new DebugEngine.SourceBreakpoint(displayedLine)
+            );
+            equal(1, breakpoints.size(), "decompiled breakpoint count");
+            equal(displayedLine, breakpoints.getFirst().line(), "verified decompiled breakpoint line");
+            harness.start();
+
+            DebugEngine.StoppedEvent stop = harness.awaitStop("decompiled-source breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+            equal(sourceUri, frame.sourceUri(), "decompiled frame source");
+            equal(displayedLine, frame.line(), "decompiled frame line");
+            equal("10", variable(harness.variables(frame), "value").value(), "decompiled frame local");
+
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "decompiled debuggee exit code");
+        }
+    }
+
+    public static void lateAttach() throws Exception {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launchRunning(LateAttachDebuggeeMain.class)) {
+            int breakpointLine = harness.lineContaining("DEBUG_LATE_ATTACH");
+            equal("ready", harness.readOutputLine("late-attach readiness"), "late-attach readiness output");
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
+            harness.start();
+            harness.closeInput();
+
+            DebugEngine.StoppedEvent stop = harness.awaitStop("late-attach breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+            equal(breakpointLine, frame.line(), "late-attach breakpoint line");
+            equal("87", variable(harness.variables(frame), "sentinel").value(), "late-attach local");
+
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "late-attach debuggee exit code");
+        }
+    }
+
     private static void assertLoopBreakpoint(
             String condition,
             String hitCondition,
@@ -189,6 +261,35 @@ public final class DebuggerScenarios {
             throw new AssertionError("Debugger returned no variable named " + name + "; found " + variables.keySet());
         }
         return variable;
+    }
+
+    private static int mappedLine(int[] pairs, int sourceLine) {
+        for (int i = 0; i < pairs.length; i += 2) {
+            if (pairs[i] == sourceLine) {
+                return pairs[i + 1];
+            }
+        }
+        throw new AssertionError("No line mapping for displayed line " + sourceLine);
+    }
+
+    private static ClassBytecodeSource classPathSource(ClassLoader loader) {
+        return className -> {
+            String resourceName = normalizeClassName(className) + ".class";
+            try (InputStream input = loader.getResourceAsStream(resourceName)) {
+                return input == null ? null : input.readAllBytes();
+            }
+        };
+    }
+
+    private static String normalizeClassName(String className) {
+        String normalized = className;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.endsWith(".class")) {
+            normalized = normalized.substring(0, normalized.length() - ".class".length());
+        }
+        return normalized.replace('.', '/');
     }
 
     private static void check(boolean condition, String message) {

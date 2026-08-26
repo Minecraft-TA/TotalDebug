@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-1";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-line-maps-2";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
@@ -154,7 +154,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
         if (this.closed) {
             throw new IOException("Decompilation service closed before source could be stored");
         }
-        return this.sourceStore.write(binaryName, result.source());
+        return this.sourceStore.write(binaryName, result.source(), result.lineMap());
     }
 
     private static String requireBinaryName(String binaryName) {

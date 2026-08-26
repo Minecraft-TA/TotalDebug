@@ -41,6 +41,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
 
     private DebuggerTestHarness(
             Path sourcePath,
+            URI sourceUri,
             String sourceText,
             Process process,
             BufferedReader output,
@@ -48,7 +49,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
     ) {
         this.sourcePath = sourcePath;
         this.sourceText = sourceText;
-        this.sourceUri = sourcePath.toUri();
+        this.sourceUri = sourceUri;
         this.process = process;
         this.output = output;
         this.engine = engine;
@@ -57,7 +58,34 @@ public final class DebuggerTestHarness implements AutoCloseable {
     public static DebuggerTestHarness launch(Class<?> mainClass) throws Exception {
         Path sourcePath = sourcePath(mainClass);
         String sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
-        Process process = launchSuspendedDebuggee(mainClass);
+        return launch(
+                mainClass,
+                new DebugEngine.Source(sourcePath.toUri(), mainClass.getName(), sourceText),
+                true
+        );
+    }
+
+    public static DebuggerTestHarness launch(Class<?> mainClass, DebugEngine.Source source) throws Exception {
+        return launch(mainClass, source, true);
+    }
+
+    public static DebuggerTestHarness launchRunning(Class<?> mainClass) throws Exception {
+        Path sourcePath = sourcePath(mainClass);
+        String sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
+        return launch(
+                mainClass,
+                new DebugEngine.Source(sourcePath.toUri(), mainClass.getName(), sourceText),
+                false
+        );
+    }
+
+    private static DebuggerTestHarness launch(
+            Class<?> mainClass,
+            DebugEngine.Source source,
+            boolean initiallySuspended
+    ) throws Exception {
+        Path sourcePath = sourcePath(mainClass);
+        Process process = launchDebuggee(mainClass, initiallySuspended);
         BufferedReader output = new BufferedReader(new InputStreamReader(
                 process.getInputStream(),
                 StandardCharsets.UTF_8
@@ -65,7 +93,8 @@ public final class DebuggerTestHarness implements AutoCloseable {
         MicrosoftJavaDebugEngine engine = new MicrosoftJavaDebugEngine();
         DebuggerTestHarness harness = new DebuggerTestHarness(
                 sourcePath,
-                sourceText,
+                source.uri(),
+                source.contents(),
                 process,
                 output,
                 engine
@@ -82,11 +111,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
                     harness.termination.complete(null);
                 }
             });
-            engine.registerSource(new DebugEngine.Source(
-                    harness.sourceUri,
-                    mainClass.getName(),
-                    sourceText
-            ));
+            engine.registerSource(source);
             int debugPort = harness.readDebugPort();
             engine.attach(DebugEngine.Target.local(debugPort, OPERATION_TIMEOUT))
                     .get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
@@ -124,7 +149,10 @@ public final class DebuggerTestHarness implements AutoCloseable {
                 return i + 1;
             }
         }
-        throw new IllegalArgumentException("Missing source marker " + marker + " in " + this.sourcePath);
+        throw new IllegalArgumentException(
+                "Missing source marker " + marker + " in " + this.sourcePath
+                        + System.lineSeparator() + this.sourceText
+        );
     }
 
     public List<DebugEngine.Breakpoint> setBreakpoints(DebugEngine.SourceBreakpoint... breakpoints)
@@ -280,7 +308,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
         return Integer.parseInt(matcher.group(1));
     }
 
-    private static Process launchSuspendedDebuggee(Class<?> mainClass) throws IOException {
+    private static Process launchDebuggee(Class<?> mainClass, boolean initiallySuspended) throws IOException {
         Path javaExecutable = Path.of(
                 System.getProperty("java.home"),
                 "bin",
@@ -294,7 +322,9 @@ public final class DebuggerTestHarness implements AutoCloseable {
         }
         return new ProcessBuilder(
                 javaExecutable.toString(),
-                "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0",
+                "-agentlib:jdwp=transport=dt_socket,server=y,suspend="
+                        + (initiallySuspended ? "y" : "n")
+                        + ",address=127.0.0.1:0",
                 "-cp",
                 testClasses.toString(),
                 mainClass.getName()
