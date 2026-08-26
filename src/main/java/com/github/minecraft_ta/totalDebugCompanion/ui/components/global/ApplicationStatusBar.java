@@ -61,7 +61,7 @@ public final class ApplicationStatusBar extends JPanel {
 
     public ApplicationStatusBar() {
         setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
-        setBorder(BorderFactory.createEmptyBorder(2, 7, 0, 5));
+        setBorder(BorderFactory.createEmptyBorder(1, 7, 1, 5));
         setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
         setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 

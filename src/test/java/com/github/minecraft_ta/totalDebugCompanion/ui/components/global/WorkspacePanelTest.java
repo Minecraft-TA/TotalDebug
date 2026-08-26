@@ -31,7 +31,7 @@ class WorkspacePanelTest {
             FileTreeViewHeader header = new FileTreeViewHeader();
             ApplicationStatusBar statusBar = new ApplicationStatusBar();
             assertEquals(0, header.getBorder().getBorderInsets(header).bottom);
-            assertEquals(2, statusBar.getBorder().getBorderInsets(statusBar).top);
+            assertEquals(1, statusBar.getBorder().getBorderInsets(statusBar).top);
 
             WorkspacePanel workspace = new WorkspacePanel(
                     header,
@@ -50,7 +50,8 @@ class WorkspacePanelTest {
 
         assertEquals(1, workspaceInsets.top);
         assertEquals(1, headerInsets.bottom);
-        assertEquals(3, statusInsets.top);
+        assertEquals(2, statusInsets.top);
+        assertEquals(1, statusInsets.bottom);
         assertNotNull(splitPane);
         assertEquals(1, splitPane.getDividerSize());
     }

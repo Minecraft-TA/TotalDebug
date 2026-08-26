@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.JProgressBar;
 import javax.swing.JButton;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -68,6 +69,39 @@ class ApplicationStatusBarTest {
         assertNotNull(findButton(bar, "MCP: Listening"));
     }
 
+    @Test
+    void centersContentWithinTheStatusBar() throws Exception {
+        AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            ApplicationStatusBar bar = new ApplicationStatusBar();
+            bar.setRuntimeStatus(new RuntimeIndexService.Status(
+                    RuntimeIndexService.Phase.READY,
+                    "Runtime index ready",
+                    null
+            ));
+            WorkspacePanel workspace = new WorkspacePanel(
+                    new JPanel(),
+                    new JPanel(),
+                    new JPanel(),
+                    bar
+            );
+            workspace.setSize(1_000, 500);
+            layoutRecursively(workspace);
+            result.set(bar);
+        });
+
+        ApplicationStatusBar bar = result.get();
+        double statusBarCenter = (UiMetrics.STATUS_BAR_HEIGHT - 1) / 2.0;
+        for (Component child : bar.getComponents()) {
+            if (!child.isVisible() || child.getHeight() == 0) {
+                continue;
+            }
+            double childCenter = child.getY() + (child.getHeight() - 1) / 2.0;
+            assertEquals(statusBarCenter, childCenter, 0.5,
+                    child.getClass().getSimpleName() + " bounds were " + child.getBounds());
+        }
+    }
+
     private static <T extends Component> T find(Container parent, Class<T> type) {
         for (Component child : parent.getComponents()) {
             if (type.isInstance(child)) {
@@ -96,5 +130,14 @@ class ApplicationStatusBarTest {
             }
         }
         return null;
+    }
+
+    private static void layoutRecursively(Container container) {
+        container.doLayout();
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container nested) {
+                layoutRecursively(nested);
+            }
+        }
     }
 }
