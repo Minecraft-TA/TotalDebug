@@ -3,8 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -219,7 +219,7 @@ public final class DebuggerPanel extends JPanel {
     private JPanel createWatchesPanel() {
         this.expression.putClientProperty("JTextField.placeholderText", "Evaluate expression or add a watch");
         this.expression.setToolTipText(
-                "Supports locals, fields, array access, literals, and operators; method calls are not supported"
+                "Supports rich Java expressions, including members, operators, and method calls"
         );
         this.expression.addActionListener(event -> evaluateExpression(false));
         this.evaluate.addActionListener(event -> evaluateExpression(false));
@@ -405,7 +405,7 @@ public final class DebuggerPanel extends JPanel {
         this.currentFrame = frame;
         this.currentVariables = List.of();
         this.expressionCompletion.setCompletionProvider((text, caret, explicit) ->
-                this.controller.completions(text, frame));
+                this.controller.completions(text, caret, frame));
         updateExpressionSuggestions(List.of(), List.of());
         this.frameLabel.setText(frameLocation(frame));
 
@@ -471,29 +471,35 @@ public final class DebuggerPanel extends JPanel {
             List<DebugEngine.Variable> variables,
             List<DebugEngine.Variable> fields
     ) {
-        java.util.LinkedHashMap<String, ExpressionSuggestion> suggestions = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, DebuggerCompletionProposal> suggestions = new java.util.LinkedHashMap<>();
         for (DebugEngine.Variable variable : variables) {
-            suggestions.putIfAbsent(variable.name(), new ExpressionSuggestion(
+            suggestions.putIfAbsent(variable.name(), new DebuggerCompletionProposal(
                     variable.name(),
+                    variable.name(),
+                    DebuggerCompletionProposal.Kind.VARIABLE,
                     variable.type(),
-                    ExpressionSuggestion.Kind.VARIABLE
+                    0, 0, variable.name().length(), 10
             ));
         }
         for (DebugEngine.Variable field : fields) {
-            suggestions.putIfAbsent(field.name(), new ExpressionSuggestion(
+            suggestions.putIfAbsent(field.name(), new DebuggerCompletionProposal(
                     field.name(),
+                    field.name(),
+                    DebuggerCompletionProposal.Kind.FIELD,
                     field.type(),
-                    ExpressionSuggestion.Kind.FIELD
+                    0, 0, field.name().length(), 20
             ));
         }
         for (String literal : List.of("true", "false", "null")) {
-            suggestions.put(literal, new ExpressionSuggestion(
+            suggestions.put(literal, new DebuggerCompletionProposal(
                     literal,
+                    literal,
+                    DebuggerCompletionProposal.Kind.KEYWORD,
                     literal.equals("null") ? "null literal" : "boolean literal",
-                    ExpressionSuggestion.Kind.KEYWORD
+                    0, 0, literal.length(), 80
             ));
         }
-        this.expressionCompletion.setSuggestions(List.copyOf(suggestions.values()));
+        this.expressionCompletion.setProposals(List.copyOf(suggestions.values()));
     }
 
     private void showVariableStatus(String text) {

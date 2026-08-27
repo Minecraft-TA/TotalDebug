@@ -315,6 +315,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     @Override
     public CompletableFuture<List<DebuggerCompletionProposal>> completions(
             String expression,
+            int caret,
             int frameId
     ) {
         requireState(State.STOPPED);
@@ -322,7 +323,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         arguments.frameId = frameId;
         arguments.text = expression;
         arguments.line = 0;
-        arguments.column = expression == null ? 0 : expression.length();
+        arguments.column = caret;
         return request(Requests.Command.COMPLETIONS, arguments, Responses.CompletionsResponseBody.class)
                 .thenApply(body -> {
                     List<DebuggerCompletionProposal> result = new ArrayList<>();
@@ -344,15 +345,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         } catch (IllegalArgumentException ignored) {
                             kind = DebuggerCompletionProposal.Kind.FIELD;
                         }
+                        DebuggerCompletionWire.Metadata metadata = DebuggerCompletionWire.decode(item.sortText);
                         result.add(new DebuggerCompletionProposal(
                                 item.label == null ? text : item.label,
                                 text,
                                 kind,
-                                item.type == null ? "" : item.type,
+                                metadata.detail(),
                                 start,
                                 end,
-                                text.endsWith("()") ? text.length() - 1 : text.length(),
-                                0
+                                metadata.caretOffset(),
+                                metadata.rank()
                         ));
                     }
                     return List.copyOf(result);

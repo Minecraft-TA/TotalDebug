@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionRange;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -71,11 +71,9 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.addFocusListener(this.focusListener);
     }
 
-    public void setSuggestions(List<ExpressionSuggestion> suggestions) {
+    public void setProposals(List<DebuggerCompletionProposal> suggestions) {
         Objects.requireNonNull(suggestions, "suggestions");
-        this.suggestions = suggestions.stream()
-                .map(suggestion -> suggestion.toProposal(0, 0))
-                .toList();
+        this.suggestions = List.copyOf(suggestions);
         if (isCompletionVisible()) {
             updatePopup(true);
         }
@@ -189,7 +187,9 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             hidePopup();
             return;
         }
-        CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        DebuggerCompletionRange range = DebuggerCompletionRange.around(
+                this.field.getText(), this.field.getCaretPosition()
+        );
         if (this.completionProvider != null) {
             long revision = this.completionRevision.incrementAndGet();
             String text = this.field.getText();
@@ -262,13 +262,16 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         if (selected == null) {
             return;
         }
-        CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        DebuggerCompletionRange range = DebuggerCompletionRange.around(
+                this.field.getText(), this.field.getCaretPosition()
+        );
         if ((this.completionProvider != null || selected.replacementEnd() > selected.replacementStart())
                 && selected.replacementStart() <= selected.replacementEnd()
                 && selected.replacementEnd() <= this.field.getDocument().getLength()
                 && selected.replacementStart() <= range.start()) {
-            range = new CompletionRange(
-                    selected.replacementStart(), selected.replacementEnd(), range.prefix(), range.memberAccess()
+            range = new DebuggerCompletionRange(
+                    selected.replacementStart(), selected.replacementEnd(), range.prefix(),
+                    range.memberAccess(), range.ownerEnd()
             );
         }
         String replacement = this.field.getText().substring(0, range.start())
@@ -318,30 +321,12 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.popup = null;
     }
 
-    static CompletionRange completionRange(String text, int caret) {
-        if (caret < 0 || caret > text.length()) {
-            throw new IllegalArgumentException("caret is outside the expression");
-        }
-        int start = caret;
-        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) {
-            start--;
-        }
-        int end = caret;
-        while (end < text.length() && Character.isJavaIdentifierPart(text.charAt(end))) {
-            end++;
-        }
-        return new CompletionRange(start, end, text.substring(start, caret), start > 0 && text.charAt(start - 1) == '.');
-    }
-
     @Override
     public void close() {
         this.completionRevision.incrementAndGet();
         disposePopup();
         this.field.getDocument().removeDocumentListener(this.documentListener);
         this.field.removeFocusListener(this.focusListener);
-    }
-
-    record CompletionRange(int start, int end, String prefix, boolean memberAccess) {
     }
 
     @FunctionalInterface

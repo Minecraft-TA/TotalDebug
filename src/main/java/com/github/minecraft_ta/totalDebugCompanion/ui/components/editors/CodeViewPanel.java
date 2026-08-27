@@ -19,6 +19,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightSer
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import org.eclipse.jdt.core.JavaModelException;
@@ -420,7 +421,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 displayedLine,
                 template,
                 managed != null,
-                expressionSuggestionsAtLine(displayedLine),
+                completionProviderAtLine(displayedLine),
                 new BreakpointEditorPopup.Handler() {
                     @Override
                     public void save(int line, String condition, String hitCount) {
@@ -438,12 +439,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         );
     }
 
-    private List<com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion>
-    expressionSuggestionsAtLine(int displayedLine) {
+    private ExpressionCompletionSupport.CompletionProvider completionProviderAtLine(int displayedLine) {
         String source = ASTCache.getContents(this.identifier);
         var unit = ASTCache.getFromCache(this.identifier);
         if (source == null || unit == null) {
-            return List.of();
+            return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
         }
         int lineStart;
         int lineEnd;
@@ -451,14 +451,17 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             lineStart = this.editorPane.getLineStartOffset(displayedLine - 1);
             lineEnd = this.editorPane.getLineEndOffset(displayedLine - 1);
         } catch (BadLocationException exception) {
-            return List.of();
+            return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
         }
         int sourceOffset = lineStart;
         while (sourceOffset < lineEnd && sourceOffset < source.length()
                 && Character.isWhitespace(source.charAt(sourceOffset))) {
             sourceOffset++;
         }
-        return ExpressionScopeAnalyzer.analyze(unit, sourceOffset);
+        int contextOffset = sourceOffset;
+        return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(
+                ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret)
+        );
     }
 
     private void configureBreakpoint(

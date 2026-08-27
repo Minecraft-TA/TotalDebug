@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 
@@ -51,7 +50,7 @@ final class BreakpointEditorPopup {
             int displayedLine,
             DebugEngine.SourceBreakpoint breakpoint,
             boolean installed,
-            List<ExpressionSuggestion> suggestions,
+            ExpressionCompletionSupport.CompletionProvider completionProvider,
             Handler handler
     ) {
         if (displayedLine < 1) {
@@ -69,7 +68,7 @@ final class BreakpointEditorPopup {
                 ? ""
                 : breakpoint.hitCondition());
         this.remove.setVisible(installed);
-        this.conditionCompletion.setSuggestions(suggestions);
+        this.conditionCompletion.setCompletionProvider(completionProvider);
         clearValidation();
         this.popup.show(invoker, location.x, location.y);
         SwingUtilities.invokeLater(() -> {

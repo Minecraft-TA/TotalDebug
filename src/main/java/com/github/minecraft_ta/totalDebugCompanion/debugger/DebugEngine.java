@@ -34,7 +34,11 @@ public interface DebugEngine extends AutoCloseable {
 
     CompletableFuture<EvaluationResult> evaluate(String expression, int frameId);
 
-    default CompletableFuture<List<DebuggerCompletionProposal>> completions(String expression, int frameId) {
+    default CompletableFuture<List<DebuggerCompletionProposal>> completions(
+            String expression,
+            int caret,
+            int frameId
+    ) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException(
                 "Debugger expression completion is unavailable"
         ));
