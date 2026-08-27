@@ -203,6 +203,9 @@ public final class DebuggerScenarios {
                     "qualified debugger type");
             equal(DebugEngine.VariableKind.FIELD,
                     variable(harness.children(targetVariable), "ownSecret").kind(), "field variable kind");
+            check(!harness.engine().preview(targetVariable.variablesReference())
+                            .get(TIMEOUT_SECONDS, TimeUnit.SECONDS).available(),
+                    "Unregistered debugger value received an automatic preview");
 
             equal("\"own-secret\"", value(harness.engine().evaluate("renamedTarget.ownSecret", frame.id())), "private field");
             equal("\"child-hidden\"", value(harness.engine().evaluate("renamedTarget.inheritedSecret", frame.id())), "hidden child field");

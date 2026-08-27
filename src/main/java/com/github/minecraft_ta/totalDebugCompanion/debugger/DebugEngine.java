@@ -32,6 +32,10 @@ public interface DebugEngine extends AutoCloseable {
 
     CompletableFuture<List<Variable>> variables(int variablesReference);
 
+    default CompletableFuture<ValuePreview> preview(int variablesReference) {
+        return CompletableFuture.completedFuture(ValuePreview.NONE);
+    }
+
     CompletableFuture<EvaluationResult> evaluate(String expression, int frameId);
 
     default CompletableFuture<List<DebuggerCompletionProposal>> completions(
@@ -255,6 +259,19 @@ public interface DebugEngine extends AutoCloseable {
             value = Objects.requireNonNullElse(value, "");
             type = Objects.requireNonNullElse(type, "");
             Objects.requireNonNull(kind, "kind");
+        }
+    }
+
+    record ValuePreview(String summary, String detail) {
+        public static final ValuePreview NONE = new ValuePreview("", "");
+
+        public ValuePreview {
+            summary = Objects.requireNonNullElse(summary, "");
+            detail = Objects.requireNonNullElse(detail, summary);
+        }
+
+        public boolean available() {
+            return !this.summary.isBlank();
         }
     }
 

@@ -598,6 +598,19 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         this.childKindsByReference.clear();
     }
 
+    @Override
+    public CompletableFuture<ValuePreview> preview(int variablesReference) {
+        requireState(State.STOPPED);
+        if (variablesReference <= 0) {
+            return CompletableFuture.completedFuture(ValuePreview.NONE);
+        }
+        try {
+            return this.expressionEngine.preview(variablesReference);
+        } catch (Throwable failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
     private void registerChildKind(int variablesReference, String type) {
         if (variablesReference <= 0) {
             return;

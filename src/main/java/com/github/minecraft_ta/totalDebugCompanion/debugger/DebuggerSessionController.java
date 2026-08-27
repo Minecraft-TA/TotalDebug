@@ -418,6 +418,16 @@ public final class DebuggerSessionController implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
+        if (variablesReference <= 0) {
+            return CompletableFuture.completedFuture(DebugEngine.ValuePreview.NONE);
+        }
+        return submitValue(() -> {
+            requirePausedState();
+            return requireEngine().preview(variablesReference).join();
+        });
+    }
+
     public CompletableFuture<DebugEngine.EvaluationResult> evaluate(
             String expression,
             DebugEngine.StackFrame frame

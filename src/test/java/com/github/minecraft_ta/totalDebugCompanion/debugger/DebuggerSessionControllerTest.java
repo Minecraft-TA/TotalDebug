@@ -162,6 +162,11 @@ class DebuggerSessionControllerTest {
                     List.of(child),
                     controller.variables(15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
             );
+            engine.preview = new DebugEngine.ValuePreview("minecraft:stone", "minecraft:stone");
+            assertEquals(
+                    engine.preview,
+                    controller.preview(15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+            );
             engine.evaluationResult = new DebugEngine.EvaluationResult("true", "boolean", 0, 0);
             assertEquals(
                     engine.evaluationResult,
@@ -498,6 +503,7 @@ class DebuggerSessionControllerTest {
         private long resumedThread = -1;
         private DebugEngine.EvaluationResult evaluationResult =
                 new DebugEngine.EvaluationResult("", "", 0, 0);
+        private DebugEngine.ValuePreview preview = DebugEngine.ValuePreview.NONE;
         private boolean breakpointVerified = true;
         private boolean caughtExceptions;
         private boolean uncaughtExceptions;
@@ -552,6 +558,7 @@ class DebuggerSessionControllerTest {
                         case "stackTrace" -> completed(this.frames);
                         case "scopes" -> completed(this.scopes);
                         case "variables" -> completed(this.variables.getOrDefault((Integer) arguments[0], List.of()));
+                        case "preview" -> completed(this.preview);
                         case "threads" -> completed(List.of());
                         case "evaluate" -> completed(this.evaluationResult);
                         case "exceptionInfo" -> completed(new DebugEngine.ExceptionInfo("", "", ""));

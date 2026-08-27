@@ -435,13 +435,20 @@ public final class DebuggerPanel extends JPanel {
     private void showVariables(List<DebugEngine.Variable> values) {
         this.currentVariables = List.copyOf(values);
         this.variableRoot.removeAllChildren();
+        List<DefaultMutableTreeNode> nodes = new ArrayList<>();
         for (DebugEngine.Variable variable : values) {
-            this.variableRoot.add(valueNode(DebugValue.from(variable)));
+            DefaultMutableTreeNode node = valueNode(DebugValue.from(variable));
+            this.variableRoot.add(node);
+            nodes.add(node);
         }
         if (values.isEmpty()) {
             this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue("No variables available", false)));
         }
         this.variableModel.reload();
+        long revision = this.viewRevision;
+        for (DefaultMutableTreeNode node : nodes) {
+            requestPreview(node, this.variableModel, revision);
+        }
 
     }
 
@@ -472,9 +479,17 @@ public final class DebuggerPanel extends JPanel {
                                 true
                         )));
                     } else {
+                        List<DefaultMutableTreeNode> childNodes = new ArrayList<>();
                         for (DebugEngine.Variable child : children) {
-                            node.add(valueNode(DebugValue.from(child)));
+                            DefaultMutableTreeNode childNode = valueNode(DebugValue.from(child));
+                            node.add(childNode);
+                            childNodes.add(childNode);
                         }
+                        model.nodeStructureChanged(node);
+                        for (DefaultMutableTreeNode childNode : childNodes) {
+                            requestPreview(childNode, model, revision);
+                        }
+                        return;
                     }
                     model.nodeStructureChanged(node);
                 })
@@ -552,6 +567,9 @@ public final class DebuggerPanel extends JPanel {
                             addPlaceholder(request.node(), value);
                         }
                         this.watchModel.nodeStructureChanged(request.node());
+                        if (failure == null) {
+                            requestPreview(request.node(), this.watchModel, revision);
+                        }
                     })
             );
         }
@@ -559,7 +577,7 @@ public final class DebuggerPanel extends JPanel {
 
     private void addExpressionRequest(List<ExpressionRequest> requests, String expression, boolean watch) {
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(
-                new ExpressionStatus(expression, watch ? "Watch · " + LOADING : LOADING, false)
+                new ExpressionStatus(expression, watch ? "Watch  " + LOADING : LOADING, false)
         );
         this.watchRoot.add(node);
         requests.add(new ExpressionRequest(expression, node));
@@ -586,6 +604,26 @@ public final class DebuggerPanel extends JPanel {
 
     private boolean isCurrent(DebugEngine.StackFrame frame, long revision) {
         return revision == this.viewRevision && Objects.equals(frame, this.currentFrame);
+    }
+
+    private void requestPreview(DefaultMutableTreeNode node, DefaultTreeModel model, long revision) {
+        DebugValue value = debugValue(node.getUserObject());
+        if (value == null || value.variablesReference() <= 0) {
+            return;
+        }
+        this.controller.preview(value.variablesReference()).whenComplete((preview, failure) ->
+                SwingUtilities.invokeLater(() -> {
+                    if (failure != null || revision != this.viewRevision || node.getParent() == null
+                            || !Objects.equals(debugValue(node.getUserObject()), value) || !preview.available()) {
+                        return;
+                    }
+                    DebugValue replacement = value.withPreview(preview);
+                    node.setUserObject(node.getUserObject() instanceof ExpressionValue
+                            ? new ExpressionValue(replacement)
+                            : replacement);
+                    model.nodeChanged(node);
+                })
+        );
     }
 
     private static DefaultMutableTreeNode valueNode(DebugValue value) {
@@ -661,7 +699,8 @@ public final class DebuggerPanel extends JPanel {
             String type,
             DebugEngine.VariableKind kind,
             int variablesReference,
-            int indexedVariables
+            int indexedVariables,
+            DebugEngine.ValuePreview preview
     ) {
         private static DebugValue from(DebugEngine.Variable variable) {
             return new DebugValue(
@@ -671,7 +710,8 @@ public final class DebuggerPanel extends JPanel {
                     variable.type(),
                     variable.kind(),
                     variable.variablesReference(),
-                    variable.indexedVariables()
+                    variable.indexedVariables(),
+                    DebugEngine.ValuePreview.NONE
             );
         }
 
@@ -683,8 +723,14 @@ public final class DebuggerPanel extends JPanel {
                     result.type(),
                     DebugEngine.VariableKind.EXPRESSION,
                     result.variablesReference(),
-                    result.indexedVariables()
+                    result.indexedVariables(),
+                    DebugEngine.ValuePreview.NONE
             );
+        }
+
+        private DebugValue withPreview(DebugEngine.ValuePreview replacement) {
+            return new DebugValue(this.name, this.evaluateName, this.value, this.type, this.kind,
+                    this.variablesReference, this.indexedVariables, replacement);
         }
     }
 
@@ -724,7 +770,9 @@ public final class DebuggerPanel extends JPanel {
             if (debugValue != null) {
                 String visibleValue = visibleValue(debugValue.value(), debugValue.type());
                 String simpleType = simpleTypeName(debugValue.type());
-                String secondary = visibleValue.equals(simpleType) ? "" : simpleType;
+                String secondary = debugValue.preview().available()
+                        ? debugValue.preview().summary()
+                        : visibleValue.equals(simpleType) ? "" : simpleType;
                 this.valueLabel.configure(
                         new PrimarySecondaryText(
                                 debugValue.name() + " = " + visibleValue,
@@ -736,9 +784,12 @@ public final class DebuggerPanel extends JPanel {
                         getTextSelectionColor(),
                         getBackgroundSelectionColor()
                 );
+                String detail = debugValue.preview().available()
+                        ? debugValue.preview().detail()
+                        : debugValue.value();
                 this.valueLabel.setToolTipText(debugValue.type().isBlank()
-                        ? debugValue.value()
-                        : debugValue.type() + "  " + debugValue.value());
+                        ? detail
+                        : debugValue.type() + (detail.isBlank() ? "" : "  " + detail));
                 return this.valueLabel;
             }
             switch (node.getUserObject()) {

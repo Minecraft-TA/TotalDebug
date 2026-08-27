@@ -5,6 +5,7 @@ import com.microsoft.java.debug.core.adapter.ICompletionsProvider;
 import com.microsoft.java.debug.core.adapter.IDebugAdapterContext;
 import com.microsoft.java.debug.core.adapter.IEvaluationProvider;
 import com.microsoft.java.debug.core.adapter.variables.StackFrameReference;
+import com.microsoft.java.debug.core.adapter.variables.VariableProxy;
 import com.microsoft.java.debug.core.protocol.Types;
 import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.ArrayReference;
@@ -81,6 +82,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
     private static final List<String> KEYWORDS = List.of("true", "false", "null", "this", "super");
     private final VariableNameResolver variableNameResolver;
     private final DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
+    private final DebuggerValuePreviewer valuePreviewer = new DebuggerValuePreviewer(this::evaluate);
     private volatile IDebugAdapterContext debugContext;
 
     RichJavaExpressionEngine(VariableNameResolver variableNameResolver) {
@@ -114,6 +116,18 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             result.put("this", DebugEngine.VariableKind.THIS);
         }
         return Map.copyOf(result);
+    }
+
+    CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
+        IDebugAdapterContext context = Objects.requireNonNull(this.debugContext, "debugContext");
+        Object reference = context.getRecyclableIdPool().getObjectById(variablesReference);
+        if (!(reference instanceof VariableProxy proxy)) {
+            throw new IllegalArgumentException("Unknown debugger variable reference " + variablesReference);
+        }
+        if (!(proxy.getProxiedVariable() instanceof ObjectReference value)) {
+            return CompletableFuture.completedFuture(DebugEngine.ValuePreview.NONE);
+        }
+        return this.valuePreviewer.preview(value, proxy.getThread());
     }
 
     @Override
