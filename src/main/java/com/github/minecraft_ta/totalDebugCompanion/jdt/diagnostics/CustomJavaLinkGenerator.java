@@ -16,6 +16,7 @@ import org.fife.ui.rsyntaxtextarea.Token;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.BadLocationException;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.IntFunction;
@@ -52,13 +53,21 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     @Override
     public LinkGeneratorResult isLinkAtOffset(RSyntaxTextArea textArea, int offs) {
         try {
+            if (offs < 0
+                    || offs >= textArea.getDocument().getLength()
+                    || !Character.isJavaIdentifierPart(textArea.getText(offs, 1).charAt(0))) {
+                return null;
+            }
+            Token token = textArea.modelToToken(offs);
+            if (token == null || !token.containsPosition(offs)) {
+                return null;
+            }
             IJavaElement element = this.elementResolver.resolve(offs);
             if (element == null) {
                 return null;
             }
-            Token token = textArea.modelToToken(offs);
-            return token == null ? null : new LinkResult(textArea, element, offs, token.getOffset());
-        } catch (JavaModelException e) {
+            return new LinkResult(textArea, element, offs, token.getOffset());
+        } catch (JavaModelException | BadLocationException e) {
             e.printStackTrace();
             return null;
         }

@@ -42,6 +42,10 @@ final class JavaSymbolResolverTest {
                     target.run(new int[0], "name");
                     return target;
                 }
+
+                static boolean callsExternalMethod() {
+                    return "value".isBlank();
+                }
             }
             """;
 
@@ -96,6 +100,18 @@ final class JavaSymbolResolverTest {
         assertEquals(
                 new CodeSymbol.MethodSymbol("example.Target", "<init>", "(Ljava/lang/String;)V"),
                 resolution.symbol()
+        );
+    }
+
+    @Test
+    void resolvesAnExternalIndexedMethodToItsRuntimeOwner() throws Exception {
+        String key = prepareAst("external-method");
+
+        var method = JavaSymbolResolver.resolve(key, SOURCE.indexOf("isBlank"));
+
+        assertEquals(
+                new CodeSymbol.MethodSymbol("java.lang.String", "isBlank", "()Z"),
+                method.symbol()
         );
     }
 

@@ -44,7 +44,12 @@ public class ClassFileImpl extends Openable implements IOrdinaryClassFileStub {
         info.setChildren(new IJavaElement[]{type});
         newElements.put(type, type.getElementInfo());
 
-        Object fakeClassFile = JDTHacks.createInstance(ClassFile.class, new Class[]{PackageFragment.class, String.class}, null, null);
+        Object fakeClassFile = JDTHacks.createInstance(
+                ClassFile.class,
+                new Class[]{PackageFragment.class, String.class},
+                (PackageFragment) getParent(),
+                getElementName()
+        );
         JDTHacks.setField(fakeClassFile, "binaryType", type);
         JDTHacks.invokeMethod(classFileInfo, "readBinaryChildren", new Class[]{ClassFile.class, Map.class, IBinaryType.class}, fakeClassFile, newElements, type.getElementInfo());
         return true;

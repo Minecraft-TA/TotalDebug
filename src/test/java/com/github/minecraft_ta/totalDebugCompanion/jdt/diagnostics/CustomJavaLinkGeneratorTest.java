@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class CustomJavaLinkGeneratorTest {
 
@@ -55,6 +56,22 @@ class CustomJavaLinkGeneratorTest {
         assertNotNull(link);
         assertNotNull(token);
         assertEquals(token.getOffset(), link.getSourceOffset());
+    }
+
+    @Test
+    void punctuationNextToAResolvableSymbolIsNotALink() {
+        String source = "final class Sample { Object value = target.call(); }";
+        RSyntaxTextArea textArea = new RSyntaxTextArea(source);
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
+        var generator = new CustomJavaLinkGenerator(
+                offset -> packageFragment("example"),
+                offset -> "example.Target",
+                (packageName, ownerClass) -> {
+                }
+        );
+
+        assertNull(generator.isLinkAtOffset(textArea, source.indexOf(".call")));
+        assertNull(generator.isLinkAtOffset(textArea, source.indexOf("call()") + "call".length()));
     }
 
     private static IPackageFragment packageFragment(String name) {
