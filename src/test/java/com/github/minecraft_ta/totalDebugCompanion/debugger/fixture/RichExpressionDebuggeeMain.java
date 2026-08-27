@@ -50,6 +50,8 @@ public final class RichExpressionDebuggeeMain {
 
         private void debugExpressions() {
             Child target = this;
+            Base declaredTarget = this;
+            String[] strings = new String[]{"a", "b"};
             Integer warmedBoxingType = 0;
             Boolean warmedBooleanType = true;
             int local = 2; // DEBUG_RICH_EXPRESSION
@@ -115,6 +117,14 @@ public final class RichExpressionDebuggeeMain {
             return "object-null";
         }
 
+        private String nullUnrelated(CharSequence input) {
+            return "char-sequence-null";
+        }
+
+        private String nullUnrelated(Number input) {
+            return "number-null";
+        }
+
         private String fixed(String input) {
             return "fixed";
         }
@@ -136,6 +146,18 @@ public final class RichExpressionDebuggeeMain {
 
         private String varargs(String... values) {
             return String.join(",", values);
+        }
+
+        private String varargsOrNull(String... values) {
+            return values == null ? "array-null" : String.join(",", values);
+        }
+
+        private String completionOverload(int value) {
+            return "not-an-object";
+        }
+
+        private Child completionOverload(String value) {
+            return this;
         }
 
         private String throwing() {

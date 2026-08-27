@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.insight;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.tth05.jindex.ClassIndex;
@@ -39,7 +40,9 @@ class ExpressionScopeAnalyzerTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(classBytes(Object.class))));
+        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+                classBytes(Object.class), classBytes(ExternalCompletionType.class)
+        )));
     }
 
     @AfterAll
@@ -67,7 +70,7 @@ class ExpressionScopeAnalyzerTest {
 
         List<String> names = names(ExpressionScopeAnalyzer.analyze(unit, SOURCE.lastIndexOf("staticField++")));
 
-        assertEquals(List.of("staticField", "staticRun()", "false", "null", "super", "this", "true"), names);
+        assertEquals(List.of("staticField", "staticRun()", "false", "null", "true"), names);
     }
 
     @Test
@@ -95,6 +98,41 @@ class ExpressionScopeAnalyzerTest {
         assertTrue(names(completions).containsAll(List.of("own", "inherited", "baseCall()", "BASE_STATIC")), names(completions).toString());
         assertTrue(completions.stream().allMatch(proposal -> proposal.replacementStart() == "target.".length()
                 && proposal.replacementEnd() == "target.".length()));
+    }
+
+    @Test
+    void completesMembersOfAnIndexedCrossFileTypeFromAParameter() throws Exception {
+        String externalSource = """
+                package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
+                public class ExternalCompletionType {
+                    private String privateValue;
+                    public String externalMethod() { return privateValue; }
+                    public static String externalStatic() { return "static"; }
+                }
+                """;
+        ASTCache.update("external-completion-type", "ExternalCompletionType", externalSource);
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+        while (ASTCache.getFromCache("external-completion-type") == null && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+        String source = """
+                package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
+                import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
+                class Sample {
+                    void run(ExternalCompletionType parameter) {
+                        parameter.
+                    }
+                }
+                """;
+        var unit = ASTCache.rawParse("Sample", source);
+        int context = source.indexOf("parameter.");
+        List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
+                unit, context, "parameter.", "parameter.".length()
+        );
+
+        assertTrue(names(completions).containsAll(List.of("externalMethod()", "externalStatic()")),
+                names(completions).toString());
+        ASTCache.removeFromCache("external-completion-type");
     }
 
     private static List<String> names(List<DebuggerCompletionProposal> suggestions) {

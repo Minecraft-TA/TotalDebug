@@ -189,6 +189,8 @@ public final class DebuggerScenarios {
             equal("\"default-interface\"", value(harness.engine().evaluate("renamedTarget.defaultCall()", frame.id())), "interface default method");
             equal("\"child-overridable\"", value(harness.engine().evaluate("renamedTarget.overridable()", frame.id())), "overridden virtual call");
             equal("\"base-overridable\"", value(harness.engine().evaluate("super.overridable()", frame.id())), "super nonvirtual call");
+            equal("\"inherited-secret\"", value(harness.engine().evaluate("declaredTarget.inheritedSecret", frame.id())), "declared receiver field type");
+            equal("\"child\"", value(harness.engine().evaluate("declaredTarget.virtualCall()", frame.id())), "declared receiver virtual dispatch");
             equal("\"inherited-secret\"", value(harness.engine().evaluate("((RichExpressionDebuggeeMain.Base) renamedTarget).inheritedSecret", frame.id())), "cast static field type");
             equal("\"static-child\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.Child.staticChild()", frame.id())), "type-qualified static call");
             try {
@@ -196,7 +198,7 @@ public final class DebuggerScenarios {
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Type-qualified instance method unexpectedly invoked");
             } catch (java.util.concurrent.ExecutionException expected) {
-                check(expected.getCause() != null && expected.getCause().toString().contains("static method"),
+                check(expected.toString().contains("No compatible overload"),
                         "Type-qualified instance method failure was not explicit: " + expected);
             }
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload(1)", frame.id())), "exact overload");
@@ -209,9 +211,19 @@ public final class DebuggerScenarios {
             equal("\"boolean-true\"", value(harness.engine().evaluate("renamedTarget.booleanAccepted(warmedBooleanType)", frame.id())), "Boolean unboxing");
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload((char) 1)", frame.id())), "char widening");
             equal("\"fixed\"", value(harness.engine().evaluate("renamedTarget.fixed(\"x\")", frame.id())), "fixed arity beats varargs");
+            equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(strings)", frame.id())), "varargs direct array");
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
+            equal("\"array-null\"", value(harness.engine().evaluate("renamedTarget.varargsOrNull(null)", frame.id())), "varargs null array");
             equal("\"worker-complete\"", value(harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id())), "multi-thread evaluation");
             equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
+            try {
+                harness.engine().evaluate("java.util.List.of()", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Static interface method unexpectedly invoked");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Static interface invocation is not supported by JDI InterfaceType"),
+                        "Static interface limitation was not explicit: " + expected);
+            }
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");
             equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())), "completion counter before");
 
@@ -238,6 +250,12 @@ public final class DebuggerScenarios {
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             check(chained.stream().anyMatch(item -> item.label().equals("ownSecret")),
                     "chained completion did not resolve the method return type");
+            List<DebuggerCompletionProposal> overloadChained = harness.engine()
+                    .completions("renamedTarget.completionOverload(\"text\").",
+                            "renamedTarget.completionOverload(\"text\").".length(), frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(overloadChained.stream().anyMatch(item -> item.label().equals("ownSecret")),
+                    "chained completion did not select the statically compatible overload");
             equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())),
                     "member completion evaluated its owner");
 
@@ -247,11 +265,13 @@ public final class DebuggerScenarios {
             } catch (java.util.concurrent.ExecutionException expected) {
                 check(expected.toString().contains("No compatible overload"), "Invalid int-to-Long conversion was accepted");
             }
+            equal("\"string-null\"", value(harness.engine().evaluate("renamedTarget.nullOverload(null)", frame.id())),
+                    "most-specific null overload");
             try {
-                harness.engine().evaluate("renamedTarget.nullOverload(null)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                throw new AssertionError("Ambiguous null overload unexpectedly succeeded");
+                harness.engine().evaluate("renamedTarget.nullUnrelated(null)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Unrelated null overload unexpectedly succeeded");
             } catch (java.util.concurrent.ExecutionException expected) {
-                check(expected.toString().contains("Ambiguous overload"), "Null overload ambiguity was not explicit");
+                check(expected.toString().contains("Ambiguous overload"), "Unrelated null overload ambiguity was not explicit");
             }
             try {
                 harness.engine().evaluate("renamedTarget.throwing()", frame.id())

@@ -157,13 +157,18 @@ final class ExpressionCompletionSupportUiTest {
 
     private static ExpressionCompletionSupport completion(JTextField field) {
         ExpressionCompletionSupport completion = new ExpressionCompletionSupport(field);
-        completion.setProposals(List.of(new DebuggerCompletionProposal(
+        List<DebuggerCompletionProposal> proposals = List.of(new DebuggerCompletionProposal(
                 "false", "false", DebuggerCompletionProposal.Kind.KEYWORD,
                 "boolean literal", 0, 0, 5, 80
         ), new DebuggerCompletionProposal(
                 "true", "true", DebuggerCompletionProposal.Kind.KEYWORD,
                 "boolean literal", 0, 0, 4, 80
-        )));
+        ));
+        completion.setCompletionProvider((text, caret, explicit) ->
+                CompletableFuture.completedFuture(proposals.stream()
+                        .filter(proposal -> proposal.label().startsWith(text.substring(0, Math.min(caret, text.length()))))
+                        .map(proposal -> proposal.withRange(0, text.length()))
+                        .toList()));
         return completion;
     }
 
