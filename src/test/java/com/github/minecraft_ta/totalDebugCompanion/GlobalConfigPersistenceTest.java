@@ -31,6 +31,8 @@ class GlobalConfigPersistenceTest {
         config.setUiFontSize(15f);
         config.setDebuggerWindowBounds(new Rectangle(120, 80, 1100, 620));
         config.setDebuggerWatches(List.of("player", "level.gameTime", "player"));
+        config.setBreakOnCaughtExceptions(true);
+        config.setBreakOnUncaughtExceptions(true);
         config.saveNow();
 
         assertTrue(Files.isRegularFile(dataDirectory.resolve(SETTINGS_FILE)));
@@ -41,6 +43,8 @@ class GlobalConfigPersistenceTest {
         config.setUiFontSize(13f);
         config.setDebuggerWindowBounds(null);
         config.setDebuggerWatches(List.of());
+        config.setBreakOnCaughtExceptions(false);
+        config.setBreakOnUncaughtExceptions(false);
         config.loadFrom(dataDirectory);
 
         assertEquals("islands-light", config.themeId());
@@ -48,6 +52,8 @@ class GlobalConfigPersistenceTest {
         assertEquals(15f, config.uiFontSize());
         assertEquals(new Rectangle(120, 80, 1100, 620), config.debuggerWindowBounds());
         assertEquals(List.of("player", "level.gameTime"), config.debuggerWatches());
+        assertTrue(config.breakOnCaughtExceptions());
+        assertTrue(config.breakOnUncaughtExceptions());
     }
 
     @Test
@@ -78,7 +84,7 @@ class GlobalConfigPersistenceTest {
     void ignoresUnknownAndAbsentFields(@TempDir Path dataDirectory) throws IOException {
         Files.writeString(
                 dataDirectory.resolve(SETTINGS_FILE),
-                "{\"version\":1,\"theme\":\"islands-light\",\"somethingElse\":true}",
+                "{\"version\":2,\"theme\":\"islands-light\",\"somethingElse\":true}",
                 StandardCharsets.UTF_8
         );
 
@@ -95,7 +101,7 @@ class GlobalConfigPersistenceTest {
     void clampsAbsurdFontSizes(@TempDir Path dataDirectory) throws IOException {
         Files.writeString(
                 dataDirectory.resolve(SETTINGS_FILE),
-                "{\"version\":1,\"editorFontSize\":9999.0,\"uiFontSize\":-4.0}",
+                "{\"version\":2,\"editorFontSize\":9999.0,\"uiFontSize\":-4.0}",
                 StandardCharsets.UTF_8
         );
 

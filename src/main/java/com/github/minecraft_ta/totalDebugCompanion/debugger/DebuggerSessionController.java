@@ -113,6 +113,8 @@ public final class DebuggerSessionController implements AutoCloseable {
     private volatile DebugTargetDescriptor target;
     private volatile DebugEngine engine;
     private volatile PausedState pausedState;
+    private volatile boolean breakOnCaughtExceptions;
+    private volatile boolean breakOnUncaughtExceptions;
     private volatile boolean closed;
 
     public DebuggerSessionController() {
@@ -203,6 +205,10 @@ public final class DebuggerSessionController implements AutoCloseable {
                 DebugEngine.Target endpoint = this.targetResolver.resolve(currentTarget, ATTACH_TIMEOUT);
                 replacement.attach(endpoint).join();
                 applyAllBreakpoints(replacement);
+                replacement.setExceptionBreakpoints(
+                        this.breakOnCaughtExceptions,
+                        this.breakOnUncaughtExceptions
+                ).join();
                 replacement.start().join();
                 updateStatus(Phase.RUNNING, "Attached to " + currentTarget.displayName(), null);
             } catch (Throwable failure) {
@@ -268,6 +274,17 @@ public final class DebuggerSessionController implements AutoCloseable {
             NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
             return sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.values());
         }
+    }
+
+    public CompletableFuture<Void> setExceptionBreakpoints(boolean caught, boolean uncaught) {
+        return submitFuture(() -> {
+            this.breakOnCaughtExceptions = caught;
+            this.breakOnUncaughtExceptions = uncaught;
+            DebugEngine current = this.engine;
+            if (current != null) {
+                current.setExceptionBreakpoints(caught, uncaught).join();
+            }
+        });
     }
 
     public Breakpoint breakpoint(URI sourceUri, int line) {

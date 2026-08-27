@@ -134,6 +134,10 @@ public final class CompanionApp {
             runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
             debuggerController = new DebuggerSessionController(CompanionApp::loadDebugSource);
+            debuggerController.setExceptionBreakpoints(
+                    GlobalConfig.getInstance().breakOnCaughtExceptions(),
+                    GlobalConfig.getInstance().breakOnUncaughtExceptions()
+            );
             restoreProfile();
 
             session = new CompanionSession(token, CompanionApp::activateSessionProfile, new CompanionSession.Listener() {

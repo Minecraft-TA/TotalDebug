@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
@@ -10,6 +11,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -41,6 +43,7 @@ public class SettingsWindow extends JDialog {
 
         JPanel form = new JPanel(new GridBagLayout());
         int row = 0;
+        addSection(form, row++, "Appearance");
         addRow(form, row++, "Theme", createThemeChooser());
         GlobalConfig config = GlobalConfig.getInstance();
         addRow(form, row++, "Editor font size", createFontSizeSpinner(
@@ -48,10 +51,21 @@ public class SettingsWindow extends JDialog {
                 config::setEditorFontSize,
                 () -> { }
         ));
-        addRow(form, row, "UI font size", createFontSizeSpinner(
+        addRow(form, row++, "UI font size", createFontSizeSpinner(
                 config.uiFontSize(),
                 config::setUiFontSize,
                 ThemeManager::reapply
+        ));
+        addSection(form, row++, "Debugger");
+        addWideRow(form, row++, createExceptionBreakpointToggle(
+                "Pause on caught exceptions",
+                config.breakOnCaughtExceptions(),
+                config::setBreakOnCaughtExceptions
+        ));
+        addWideRow(form, row, createExceptionBreakpointToggle(
+                "Pause on uncaught exceptions",
+                config.breakOnUncaughtExceptions(),
+                config::setBreakOnUncaughtExceptions
         ));
 
         content.add(form, BorderLayout.CENTER);
@@ -91,6 +105,24 @@ public class SettingsWindow extends JDialog {
         return spinner;
     }
 
+    private JComponent createExceptionBreakpointToggle(
+            String label,
+            boolean selected,
+            Consumer<Boolean> setter
+    ) {
+        JCheckBox toggle = new JCheckBox(label, selected);
+        toggle.addActionListener(event -> {
+            setter.accept(toggle.isSelected());
+            GlobalConfig config = GlobalConfig.getInstance();
+            CompanionApp.getDebuggerController()
+                    .setExceptionBreakpoints(
+                            config.breakOnCaughtExceptions(),
+                            config.breakOnUncaughtExceptions()
+                    );
+        });
+        return toggle;
+    }
+
     private JComponent createButtonBar() {
         JButton close = new JButton("Close");
         close.addActionListener(event -> dispose());
@@ -119,5 +151,28 @@ public class SettingsWindow extends JDialog {
         fieldConstraints.insets = new Insets(4, 0, 4, 0);
         field.setPreferredSize(new Dimension(180, field.getPreferredSize().height));
         form.add(field, fieldConstraints);
+    }
+
+    private static void addSection(JPanel form, int row, String title) {
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridy = row;
+        constraints.gridwidth = 2;
+        constraints.anchor = GridBagConstraints.LINE_START;
+        constraints.insets = new Insets(row == 0 ? 0 : 12, 0, 4, 0);
+        JLabel label = new JLabel(title);
+        label.putClientProperty("FlatLaf.styleClass", "h4");
+        form.add(label, constraints);
+    }
+
+    private static void addWideRow(JPanel form, int row, Component field) {
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridy = row;
+        constraints.gridwidth = 2;
+        constraints.weightx = 1;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.insets = new Insets(2, 0, 2, 0);
+        form.add(field, constraints);
     }
 }

@@ -15,12 +15,42 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerSessionControllerTest {
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(2);
+
+    @Test
+    void appliesExceptionPreferencesOnAttachAndWhileRunning() throws Exception {
+        RecordingEngine recording = new RecordingEngine();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                recording::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            controller.setExceptionBreakpoints(true, false)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertTrue(recording.caughtExceptions);
+            assertFalse(recording.uncaughtExceptions);
+            assertEquals(1, recording.exceptionBreakpointUpdates);
+
+            controller.setExceptionBreakpoints(false, true)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertFalse(recording.caughtExceptions);
+            assertTrue(recording.uncaughtExceptions);
+            assertEquals(2, recording.exceptionBreakpointUpdates);
+        } finally {
+            controller.close();
+        }
+    }
 
     @Test
     void targetPublicationIsDetachedAndManualReattachUsesAFreshEngine() throws Exception {
@@ -465,6 +495,9 @@ class DebuggerSessionControllerTest {
         private DebugEngine.EvaluationResult evaluationResult =
                 new DebugEngine.EvaluationResult("", "", 0, 0);
         private boolean breakpointVerified = true;
+        private boolean caughtExceptions;
+        private boolean uncaughtExceptions;
+        private int exceptionBreakpointUpdates;
 
         static DebugEngine newProxy() {
             return new RecordingEngine().proxy();
@@ -518,7 +551,13 @@ class DebuggerSessionControllerTest {
                         case "threads" -> completed(List.of());
                         case "evaluate" -> completed(this.evaluationResult);
                         case "exceptionInfo" -> completed(new DebugEngine.ExceptionInfo("", "", ""));
-                        case "setExceptionBreakpoints", "pause", "stepOver", "stepInto", "stepOut" -> completed(null);
+                        case "setExceptionBreakpoints" -> {
+                            this.caughtExceptions = (Boolean) arguments[0];
+                            this.uncaughtExceptions = (Boolean) arguments[1];
+                            this.exceptionBreakpointUpdates++;
+                            yield completed(null);
+                        }
+                        case "pause", "stepOver", "stepInto", "stepOut" -> completed(null);
                         case "resume" -> {
                             this.resumedThread = (Long) arguments[0];
                             yield completed(null);

@@ -36,7 +36,7 @@ public final class GlobalConfig {
     public static final float MAX_FONT_SIZE = 40f;
 
     /** Bumped only when the on-disk shape changes incompatibly. */
-    private static final int SETTINGS_VERSION = 1;
+    private static final int SETTINGS_VERSION = 2;
     private static final String SETTINGS_FILE_NAME = "companion-ui-settings.json";
     private static final String EDITOR_FONT_SIZE_PROPERTY = "editorFontSize";
     private static final long SAVE_DELAY_MILLIS = 500;
@@ -51,6 +51,8 @@ public final class GlobalConfig {
     private volatile float uiFontSize = 13f;
     private volatile Rectangle debuggerWindowBounds;
     private volatile List<String> debuggerWatches = List.of();
+    private volatile boolean breakOnCaughtExceptions;
+    private volatile boolean breakOnUncaughtExceptions;
     private volatile Path settingsFile;
     private volatile ScheduledExecutorService saveExecutor;
 
@@ -125,6 +127,30 @@ public final class GlobalConfig {
         scheduleSave();
     }
 
+    public boolean breakOnCaughtExceptions() {
+        return this.breakOnCaughtExceptions;
+    }
+
+    public void setBreakOnCaughtExceptions(boolean enabled) {
+        if (this.breakOnCaughtExceptions == enabled) {
+            return;
+        }
+        this.breakOnCaughtExceptions = enabled;
+        scheduleSave();
+    }
+
+    public boolean breakOnUncaughtExceptions() {
+        return this.breakOnUncaughtExceptions;
+    }
+
+    public void setBreakOnUncaughtExceptions(boolean enabled) {
+        if (this.breakOnUncaughtExceptions == enabled) {
+            return;
+        }
+        this.breakOnUncaughtExceptions = enabled;
+        scheduleSave();
+    }
+
     public void addEditorFontSizeListener(PropertyChangeListener listener) {
         pcs.addPropertyChangeListener(EDITOR_FONT_SIZE_PROPERTY, listener);
     }
@@ -188,6 +214,12 @@ public final class GlobalConfig {
         }
         if (persisted.debuggerWatches != null) {
             this.debuggerWatches = normalizeWatches(persisted.debuggerWatches);
+        }
+        if (persisted.breakOnCaughtExceptions != null) {
+            this.breakOnCaughtExceptions = persisted.breakOnCaughtExceptions;
+        }
+        if (persisted.breakOnUncaughtExceptions != null) {
+            this.breakOnUncaughtExceptions = persisted.breakOnUncaughtExceptions;
         }
     }
 
@@ -255,7 +287,9 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.y,
                 debuggerBounds == null ? null : debuggerBounds.width,
                 debuggerBounds == null ? null : debuggerBounds.height,
-                this.debuggerWatches
+                this.debuggerWatches,
+                this.breakOnCaughtExceptions,
+                this.breakOnUncaughtExceptions
         );
 
         Path parent = target.toAbsolutePath().normalize().getParent();
@@ -292,7 +326,9 @@ public final class GlobalConfig {
             Integer debuggerWindowY,
             Integer debuggerWindowWidth,
             Integer debuggerWindowHeight,
-            List<String> debuggerWatches
+            List<String> debuggerWatches,
+            Boolean breakOnCaughtExceptions,
+            Boolean breakOnUncaughtExceptions
     ) {
     }
 
