@@ -12,6 +12,9 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigat
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationImplementation;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.RichExpressionDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import net.minecraft.test.GeneratedNamesDebuggeeMain;
 
 import java.io.InputStream;
@@ -39,6 +42,11 @@ public final class DebuggerScenarios {
                         "breakpoint-conditions",
                         "conditional and hit-count breakpoints",
                         DebuggerScenarios::conditionalAndHitCountBreakpoints
+                ),
+                new Scenario(
+                        "rich-expressions",
+                        "runtime member completion, overloads, and private calls",
+                        DebuggerScenarios::richExpressions
                 ),
                 new Scenario("pause-detach", "pause and detach", DebuggerScenarios::pauseAndDetach),
                 new Scenario("exceptions", "uncaught exception", DebuggerScenarios::uncaughtException),
@@ -152,8 +160,64 @@ public final class DebuggerScenarios {
     }
 
     public static void conditionalAndHitCountBreakpoints() throws Exception {
-        assertLoopBreakpoint("iteration == 2", null, "2");
+        assertLoopBreakpoint("isTarget(iteration)", null, "2");
         assertLoopBreakpoint(null, "2", "1");
+    }
+
+    public static void richExpressions() throws Exception {
+        java.nio.file.Path path = java.nio.file.Path.of(System.getProperty("user.dir"), "src", "test", "java")
+                .resolve(RichExpressionDebuggeeMain.class.getName().replace('.', '/') + ".java")
+                .toAbsolutePath().normalize();
+        DebugEngine.Source source = new DebugEngine.Source(
+                path.toUri(), RichExpressionDebuggeeMain.class.getName(),
+                java.nio.file.Files.readString(path),
+                com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap.empty(),
+                SourceVariableNames.of(Map.of("target", "renamedTarget", "local", "renamedLocal"))
+        );
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class, source)) {
+            int line = harness.lineContaining("DEBUG_RICH_EXPRESSION");
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(line));
+            harness.start();
+            DebugEngine.StoppedEvent stop = harness.awaitStop("rich expression breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+
+            equal("\"own-secret\"", value(harness.engine().evaluate("renamedTarget.ownSecret", frame.id())), "private field");
+            equal("\"inherited-secret\"", value(harness.engine().evaluate("renamedTarget.privateBaseCall()", frame.id())), "inherited private method");
+            equal("\"child\"", value(harness.engine().evaluate("renamedTarget.virtualCall()", frame.id())), "virtual dispatch");
+            equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload(1)", frame.id())), "exact overload");
+            equal("\"long\"", value(harness.engine().evaluate("renamedTarget.overload((long) 1)", frame.id())), "primitive widening overload");
+            equal("\"string\"", value(harness.engine().evaluate("renamedTarget.overload(\"text\")", frame.id())), "reference overload");
+            equal("\"boxed3\"", value(harness.engine().evaluate("renamedTarget.boxed(3)", frame.id())), "boxing");
+            equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
+            equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
+            equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");
+
+            List<DebuggerCompletionProposal> completions = harness.engine()
+                    .completions("renamedTarget.", frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(completions.stream().anyMatch(item -> item.label().equals("ownSecret")), "private field missing from completion");
+            check(completions.stream().anyMatch(item -> item.label().startsWith("privateBaseCall")), "inherited method missing from completion");
+            check(completions.stream().anyMatch(item -> item.label().startsWith("overload")), "overload missing from completion");
+            check(completions.stream().allMatch(item -> item.replacementStart() == "renamedTarget.".length()
+                    && item.replacementEnd() == "renamedTarget.".length()), "completion replacement range is not after dot");
+
+            try {
+                harness.engine().evaluate("renamedTarget.throwing()", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Target exception unexpectedly completed evaluation");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.getCause() != null
+                                && expected.getCause().toString().contains("InvocationException"),
+                        "Target exception was not preserved: " + expected);
+            }
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "rich expression debuggee exit code");
+        }
+    }
+
+    private static String value(java.util.concurrent.CompletableFuture<DebugEngine.EvaluationResult> evaluation)
+            throws Exception {
+        return evaluation.get(TIMEOUT_SECONDS, TimeUnit.SECONDS).value();
     }
 
     public static void pauseAndDetach() throws Exception {

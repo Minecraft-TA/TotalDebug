@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +21,7 @@ import java.awt.Dimension;
 import java.awt.Window;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
 import java.util.function.BooleanSupplier;
 
@@ -72,6 +74,49 @@ final class ExpressionCompletionSupportUiTest {
                     invokeFieldAction(fixture.field(), "TAB");
                     assertEquals("true", fixture.field().getText());
                     assertTrue(fixture.parentPopup().isVisible(), "Accepting completion must keep the editor open");
+                });
+            } finally {
+                onEdt(fixture::close);
+            }
+        });
+    }
+
+    @Test
+    void ignoresAStaleAsynchronousCompletionResponse() throws Exception {
+        withPopupFactory(ignored -> {
+            Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            try {
+                List<CompletableFuture<List<DebuggerCompletionProposal>>> requests = new java.util.ArrayList<>();
+                List<String> requestTexts = new java.util.ArrayList<>();
+                onEdt(() -> fixture.completion().setCompletionProvider((text, caret, explicit) -> {
+                    CompletableFuture<List<DebuggerCompletionProposal>> request = new CompletableFuture<>();
+                    requests.add(request);
+                    requestTexts.add(text);
+                    return request;
+                }));
+
+                onEdt(() -> fixture.field().setText("f"));
+                await(() -> requestTexts.contains("f"));
+                onEdt(() -> fixture.field().setText("t"));
+                await(() -> requestTexts.contains("t"));
+                int currentRequest = requestTexts.lastIndexOf("t");
+                int staleRequest = requestTexts.lastIndexOf("f");
+
+                onEdt(() -> requests.get(currentRequest).complete(List.of(new DebuggerCompletionProposal(
+                        "true", "true", DebuggerCompletionProposal.Kind.KEYWORD,
+                        "boolean literal", 0, 1
+                ))));
+                await(fixture.completion()::isCompletionVisible);
+                assertTrue(onEdt(fixture.completion()::isCompletionVisible));
+                onEdt(() -> requests.get(staleRequest).complete(List.of(new DebuggerCompletionProposal(
+                        "false", "false", DebuggerCompletionProposal.Kind.KEYWORD,
+                        "boolean literal", 0, 1
+                ))));
+                Thread.sleep(100);
+                onEdt(() -> {
+                    assertTrue(fixture.completion().isCompletionVisible());
+                    invokeFieldAction(fixture.field(), "TAB");
+                    assertEquals("true", fixture.field().getText());
                 });
             } finally {
                 onEdt(fixture::close);

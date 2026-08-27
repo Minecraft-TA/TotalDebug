@@ -25,6 +25,12 @@ class MicrosoftJavaDebugEngineIntegrationTest {
 
     @Test
     @Timeout(30)
+    void evaluatesRichExpressionsAndCompletesRuntimeMembers() throws Exception {
+        DebuggerScenarios.richExpressions();
+    }
+
+    @Test
+    @Timeout(30)
     void pausesARunningThreadAndInspectsItsFrame() throws Exception {
         DebuggerScenarios.pauseAndDetach();
     }

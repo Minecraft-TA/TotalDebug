@@ -4,6 +4,10 @@ public final class ConditionalDebuggeeMain {
     private ConditionalDebuggeeMain() {
     }
 
+    private static boolean isTarget(int iteration) {
+        return iteration == 2;
+    }
+
     public static void main(String[] args) {
         for (int iteration = 0; iteration < 3; iteration++) {
             int snapshot = iteration; // DEBUG_CONDITIONAL_BREAKPOINT
