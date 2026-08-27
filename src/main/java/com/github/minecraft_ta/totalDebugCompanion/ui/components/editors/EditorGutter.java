@@ -4,7 +4,6 @@ import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.IconRowHeader;
 import org.fife.ui.rtextarea.LineNumberList;
 
-import javax.swing.JLayer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.util.Objects;
@@ -14,19 +13,16 @@ final class EditorGutter {
     private final Gutter gutter;
     private final LineNumberList lineNumbers;
     private final IconRowHeader hierarchyIcons;
-    private final JLayer<LineNumberList> lineNumberLayer;
 
     EditorGutter(Gutter gutter) {
         this.gutter = Objects.requireNonNull(gutter, "gutter");
         this.gutter.setIconRowHeaderEnabled(true);
         this.lineNumbers = find(this.gutter, LineNumberList.class, "line numbers");
         this.hierarchyIcons = find(this.gutter, IconRowHeader.class, "icon row header");
-        this.lineNumberLayer = new JLayer<>(this.lineNumbers);
-        this.lineNumberLayer.setOpaque(false);
 
         this.gutter.remove(this.lineNumbers);
         this.gutter.remove(this.hierarchyIcons);
-        this.gutter.add(this.lineNumberLayer, BorderLayout.LINE_START);
+        this.gutter.add(this.lineNumbers, BorderLayout.LINE_START);
         this.gutter.add(this.hierarchyIcons, BorderLayout.CENTER);
         this.gutter.revalidate();
     }
@@ -41,10 +37,6 @@ final class EditorGutter {
 
     IconRowHeader hierarchyIcons() {
         return this.hierarchyIcons;
-    }
-
-    JLayer<LineNumberList> lineNumberLayer() {
-        return this.lineNumberLayer;
     }
 
     private static <T extends Component> T find(

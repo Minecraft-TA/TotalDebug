@@ -162,6 +162,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.breakpointMarkers = new BreakpointGutterMarkers(
                     editorGutter,
                     this.editorPane,
+                    this.editorLayer,
                     new BreakpointGutterMarkers.Handler() {
                         @Override
                         public void toggle(int displayedLine) {
@@ -174,6 +175,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                         }
                     }
             );
+            this.editorChromeLayerUI.setBreakpointMarkers(this.breakpointMarkers);
             updateBreakpointMarkers(debugger);
             this.debuggerListener = new DebuggerSessionController.Listener() {
                 @Override
@@ -267,6 +269,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
             }
             if (this.breakpointMarkers != null) {
+                this.editorChromeLayerUI.setBreakpointMarkers(null);
                 this.breakpointMarkers.dispose();
             }
             DebuggerExecutionLine.clear(this.debuggerLineHighlights);

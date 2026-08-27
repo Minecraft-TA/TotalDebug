@@ -27,6 +27,7 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
     private JLayer<RTextScrollPane> layer;
     private Color gutterBackground;
     private Color currentLine;
+    private BreakpointGutterMarkers breakpointMarkers;
 
     EditorChromeLayerUI(RSyntaxTextArea editor, Gutter gutter) {
         this.editor = Objects.requireNonNull(editor, "editor");
@@ -37,6 +38,13 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
         this.gutterBackground = palette.background();
         this.currentLine = palette.currentLine();
         layer.repaint();
+    }
+
+    void setBreakpointMarkers(BreakpointGutterMarkers breakpointMarkers) {
+        this.breakpointMarkers = breakpointMarkers;
+        if (this.layer != null) {
+            this.layer.repaint();
+        }
     }
 
     @Override
@@ -89,6 +97,19 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
             draw.dispose();
         }
         super.paint(graphics, component);
+        if (this.breakpointMarkers != null) {
+            Graphics2D overlay = (Graphics2D) graphics.create();
+            try {
+                this.breakpointMarkers.paint(
+                        overlay,
+                        component,
+                        this.gutterBackground == null ? this.editor.getBackground() : this.gutterBackground,
+                        this.currentLine == null ? this.editor.getCurrentLineHighlightColor() : this.currentLine
+                );
+            } finally {
+                overlay.dispose();
+            }
+        }
     }
 
     private static Rectangle componentBounds(JComponent child, JComponent ancestor) {

@@ -12,6 +12,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
+import javax.swing.JLayer;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
@@ -38,30 +39,32 @@ class HierarchyGutterMarkersTest {
             editor.setSize(320, 120);
             var scrollPane = new RTextScrollPane(editor);
             scrollPane.setLineNumbersEnabled(true);
+            var paintLayer = new JLayer<>(scrollPane);
             var editorGutter = new EditorGutter(scrollPane.getGutter());
             var breakpointMarkers = new BreakpointGutterMarkers(
                     editorGutter,
                     editor,
+                    paintLayer,
                     new EmptyBreakpointHandler()
             );
-            scrollPane.setSize(320, 120);
-            layoutRecursively(scrollPane);
+            paintLayer.setSize(320, 120);
+            layoutRecursively(paintLayer);
 
-            BufferedImage empty = paint(editorGutter.lineNumberLayer());
+            BufferedImage empty = paint(breakpointMarkers, paintLayer);
             breakpointMarkers.setBreakpoints(List.of(managed(
                     new DebugEngine.SourceBreakpoint(1),
                     DebuggerSessionController.BreakpointState.UNBOUND
             )));
-            BufferedImage first = paint(editorGutter.lineNumberLayer());
+            BufferedImage first = paint(breakpointMarkers, paintLayer);
             breakpointMarkers.setBreakpoints(List.of(
                     managed(new DebugEngine.SourceBreakpoint(1), DebuggerSessionController.BreakpointState.UNBOUND),
                     managed(new DebugEngine.SourceBreakpoint(2), DebuggerSessionController.BreakpointState.UNBOUND)
             ));
-            BufferedImage second = paint(editorGutter.lineNumberLayer());
+            BufferedImage second = paint(breakpointMarkers, paintLayer);
 
-            assertNotEquals(rowPixels(empty, editor, 1), rowPixels(first, editor, 1));
-            assertEquals(rowPixels(first, editor, 1), rowPixels(second, editor, 1));
-            assertNotEquals(rowPixels(first, editor, 2), rowPixels(second, editor, 2));
+            assertNotEquals(rowPixels(empty, editor, paintLayer, 1), rowPixels(first, editor, paintLayer, 1));
+            assertEquals(rowPixels(first, editor, paintLayer, 1), rowPixels(second, editor, paintLayer, 1));
+            assertNotEquals(rowPixels(first, editor, paintLayer, 2), rowPixels(second, editor, paintLayer, 2));
 
             breakpointMarkers.dispose();
         });
@@ -79,12 +82,12 @@ class HierarchyGutterMarkersTest {
             var markers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
             gutter.setSize(gutter.getPreferredSize());
             gutter.doLayout();
-            lineNumbers.set(editorGutter.lineNumberLayer());
+            lineNumbers.set(editorGutter.lineNumbers());
             hierarchyIcons.set(editorGutter.hierarchyIcons());
             markers.dispose();
         });
 
-        assertInstanceOf(javax.swing.JLayer.class, lineNumbers.get());
+        assertInstanceOf(LineNumberList.class, lineNumbers.get());
         assertInstanceOf(IconRowHeader.class, hierarchyIcons.get());
         assertTrue(lineNumbers.get().getX() < hierarchyIcons.get().getX());
     }
@@ -103,7 +106,13 @@ class HierarchyGutterMarkersTest {
 
             var editorGutter = new EditorGutter(gutter);
             var hierarchyMarkers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
-            var breakpointMarkers = new BreakpointGutterMarkers(editorGutter, editor, new EmptyBreakpointHandler());
+            var paintLayer = new JLayer<>(scrollPane);
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    paintLayer,
+                    new EmptyBreakpointHandler()
+            );
             breakpointMarkers.setBreakpoints(List.of(new DebuggerSessionController.Breakpoint(
                     new DebugEngine.SourceBreakpoint(2),
                     DebuggerSessionController.BreakpointState.UNBOUND,
@@ -155,9 +164,11 @@ class HierarchyGutterMarkersTest {
             var gutter = scrollPane.getGutter();
             var editorGutter = new EditorGutter(gutter);
             var hierarchyMarkers = new HierarchyGutterMarkers(editorGutter, new EmptyHandler());
+            var paintLayer = new JLayer<>(scrollPane);
             var breakpointMarkers = new BreakpointGutterMarkers(
                     editorGutter,
                     editor,
+                    paintLayer,
                     new BreakpointGutterMarkers.Handler() {
                         @Override
                         public void toggle(int displayedLine) {
@@ -207,9 +218,11 @@ class HierarchyGutterMarkersTest {
             var editor = new RSyntaxTextArea("first\nsecond\nthird");
             var scrollPane = new RTextScrollPane(editor);
             var editorGutter = new EditorGutter(scrollPane.getGutter());
+            var paintLayer = new JLayer<>(scrollPane);
             var breakpointMarkers = new BreakpointGutterMarkers(
                     editorGutter,
                     editor,
+                    paintLayer,
                     new BreakpointGutterMarkers.Handler() {
                         @Override
                         public void toggle(int displayedLine) {
@@ -308,21 +321,27 @@ class HierarchyGutterMarkersTest {
         return new DebuggerSessionController.Breakpoint(request, state, "");
     }
 
-    private static BufferedImage paint(Component component) {
+    private static BufferedImage paint(BreakpointGutterMarkers markers, Component component) {
         BufferedImage image = new BufferedImage(
                 component.getWidth(),
                 component.getHeight(),
                 BufferedImage.TYPE_INT_ARGB
         );
         Graphics2D graphics = image.createGraphics();
-        component.paint(graphics);
+        markers.paint(graphics, component, Color.BLACK, Color.DARK_GRAY);
         graphics.dispose();
         return image;
     }
 
-    private static int rowPixels(BufferedImage image, RSyntaxTextArea editor, int displayedLine) {
+    private static int rowPixels(
+            BufferedImage image,
+            RSyntaxTextArea editor,
+            Component ancestor,
+            int displayedLine
+    ) {
         try {
-            int y = (int) editor.modelToView2D(editor.getLineStartOffset(displayedLine - 1)).getY();
+            int editorY = (int) editor.modelToView2D(editor.getLineStartOffset(displayedLine - 1)).getY();
+            int y = SwingUtilities.convertPoint(editor, 0, editorY, ancestor).y;
             int height = Math.min(editor.getLineHeight(), image.getHeight() - y);
             return java.util.Arrays.hashCode(image.getRGB(
                     0,

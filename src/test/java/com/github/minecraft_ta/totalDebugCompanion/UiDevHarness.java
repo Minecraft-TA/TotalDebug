@@ -324,6 +324,75 @@ public final class UiDevHarness {
         openTimer.start();
     }
 
+    private static void scheduleMethodNavigationVerification() {
+        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> CompanionApp.openClass(
+                "sample.ThemeSampleImpl",
+                org.eclipse.jdt.core.IJavaElement.METHOD,
+                "Lsample/ThemeSampleImpl;.apply(Lsample/ThemeSample;)V"
+        ));
+        openTimer.setRepeats(false);
+        openTimer.start();
+
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
+        javax.swing.Timer verifyTimer = new javax.swing.Timer(100, event -> {
+            try {
+                var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                if (selected instanceof CodeView codeView
+                        && codeView.getTitle().equals("ThemeSampleImpl")) {
+                    RSyntaxTextArea editor = findComponent(
+                            (Container) codeView.getComponent(),
+                            RSyntaxTextArea.class
+                    );
+                    int caret = editor.getCaretPosition();
+                    int line = editor.getLineOfOffset(caret);
+                    int lineStart = editor.getLineStartOffset(line);
+                    String lineText = editor.getText(lineStart, editor.getLineEndOffset(line) - lineStart);
+                    if (lineText.contains(" apply(")) {
+                        ((javax.swing.Timer) event.getSource()).stop();
+                        System.out.println("METHOD_NAVIGATION_OK line=" + (line + 1) + " caret=" + caret);
+                        MainWindow.INSTANCE.dispose();
+                        System.exit(0);
+                    }
+                }
+                if (System.nanoTime() >= deadline) {
+                    String detail = selected == null
+                            ? "selected=null"
+                            : "selected=" + selected.getClass().getSimpleName() + ":" + selected.getTitle();
+                    if (selected instanceof CodeView codeView) {
+                        RSyntaxTextArea editor = findComponent(
+                                (Container) codeView.getComponent(),
+                                RSyntaxTextArea.class
+                        );
+                        int line = editor.getLineOfOffset(editor.getCaretPosition());
+                        detail += " caret=" + editor.getCaretPosition() + " line=" + (line + 1)
+                                + " text=" + editor.getText(
+                                editor.getLineStartOffset(line),
+                                editor.getLineEndOffset(line) - editor.getLineStartOffset(line)
+                        ).strip();
+                        detail += " readyDone=" + codeView.ready().isDone()
+                                + " readyExceptional=" + codeView.ready().isCompletedExceptionally();
+                        if (codeView.ready().isCompletedExceptionally()) {
+                            try {
+                                codeView.ready().join();
+                            } catch (java.util.concurrent.CompletionException failure) {
+                                detail += " readyFailure=" + failure.getCause();
+                            }
+                        }
+                    }
+                    throw new IllegalStateException(
+                            "Method navigation did not place the caret on ThemeSampleImpl.apply; " + detail
+                    );
+                }
+            } catch (Exception exception) {
+                exception.printStackTrace(System.err);
+                MainWindow.INSTANCE.dispose();
+                System.exit(2);
+            }
+        });
+        verifyTimer.setInitialDelay(0);
+        verifyTimer.start();
+    }
+
     private static Component findNamedComponent(Container root, String name) {
         if (name.equals(root.getName())) {
             return root;
@@ -844,7 +913,8 @@ public final class UiDevHarness {
                 || Arrays.asList(args).contains("--verify-gutter-direct")
                 || Arrays.asList(args).contains("--verify-gutter-hover")
                 || Arrays.asList(args).contains("--verify-hierarchy-row-layout")
-                || Arrays.asList(args).contains("--verify-search-everywhere-interactions");
+                || Arrays.asList(args).contains("--verify-search-everywhere-interactions")
+                || Arrays.asList(args).contains("--verify-method-navigation");
         CompanionApp.configureLookAndFeel();
         if (backgroundMode) {
             javax.swing.PopupFactory.setSharedInstance(new OffscreenPopupFactory());
@@ -915,6 +985,9 @@ public final class UiDevHarness {
             );
             if (verifySearchEverywhere) {
                 scheduleSearchEverywhereInteractionVerification();
+            }
+            if (Arrays.asList(args).contains("--verify-method-navigation")) {
+                scheduleMethodNavigationVerification();
             }
             if (backgroundMode) {
                 MainWindow.INSTANCE.setAutoRequestFocus(false);

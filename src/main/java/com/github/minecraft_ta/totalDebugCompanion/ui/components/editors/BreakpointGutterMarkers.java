@@ -5,22 +5,21 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.LineNumberList;
+import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.Icon;
 import javax.swing.JLayer;
 import javax.swing.SwingUtilities;
-import javax.swing.plaf.LayerUI;
 import javax.swing.text.BadLocationException;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
-import java.awt.geom.Area;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,8 +51,7 @@ final class BreakpointGutterMarkers {
     private final RSyntaxTextArea editor;
     private final Handler handler;
     private final LineNumberList lineNumbers;
-    private final JLayer<LineNumberList> lineNumberLayer;
-    private final BreakpointLayerUI layerUI = new BreakpointLayerUI();
+    private final JLayer<RTextScrollPane> paintLayer;
     private List<DebuggerSessionController.Breakpoint> breakpoints = List.of();
 
     private final MouseAdapter lineNumberClicks = new MouseAdapter() {
@@ -87,27 +85,50 @@ final class BreakpointGutterMarkers {
         }
     };
 
-    BreakpointGutterMarkers(EditorGutter gutter, RSyntaxTextArea editor, Handler handler) {
+    BreakpointGutterMarkers(
+            EditorGutter gutter,
+            RSyntaxTextArea editor,
+            JLayer<RTextScrollPane> paintLayer,
+            Handler handler
+    ) {
         Objects.requireNonNull(gutter, "gutter");
         this.editor = Objects.requireNonNull(editor, "editor");
+        this.paintLayer = Objects.requireNonNull(paintLayer, "paintLayer");
         this.handler = Objects.requireNonNull(handler, "handler");
         this.lineNumbers = gutter.lineNumbers();
-        this.lineNumberLayer = gutter.lineNumberLayer();
-        this.lineNumberLayer.setUI(this.layerUI);
         this.lineNumbers.addMouseListener(this.lineNumberClicks);
         this.lineNumbers.addMouseMotionListener(this.tooltipUpdater);
     }
 
     void setBreakpoints(List<DebuggerSessionController.Breakpoint> breakpoints) {
         this.breakpoints = List.copyOf(Objects.requireNonNull(breakpoints, "breakpoints"));
-        this.lineNumberLayer.repaint();
+        this.paintLayer.repaint();
     }
 
     void dispose() {
         this.lineNumbers.removeMouseListener(this.lineNumberClicks);
         this.lineNumbers.removeMouseMotionListener(this.tooltipUpdater);
         this.lineNumbers.setToolTipText(null);
-        this.lineNumberLayer.setUI(new LayerUI<>());
+        this.breakpoints = List.of();
+        this.paintLayer.repaint();
+    }
+
+    void paint(Graphics2D graphics, Component layer, Color gutterBackground, Color currentLine) {
+        Rectangle lineNumberBounds = componentBounds(this.lineNumbers, layer);
+        for (DebuggerSessionController.Breakpoint breakpoint : this.breakpoints) {
+            Rectangle row = rowBounds(breakpoint.line(), layer, lineNumberBounds);
+            if (row == null) {
+                continue;
+            }
+            graphics.setColor(breakpoint.line() == this.editor.getCaretLineNumber() + 1
+                    ? currentLine
+                    : gutterBackground);
+            graphics.fillRect(row.x, row.y, row.width, row.height);
+            Icon icon = iconFor(breakpoint);
+            int x = row.x + Math.max(0, (row.width - icon.getIconWidth()) / 2);
+            int y = row.y + Math.max(0, (row.height - icon.getIconHeight()) / 2);
+            icon.paintIcon(layer, graphics, x, y);
+        }
     }
 
     static Icon iconFor(DebuggerSessionController.Breakpoint breakpoint) {
@@ -208,52 +229,35 @@ final class BreakpointGutterMarkers {
         return state + " at line " + breakpoint.line();
     }
 
-    private final class BreakpointLayerUI extends LayerUI<LineNumberList> {
-        @Override
-        public void paint(Graphics graphics, javax.swing.JComponent component) {
-            Graphics2D base = (Graphics2D) graphics.create();
-            Shape originalClip = base.getClip();
-            Area remaining = originalClip == null
-                    ? new Area(new Rectangle(0, 0, component.getWidth(), component.getHeight()))
-                    : new Area(originalClip);
-            for (DebuggerSessionController.Breakpoint breakpoint : breakpoints) {
-                Rectangle row = rowBounds(breakpoint.line());
-                if (row != null) {
-                    remaining.subtract(new Area(row));
-                }
-            }
-            base.setClip(remaining);
-            super.paint(base, component);
-            base.dispose();
-
-            Graphics2D icons = (Graphics2D) graphics.create();
-            for (DebuggerSessionController.Breakpoint breakpoint : breakpoints) {
-                Rectangle row = rowBounds(breakpoint.line());
-                if (row == null) {
-                    continue;
-                }
-                Icon icon = iconFor(breakpoint);
-                int x = Math.max(0, (component.getWidth() - icon.getIconWidth()) / 2);
-                int y = row.y + Math.max(0, (row.height - icon.getIconHeight()) / 2);
-                icon.paintIcon(component, icons, x, y);
-            }
-            icons.dispose();
+    private Rectangle rowBounds(int displayedLine, Component layer, Rectangle lineNumberBounds) {
+        if (displayedLine < 1 || displayedLine > this.editor.getLineCount()) {
+            return null;
         }
-
-        private Rectangle rowBounds(int displayedLine) {
-            if (displayedLine < 1 || displayedLine > editor.getLineCount()) {
+        try {
+            var bounds = this.editor.modelToView2D(this.editor.getLineStartOffset(displayedLine - 1));
+            if (bounds == null) {
                 return null;
             }
-            try {
-                var bounds = editor.modelToView2D(editor.getLineStartOffset(displayedLine - 1));
-                if (bounds == null) {
-                    return null;
-                }
-                return new Rectangle(0, (int) bounds.getY(), lineNumberLayer.getWidth(), editor.getLineHeight());
-            } catch (BadLocationException exception) {
-                throw new IllegalStateException("Unable to paint breakpoint line " + displayedLine, exception);
-            }
+            Point point = SwingUtilities.convertPoint(
+                    this.editor,
+                    0,
+                    (int) bounds.getY(),
+                    layer
+            );
+            return new Rectangle(
+                    lineNumberBounds.x,
+                    point.y,
+                    lineNumberBounds.width,
+                    this.editor.getLineHeight()
+            );
+        } catch (BadLocationException exception) {
+            throw new IllegalStateException("Unable to paint breakpoint line " + displayedLine, exception);
         }
+    }
+
+    private static Rectangle componentBounds(Component child, Component ancestor) {
+        Point point = SwingUtilities.convertPoint(child, 0, 0, ancestor);
+        return new Rectangle(point.x, point.y, child.getWidth(), child.getHeight());
     }
 
     private record BadgeIcon(Icon breakpoint, Icon badge) implements Icon {

@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceL
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.tth05.jindex.ClassIndex;
+import org.eclipse.jdt.core.IJavaElement;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,35 @@ final class SourceFileNavigationTest {
         assertEquals(
                 SOURCE.indexOf("void test"),
                 offset(ReferenceQuery.fieldReference("example.Use$Target", "missing", "I"))
+        );
+    }
+
+    @Test
+    void targetsTheExactMemberNameInsteadOfItsAnnotationOrDeclarationStart() {
+        String source = """
+                package sample;
+
+                class Target {
+                    @Deprecated
+                    void apply(int value) {
+                    }
+
+                    @Deprecated
+                    int first, selected;
+                }
+                """;
+
+        assertEquals(
+                source.indexOf("apply(int"),
+                SourceFileNavigation.targetOffset(
+                        source,
+                        IJavaElement.METHOD,
+                        "Lsample/Target;.apply(I)V"
+                )
+        );
+        assertEquals(
+                source.indexOf("selected;"),
+                SourceFileNavigation.targetOffset(source, IJavaElement.FIELD, "selected")
         );
     }
 

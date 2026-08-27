@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 final class SourceFileNavigation {
     private static final String COMPILATION_UNIT_NAME = "Name";
@@ -88,18 +87,14 @@ final class SourceFileNavigation {
     ) {
         SwingUtilities.invokeLater(() -> {
             MainWindow window = MainWindow.INSTANCE;
-            AtomicBoolean created = new AtomicBoolean();
             window.getEditorTabs().focusOrCreateIfAbsent(
                     CodeView.class,
                     view -> view.getPath().equals(source.path()),
-                    () -> {
-                        created.set(true);
-                        return new CodeView(source, offset, location);
-                    }
+                    () -> new CodeView(source, offset, location)
             ).thenAccept(codeView -> {
-                if (!created.get()) {
-                    codeView.centerViewportOnOffset(offset);
-                }
+                // A newly created editor can finish loading before its tab has been laid out. Apply
+                // the destination again after EditorTabs reports both the tab and editor ready.
+                codeView.centerViewportOnOffset(offset);
                 if (executionLine > 0) {
                     codeView.showExecutionLine(executionLine);
                 }
@@ -157,11 +152,15 @@ final class SourceFileNavigation {
     }
 
     private static int targetOffset(Path filePath, int targetType, String targetIdentifier) {
+        return targetOffset(CodeView.readCode(filePath), targetType, targetIdentifier);
+    }
+
+    static int targetOffset(String source, int targetType, String targetIdentifier) {
         if (targetType == -1) {
             return 0;
         }
 
-        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, CodeView.readCode(filePath));
+        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
         if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
             throw new IllegalStateException("Decompiled source has no top-level type");
         }
@@ -173,7 +172,7 @@ final class SourceFileNavigation {
             if (method.isEmpty() && !defaultConstructor) {
                 throw new IllegalStateException("Method not found in decompiled source: " + normalizedIdentifier);
             }
-            return method.map(ASTNode::getStartPosition).orElse(0);
+            return method.map(candidate -> candidate.getName().getStartPosition()).orElse(0);
         }
         if (targetType == IJavaElement.FIELD) {
             OptionalInt field = findTargetField(targetIdentifier, type);
@@ -264,7 +263,7 @@ final class SourceFileNavigation {
                         || declaration instanceof EnumConstantDeclaration
                         || declaration instanceof SingleVariableDeclaration)
                 .filter(declaration -> fieldMatches(declaration, targetIdentifier))
-                .mapToInt(SourceFileNavigation::fieldOffset)
+                .mapToInt(declaration -> fieldOffset(declaration, targetIdentifier))
                 .findFirst();
     }
 
@@ -279,13 +278,23 @@ final class SourceFileNavigation {
         };
     }
 
-    private static int fieldOffset(Object declaration) {
+    private static int fieldOffset(Object declaration, String targetIdentifier) {
         return switch (declaration) {
-            case EnumConstantDeclaration constant -> constant.getStartPosition();
-            case SingleVariableDeclaration component -> component.getStartPosition();
-            case FieldDeclaration field -> field.getStartPosition();
+            case EnumConstantDeclaration constant -> constant.getName().getStartPosition();
+            case SingleVariableDeclaration component -> component.getName().getStartPosition();
+            case FieldDeclaration field -> fieldFragmentOffset(field, targetIdentifier);
             default -> throw new IllegalArgumentException("Not a field declaration");
         };
+    }
+
+    private static int fieldFragmentOffset(FieldDeclaration field, String targetIdentifier) {
+        for (Object candidate : field.fragments()) {
+            VariableDeclarationFragment fragment = (VariableDeclarationFragment) candidate;
+            if (fragment.getName().getIdentifier().equals(targetIdentifier)) {
+                return fragment.getName().getStartPosition();
+            }
+        }
+        throw new IllegalArgumentException("Field declaration does not contain " + targetIdentifier);
     }
 
     private static String removeCompilationUnitName(String identifier) {
