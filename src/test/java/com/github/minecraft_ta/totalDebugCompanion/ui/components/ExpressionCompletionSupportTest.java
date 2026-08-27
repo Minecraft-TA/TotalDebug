@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionRange;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -9,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExpressionCompletionSupportTest {
     @Test
     void findsTheIdentifierFragmentAroundTheCaret() {
-        var range = ExpressionCompletionSupport.completionRange("level == true", 3);
+        var range = DebuggerCompletionRange.around("level == true", 3);
 
         assertEquals(0, range.start());
         assertEquals(5, range.end());
@@ -19,9 +20,19 @@ class ExpressionCompletionSupportTest {
 
     @Test
     void recognizesUnsupportedMemberCompletionWithoutGuessing() {
-        var range = ExpressionCompletionSupport.completionRange("state.val", 8);
+        var range = DebuggerCompletionRange.around("state.val", 8);
 
         assertEquals("va", range.prefix());
+        assertTrue(range.memberAccess());
+    }
+
+    @Test
+    void sharesTheSameRangeWhenTheCaretIsInsideAToken() {
+        var range = DebuggerCompletionRange.around("target.field", 9);
+
+        assertEquals(7, range.start());
+        assertEquals(12, range.end());
+        assertEquals("fi", range.prefix());
         assertTrue(range.memberAccess());
     }
 }

@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
@@ -158,14 +157,12 @@ final class ExpressionCompletionSupportUiTest {
 
     private static ExpressionCompletionSupport completion(JTextField field) {
         ExpressionCompletionSupport completion = new ExpressionCompletionSupport(field);
-        completion.setSuggestions(List.of(new ExpressionSuggestion(
-                "false",
-                "boolean literal",
-                ExpressionSuggestion.Kind.KEYWORD
-        ), new ExpressionSuggestion(
-                "true",
-                "boolean literal",
-                ExpressionSuggestion.Kind.KEYWORD
+        completion.setProposals(List.of(new DebuggerCompletionProposal(
+                "false", "false", DebuggerCompletionProposal.Kind.KEYWORD,
+                "boolean literal", 0, 0, 5, 80
+        ), new DebuggerCompletionProposal(
+                "true", "true", DebuggerCompletionProposal.Kind.KEYWORD,
+                "boolean literal", 0, 0, 4, 80
         )));
         return completion;
     }

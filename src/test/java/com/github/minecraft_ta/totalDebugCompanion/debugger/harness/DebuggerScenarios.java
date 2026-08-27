@@ -182,34 +182,86 @@ public final class DebuggerScenarios {
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
 
             equal("\"own-secret\"", value(harness.engine().evaluate("renamedTarget.ownSecret", frame.id())), "private field");
+            equal("\"child-hidden\"", value(harness.engine().evaluate("renamedTarget.inheritedSecret", frame.id())), "hidden child field");
+            equal("\"inherited-secret\"", value(harness.engine().evaluate("super.inheritedSecret", frame.id())), "super private field");
             equal("\"inherited-secret\"", value(harness.engine().evaluate("renamedTarget.privateBaseCall()", frame.id())), "inherited private method");
             equal("\"child\"", value(harness.engine().evaluate("renamedTarget.virtualCall()", frame.id())), "virtual dispatch");
+            equal("\"default-interface\"", value(harness.engine().evaluate("renamedTarget.defaultCall()", frame.id())), "interface default method");
+            equal("\"child-overridable\"", value(harness.engine().evaluate("renamedTarget.overridable()", frame.id())), "overridden virtual call");
+            equal("\"base-overridable\"", value(harness.engine().evaluate("super.overridable()", frame.id())), "super nonvirtual call");
+            equal("\"inherited-secret\"", value(harness.engine().evaluate("((RichExpressionDebuggeeMain.Base) renamedTarget).inheritedSecret", frame.id())), "cast static field type");
+            equal("\"static-child\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.Child.staticChild()", frame.id())), "type-qualified static call");
+            try {
+                harness.engine().evaluate("RichExpressionDebuggeeMain.Child.overridable()", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Type-qualified instance method unexpectedly invoked");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.getCause() != null && expected.getCause().toString().contains("static method"),
+                        "Type-qualified instance method failure was not explicit: " + expected);
+            }
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload(1)", frame.id())), "exact overload");
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload((short) 1)", frame.id())), "primitive widening overload");
             equal("\"long\"", value(harness.engine().evaluate("renamedTarget.overload((long) 1)", frame.id())), "primitive widening overload");
             equal("\"string\"", value(harness.engine().evaluate("renamedTarget.overload(\"text\")", frame.id())), "reference overload");
             equal("\"boxed3\"", value(harness.engine().evaluate("renamedTarget.boxed(3)", frame.id())), "boxing");
             equal("\"unboxed0\"", value(harness.engine().evaluate("renamedTarget.unboxed(warmedBoxingType)", frame.id())), "unboxing");
+            equal("\"unboxed-long0\"", value(harness.engine().evaluate("renamedTarget.unboxedLong(warmedBoxingType)", frame.id())), "unboxing plus widening");
+            equal("\"boolean-true\"", value(harness.engine().evaluate("renamedTarget.booleanAccepted(warmedBooleanType)", frame.id())), "Boolean unboxing");
+            equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload((char) 1)", frame.id())), "char widening");
+            equal("\"fixed\"", value(harness.engine().evaluate("renamedTarget.fixed(\"x\")", frame.id())), "fixed arity beats varargs");
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
+            equal("\"worker-complete\"", value(harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id())), "multi-thread evaluation");
             equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");
+            equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())), "completion counter before");
 
             List<DebuggerCompletionProposal> completions = harness.engine()
-                    .completions("renamedTarget.", frame.id())
+                    .completions("renamedTarget.", "renamedTarget.".length(), frame.id())
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             check(completions.stream().anyMatch(item -> item.label().equals("ownSecret")), "private field missing from completion");
             check(completions.stream().anyMatch(item -> item.label().startsWith("privateBaseCall")), "inherited method missing from completion");
             check(completions.stream().anyMatch(item -> item.label().startsWith("overload")), "overload missing from completion");
             check(completions.stream().allMatch(item -> item.replacementStart() == "renamedTarget.".length()
                     && item.replacementEnd() == "renamedTarget.".length()), "completion replacement range is not after dot");
+            String middleCompletion = "renamedTarget.ownSecret";
+            int middleCaret = "renamedTarget.o".length();
+            List<DebuggerCompletionProposal> middleCompletions = harness.engine()
+                    .completions(middleCompletion, middleCaret, frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebuggerCompletionProposal ownSecret = middleCompletions.stream()
+                    .filter(item -> item.label().equals("ownSecret"))
+                    .findFirst().orElseThrow(() -> new AssertionError("middle-token completion missing"));
+            equal("renamedTarget.".length(), ownSecret.replacementStart(), "middle completion start");
+            equal(middleCompletion.length(), ownSecret.replacementEnd(), "middle completion end");
+            List<DebuggerCompletionProposal> chained = harness.engine()
+                    .completions("renamedTarget.sideEffect().", "renamedTarget.sideEffect().".length(), frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(chained.stream().anyMatch(item -> item.label().equals("ownSecret")),
+                    "chained completion did not resolve the method return type");
+            equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())),
+                    "member completion evaluated its owner");
 
+            try {
+                harness.engine().evaluate("renamedTarget.boxedLong(3)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("int-to-Long conversion unexpectedly succeeded");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("No compatible overload"), "Invalid int-to-Long conversion was accepted");
+            }
+            try {
+                harness.engine().evaluate("renamedTarget.nullOverload(null)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Ambiguous null overload unexpectedly succeeded");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Ambiguous overload"), "Null overload ambiguity was not explicit");
+            }
             try {
                 harness.engine().evaluate("renamedTarget.throwing()", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Target exception unexpectedly completed evaluation");
             } catch (java.util.concurrent.ExecutionException expected) {
                 check(expected.getCause() != null
-                                && expected.getCause().toString().contains("InvocationException"),
+                                && expected.toString().contains("java.lang.IllegalStateException")
+                                && expected.toString().contains("rich-expression-target-failure")
+                                && hasCause(expected, com.sun.jdi.InvocationException.class),
                         "Target exception was not preserved: " + expected);
             }
             harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -220,6 +272,13 @@ public final class DebuggerScenarios {
     private static String value(java.util.concurrent.CompletableFuture<DebugEngine.EvaluationResult> evaluation)
             throws Exception {
         return evaluation.get(TIMEOUT_SECONDS, TimeUnit.SECONDS).value();
+    }
+
+    private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) return true;
+        }
+        return false;
     }
 
     public static void pauseAndDetach() throws Exception {

@@ -12,9 +12,8 @@ public final class RichExpressionDebuggeeMain {
 
     public static void main(String[] args) {
         Child target = new Child();
-        Integer warmedBoxingType = 0;
-        int local = 2; // DEBUG_RICH_EXPRESSION
-        System.out.println(target.value(local));
+        target.debugExpressions();
+        System.out.println(target.value(2));
     }
 
     private static class Base {
@@ -27,19 +26,53 @@ public final class RichExpressionDebuggeeMain {
         String virtualCall() {
             return "base";
         }
+
+        String overridable() {
+            return "base-overridable";
+        }
     }
 
-    private static final class Child extends Base {
+    private interface Defaulted {
+        default String defaultCall() {
+            return "default-interface";
+        }
+    }
+
+    private static final class Child extends Base implements Defaulted {
         private final String ownSecret = "own-secret";
+        private final String inheritedSecret = "child-hidden";
         private static final int STATIC_VALUE = 9;
+        private int completionCalls;
 
         private String value(int input) {
             return ownSecret + input;
         }
 
+        private void debugExpressions() {
+            Child target = this;
+            Integer warmedBoxingType = 0;
+            Boolean warmedBooleanType = true;
+            int local = 2; // DEBUG_RICH_EXPRESSION
+            System.out.println(target.value(local));
+        }
+
+        private Child sideEffect() {
+            completionCalls++;
+            return this;
+        }
+
         @Override
         String virtualCall() {
             return "child";
+        }
+
+        @Override
+        String overridable() {
+            return "child-overridable";
+        }
+
+        private static String staticChild() {
+            return "static-child";
         }
 
         private String overload(int input) {
@@ -60,6 +93,45 @@ public final class RichExpressionDebuggeeMain {
 
         private String unboxed(int input) {
             return "unboxed" + input;
+        }
+
+        private String unboxedLong(long input) {
+            return "unboxed-long" + input;
+        }
+
+        private String booleanAccepted(boolean input) {
+            return input ? "boolean-true" : "boolean-false";
+        }
+
+        private String boxedLong(Long input) {
+            return "long" + input;
+        }
+
+        private String nullOverload(String input) {
+            return "string-null";
+        }
+
+        private String nullOverload(Object input) {
+            return "object-null";
+        }
+
+        private String fixed(String input) {
+            return "fixed";
+        }
+
+        private String fixed(String... input) {
+            return "varargs-fixed";
+        }
+
+        private String waitsForWorker() throws InterruptedException {
+            java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            Thread worker = new Thread(done::countDown, "rich-expression-worker");
+            worker.start();
+            if (!done.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                throw new IllegalStateException("worker did not run during evaluation");
+            }
+            worker.join();
+            return "worker-complete";
         }
 
         private String varargs(String... values) {

@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.insight;
 
-import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.tth05.jindex.ClassIndex;
@@ -67,11 +67,38 @@ class ExpressionScopeAnalyzerTest {
 
         List<String> names = names(ExpressionScopeAnalyzer.analyze(unit, SOURCE.lastIndexOf("staticField++")));
 
-        assertEquals(List.of("staticField", "true", "false", "null"), names);
+        assertEquals(List.of("staticField", "staticRun()", "false", "null", "super", "this", "true"), names);
     }
 
-    private static List<String> names(List<ExpressionSuggestion> suggestions) {
-        return suggestions.stream().map(ExpressionSuggestion::text).toList();
+    @Test
+    void completesSourceMembersAndInheritedPrivateDeclarationsBeforePause() {
+        String source = """
+                class Base {
+                    private int inherited;
+                    private String baseCall() { return \"base\"; }
+                    static int BASE_STATIC;
+                }
+                class Sample extends Base {
+                    private int own;
+                    void run() {
+                        Sample target = null;
+                        target.
+                    }
+                }
+                """;
+        var unit = ASTCache.rawParse("Sample", source);
+        int context = source.indexOf("target.");
+        List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
+                unit, context, "target.", "target.".length()
+        );
+
+        assertTrue(names(completions).containsAll(List.of("own", "inherited", "baseCall()", "BASE_STATIC")), names(completions).toString());
+        assertTrue(completions.stream().allMatch(proposal -> proposal.replacementStart() == "target.".length()
+                && proposal.replacementEnd() == "target.".length()));
+    }
+
+    private static List<String> names(List<DebuggerCompletionProposal> suggestions) {
+        return suggestions.stream().map(DebuggerCompletionProposal::label).toList();
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {
