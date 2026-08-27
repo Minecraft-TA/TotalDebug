@@ -95,6 +95,15 @@ public class ASTCache {
         }
     }
 
+    public static List<CompilationUnit> cachedUnits() {
+        synchronized (CACHE) {
+            return CACHE.values().stream()
+                    .map(entry -> entry.unit)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+    }
+
     private static void notifyListeners(String key, CompilationUnit ast, int version) {
         var listeners = LISTENERS.get(key);
         if (listeners == null) {

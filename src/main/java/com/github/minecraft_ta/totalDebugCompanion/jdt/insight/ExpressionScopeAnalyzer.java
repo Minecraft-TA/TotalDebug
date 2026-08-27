@@ -2,12 +2,16 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.insight;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionRange;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.IMethodBinding;
+import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NodeFinder;
@@ -38,7 +42,7 @@ public final class ExpressionScopeAnalyzer {
         ASTNode selected = NodeFinder.perform(unit, sourceOffset, 0);
         MethodDeclaration method = ancestor(selected, MethodDeclaration.class);
         AbstractTypeDeclaration type = ancestor(selected, AbstractTypeDeclaration.class);
-        if (method == null || type == null) return keywordProposals(0, 0);
+        if (method == null || type == null) return keywordProposals(0, 0, false);
 
         Map<String, DebuggerCompletionProposal> proposals = new LinkedHashMap<>();
         boolean staticContext = Modifier.isStatic(method.getModifiers());
@@ -72,7 +76,7 @@ public final class ExpressionScopeAnalyzer {
                 return true;
             }
         });
-        keywordProposals(0, 0).forEach(proposal -> add(proposals, proposal));
+        keywordProposals(0, 0, !staticContext).forEach(proposal -> add(proposals, proposal));
         return sorted(proposals);
     }
 
@@ -104,10 +108,138 @@ public final class ExpressionScopeAnalyzer {
                                            AbstractTypeDeclaration type, String owner, int sourceOffset,
                                            DebuggerCompletionRange range) {
         boolean staticOwner = owner.equals(type.getName().getIdentifier());
+        ITypeBinding ownerBinding = resolveOwnerBinding(type, owner, sourceOffset);
+        if (ownerBinding != null) {
+            if (owner.equals("super")) staticOwner = false;
+            addBindingMembers(result, ownerBinding, staticOwner, 20, 30, range, new java.util.HashSet<>());
+        }
         AbstractTypeDeclaration ownerType = resolveOwnerType(type, owner, sourceOffset);
         if (owner.equals("super") && ownerType != null) staticOwner = false;
         if (ownerType == null) return;
         addTypeMembers(result, ownerType, staticOwner, 20, 30, range, new java.util.HashSet<>());
+    }
+
+    private static ITypeBinding resolveOwnerBinding(
+        AbstractTypeDeclaration type, String owner, int sourceOffset) {
+        ITypeBinding current = type.resolveBinding();
+        String simple = owner.substring(owner.lastIndexOf('.') + 1);
+        MethodDeclaration methodDeclaration = ancestor(NodeFinder.perform(type.getRoot(), sourceOffset, 0), MethodDeclaration.class);
+        if (methodDeclaration != null) {
+            final ITypeBinding[] found = {null};
+            methodDeclaration.accept(new ASTVisitor() {
+                @Override
+                public boolean visit(SingleVariableDeclaration declaration) {
+                    IVariableBinding binding = declaration.resolveBinding();
+                    if (binding != null && binding.getName().equals(simple)) found[0] = binding.getType();
+                    return found[0] == null;
+                }
+
+                @Override
+                public boolean visit(VariableDeclarationFragment fragment) {
+                    IVariableBinding binding = fragment.resolveBinding();
+                    if (binding != null && binding.getName().equals(simple)) found[0] = binding.getType();
+                    return found[0] == null;
+                }
+            });
+            if (found[0] != null) return found[0];
+        }
+        if (current == null) return null;
+        if (owner.equals("this") || owner.equals(type.getName().getIdentifier())) return current;
+        if (owner.equals("super")) return current.getSuperclass();
+
+        int call = owner.lastIndexOf('(');
+        if (call > 0 && owner.endsWith(")")) {
+            int dot = owner.lastIndexOf('.', call);
+            if (dot > 0) {
+                ITypeBinding receiver = resolveOwnerBinding(type, owner.substring(0, dot), sourceOffset);
+                if (receiver != null) {
+                    String name = owner.substring(dot + 1, call);
+                    int argumentCount = argumentCount(owner.substring(call + 1, owner.length() - 1));
+                    IMethodBinding method = findMethod(receiver, name, argumentCount);
+                    return method == null ? null : method.getReturnType();
+                }
+            }
+        }
+
+        for (ITypeBinding binding = current; binding != null; binding = binding.getSuperclass()) {
+            for (IVariableBinding field : binding.getDeclaredFields()) {
+                if (field.getName().equals(simple)) return field.getType();
+            }
+        }
+        org.eclipse.jdt.core.dom.CompilationUnit compilationUnit =
+                (org.eclipse.jdt.core.dom.CompilationUnit) type.getRoot();
+        for (Object importObject : compilationUnit.imports()) {
+            org.eclipse.jdt.core.dom.ImportDeclaration declaration =
+                    (org.eclipse.jdt.core.dom.ImportDeclaration) importObject;
+            if (!declaration.isOnDemand()
+                    && declaration.getName().getFullyQualifiedName().endsWith("." + simple)
+                    && declaration.getName().resolveBinding() instanceof ITypeBinding binding) {
+                return binding;
+            }
+        }
+        return null;
+    }
+
+    private static IMethodBinding findMethod(ITypeBinding type, String name, int argumentCount) {
+        for (ITypeBinding current = type; current != null; current = current.getSuperclass()) {
+            for (IMethodBinding method : current.getDeclaredMethods()) {
+                if (method.getName().equals(name)
+                        && (method.isVarargs() ? argumentCount >= method.getParameterTypes().length - 1
+                        : method.getParameterTypes().length == argumentCount)) {
+                    return method;
+                }
+            }
+            for (ITypeBinding interfaceType : current.getInterfaces()) {
+                IMethodBinding method = findMethod(interfaceType, name, argumentCount);
+                if (method != null) return method;
+            }
+        }
+        return null;
+    }
+
+    private static int argumentCount(String arguments) {
+        if (arguments.isBlank()) return 0;
+        int depth = 0;
+        int count = 1;
+        for (int i = 0; i < arguments.length(); i++) {
+            char current = arguments.charAt(i);
+            if (current == '(' || current == '[') depth++;
+            else if (current == ')' || current == ']') depth--;
+            else if (current == ',' && depth == 0) count++;
+        }
+        return count;
+    }
+
+    private static void addBindingMembers(Map<String, DebuggerCompletionProposal> result,
+                                          ITypeBinding type, boolean staticOnly, int fieldRank,
+                                          int methodRank, DebuggerCompletionRange range,
+                                          java.util.Set<String> visited) {
+        if (type == null || !visited.add(type.getQualifiedName())) return;
+        for (IVariableBinding field : type.getDeclaredFields()) {
+            if (staticOnly && !java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
+            add(result, proposal(field.getName(), typeName(field.getType()),
+                    java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                            ? DebuggerCompletionProposal.Kind.CONSTANT : DebuggerCompletionProposal.Kind.FIELD,
+                    fieldRank, range));
+        }
+        for (IMethodBinding method : type.getDeclaredMethods()) {
+            if (method.isConstructor() || staticOnly && !java.lang.reflect.Modifier.isStatic(method.getModifiers())) continue;
+            String insertion = method.getName() + "()";
+            String parameters = java.util.Arrays.stream(method.getParameterTypes())
+                    .map(ExpressionScopeAnalyzer::typeName).collect(java.util.stream.Collectors.joining(", "));
+            add(result, new DebuggerCompletionProposal(
+                    method.getName() + "(" + parameters + ")", insertion, DebuggerCompletionProposal.Kind.METHOD,
+                    typeName(method.getReturnType()), range == null ? 0 : range.start(),
+                    range == null ? 0 : range.end(), insertion.length() - 1, methodRank));
+        }
+        addBindingMembers(result, type.getSuperclass(), staticOnly, fieldRank + 1, methodRank + 1, range, visited);
+        for (ITypeBinding interfaceType : type.getInterfaces()) {
+            addBindingMembers(result, interfaceType, staticOnly, fieldRank + 1, methodRank + 1, range, visited);
+        }
+    }
+
+    private static String typeName(ITypeBinding binding) {
+        return binding == null ? "" : binding.getQualifiedName();
     }
 
     private static AbstractTypeDeclaration resolveOwnerType(
@@ -149,6 +281,11 @@ public final class ExpressionScopeAnalyzer {
                                        int fieldRank, int methodRank, DebuggerCompletionRange range,
                                        java.util.Set<String> visited) {
         if (type == null || !visited.add(type.getName().getFullyQualifiedName())) return;
+        ITypeBinding binding = type.resolveBinding();
+        if (binding != null) {
+            addBindingMembers(result, binding, staticOnly, fieldRank, methodRank, range,
+                    new java.util.HashSet<>());
+        }
         addDeclaredFields(result, type, staticOnly, fieldRank, range);
         addDeclaredMethods(result, type, staticOnly, methodRank, range);
         if (type instanceof TypeDeclaration declaration) {
@@ -177,12 +314,34 @@ public final class ExpressionScopeAnalyzer {
                 }
                 return true;
             }
+
+            @Override
+            public boolean visit(SingleVariableDeclaration parameter) {
+                if (parameter.getName().getIdentifier().equals(name)) {
+                    AbstractTypeDeclaration declaration = findType(type.getRoot(), parameter.getType().toString());
+                    if (declaration != null) resolved[0] = declaration;
+                }
+                return true;
+            }
         });
         return resolved[0];
     }
 
     private static AbstractTypeDeclaration findType(ASTNode root, String name) {
-        String simple = name.substring(name.lastIndexOf('.') + 1).replace("[]", "");
+        String normalized = name.replace("[]", "");
+        AbstractTypeDeclaration found = findTypeInRoot(root, normalized);
+        if (found != null) return found;
+        for (org.eclipse.jdt.core.dom.CompilationUnit cached : ASTCache.cachedUnits()) {
+            if (cached != root.getRoot()) {
+                found = findTypeInRoot(cached, normalized);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static AbstractTypeDeclaration findTypeInRoot(ASTNode root, String name) {
+        String simple = name.substring(name.lastIndexOf('.') + 1);
         final AbstractTypeDeclaration[] found = {null};
         root.accept(new ASTVisitor() {
             @Override
@@ -263,8 +422,10 @@ public final class ExpressionScopeAnalyzer {
                 .toList();
     }
 
-    private static List<DebuggerCompletionProposal> keywordProposals(int start, int end) {
-        return KEYWORDS.stream().map(keyword -> new DebuggerCompletionProposal(
+    private static List<DebuggerCompletionProposal> keywordProposals(int start, int end, boolean includeThisAndSuper) {
+        return KEYWORDS.stream()
+                .filter(keyword -> includeThisAndSuper || !keyword.equals("this") && !keyword.equals("super"))
+                .map(keyword -> new DebuggerCompletionProposal(
                 keyword, keyword, DebuggerCompletionProposal.Kind.KEYWORD,
                 keyword.equals("null") ? "null literal" : "Java expression keyword",
                 start, end, keyword.length(), 80)).toList();

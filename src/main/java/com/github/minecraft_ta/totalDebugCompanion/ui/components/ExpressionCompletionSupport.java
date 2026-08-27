@@ -30,9 +30,7 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
@@ -57,7 +55,6 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             hidePopup();
         }
     };
-    private List<DebuggerCompletionProposal> suggestions = List.of();
     private CompletionProvider completionProvider;
     private final AtomicLong completionRevision = new AtomicLong();
     private JWindow popup;
@@ -69,14 +66,6 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         configureKeys();
         this.field.getDocument().addDocumentListener(this.documentListener);
         this.field.addFocusListener(this.focusListener);
-    }
-
-    public void setProposals(List<DebuggerCompletionProposal> suggestions) {
-        Objects.requireNonNull(suggestions, "suggestions");
-        this.suggestions = List.copyOf(suggestions);
-        if (isCompletionVisible()) {
-            updatePopup(true);
-        }
     }
 
     public void setCompletionProvider(CompletionProvider completionProvider) {
@@ -190,47 +179,37 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         DebuggerCompletionRange range = DebuggerCompletionRange.around(
                 this.field.getText(), this.field.getCaretPosition()
         );
-        if (this.completionProvider != null) {
-            long revision = this.completionRevision.incrementAndGet();
-            String text = this.field.getText();
-            int caret = this.field.getCaretPosition();
-            if (!explicit && range.prefix().isEmpty() && !range.memberAccess()) {
-                hidePopup();
-                return;
-            }
-            CompletableFuture<List<DebuggerCompletionProposal>> request;
-            try {
-                request = Objects.requireNonNull(this.completionProvider.complete(text, caret, explicit),
-                        "completion provider result");
-            } catch (RuntimeException failure) {
-                hidePopup();
-                return;
-            }
-            request.whenComplete((matches, failure) -> SwingUtilities.invokeLater(() -> {
-                if (revision != this.completionRevision.get()
-                        || !text.equals(this.field.getText())
-                        || caret != this.field.getCaretPosition()) {
-                    return;
-                }
-                if (failure != null || matches == null) {
-                    hidePopup();
-                    return;
-                }
-                showMatches(matches);
-            }));
-            return;
-        }
-        if (range.memberAccess() || !explicit && range.prefix().isEmpty()) {
+        if (this.completionProvider == null) {
             hidePopup();
             return;
         }
-        String foldedPrefix = range.prefix().toLowerCase(Locale.ROOT);
-        List<DebuggerCompletionProposal> matches = this.suggestions.stream()
-                .filter(suggestion -> suggestion.label().toLowerCase(Locale.ROOT).startsWith(foldedPrefix))
-                .sorted(Comparator.comparing(DebuggerCompletionProposal::label, String.CASE_INSENSITIVE_ORDER))
-                .limit(12)
-                .toList();
-        showMatches(matches);
+        long revision = this.completionRevision.incrementAndGet();
+        String text = this.field.getText();
+        int caret = this.field.getCaretPosition();
+        if (!explicit && range.prefix().isEmpty() && !range.memberAccess()) {
+            hidePopup();
+            return;
+        }
+        CompletableFuture<List<DebuggerCompletionProposal>> request;
+        try {
+            request = Objects.requireNonNull(this.completionProvider.complete(text, caret, explicit),
+                    "completion provider result");
+        } catch (RuntimeException failure) {
+            hidePopup();
+            return;
+        }
+        request.whenComplete((matches, failure) -> SwingUtilities.invokeLater(() -> {
+            if (revision != this.completionRevision.get()
+                    || !text.equals(this.field.getText())
+                    || caret != this.field.getCaretPosition()) {
+                return;
+            }
+            if (failure != null || matches == null) {
+                hidePopup();
+                return;
+            }
+            showMatches(matches);
+        }));
     }
 
     private void showMatches(List<DebuggerCompletionProposal> matches) {

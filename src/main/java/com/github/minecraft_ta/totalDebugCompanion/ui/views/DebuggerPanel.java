@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
@@ -340,7 +339,6 @@ public final class DebuggerPanel extends JPanel {
         if (!paused) {
             this.expressionCompletion.setCompletionProvider(null);
             this.viewRevision++;
-            updateExpressionSuggestions(List.of(), List.of());
             if (clearsPausedSnapshot(status.phase())) {
                 clearPausedSnapshot();
             }
@@ -368,7 +366,6 @@ public final class DebuggerPanel extends JPanel {
         this.viewRevision++;
         this.currentFrame = null;
         this.currentVariables = List.of();
-        updateExpressionSuggestions(List.of(), List.of());
         this.currentPause = Objects.requireNonNull(state, "state");
         this.statusLabel.setText(stopDescription(state.event()));
         this.statusLabel.setIcon(Icons.WARNING);
@@ -406,7 +403,6 @@ public final class DebuggerPanel extends JPanel {
         this.currentVariables = List.of();
         this.expressionCompletion.setCompletionProvider((text, caret, explicit) ->
                 this.controller.completions(text, caret, frame));
-        updateExpressionSuggestions(List.of(), List.of());
         this.frameLabel.setText(frameLocation(frame));
 
         this.frameNavigation.open(frame, false);
@@ -438,7 +434,6 @@ public final class DebuggerPanel extends JPanel {
 
     private void showVariables(List<DebugEngine.Variable> values) {
         this.currentVariables = List.copyOf(values);
-        updateExpressionSuggestions(this.currentVariables, List.of());
         this.variableRoot.removeAllChildren();
         for (DebugEngine.Variable variable : values) {
             this.variableRoot.add(valueNode(DebugValue.from(variable)));
@@ -448,58 +443,6 @@ public final class DebuggerPanel extends JPanel {
         }
         this.variableModel.reload();
 
-        DebugEngine.Variable thisVariable = values.stream()
-                .filter(variable -> variable.name().equals("this"))
-                .filter(variable -> variable.variablesReference() > 0)
-                .findFirst()
-                .orElse(null);
-        if (thisVariable == null) {
-            return;
-        }
-        DebugEngine.StackFrame frame = this.currentFrame;
-        long revision = this.viewRevision;
-        this.controller.variables(thisVariable.variablesReference()).whenComplete((fields, failure) ->
-                SwingUtilities.invokeLater(() -> {
-                    if (failure == null && isCurrent(frame, revision)) {
-                        updateExpressionSuggestions(this.currentVariables, fields);
-                    }
-                })
-        );
-    }
-
-    private void updateExpressionSuggestions(
-            List<DebugEngine.Variable> variables,
-            List<DebugEngine.Variable> fields
-    ) {
-        java.util.LinkedHashMap<String, DebuggerCompletionProposal> suggestions = new java.util.LinkedHashMap<>();
-        for (DebugEngine.Variable variable : variables) {
-            suggestions.putIfAbsent(variable.name(), new DebuggerCompletionProposal(
-                    variable.name(),
-                    variable.name(),
-                    DebuggerCompletionProposal.Kind.VARIABLE,
-                    variable.type(),
-                    0, 0, variable.name().length(), 10
-            ));
-        }
-        for (DebugEngine.Variable field : fields) {
-            suggestions.putIfAbsent(field.name(), new DebuggerCompletionProposal(
-                    field.name(),
-                    field.name(),
-                    DebuggerCompletionProposal.Kind.FIELD,
-                    field.type(),
-                    0, 0, field.name().length(), 20
-            ));
-        }
-        for (String literal : List.of("true", "false", "null")) {
-            suggestions.put(literal, new DebuggerCompletionProposal(
-                    literal,
-                    literal,
-                    DebuggerCompletionProposal.Kind.KEYWORD,
-                    literal.equals("null") ? "null literal" : "boolean literal",
-                    0, 0, literal.length(), 80
-            ));
-        }
-        this.expressionCompletion.setProposals(List.copyOf(suggestions.values()));
     }
 
     private void showVariableStatus(String text) {

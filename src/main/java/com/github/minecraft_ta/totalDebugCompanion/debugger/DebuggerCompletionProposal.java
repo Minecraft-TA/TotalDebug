@@ -48,13 +48,6 @@ public record DebuggerCompletionProposal(
         );
     }
 
-    public DebuggerCompletionProposal withRank(int newRank) {
-        return new DebuggerCompletionProposal(
-                this.label, this.insertionText, this.kind, this.detail,
-                this.replacementStart, this.replacementEnd, this.caretOffset, newRank
-        );
-    }
-
     public enum Kind {
         VARIABLE,
         FIELD,
