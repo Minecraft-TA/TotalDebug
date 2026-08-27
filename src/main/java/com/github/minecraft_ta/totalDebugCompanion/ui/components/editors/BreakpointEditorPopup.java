@@ -78,9 +78,9 @@ final class BreakpointEditorPopup {
         });
     }
 
-    void hide() {
+    void dispose() {
         this.popup.setVisible(false);
-        this.conditionCompletion.setSuggestions(List.of());
+        this.conditionCompletion.close();
     }
 
     private void configureUi() {

@@ -12,8 +12,8 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JComponent;
 import javax.swing.JList;
-import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
@@ -23,6 +23,8 @@ import javax.swing.event.DocumentListener;
 import javax.swing.JTextField;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Rectangle;
+import java.awt.Window;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
@@ -32,7 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Lightweight completion for the subset of Java expressions supported by the debugger. */
+/** Keyboard-driven completion for the subset of Java expressions supported by the debugger. */
 public final class ExpressionCompletionSupport implements AutoCloseable {
     private static final String NEXT = "debugExpressionCompletion.next";
     private static final String PREVIOUS = "debugExpressionCompletion.previous";
@@ -44,15 +46,16 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private final JTextField field;
     private final DefaultListModel<ExpressionSuggestion> model = new DefaultListModel<>();
     private final JList<ExpressionSuggestion> list = new JList<>(this.model);
-    private final JPopupMenu popup = new JPopupMenu();
+    private final JScrollPane content = new JScrollPane(this.list);
     private final DocumentListener documentListener = (DocumentChangeListener) this::documentChanged;
     private final FocusAdapter focusListener = new FocusAdapter() {
         @Override
         public void focusLost(FocusEvent event) {
-            popup.setVisible(false);
+            hidePopup();
         }
     };
     private List<ExpressionSuggestion> suggestions = List.of();
+    private JWindow popup;
     private boolean applying;
 
     public ExpressionCompletionSupport(JTextField field) {
@@ -65,13 +68,12 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
 
     public void setSuggestions(List<ExpressionSuggestion> suggestions) {
         this.suggestions = List.copyOf(Objects.requireNonNull(suggestions, "suggestions"));
-        if (this.popup.isVisible()) {
+        if (isCompletionVisible()) {
             updatePopup(true);
         }
     }
 
     private void configurePopup() {
-        this.popup.setBorder(PopupChrome.border());
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(ROW_HEIGHT);
         this.list.setCellRenderer((ListCellRenderer<ExpressionSuggestion>) (list, value, index, selected, focus) -> {
@@ -99,9 +101,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
                 }
             }
         });
-        JScrollPane scroll = new JScrollPane(this.list);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        this.popup.add(scroll);
+        this.content.setBorder(PopupChrome.border());
     }
 
     private void configureKeys() {
@@ -111,7 +111,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.getActionMap().put(ACCEPT_ENTER, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                if (popup.isVisible()) {
+                if (isCompletionVisible()) {
                     acceptSelection();
                 } else {
                     field.postActionEvent();
@@ -123,7 +123,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.getActionMap().put(ACCEPT_TAB, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                if (popup.isVisible()) {
+                if (isCompletionVisible()) {
                     acceptSelection();
                 } else {
                     field.transferFocus();
@@ -144,7 +144,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.getActionMap().put(actionKey, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                if (!popup.isVisible()) {
+                if (!isCompletionVisible()) {
                     updatePopup(true);
                     return;
                 }
@@ -168,12 +168,12 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
 
     private void updatePopup(boolean explicit) {
         if (!this.field.isShowing() || !this.field.isEnabled()) {
-            this.popup.setVisible(false);
+            hidePopup();
             return;
         }
         CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
         if (range.memberAccess() || !explicit && range.prefix().isEmpty()) {
-            this.popup.setVisible(false);
+            hidePopup();
             return;
         }
         String foldedPrefix = range.prefix().toLowerCase(Locale.ROOT);
@@ -185,20 +185,24 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.model.clear();
         this.model.addAll(matches);
         if (matches.isEmpty()) {
-            this.popup.setVisible(false);
+            hidePopup();
             return;
         }
         this.list.setSelectedIndex(0);
         int width = Math.max(this.field.getWidth(), 300);
         int height = Math.min(8, matches.size()) * ROW_HEIGHT + 2;
-        this.popup.setPopupSize(new Dimension(width, height));
-        if (!this.popup.isVisible()) {
-            this.popup.show(this.field, 0, this.field.getHeight());
-        }
+        JWindow completionWindow = popupForFieldOwner();
+        completionWindow.setSize(new Dimension(width, height));
+        PopupChrome.placeAdjacent(
+                completionWindow,
+                this.field,
+                new Rectangle(0, 0, this.field.getWidth(), this.field.getHeight())
+        );
+        completionWindow.setVisible(true);
     }
 
     private void acceptSelection() {
-        if (!this.popup.isVisible()) {
+        if (!isCompletionVisible()) {
             return;
         }
         ExpressionSuggestion selected = this.list.getSelectedValue();
@@ -216,7 +220,41 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         } finally {
             this.applying = false;
         }
-        this.popup.setVisible(false);
+        hidePopup();
+    }
+
+    boolean isCompletionVisible() {
+        return this.popup != null && this.popup.isVisible();
+    }
+
+    private JWindow popupForFieldOwner() {
+        Window owner = SwingUtilities.getWindowAncestor(this.field);
+        if (owner == null) {
+            throw new IllegalStateException("Expression completion requires a visible owner window");
+        }
+        if (this.popup != null && this.popup.getOwner() == owner) {
+            return this.popup;
+        }
+        disposePopup();
+        // A second JPopupMenu would replace the breakpoint editor's active menu path.
+        this.popup = new JWindow(owner);
+        this.popup.setFocusableWindowState(false);
+        this.popup.setContentPane(this.content);
+        return this.popup;
+    }
+
+    private void hidePopup() {
+        if (this.popup != null) {
+            this.popup.setVisible(false);
+        }
+    }
+
+    private void disposePopup() {
+        if (this.popup == null) {
+            return;
+        }
+        this.popup.dispose();
+        this.popup = null;
     }
 
     static CompletionRange completionRange(String text, int caret) {
@@ -236,7 +274,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
 
     @Override
     public void close() {
-        this.popup.setVisible(false);
+        disposePopup();
         this.field.getDocument().removeDocumentListener(this.documentListener);
         this.field.removeFocusListener(this.focusListener);
     }

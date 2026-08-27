@@ -280,7 +280,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             }
             this.implementationChooser.dispose();
             this.hierarchyPreview.dispose();
-            this.breakpointEditor.hide();
+            this.breakpointEditor.dispose();
             if (this.debuggerListener != null) {
                 CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
             }
