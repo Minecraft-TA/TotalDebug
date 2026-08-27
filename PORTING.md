@@ -58,6 +58,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | M8 | Client package/lifecycle cleanup | Complete | Client setup assembles one explicit runtime; TotalDebug owns live target resolution and sends binary class names, while Companion owns decompilation and JDT navigation |
 | M9 | Modernized live acceptance | Complete | Cold launch, warm reuse, block/entity/hovered block item/spawn egg F6, one-request-per-press, reverse Ctrl-click navigation, graceful close, and fresh-session relaunch passed live |
 | M10 | Launch and dependency policy ownership | Complete | SCNet requires explicit factories for received messages and uses Java 21 throughout build and CI; mirrored launch constants and injectable timing policies replace scattered literals; immutable Companion release metadata and checksum are generated from Gradle properties |
+| M11 | Companion semantic navigation and debugger UX | Complete | Typed navigation and bounded history cover runtime/local/archive/search targets; runtime browsing includes Minecraft, NeoForge, mods, nested libraries, development directories, and JDK modules; breadcrumbs, debugger completion/preferences, and popup placement share current runtime and theme truth |
 
 ## Auditable slices
 
@@ -88,6 +89,13 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S22 | Companion-owned offline decompilation | Move Vineflower and Parchment naming into Companion; resolve indexed snapshot bytes from archives, directories, multi-release JARs, and the JDK; route every class-navigation entry point locally; use signature and byte-hash keyed caches; bump the paired protocol; remove the game-side engine | Implementation complete; live F6 and offline restart smoke pending |
 | S23 | Companion-owned runtime browsing and indexing | Publish a strict runtime inventory from TotalDebug; let Companion prepare sources, build/reuse JIndex, browse modules, and display module-relative editor provenance without requiring a running game | Complete; user-tested |
 | S24 | Editor code vision and hierarchy navigation | Add bounded JIndex summary queries, exact JDT declaration anchors, asynchronous code-vision counts, official JetBrains hierarchy gutter icons, and one shared implementation/base chooser for clicks and Ctrl+T/U; render both themes and run paired builds | Implementation complete; live navigation smoke pending |
+| S25 | Typed Companion navigation | Route file tree, Search Everywhere, source links, code vision, hierarchy, usages, debugger frames, and game requests through domain navigation targets rather than Swing components | Complete; Companion commit `e8d8879` |
+| S26 | Semantic navigation history | Store bounded back/forward targets with runtime generation, caret, and viewport; expose keyboard, mouse, and editor-menu actions; record only successful async navigation | Complete; Companion commit `42296a7` |
+| S27 | Runtime browsing and cache hygiene | Keep only Java sources in the visible decompiled tree; move line/name metadata into the owned cache; expose Minecraft, NeoForge, mods, nested libraries, development directories, and JDK modules from the runtime catalog | Complete; Companion commit `31d2ae6` |
+| S28 | Typed editor breadcrumbs | Resolve module, package/folder, class/file, and debounced enclosing-member segments from the current editor and cached AST; route every segment through semantic navigation | Complete; Companion commit `3fb5d2e` |
+| S29 | Debugger expression completion | Complete Evaluate from the selected frame and breakpoint conditions from exact lexical source scope without suggesting evaluator-unsupported method calls or guessed member access | Complete; Companion commit `eccc701` |
+| S30 | Debugger preferences | Persist and live-apply caught/uncaught exception pause policies; leave watches as workspace data and window geometry as layout state | Complete; Companion commit `01ea178` |
+| S31 | Popup and final theme polish | Preserve each popup's correct Swing family; share paint-time borders, padding, screen clamping, and source-line-relative placement; fix multi-monitor centering and configured-relative editor-adjacent fonts | Complete; Companion commit `6aab645`; full tests and dark/light popup harness gates passed |
 
 ## Core-flow milestone
 
@@ -140,6 +148,15 @@ Exact transformed-byte capture and process-wide loaded-class enumeration remain 
 | 2026-08-25 | S24 | Added direct JIndex reference aggregates, allocation-light hierarchy summaries, and stricter JVM override rules; Companion resolves exact JDT declarations into asynchronous usage/implementation code vision, official JetBrains implementation markers, and one bounded chooser shared by mouse navigation and Ctrl+T/U. JIndex passed 19 Java and 27 Rust tests; Companion passed 124 tests and dark/light UI renders; `localCompanionPair` verified SHA-256 `49f7877959094354714b8f8e959c1f8038075474ff60a706625560485a1b0581`. Live navigation smoke remains. |
 | 2026-08-25 | S24 UI | Code-vision counts now become accented, underlined links on hover and open usages or the hierarchy chooser on click. Gutter markers resolve the actual icons on the clicked RSyntax line, show a compact asynchronous implementation preview on hover, and open the full chooser on click. Off-screen synthetic interaction gates passed for inline click, gutter click, and gutter hover without controlling the user's mouse; the Companion clean build passed all 124 tests. `localBundle` assembled TotalDebug and Companion SHA-256 `a06c3eaf1a8eecf2952317e1874a2f51ec9772c40b08c2d4145cd18b93753ccc`. Live feel verification remains. |
 | 2026-08-25 | S24 semantics | Split hierarchy results into subtypes, implementations, overrides, implemented bases, and overridden bases without changing JIndex persistence. Code vision, gutter previews, direct single-target navigation, multi-target choosers, and Ctrl+T/U now share that model and use the matching official JetBrains hierarchy icons. Companion commit `d6f95db` passed a clean 127-test build plus off-screen inline, gutter, hover, and direct-navigation interaction gates. Live feel verification remains. |
+| 2026-08-27 | S25-S31 | Companion commits `e8d8879`, `42296a7`, `31d2ae6`, `3fb5d2e`, `eccc701`, `01ea178`, and `6aab645` completed typed navigation, bounded history, authoritative runtime browsing, metadata-cache hygiene, clickable AST breadcrumbs, debugger completion/preferences, and popup/theme cleanup. The full Companion suite passed; dark/light hierarchy chooser, hierarchy summary/layout, and module-filter harness gates rendered successfully. |
+
+## Deferred Companion polish
+
+- Add member completion after `.` only when the evaluator and runtime type model can provide exact fields; do not guess from source text.
+- Add deliberate value renderers for common Minecraft objects such as `ItemStack` and `BlockPos`; arbitrary `toString()` output is not the presentation contract.
+- Keep method-call evaluation deferred until the debugger evaluator supports it safely and explicitly.
+- Keep native popup shadows and rounded corners deferred until a clean platform-supported implementation exists.
+- Keep multi-instance/project workspace UI deferred; Companion currently owns one workspace and one window at a time.
 
 ## Foundation dependency decisions
 
