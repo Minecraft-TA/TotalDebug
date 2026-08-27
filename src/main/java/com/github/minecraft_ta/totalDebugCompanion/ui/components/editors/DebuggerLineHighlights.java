@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.swing.text.BadLocationException;
+import javax.swing.event.CaretListener;
 import java.awt.Color;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -19,16 +20,20 @@ final class DebuggerLineHighlights {
     private Set<Integer> breakpointLines = Set.of();
     private Object executionHighlight;
     private int executionLine = -1;
+    private final CaretListener executionColorUpdater = event -> updateCurrentLineColor();
+    private Color currentLineColor;
     private Color breakpointColor;
     private Color executionColor;
 
     DebuggerLineHighlights(RSyntaxTextArea editor, EditorPalette palette) {
         this.editor = Objects.requireNonNull(editor, "editor");
+        this.editor.addCaretListener(this.executionColorUpdater);
         setPalette(palette);
     }
 
     void setPalette(EditorPalette palette) {
         Objects.requireNonNull(palette, "palette");
+        this.currentLineColor = palette.currentLine();
         this.breakpointColor = palette.breakpointLine();
         this.executionColor = palette.executionLine();
         refreshEditorHighlights();
@@ -65,9 +70,11 @@ final class DebuggerLineHighlights {
     }
 
     void dispose() {
+        this.editor.removeCaretListener(this.executionColorUpdater);
         removeEditorHighlights();
         this.breakpointLines = Set.of();
         this.executionLine = -1;
+        updateCurrentLineColor();
     }
 
     int paintedBreakpointCount() {
@@ -98,6 +105,15 @@ final class DebuggerLineHighlights {
         } catch (BadLocationException exception) {
             throw new IllegalStateException("Unable to paint debugger source line", exception);
         }
+        updateCurrentLineColor();
+    }
+
+    private void updateCurrentLineColor() {
+        boolean caretOnExecutionLine = this.executionLine > 0
+                && this.editor.getCaretLineNumber() + 1 == this.executionLine;
+        this.editor.setCurrentLineHighlightColor(
+                caretOnExecutionLine ? this.executionColor : this.currentLineColor
+        );
     }
 
     private void removeEditorHighlights() {

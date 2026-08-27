@@ -24,11 +24,48 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HierarchyGutterMarkersTest {
+
+    @Test
+    void paintsEachBreakpointSnapshotWithoutWaitingForTheNextUpdate() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var editor = new RSyntaxTextArea("first\nsecond\nthird");
+            editor.setSize(320, 120);
+            var scrollPane = new RTextScrollPane(editor);
+            scrollPane.setLineNumbersEnabled(true);
+            var editorGutter = new EditorGutter(scrollPane.getGutter());
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    new EmptyBreakpointHandler()
+            );
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
+
+            BufferedImage empty = paint(editorGutter.lineNumberLayer());
+            breakpointMarkers.setBreakpoints(List.of(managed(
+                    new DebugEngine.SourceBreakpoint(1),
+                    DebuggerSessionController.BreakpointState.UNBOUND
+            )));
+            BufferedImage first = paint(editorGutter.lineNumberLayer());
+            breakpointMarkers.setBreakpoints(List.of(
+                    managed(new DebugEngine.SourceBreakpoint(1), DebuggerSessionController.BreakpointState.UNBOUND),
+                    managed(new DebugEngine.SourceBreakpoint(2), DebuggerSessionController.BreakpointState.UNBOUND)
+            ));
+            BufferedImage second = paint(editorGutter.lineNumberLayer());
+
+            assertNotEquals(rowPixels(empty, editor, 1), rowPixels(first, editor, 1));
+            assertEquals(rowPixels(first, editor, 1), rowPixels(second, editor, 1));
+            assertNotEquals(rowPixels(first, editor, 2), rowPixels(second, editor, 2));
+
+            breakpointMarkers.dispose();
+        });
+    }
 
     @Test
     void placesLineNumbersOutsideHierarchyIcons() throws Exception {
@@ -269,6 +306,36 @@ class HierarchyGutterMarkersTest {
             DebuggerSessionController.BreakpointState state
     ) {
         return new DebuggerSessionController.Breakpoint(request, state, "");
+    }
+
+    private static BufferedImage paint(Component component) {
+        BufferedImage image = new BufferedImage(
+                component.getWidth(),
+                component.getHeight(),
+                BufferedImage.TYPE_INT_ARGB
+        );
+        Graphics2D graphics = image.createGraphics();
+        component.paint(graphics);
+        graphics.dispose();
+        return image;
+    }
+
+    private static int rowPixels(BufferedImage image, RSyntaxTextArea editor, int displayedLine) {
+        try {
+            int y = (int) editor.modelToView2D(editor.getLineStartOffset(displayedLine - 1)).getY();
+            int height = Math.min(editor.getLineHeight(), image.getHeight() - y);
+            return java.util.Arrays.hashCode(image.getRGB(
+                    0,
+                    y,
+                    image.getWidth(),
+                    height,
+                    null,
+                    0,
+                    image.getWidth()
+            ));
+        } catch (javax.swing.text.BadLocationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static void layoutRecursively(Container container) {

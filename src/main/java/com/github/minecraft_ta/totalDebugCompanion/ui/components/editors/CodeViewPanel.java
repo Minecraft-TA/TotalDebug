@@ -219,8 +219,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             throw new IllegalArgumentException("Displayed source line must be positive");
         }
         try {
+            int lineOffset = this.editorPane.getLineStartOffset(displayedLine - 1);
+            this.editorPane.setCaretPosition(lineOffset);
             DebuggerExecutionLine.show(this.debuggerLineHighlights, displayedLine);
-            centerViewportOnOffset(this.editorPane.getLineStartOffset(displayedLine - 1));
+            centerViewportOnOffset(lineOffset);
         } catch (BadLocationException exception) {
             throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
         }

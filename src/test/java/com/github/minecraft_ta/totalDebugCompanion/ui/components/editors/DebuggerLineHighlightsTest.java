@@ -46,6 +46,23 @@ class DebuggerLineHighlightsTest {
         second.dispose();
     }
 
+    @Test
+    void executionColorRemainsVisibleWhenTheCaretIsOnThePausedLine() {
+        EditorPalette palette = EditorPalette.islandsDark();
+        RSyntaxTextArea editor = new RSyntaxTextArea("paused\nnext");
+        editor.setCurrentLineHighlightColor(palette.currentLine());
+        DebuggerLineHighlights highlights = new DebuggerLineHighlights(editor, palette);
+
+        highlights.showExecutionLine(1);
+
+        assertEquals(palette.executionLine(), editor.getCurrentLineHighlightColor());
+
+        editor.setCaretPosition(editor.getDocument().getLength());
+        assertEquals(palette.currentLine(), editor.getCurrentLineHighlightColor());
+
+        highlights.dispose();
+    }
+
     private static DebuggerLineHighlights highlights(String source) {
         RSyntaxTextArea editor = new RSyntaxTextArea(source);
         return new DebuggerLineHighlights(
