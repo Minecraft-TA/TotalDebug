@@ -9,11 +9,14 @@ import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTree;
 import javax.swing.JList;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
 import java.awt.Component;
 import java.awt.Container;
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -141,6 +144,97 @@ class DebuggerPanelTest {
             actions.close();
             controller.close();
         });
+    }
+
+    @Test
+    void keepsThePreviousPauseVisibleUntilTheNextPauseReplacesItAtomically() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
+            DebuggerPanel panel = new DebuggerPanel(
+                    controller,
+                    actions,
+                    (frame, activateEditor) -> navigated.set(frame)
+            );
+            DebugEngine.StackFrame first = new DebugEngine.StackFrame(
+                    1,
+                    "Target.first",
+                    "example.Target",
+                    URI.create("decompiled:///example/Target.java"),
+                    20,
+                    1
+            );
+            DebugEngine.StackFrame second = new DebugEngine.StackFrame(
+                    2,
+                    "Target.second",
+                    "example.Target",
+                    URI.create("decompiled:///example/Target.java"),
+                    24,
+                    1
+            );
+            panel.showPausedState(paused(first));
+
+            @SuppressWarnings("rawtypes")
+            JList frames = find(panel, JList.class);
+            assertNotNull(frames);
+            assertEquals(first, frames.getModel().getElementAt(0));
+
+            panel.applyStatus(new DebuggerSessionController.Status(
+                    DebuggerSessionController.Phase.RUNNING,
+                    null,
+                    "Running",
+                    null
+            ));
+            assertEquals(1, frames.getModel().getSize());
+            assertEquals(first, frames.getModel().getElementAt(0));
+
+            AtomicBoolean observedEmptyModel = new AtomicBoolean();
+            frames.getModel().addListDataListener(new ListDataListener() {
+                @Override
+                public void intervalAdded(ListDataEvent event) {
+                    observe();
+                }
+
+                @Override
+                public void intervalRemoved(ListDataEvent event) {
+                    observe();
+                }
+
+                @Override
+                public void contentsChanged(ListDataEvent event) {
+                    observe();
+                }
+
+                private void observe() {
+                    observedEmptyModel.compareAndSet(false, frames.getModel().getSize() == 0);
+                }
+            });
+
+            panel.showPausedState(paused(second));
+            assertFalse(observedEmptyModel.get(), "Replacing a pause published an empty frame model");
+            assertEquals(second, frames.getModel().getElementAt(0));
+            assertEquals(second, navigated.get());
+
+            panel.applyStatus(new DebuggerSessionController.Status(
+                    DebuggerSessionController.Phase.DETACHED,
+                    null,
+                    "Detached",
+                    null
+            ));
+            assertEquals(0, frames.getModel().getSize());
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
+    private static DebuggerSessionController.PausedState paused(DebugEngine.StackFrame frame) {
+        return new DebuggerSessionController.PausedState(
+                new DebugEngine.StoppedEvent("step", 1, true),
+                List.of(frame),
+                List.of()
+        );
     }
 
     private static void layoutRecursively(Container container) {

@@ -339,16 +339,28 @@ public final class DebuggerPanel extends JPanel {
 
         if (!paused) {
             this.viewRevision++;
-            this.currentFrame = null;
-            this.currentVariables = List.of();
             updateExpressionSuggestions(List.of(), List.of());
-            this.currentPause = null;
-            this.lastEvaluationExpression = "";
-            this.frameLabel.setText("");
-            this.frameModel.setFrames(List.of());
-            showVariableStatus("Variables are available while paused");
-            showUnavailableWatches();
+            if (clearsPausedSnapshot(status.phase())) {
+                clearPausedSnapshot();
+            }
         }
+    }
+
+    private static boolean clearsPausedSnapshot(DebuggerSessionController.Phase phase) {
+        return phase == DebuggerSessionController.Phase.UNAVAILABLE
+                || phase == DebuggerSessionController.Phase.DETACHED
+                || phase == DebuggerSessionController.Phase.FAILED;
+    }
+
+    private void clearPausedSnapshot() {
+        this.currentFrame = null;
+        this.currentVariables = List.of();
+        this.currentPause = null;
+        this.lastEvaluationExpression = "";
+        this.frameLabel.setText("");
+        this.frameModel.setFrames(List.of());
+        showVariableStatus("Variables are available while paused");
+        showUnavailableWatches();
     }
 
     void showPausedState(DebuggerSessionController.PausedState state) {
@@ -362,6 +374,9 @@ public final class DebuggerPanel extends JPanel {
         this.frameModel.setFrames(state.frames());
         if (!state.frames().isEmpty()) {
             this.frames.setSelectedIndex(0);
+            if (this.currentFrame == null) {
+                selectFrame(0);
+            }
         } else {
             this.frameLabel.setText("");
             showVariableStatus("No stack frames available");
@@ -818,14 +833,19 @@ public final class DebuggerPanel extends JPanel {
         private List<DebugEngine.StackFrame> frames = List.of();
 
         void setFrames(List<DebugEngine.StackFrame> replacement) {
+            List<DebugEngine.StackFrame> updated = List.copyOf(replacement);
             int previousSize = this.frames.size();
-            if (previousSize > 0) {
-                this.frames = List.of();
-                fireIntervalRemoved(this, 0, previousSize - 1);
+            int updatedSize = updated.size();
+            this.frames = updated;
+
+            int sharedSize = Math.min(previousSize, updatedSize);
+            if (sharedSize > 0) {
+                fireContentsChanged(this, 0, sharedSize - 1);
             }
-            this.frames = List.copyOf(replacement);
-            if (!this.frames.isEmpty()) {
-                fireIntervalAdded(this, 0, this.frames.size() - 1);
+            if (updatedSize > previousSize) {
+                fireIntervalAdded(this, previousSize, updatedSize - 1);
+            } else if (previousSize > updatedSize) {
+                fireIntervalRemoved(this, updatedSize, previousSize - 1);
             }
         }
 

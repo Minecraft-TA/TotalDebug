@@ -240,7 +240,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             int lineOffset = this.editorPane.getLineStartOffset(displayedLine - 1);
             this.editorPane.setCaretPosition(lineOffset);
             DebuggerExecutionLine.show(this.debuggerLineHighlights, displayedLine);
-            centerViewportOnOffset(lineOffset);
+            navigateToOffset(lineOffset);
         } catch (BadLocationException exception) {
             throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
         }

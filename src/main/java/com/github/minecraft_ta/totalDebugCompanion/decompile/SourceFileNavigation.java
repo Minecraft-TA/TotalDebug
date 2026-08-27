@@ -51,6 +51,15 @@ public final class SourceFileNavigation {
         return offset;
     }
 
+    public static int topLevelTypeOffset(String source) {
+        Objects.requireNonNull(source, "source");
+        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
+        if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
+            throw new IllegalStateException("Decompiled source has no top-level type");
+        }
+        return type.getName().getStartPosition();
+    }
+
     public static EditorLocation location(DecompiledSource source) {
         Objects.requireNonNull(source, "source");
         return location(source.path(), source.binaryName(), source.origin());

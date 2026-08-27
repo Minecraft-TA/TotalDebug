@@ -114,7 +114,7 @@ public final class NavigationService {
             navigation = switch (target) {
                 case NavigationTarget.RuntimeClass runtimeClass -> openRuntimeSource(
                         runtimeClass.binaryName(),
-                        source -> 0,
+                        source -> SourceFileNavigation.topLevelTypeOffset(source.contents()),
                         -1,
                         activation
                 );
@@ -346,7 +346,7 @@ public final class NavigationService {
                     view -> view.getPath().equals(source.path()),
                     () -> new CodeView(source, offset, SourceFileNavigation.location(source))
             ).thenAccept(view -> {
-                view.centerViewportOnOffset(offset);
+                view.navigateToOffset(offset);
                 if (executionLine > 0) {
                     view.showExecutionLine(executionLine);
                 }
@@ -371,14 +371,14 @@ public final class NavigationService {
                     () -> scriptName.equals("BaseScript")
                             ? new BaseScriptView(scriptName)
                             : new ScriptView(scriptName)
-            ).thenAccept(view -> view.centerViewportOnOffset(target.offset())), activation);
+            ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         if (fileName.endsWith(".java")) {
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     CodeView.class,
                     view -> view.getPath().equals(path),
                     () -> new CodeView(path, target.offset())
-            ).thenAccept(view -> view.centerViewportOnOffset(target.offset())), activation);
+            ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         return openResource(new LocalFileSource(path), activation);
     }

@@ -119,6 +119,23 @@ final class SourceFileNavigationTest {
         );
     }
 
+    @Test
+    void targetsTheTopLevelTypeNameInsteadOfThePackageAndImports() {
+        String source = """
+                package sample;
+
+                import java.util.List;
+                import java.util.Map;
+
+                /** Type documentation that should remain visible above the destination. */
+                @Deprecated
+                public class Target {
+                }
+                """;
+
+        assertEquals(source.indexOf("Target {"), SourceFileNavigation.topLevelTypeOffset(source));
+    }
+
     private static int offset(ReferenceQuery query) {
         return SourceFileNavigation.usageOffset(SOURCE, METHOD_SITE, query);
     }

@@ -62,8 +62,8 @@ public class ScriptView implements IEditorPanel {
         return path;
     }
 
-    public void centerViewportOnOffset(int offset) {
-        ((ScriptPanel) getComponent()).centerViewportOnOffset(offset);
+    public void navigateToOffset(int offset) {
+        ((ScriptPanel) getComponent()).navigateToOffset(offset);
     }
 
     @Override

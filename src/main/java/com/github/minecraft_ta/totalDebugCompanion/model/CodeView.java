@@ -54,7 +54,7 @@ public class CodeView implements IEditorPanel {
                 .supplyAsync(() -> readCode(this.path))
                 .thenAcceptAsync(code -> {
                     this.codeViewPanel.setCode(code);
-                    this.codeViewPanel.centerViewportOnOffset(offset);
+                    this.codeViewPanel.navigateToOffset(offset);
                 }, SwingUtilities::invokeLater);
         this.ready = task;
         task.exceptionally(failure -> {
@@ -68,7 +68,7 @@ public class CodeView implements IEditorPanel {
         CompletableFuture<Void> task = CompletableFuture.runAsync(
                 () -> {
                     this.codeViewPanel.setCode(code);
-                    this.codeViewPanel.centerViewportOnOffset(offset);
+                    this.codeViewPanel.navigateToOffset(offset);
                 },
                 SwingUtilities::invokeLater
         );
@@ -83,11 +83,11 @@ public class CodeView implements IEditorPanel {
     /**
      * @param offset the offset to scroll to
      */
-    public void centerViewportOnOffset(int offset) {
+    public void navigateToOffset(int offset) {
         if (offset < 0)
             throw new IllegalArgumentException();
 
-        this.codeViewPanel.centerViewportOnOffset(offset);
+        this.codeViewPanel.navigateToOffset(offset);
     }
 
     public void showExecutionLine(int displayedLine) {

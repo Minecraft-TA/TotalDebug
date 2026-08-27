@@ -10,6 +10,7 @@ import javax.swing.text.*;
 import java.awt.*;
 
 public class UIUtils {
+    private static final double NAVIGATION_TARGET_VERTICAL_POSITION = 1.0 / 3.0;
 
     public static void setTextAndKeepCaret(JTextComponent component, String text) {
         var caretPos = component.getCaretPosition();
@@ -86,7 +87,7 @@ public class UIUtils {
         frame.setLocation(PopupChrome.centeredLocation(dim, frame.getSize()));
     }
 
-    public static void centerViewportOnRange(RTextScrollPane scrollPane, int offsetStart, int offsetEnd) {
+    public static void positionViewportOnRange(RTextScrollPane scrollPane, int offsetStart, int offsetEnd) {
         try {
             var rect = scrollPane.getTextArea().modelToView2D(offsetStart);
             var viewport = scrollPane.getViewport();
@@ -96,9 +97,12 @@ public class UIUtils {
 
             int rangeWidth = UIUtils.getFontWidth(scrollPane.getTextArea(), "9".repeat(offsetEnd - offsetStart));
             int x = (int) Math.max(0, rect.getX() - ((extentSize.width - rangeWidth) / 2f));
-            x = Math.min(x, viewSize.width - extentSize.width);
-            int y = (int) Math.max(0, rect.getY() - ((extentSize.height - rect.getHeight()) / 2f));
-            y = Math.min(y, viewSize.height - extentSize.height);
+            x = Math.min(x, Math.max(0, viewSize.width - extentSize.width));
+            int targetContext = (int) Math.round(
+                    (extentSize.height - rect.getHeight()) * NAVIGATION_TARGET_VERTICAL_POSITION
+            );
+            int y = (int) Math.max(0, rect.getY() - targetContext);
+            y = Math.min(y, Math.max(0, viewSize.height - extentSize.height));
 
             viewport.setViewPosition(new Point(x, y));
             scrollPane.getTextArea().setCaretPosition(offsetStart);

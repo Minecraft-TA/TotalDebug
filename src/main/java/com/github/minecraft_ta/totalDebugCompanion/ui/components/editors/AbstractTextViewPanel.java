@@ -138,7 +138,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
             if (this.searchManager.getMatchCount() == 0) {
                 return;
             }
-            SwingUtilities.invokeLater(() -> UIUtils.centerViewportOnRange(
+            SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(
                     this.editorScrollPane,
                     this.searchManager.getFocusedRangeStart(),
                     this.searchManager.getFocusedRangeEnd()
@@ -192,8 +192,8 @@ public abstract class AbstractTextViewPanel extends JPanel {
     protected void applyAdditionalSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
     }
 
-    public void centerViewportOnOffset(int offset) {
-        SwingUtilities.invokeLater(() -> UIUtils.centerViewportOnRange(this.editorScrollPane, offset, offset));
+    public void navigateToOffset(int offset) {
+        SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(this.editorScrollPane, offset, offset));
     }
 
     public NavigationViewState captureNavigationViewState() {
