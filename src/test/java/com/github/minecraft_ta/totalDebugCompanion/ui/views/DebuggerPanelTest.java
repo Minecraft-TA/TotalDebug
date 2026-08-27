@@ -24,8 +24,11 @@ class DebuggerPanelTest {
     @Test
     void establishesFrameInspectorSplitOnFirstRealLayout() throws Exception {
         AtomicReference<DebuggerPanel> panelReference = new AtomicReference<>();
+        DebuggerSessionController controller = new DebuggerSessionController();
+        DebuggerActions actions = new DebuggerActions(controller);
         SwingUtilities.invokeAndWait(() -> panelReference.set(new DebuggerPanel(
-                new DebuggerSessionController(),
+                controller,
+                actions,
                 (frame, activateEditor) -> {
                 }
         )));
@@ -45,13 +48,18 @@ class DebuggerPanelTest {
                             + split.getDividerLocation());
             panel.dispose();
         });
+        actions.close();
+        controller.close();
     }
 
     @Test
     void hidesDebuggerObjectIdsAndKeepsTheTypeStructured() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
             DebuggerPanel panel = new DebuggerPanel(
-                    new DebuggerSessionController(),
+                    controller,
+                    actions,
                     (frame, activateEditor) -> {
                     }
             );
@@ -85,6 +93,8 @@ class DebuggerPanelTest {
             assertEquals("level = ServerLevel", labels.getFirst());
             assertFalse(labels.stream().anyMatch(text -> text.contains("@17")), labels.toString());
             panel.dispose();
+            actions.close();
+            controller.close();
         });
     }
 
@@ -92,8 +102,11 @@ class DebuggerPanelTest {
     void selectingAStackFrameNavigatesItsExactRuntimeClassAndLine() throws Exception {
         AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
             DebuggerPanel panel = new DebuggerPanel(
-                    new DebuggerSessionController(),
+                    controller,
+                    actions,
                     (frame, activateEditor) -> navigated.set(frame)
             );
             DebugEngine.StackFrame implementation = new DebugEngine.StackFrame(
@@ -125,6 +138,8 @@ class DebuggerPanelTest {
             frames.setSelectedIndex(1);
             assertEquals(caller, navigated.get());
             panel.dispose();
+            actions.close();
+            controller.close();
         });
     }
 

@@ -13,6 +13,7 @@ import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.util.Objects;
 
 /** Floating host for the reusable debugger workspace. */
 public final class DebuggerWindow extends JFrame {
@@ -20,6 +21,7 @@ public final class DebuggerWindow extends JFrame {
     private static final Dimension MINIMUM_SIZE = new Dimension(760, 420);
 
     private final DebuggerSessionController controller;
+    private final DebuggerShortcuts debuggerShortcuts;
     private final DebuggerPanel panel;
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
@@ -29,18 +31,33 @@ public final class DebuggerWindow extends JFrame {
     };
     private boolean disposed;
 
-    public DebuggerWindow(Window owner, DebuggerSessionController controller) {
-        this(owner, controller, (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor));
+    DebuggerWindow(
+            Window owner,
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            DebuggerShortcuts debuggerShortcuts
+    ) {
+        this(
+                owner,
+                controller,
+                debuggerActions,
+                debuggerShortcuts,
+                (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor)
+        );
     }
 
     DebuggerWindow(
             Window owner,
             DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            DebuggerShortcuts debuggerShortcuts,
             DebuggerPanel.FrameNavigation frameNavigation
     ) {
         super("Minecraft Debugger");
         this.controller = controller;
-        this.panel = new DebuggerPanel(controller, frameNavigation);
+        this.debuggerShortcuts = Objects.requireNonNull(debuggerShortcuts, "debuggerShortcuts");
+        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation);
+        this.debuggerShortcuts.install(this);
         if (owner instanceof Frame frame) {
             setIconImages(frame.getIconImages());
         }
@@ -123,6 +140,7 @@ public final class DebuggerWindow extends JFrame {
         this.disposed = true;
         rememberBounds();
         this.controller.removeListener(this.listener);
+        this.debuggerShortcuts.uninstall(this);
         this.panel.dispose();
         super.dispose();
     }

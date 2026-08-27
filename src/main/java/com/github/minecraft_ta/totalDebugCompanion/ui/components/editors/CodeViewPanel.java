@@ -47,6 +47,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_BASE_METHODS_KEY = "findBaseMethods";
     private static final String FIND_USAGES_KEY = "findUsages";
     private static final String TOGGLE_BREAKPOINT_KEY = "toggleBreakpoint";
+    private static final KeyStroke TOGGLE_BREAKPOINT_SHORTCUT =
+            KeyStroke.getKeyStroke(KeyEvent.VK_F8, InputEvent.CTRL_DOWN_MASK);
 
     private final ImplementationChooserPopup implementationChooser;
     private final HierarchyPreviewPopup hierarchyPreview;
@@ -308,13 +310,6 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 toggleBreakpointAtCaret();
             }
         };
-        AbstractAction editBreakpoint = new AbstractAction("Edit Breakpoint Condition…", Icons.BREAKPOINT) {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                editBreakpointAtCaret();
-            }
-        };
-
         this.editorPane.getActionMap().put(FIND_IMPLEMENTATIONS_KEY, implementations);
         this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK),
@@ -333,18 +328,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         if (this.debugSource != null) {
             this.editorPane.getActionMap().put(TOGGLE_BREAKPOINT_KEY, toggleBreakpoint);
             this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(
-                    KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0),
+                    TOGGLE_BREAKPOINT_SHORTCUT,
                     TOGGLE_BREAKPOINT_KEY
             );
         }
 
         var menu = this.editorPane.getPopupMenu();
-        if (this.debugSource != null) {
-            menu.addSeparator();
-            var breakpointItem = menu.add(toggleBreakpoint);
-            breakpointItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0));
-            menu.add(editBreakpoint);
-        }
         menu.addSeparator();
         var usageItem = menu.add(usages);
         usageItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F7, InputEvent.ALT_DOWN_MASK));
@@ -391,21 +380,6 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                         );
                     }
                 }));
-    }
-
-    private void editBreakpointAtCaret() {
-        int displayedLine;
-        try {
-            displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
-            var bounds = this.editorPane.modelToView2D(this.editorPane.getLineStartOffset(displayedLine - 1));
-            showBreakpointEditor(
-                    displayedLine,
-                    this.editorPane,
-                    new Point(16, (int) (bounds.getY() + bounds.getHeight()))
-            );
-        } catch (BadLocationException exception) {
-            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
-        }
     }
 
     private void showBreakpointEditor(int displayedLine, Component invoker, Point location) {

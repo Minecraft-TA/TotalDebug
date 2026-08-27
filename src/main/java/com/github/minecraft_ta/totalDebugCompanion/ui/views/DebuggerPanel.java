@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.AbstractAction;
 import javax.swing.AbstractListModel;
+import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -64,6 +65,7 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private final DebuggerSessionController controller;
+    private final DebuggerActions debuggerActions;
     private final FrameNavigation frameNavigation;
     private final JLabel statusLabel = new JLabel("Debugger is unavailable", Icons.INFORMATION, JLabel.LEADING);
     private final JLabel frameLabel = new MutedLabel();
@@ -81,12 +83,12 @@ public final class DebuggerPanel extends JPanel {
     private final JButton removeWatch = toolbarButton(Icons.DELETE, "Remove selected watch (Delete)");
     private final Set<String> watches = new LinkedHashSet<>(GlobalConfig.getInstance().debuggerWatches());
     private final JTabbedPane inspectorTabs = new JTabbedPane();
-    private final JButton attach = toolbarButton(Icons.DEBUG, "Attach debugger");
-    private final JButton resume = toolbarButton(Icons.DEBUG_RESUME, "Continue (F9)");
-    private final JButton stepOver = toolbarButton(Icons.DEBUG_STEP_OVER, "Step Over (F8)");
-    private final JButton stepInto = toolbarButton(Icons.DEBUG_STEP_INTO, "Step Into (F7)");
-    private final JButton stepOut = toolbarButton(Icons.DEBUG_STEP_OUT, "Step Out (Shift+F8)");
-    private final JButton detach = toolbarButton(Icons.DEBUG_DETACH, "Detach debugger");
+    private final JButton attach;
+    private final JButton resume;
+    private final JButton stepOver;
+    private final JButton stepInto;
+    private final JButton stepOut;
+    private final JButton detach;
     private final JPanel watchesPanel;
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
@@ -106,15 +108,25 @@ public final class DebuggerPanel extends JPanel {
     private String lastEvaluationExpression = "";
     private boolean disposed;
 
-    public DebuggerPanel(DebuggerSessionController controller, FrameNavigation frameNavigation) {
+    DebuggerPanel(
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            FrameNavigation frameNavigation
+    ) {
         super(new BorderLayout());
         this.controller = Objects.requireNonNull(controller, "controller");
+        this.debuggerActions = Objects.requireNonNull(debuggerActions, "debuggerActions");
         this.frameNavigation = Objects.requireNonNull(frameNavigation, "frameNavigation");
+        this.attach = toolbarButton(debuggerActions.attach());
+        this.resume = toolbarButton(debuggerActions.resume());
+        this.stepOver = toolbarButton(debuggerActions.stepOver());
+        this.stepInto = toolbarButton(debuggerActions.stepInto());
+        this.stepOut = toolbarButton(debuggerActions.stepOut());
+        this.detach = toolbarButton(debuggerActions.detach());
         this.watchesPanel = createWatchesPanel();
 
         setBorder(BorderFactory.createEmptyBorder());
         add(createToolbar(), BorderLayout.NORTH);
-        installDebuggerShortcuts();
 
         configureFrames();
         installExpansion(this.variables, this.variableModel);
@@ -139,13 +151,6 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private JComponent createToolbar() {
-        this.attach.addActionListener(event -> this.controller.attach());
-        this.resume.addActionListener(event -> this.controller.resume());
-        this.stepOver.addActionListener(event -> this.controller.stepOver());
-        this.stepInto.addActionListener(event -> this.controller.stepInto());
-        this.stepOut.addActionListener(event -> this.controller.stepOut());
-        this.detach.addActionListener(event -> this.controller.detach());
-
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEADING, 2, 2));
         actions.setOpaque(false);
         actions.add(this.attach);
@@ -171,29 +176,6 @@ public final class DebuggerPanel extends JPanel {
         toolbar.add(actions, BorderLayout.WEST);
         toolbar.add(state, BorderLayout.CENTER);
         return toolbar;
-    }
-
-    private void installDebuggerShortcuts() {
-        installShortcut("resume", KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0), this.resume);
-        installShortcut("stepOver", KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), this.stepOver);
-        installShortcut("stepInto", KeyStroke.getKeyStroke(KeyEvent.VK_F7, 0), this.stepInto);
-        installShortcut(
-                "stepOut",
-                KeyStroke.getKeyStroke(KeyEvent.VK_F8, KeyEvent.SHIFT_DOWN_MASK),
-                this.stepOut
-        );
-    }
-
-    private void installShortcut(String name, KeyStroke keyStroke, JButton button) {
-        getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(keyStroke, name);
-        getActionMap().put(name, new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                if (button.isEnabled()) {
-                    button.doClick();
-                }
-            }
-        });
     }
 
     private void configureFrames() {
@@ -301,6 +283,15 @@ public final class DebuggerPanel extends JPanel {
         return button;
     }
 
+    private static JButton toolbarButton(Action action) {
+        JButton button = new JButton(action);
+        button.setHideActionText(true);
+        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        button.setFocusable(false);
+        button.setMargin(new Insets(4, 6, 4, 6));
+        return button;
+    }
+
     private static JTree createValueTree(DefaultTreeModel model) {
         JTree tree = new JTree(model);
         tree.setRootVisible(false);
@@ -328,6 +319,7 @@ public final class DebuggerPanel extends JPanel {
     }
 
     void applyStatus(DebuggerSessionController.Status status) {
+        this.debuggerActions.applyStatus(status);
         this.statusLabel.setText(status.detail());
         this.statusLabel.setIcon(switch (status.phase()) {
             case RUNNING -> Icons.SUCCESS;
@@ -337,17 +329,6 @@ public final class DebuggerPanel extends JPanel {
         });
 
         boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED;
-        boolean attachable = status.phase() == DebuggerSessionController.Phase.DETACHED
-                || status.phase() == DebuggerSessionController.Phase.FAILED;
-        this.attach.setEnabled(attachable);
-        this.resume.setEnabled(paused);
-        this.stepOver.setEnabled(paused);
-        this.stepInto.setEnabled(paused);
-        this.stepOut.setEnabled(paused);
-        this.detach.setEnabled(switch (status.phase()) {
-            case ATTACHING, RUNNING, PAUSED, DETACHING -> true;
-            default -> false;
-        });
         this.expression.setEnabled(paused);
         this.evaluate.setEnabled(paused);
         this.addWatch.setEnabled(paused);

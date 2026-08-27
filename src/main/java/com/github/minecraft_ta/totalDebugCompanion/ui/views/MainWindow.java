@@ -42,6 +42,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final Action chunkGridAction;
     private final Action packetLoggerAction;
     private final Action newScriptAction;
+    private final DebuggerActions debuggerActions;
+    private final DebuggerShortcuts debuggerShortcuts;
     private DebuggerWindow debuggerWindow;
     private final DebuggerSessionController.Listener debuggerListener;
 
@@ -101,6 +103,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
         menuBar.add(this.scriptMenu);
         menuBar.add(Box.createHorizontalGlue());
         DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        this.debuggerActions = new DebuggerActions(debugger);
+        this.debuggerShortcuts = new DebuggerShortcuts(this.debuggerActions);
+        this.debuggerShortcuts.install(this);
         this.debuggerListener = new DebuggerSessionController.Listener() {
             @Override
             public void statusChanged(DebuggerSessionController.Status status) {
@@ -157,18 +162,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
         popup.addSeparator();
 
         switch (status.phase()) {
-            case DETACHED, FAILED -> popup.add(new AbstractAction("Attach", Icons.DEBUG) {
-                @Override
-                public void actionPerformed(ActionEvent event) {
-                    debugger.attach();
-                }
-            });
-            case RUNNING, ATTACHING, DETACHING -> popup.add(new AbstractAction("Detach", Icons.DEBUG_DETACH) {
-                @Override
-                public void actionPerformed(ActionEvent event) {
-                    debugger.detach();
-                }
-            });
+            case DETACHED, FAILED -> popup.add(this.debuggerActions.attach());
+            case RUNNING, ATTACHING, DETACHING -> popup.add(this.debuggerActions.detach());
             case PAUSED -> {
                 popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
                     @Override
@@ -176,37 +171,12 @@ public class MainWindow extends JFrame implements AWTEventListener {
                         debuggerWindow(debugger).showWindow();
                     }
                 });
-                popup.add(new AbstractAction("Continue", Icons.DEBUG_RESUME) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debugger.resume();
-                    }
-                });
-                popup.add(new AbstractAction("Step Over", Icons.DEBUG_STEP_OVER) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debugger.stepOver();
-                    }
-                });
-                popup.add(new AbstractAction("Step Into", Icons.DEBUG_STEP_INTO) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debugger.stepInto();
-                    }
-                });
-                popup.add(new AbstractAction("Step Out", Icons.DEBUG_STEP_OUT) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debugger.stepOut();
-                    }
-                });
+                popup.add(this.debuggerActions.resume());
+                popup.add(this.debuggerActions.stepOver());
+                popup.add(this.debuggerActions.stepInto());
+                popup.add(this.debuggerActions.stepOut());
                 popup.addSeparator();
-                popup.add(new AbstractAction("Detach", Icons.DEBUG_DETACH) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debugger.detach();
-                    }
-                });
+                popup.add(this.debuggerActions.detach());
             }
             case UNAVAILABLE -> {
             }
@@ -234,7 +204,12 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private DebuggerWindow debuggerWindow(DebuggerSessionController debugger) {
         if (this.debuggerWindow == null) {
-            this.debuggerWindow = new DebuggerWindow(this, debugger);
+            this.debuggerWindow = new DebuggerWindow(
+                    this,
+                    debugger,
+                    this.debuggerActions,
+                    this.debuggerShortcuts
+            );
         }
         return this.debuggerWindow;
     }

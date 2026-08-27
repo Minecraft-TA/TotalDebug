@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescripto
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 
 import java.awt.Window;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URI;
 import java.util.List;
 
@@ -19,7 +21,17 @@ public final class DebuggerWindowPreview {
 
     public static DebuggerWindow open(Window owner, boolean showWatches) {
         DebuggerSessionController controller = new DebuggerSessionController();
-        DebuggerWindow window = new DebuggerWindow(owner, controller, (frame, activateEditor) -> {
+        DebuggerActions actions = new DebuggerActions(controller);
+        DebuggerShortcuts shortcuts = new DebuggerShortcuts(actions);
+        DebuggerWindow window = new DebuggerWindow(owner, controller, actions, shortcuts, (frame, activateEditor) -> {
+        });
+        window.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent event) {
+                actions.close();
+                shortcuts.close();
+                controller.close();
+            }
         });
 
         DebugEngine.StackFrame top = frame(
