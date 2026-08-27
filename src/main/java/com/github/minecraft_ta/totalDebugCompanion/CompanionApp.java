@@ -83,6 +83,7 @@ public final class CompanionApp {
     private static volatile CompanionDecompilationService decompilationService;
     private static volatile ReferenceSearchService referenceSearchService;
     private static volatile CodeInsightService codeInsightService;
+    private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
     private static RuntimeIndexService runtimeIndexService;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;
@@ -280,6 +281,7 @@ public final class CompanionApp {
             CompanionClassIndex.close();
             activeIndexFile = null;
             activeRuntimeSignature = null;
+            runtimeSourceCatalog = RuntimeSourceCatalog.empty();
         }
         profile = requested;
         setupDataDirectories();
@@ -336,6 +338,7 @@ public final class CompanionApp {
 
         closeReferenceSearchService();
         RuntimeSourceCatalog sourceCatalog = new RuntimeSourceCatalog(snapshot.sources());
+        runtimeSourceCatalog = sourceCatalog;
         CodeInsightService currentInsightService = codeInsightService;
         if (currentInsightService != null) {
             currentInsightService.rebind(() -> snapshot.index(), sourceCatalog);
@@ -353,6 +356,7 @@ public final class CompanionApp {
         activeRuntimeSignature = snapshot.signature();
         if (uiStarted) {
             MainWindow.INSTANCE.navigation().runtimeChanged();
+            MainWindow.INSTANCE.refreshRuntimeSources();
         }
         prewarmJavaParser();
 
@@ -710,6 +714,10 @@ public final class CompanionApp {
             throw new IllegalStateException("Code insight is unavailable");
         }
         return service;
+    }
+
+    public static RuntimeSourceCatalog getRuntimeSourceCatalog() {
+        return runtimeSourceCatalog;
     }
 
     public static CompanionDecompilationService getDecompilationService() {

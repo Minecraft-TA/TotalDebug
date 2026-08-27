@@ -23,6 +23,14 @@ class DecompiledSourceStoreTest {
 
         assertEquals(source, store.find("sample.Target"));
         assertEquals("class Target {}", Files.readString(source));
+        assertEquals(
+                java.util.List.of("sample.Target.java"),
+                fileNames(directory.resolve("decompiled-files"))
+        );
+        assertEquals(
+                java.util.List.of("sample.Target.lines", "sample.Target.names", "state.properties"),
+                fileNames(directory.resolve("cache/decompiled-source-metadata"))
+        );
         SourceLineMap restored = DecompiledSourceStore.open(directory, "runtime", "format")
                 .readLineMap("sample.Target");
         assertArrayEquals(new int[]{10, 4, 20, 8, 21, 8}, restored.originalToDisplayed());
@@ -38,5 +46,11 @@ class DecompiledSourceStoreTest {
         Files.writeString(javaOnly, "old source without debugger mapping");
 
         assertNull(store.find("sample.Target"));
+    }
+
+    private static java.util.List<String> fileNames(Path directory) throws Exception {
+        try (var files = Files.list(directory)) {
+            return files.map(path -> path.getFileName().toString()).sorted().toList();
+        }
     }
 }

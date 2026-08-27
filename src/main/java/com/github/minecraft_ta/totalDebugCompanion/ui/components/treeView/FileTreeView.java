@@ -4,20 +4,20 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 
 import javax.swing.*;
 import java.awt.Color;
-import java.io.IOException;
 import java.net.URI;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -76,6 +76,11 @@ public class FileTreeView extends JScrollPane {
                             entry.getEntryPath()
                     ));
                 }
+            } else if (item instanceof RuntimeSourceTreeItem.RuntimeFileEntry runtimeFile) {
+                String binaryName = runtimeFile.binaryName();
+                navigator.accept(binaryName == null
+                        ? new NavigationTarget.LocalFile(runtimeFile.path())
+                        : new NavigationTarget.RuntimeClass(binaryName));
             }
         });
 
@@ -126,59 +131,70 @@ public class FileTreeView extends JScrollPane {
         decompiledFiles.setIcon(FileTreeIcons.forRootDirectory("decompiled-files"));
         rootItems.add(decompiledFiles);
 
-        Path modsPath = CompanionApp.getWorkspaceDirectory().resolve("mods");
-        var mods = new DirectoryTreeItem("mods") {
-            @Override
-            public List<TreeItem> loadChildren() {
-                if (!Files.isDirectory(modsPath)) {
-                    return List.of();
+        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
+        if (!catalog.modules().isEmpty()) {
+            var runtime = new DirectoryTreeItem("runtime") {
+                {
+                    setPresentation(PrimarySecondaryText.primary("Runtime"));
                 }
-                try (var paths = Files.walk(modsPath, 1)) {
-                    return paths.skip(1)
-                            .filter(path -> path.getFileName().toString().endsWith(".jar"))
-                            .<TreeItem>map(ZipFileRootItem::new)
+
+                @Override
+                public List<TreeItem> loadChildren() {
+                    return catalog.modules().stream()
+                            .<TreeItem>map(module -> new RuntimeModuleTreeItem(
+                                    module,
+                                    catalog.sourcesForModule(module.id())
+                            ))
                             .toList();
-                } catch (IOException exception) {
-                    throw new RuntimeException(exception);
                 }
-            }
-        };
-        mods.setIcon(FileTreeIcons.forRootDirectory("mods"));
-        rootItems.add(mods);
+            };
+            runtime.setIcon(Icons.LIBRARY);
+            rootItems.add(runtime);
+        }
         this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
     }
 
-    /** Reveals every runtime archive containing the requested Java package. */
-    public CompletableFuture<Boolean> revealPackage(String packageName, String archiveName) {
+    public CompletableFuture<Boolean> revealPackage(
+            String packageName,
+            String ownerClassName,
+            RuntimeSnapshotBytecodeSource.Source source
+    ) {
         if (packageName == null || packageName.isBlank()) {
             throw new IllegalArgumentException("A package name must not be blank");
         }
+        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
+        List<String> path = new ArrayList<>();
+        if (catalog.sourcesForModule(source.module().id()).size() > 1) {
+            path.add(RuntimeSourceTreeItem.nodeName(source));
+        }
+        if (source.logicalUri().equals("jrt:/")) {
+            String module = findJrtModule(ownerClassName);
+            if (module == null) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Unable to locate " + ownerClassName + " in the Java runtime image"
+                ));
+            }
+            path.add(module);
+        }
+        path.addAll(List.of(packageName.split("\\.")));
         return this.tree.revealDirectoryPath(
-                "mods",
-                archiveName,
-                List.of(packageName.split("\\."))
+                "runtime",
+                RuntimeModuleTreeItem.nodeName(source.module()),
+                path
         );
     }
 
-    public static Optional<String> workspaceArchiveName(RuntimeSnapshotBytecodeSource.Source source) {
-        Path modsDirectory = CompanionApp.getWorkspaceDirectory().resolve("mods").toAbsolutePath().normalize();
-        Path archive = source.path().toAbsolutePath().normalize();
-        if (modsDirectory.equals(archive.getParent())) {
-            return Optional.of(archive.getFileName().toString());
+    private static String findJrtModule(String ownerClassName) {
+        Path modules = FileSystems.getFileSystem(URI.create("jrt:/")).getPath("/modules");
+        String resource = ownerClassName.replace('.', '/') + ".class";
+        try (var candidates = Files.list(modules)) {
+            return candidates.filter(module -> Files.isRegularFile(module.resolve(resource)))
+                    .map(module -> module.getFileName().toString())
+                    .findFirst()
+                    .orElse(null);
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("Unable to browse the Java runtime image", exception);
         }
-
-        String logicalRoot = source.logicalUri();
-        int nestedSeparator = logicalRoot.indexOf("!/");
-        if (nestedSeparator >= 0) {
-            logicalRoot = logicalRoot.substring(0, nestedSeparator);
-        }
-        if (!logicalRoot.startsWith("file:")) {
-            return Optional.empty();
-        }
-        Path logicalArchive = Path.of(URI.create(logicalRoot)).toAbsolutePath().normalize();
-        return modsDirectory.equals(logicalArchive.getParent())
-                ? Optional.of(logicalArchive.getFileName().toString())
-                : Optional.empty();
     }
 
     @Override

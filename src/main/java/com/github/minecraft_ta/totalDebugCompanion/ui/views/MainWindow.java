@@ -327,6 +327,14 @@ public class MainWindow extends JFrame implements AWTEventListener {
         refreshActions();
     }
 
+    public void refreshRuntimeSources() {
+        if (SwingUtilities.isEventDispatchThread()) {
+            this.fileTreeView.reloadProfile();
+        } else {
+            SwingUtilities.invokeLater(this.fileTreeView::reloadProfile);
+        }
+    }
+
     private void refreshActions() {
         boolean chunkGrid = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID);
         boolean packetLogger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER);

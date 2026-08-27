@@ -17,6 +17,7 @@ public final class RuntimeSourceCatalog {
     private final Map<Integer, RuntimeInventory.RuntimeModule> modulesBySourceId;
     private final List<RuntimeInventory.RuntimeModule> modules;
     private final Map<String, int[]> sourceIdsByModuleId;
+    private final Map<String, List<RuntimeSnapshotBytecodeSource.Source>> sourcesByModuleId;
 
     public RuntimeSourceCatalog(List<RuntimeSnapshotBytecodeSource.Source> sources) {
         Map<Integer, RuntimeSnapshotBytecodeSource.Source> indexedSources = new LinkedHashMap<>();
@@ -53,13 +54,22 @@ public final class RuntimeSourceCatalog {
                         .thenComparing(RuntimeInventory.RuntimeModule::id))
                 .toList();
         Map<String, int[]> frozenSourceIds = new LinkedHashMap<>();
+        Map<String, List<RuntimeSnapshotBytecodeSource.Source>> frozenSources = new LinkedHashMap<>();
         for (Map.Entry<String, List<Integer>> entry : sourceIdsByModuleId.entrySet()) {
             frozenSourceIds.put(
                     entry.getKey(),
                     entry.getValue().stream().mapToInt(Integer::intValue).sorted().distinct().toArray()
             );
+            frozenSources.put(
+                    entry.getKey(),
+                    entry.getValue().stream()
+                            .sorted()
+                            .map(indexedSources::get)
+                            .toList()
+            );
         }
         this.sourceIdsByModuleId = Map.copyOf(frozenSourceIds);
+        this.sourcesByModuleId = Map.copyOf(frozenSources);
     }
 
     public RuntimeInventory.RuntimeModule moduleFor(int sourceId) {
@@ -80,6 +90,16 @@ public final class RuntimeSourceCatalog {
 
     public List<RuntimeInventory.RuntimeModule> modules() {
         return this.modules;
+    }
+
+    public List<RuntimeSnapshotBytecodeSource.Source> sourcesForModule(String moduleId) {
+        List<RuntimeSnapshotBytecodeSource.Source> sources = this.sourcesByModuleId.get(
+                Objects.requireNonNull(moduleId, "moduleId")
+        );
+        if (sources == null) {
+            throw new IllegalArgumentException("Unknown runtime module id " + moduleId);
+        }
+        return sources;
     }
 
     public int[] sourceIdsForModules(Set<String> moduleIds) {

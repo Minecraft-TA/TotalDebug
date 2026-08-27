@@ -30,6 +30,6 @@ class FileTreeIconsTest {
         assertSame(Icons.FOLDER, FileTreeIcons.forArchiveDirectory("textures", true, false));
         assertSame(Icons.SOURCE_ROOT, FileTreeIcons.forRootDirectory("scripts"));
         assertSame(Icons.SOURCE_ROOT, FileTreeIcons.forRootDirectory("decompiled-files"));
-        assertSame(Icons.LIBRARY, FileTreeIcons.forRootDirectory("mods"));
+        assertSame(Icons.LIBRARY, FileTreeIcons.forRootDirectory("runtime"));
     }
 }

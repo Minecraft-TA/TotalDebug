@@ -24,6 +24,7 @@ class RuntimeSourceCatalogTest {
 
         assertEquals(List.of(alpha, zeta), catalog.modules());
         assertEquals(Path.of("alpha.jar").toAbsolutePath().normalize(), catalog.sourceFor(2).path());
+        assertEquals(List.of(catalog.sourceFor(3), catalog.sourceFor(4)), catalog.sourcesForModule("zeta"));
         assertArrayEquals(new int[]{2, 3, 4}, catalog.sourceIdsForModules(Set.of("zeta", "alpha")));
         assertArrayEquals(new int[0], catalog.sourceIdsForModules(Set.of()));
         assertThrows(IllegalArgumentException.class, () -> catalog.sourceIdsForModules(Set.of("missing")));

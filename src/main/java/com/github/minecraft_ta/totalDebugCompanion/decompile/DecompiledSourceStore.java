@@ -22,12 +22,15 @@ final class DecompiledSourceStore {
     private static final int LINE_MAP_VERSION = 1;
     private static final int VARIABLE_NAMES_MAGIC = 0x5444564E;
     private static final int VARIABLE_NAMES_VERSION = 1;
-    private static final String DIRECTORY_NAME = "decompiled-files";
-    private static final String STATE_FILE_NAME = "decompiled-files.properties";
-    private final Path directory;
+    private static final String SOURCE_DIRECTORY_NAME = "decompiled-files";
+    private static final String METADATA_DIRECTORY_NAME = "decompiled-source-metadata";
+    private static final String STATE_FILE_NAME = "state.properties";
+    private final Path sourceDirectory;
+    private final Path metadataDirectory;
 
-    private DecompiledSourceStore(Path directory) {
-        this.directory = directory;
+    private DecompiledSourceStore(Path sourceDirectory, Path metadataDirectory) {
+        this.sourceDirectory = sourceDirectory;
+        this.metadataDirectory = metadataDirectory;
     }
 
     static DecompiledSourceStore open(
@@ -38,15 +41,18 @@ final class DecompiledSourceStore {
         Path root = Objects.requireNonNull(dataDirectory, "dataDirectory").toAbsolutePath().normalize();
         String signature = requireNonBlank(runtimeSignature, "runtimeSignature");
         String format = requireNonBlank(decompilerFormat, "decompilerFormat");
-        Path directory = root.resolve(DIRECTORY_NAME);
-        Path stateFile = root.resolve(STATE_FILE_NAME);
+        Path sourceDirectory = root.resolve(SOURCE_DIRECTORY_NAME);
+        Path metadataDirectory = root.resolve("cache").resolve(METADATA_DIRECTORY_NAME);
+        Path stateFile = metadataDirectory.resolve(STATE_FILE_NAME);
 
-        Files.createDirectories(directory);
+        Files.createDirectories(sourceDirectory);
+        Files.createDirectories(metadataDirectory);
         if (!matches(stateFile, signature, format)) {
-            clear(directory);
+            clear(sourceDirectory);
+            clear(metadataDirectory);
             writeState(stateFile, signature, format);
         }
-        return new DecompiledSourceStore(directory);
+        return new DecompiledSourceStore(sourceDirectory, metadataDirectory);
     }
 
     Path find(String binaryName) {
@@ -138,9 +144,9 @@ final class DecompiledSourceStore {
         Path target = sourceFile(binaryName);
         Path mappingTarget = lineMapFile(binaryName);
         Path variableNamesTarget = variableNamesFile(binaryName);
-        Path stagedSource = Files.createTempFile(this.directory, ".decompiled-", ".tmp");
-        Path stagedMapping = Files.createTempFile(this.directory, ".decompiled-lines-", ".tmp");
-        Path stagedVariableNames = Files.createTempFile(this.directory, ".decompiled-names-", ".tmp");
+        Path stagedSource = Files.createTempFile(this.sourceDirectory, ".decompiled-", ".tmp");
+        Path stagedMapping = Files.createTempFile(this.metadataDirectory, ".decompiled-lines-", ".tmp");
+        Path stagedVariableNames = Files.createTempFile(this.metadataDirectory, ".decompiled-names-", ".tmp");
         try {
             Files.writeString(stagedSource, source, StandardCharsets.UTF_8);
             writeLineMap(stagedMapping, lineMap);
@@ -172,21 +178,21 @@ final class DecompiledSourceStore {
     }
 
     private Path sourceFile(String binaryName) {
-        return resolveFile(binaryName, ".java");
+        return resolveFile(this.sourceDirectory, binaryName, ".java");
     }
 
     private Path lineMapFile(String binaryName) {
-        return resolveFile(binaryName, ".lines");
+        return resolveFile(this.metadataDirectory, binaryName, ".lines");
     }
 
     private Path variableNamesFile(String binaryName) {
-        return resolveFile(binaryName, ".names");
+        return resolveFile(this.metadataDirectory, binaryName, ".names");
     }
 
-    private Path resolveFile(String binaryName, String extension) {
-        Path file = this.directory.resolve(binaryName + extension).normalize();
-        if (!file.getParent().equals(this.directory)) {
-            throw new IllegalArgumentException("Binary name escapes the decompiled source directory: " + binaryName);
+    private static Path resolveFile(Path directory, String binaryName, String extension) {
+        Path file = directory.resolve(binaryName + extension).normalize();
+        if (!file.getParent().equals(directory)) {
+            throw new IllegalArgumentException("Binary name escapes the decompiled source store: " + binaryName);
         }
         return file;
     }

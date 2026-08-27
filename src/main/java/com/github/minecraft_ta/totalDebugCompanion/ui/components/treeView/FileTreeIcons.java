@@ -29,7 +29,7 @@ public final class FileTreeIcons {
     public static Icon forRootDirectory(String directoryName) {
         return switch (directoryName.toLowerCase(Locale.ROOT)) {
             case "scripts", "decompiled-files" -> Icons.SOURCE_ROOT;
-            case "mods" -> Icons.LIBRARY;
+            case "runtime" -> Icons.LIBRARY;
             default -> Icons.FOLDER;
         };
     }

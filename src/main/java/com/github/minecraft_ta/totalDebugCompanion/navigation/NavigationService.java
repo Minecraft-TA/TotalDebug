@@ -29,7 +29,6 @@ import java.awt.event.ActionEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -399,14 +398,11 @@ public final class NavigationService {
                     ));
                     return;
                 }
-                Optional<String> archive = FileTreeView.workspaceArchiveName(source);
-                if (archive.isEmpty()) {
-                    result.completeExceptionally(new IllegalStateException(
-                            "Class " + target.ownerClassName() + " is indexed outside the current mods tree"
-                    ));
-                    return;
-                }
-                NavigationService.this.fileTree.revealPackage(target.packageName(), archive.get())
+                NavigationService.this.fileTree.revealPackage(
+                                target.packageName(),
+                                target.ownerClassName(),
+                                source
+                        )
                         .whenComplete((revealed, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
