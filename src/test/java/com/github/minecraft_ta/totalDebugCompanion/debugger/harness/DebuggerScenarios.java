@@ -175,9 +175,21 @@ public final class DebuggerScenarios {
                 SourceVariableNames.of(Map.of("target", "renamedTarget", "local", "renamedLocal"))
         );
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class, source)) {
+            int staticLine = harness.lineContaining("DEBUG_RICH_STATIC_COMPLETION");
             int line = harness.lineContaining("DEBUG_RICH_EXPRESSION");
-            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(line));
+            harness.setBreakpoints(
+                    new DebugEngine.SourceBreakpoint(staticLine),
+                    new DebugEngine.SourceBreakpoint(line)
+            );
             harness.start();
+            DebugEngine.StoppedEvent staticStop = harness.awaitStop("rich static completion breakpoint");
+            DebugEngine.StackFrame staticFrame = harness.firstFrame(staticStop.threadId());
+            List<DebuggerCompletionProposal> staticCompletions = harness.engine()
+                    .completions("", 0, staticFrame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(staticCompletions.stream().noneMatch(item -> item.label().equals("this")
+                            || item.label().equals("super")),
+                    "static-frame completion offered this or super");
+            harness.engine().resume(staticStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             DebugEngine.StoppedEvent stop = harness.awaitStop("rich expression breakpoint");
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
 
@@ -211,19 +223,38 @@ public final class DebuggerScenarios {
             equal("\"boolean-true\"", value(harness.engine().evaluate("renamedTarget.booleanAccepted(warmedBooleanType)", frame.id())), "Boolean unboxing");
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload((char) 1)", frame.id())), "char widening");
             equal("\"fixed\"", value(harness.engine().evaluate("renamedTarget.fixed(\"x\")", frame.id())), "fixed arity beats varargs");
+            try {
+                harness.engine().evaluate("renamedTarget.fixed(null)", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("fixed/string-varargs null overload unexpectedly succeeded");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Ambiguous overload"),
+                        "fixed/string-varargs null overload was not ambiguous: " + expected);
+            }
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(strings)", frame.id())), "varargs direct array");
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
             equal("\"array-null\"", value(harness.engine().evaluate("renamedTarget.varargsOrNull(null)", frame.id())), "varargs null array");
-            equal("\"worker-complete\"", value(harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id())), "multi-thread evaluation");
-            equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
-            try {
-                harness.engine().evaluate("java.util.List.of()", frame.id())
-                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                throw new AssertionError("Static interface method unexpectedly invoked");
-            } catch (java.util.concurrent.ExecutionException expected) {
-                check(expected.toString().contains("Static interface invocation is not supported by JDI InterfaceType"),
-                        "Static interface limitation was not explicit: " + expected);
+            java.util.concurrent.CompletableFuture<DebugEngine.EvaluationResult> inFlightEvaluation =
+                    harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id());
+            long evaluationDeadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+            while (!harness.isInEvaluation(stop.threadId())
+                    && System.nanoTime() < evaluationDeadline) {
+                Thread.sleep(10);
             }
+            check(harness.isInEvaluation(stop.threadId()),
+                    "adapter did not report the active evaluation");
+            harness.clearEvaluationState(stop.threadId());
+            check(harness.isInEvaluation(stop.threadId()),
+                    "clearState forgot the active evaluation");
+            equal("\"worker-complete\"", inFlightEvaluation.get(TIMEOUT_SECONDS, TimeUnit.SECONDS).value(),
+                    "multi-thread evaluation");
+            check(!harness.isInEvaluation(stop.threadId()),
+                    "evaluation lifecycle remained active after invocation");
+            check(!harness.engine().stackTrace(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS).isEmpty(),
+                    "frames were not refreshed after invocation");
+            equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
+            harness.engine().evaluate("java.util.List.of()", frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");
             equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())), "completion counter before");
 

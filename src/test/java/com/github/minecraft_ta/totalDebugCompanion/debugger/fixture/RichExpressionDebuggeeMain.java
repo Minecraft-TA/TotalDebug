@@ -11,9 +11,15 @@ public final class RichExpressionDebuggeeMain {
     }
 
     public static void main(String[] args) {
+        staticCompletionFrame();
         Child target = new Child();
         target.debugExpressions();
         System.out.println(target.value(2));
+    }
+
+    private static void staticCompletionFrame() {
+        int staticLocal = 0; // DEBUG_RICH_STATIC_COMPLETION
+        System.out.println(staticLocal);
     }
 
     private static class Base {
@@ -141,6 +147,7 @@ public final class RichExpressionDebuggeeMain {
                 throw new IllegalStateException("worker did not run during evaluation");
             }
             worker.join();
+            Thread.sleep(250);
             return "worker-complete";
         }
 

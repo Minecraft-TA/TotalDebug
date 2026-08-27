@@ -136,6 +136,14 @@ public final class DebuggerTestHarness implements AutoCloseable {
         return this.engine;
     }
 
+    public boolean isInEvaluation(long threadId) {
+        return this.engine.isInEvaluationForTesting(threadId);
+    }
+
+    public void clearEvaluationState(long threadId) {
+        this.engine.clearEvaluationStateForTesting(threadId);
+    }
+
     public Path sourcePath() {
         return this.sourcePath;
     }

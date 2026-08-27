@@ -32,7 +32,7 @@ final class DebuggerOverloadResolver {
         methods(type).stream()
                 .filter(method -> method.name().equals(name))
                 .filter(method -> !staticOnly || method.isStatic())
-                .map(method -> new ScoredMethod(method, compatibility(method, args)))
+                .map(method -> compatibility(method, args))
                 .filter(scored -> scored.score() >= 0)
                 .forEach(scored -> uniqueMethods.putIfAbsent(scored.method().signature(), scored));
         List<ScoredMethod> compatible = uniqueMethods.values().stream()
@@ -47,7 +47,8 @@ final class DebuggerOverloadResolver {
                 .toList();
         List<ScoredMethod> mostSpecific = best.stream()
                 .filter(candidate -> best.stream().noneMatch(other ->
-                        other != candidate && moreSpecific(other.method(), candidate.method(), type.virtualMachine())))
+                        other != candidate && moreSpecific(other.method(), other.directArray(),
+                                candidate.method(), candidate.directArray(), type.virtualMachine())))
                 .toList();
         if (mostSpecific.size() != 1) {
             throw new IllegalArgumentException("Ambiguous overload for " + type.name() + "." + name);
@@ -56,8 +57,13 @@ final class DebuggerOverloadResolver {
     }
 
     static boolean moreSpecific(Method first, Method second, VirtualMachine vm) {
-        List<String> firstParameters = effectiveParameterTypes(first);
-        List<String> secondParameters = effectiveParameterTypes(second);
+        return moreSpecific(first, false, second, false, vm);
+    }
+
+    private static boolean moreSpecific(Method first, boolean firstDirectArray,
+                                        Method second, boolean secondDirectArray, VirtualMachine vm) {
+        List<String> firstParameters = effectiveParameterTypes(first, firstDirectArray);
+        List<String> secondParameters = effectiveParameterTypes(second, secondDirectArray);
         if (firstParameters.size() != secondParameters.size()) return false;
         boolean strictlyMoreSpecific = false;
         for (int i = 0; i < firstParameters.size(); i++) {
@@ -70,9 +76,9 @@ final class DebuggerOverloadResolver {
         return strictlyMoreSpecific;
     }
 
-    private static List<String> effectiveParameterTypes(Method method) {
+    private static List<String> effectiveParameterTypes(Method method, boolean directArray) {
         List<String> parameters = method.argumentTypeNames();
-        if (!method.isVarArgs()) return parameters;
+        if (!method.isVarArgs() || directArray) return parameters;
         List<String> result = new ArrayList<>(parameters);
         result.set(result.size() - 1, result.getLast().substring(0, result.getLast().length() - 2));
         return result;
@@ -88,24 +94,23 @@ final class DebuggerOverloadResolver {
         return isAssignableName(source, target, vm);
     }
 
-    private static int compatibility(Method method, List<Value> args) {
+    private static ScoredMethod compatibility(Method method, List<Value> args) {
         List<String> parameters = method.argumentTypeNames();
-        if (!method.isVarArgs() && parameters.size() != args.size()) return -1;
-        if (method.isVarArgs() && args.size() < parameters.size() - 1) return -1;
+        if (!method.isVarArgs() && parameters.size() != args.size()) return new ScoredMethod(method, -1, false);
+        if (method.isVarArgs() && args.size() < parameters.size() - 1) return new ScoredMethod(method, -1, false);
         boolean directArray = method.isVarArgs() && args.size() == parameters.size()
                 && valueCompatibility(args.getLast(), parameters.getLast()) >= 0;
         int score = method.isVarArgs() && !directArray ? 100 : 0;
         for (int i = 0; i < args.size(); i++) {
             String parameter = parameters.get(Math.min(i, parameters.size() - 1));
-            if (directArray && i == parameters.size() - 1) continue;
-            if (method.isVarArgs() && i >= parameters.size() - 1) {
+            if (method.isVarArgs() && !directArray && i >= parameters.size() - 1) {
                 parameter = parameter.substring(0, parameter.length() - 2);
             }
             int current = valueCompatibility(args.get(i), parameter);
-            if (current < 0) return -1;
+            if (current < 0) return new ScoredMethod(method, -1, directArray);
             score += current;
         }
-        return score;
+        return new ScoredMethod(method, score, directArray);
     }
 
     private static int valueCompatibility(Value value, String target) {
@@ -251,5 +256,5 @@ final class DebuggerOverloadResolver {
         };
     }
 
-    private record ScoredMethod(Method method, int score) { }
+    private record ScoredMethod(Method method, int score, boolean directArray) { }
 }

@@ -16,6 +16,7 @@ import com.sun.jdi.Field;
 import com.sun.jdi.FloatValue;
 import com.sun.jdi.IntegerValue;
 import com.sun.jdi.InvocationException;
+import com.sun.jdi.InterfaceType;
 import com.sun.jdi.LocalVariable;
 import com.sun.jdi.Method;
 import com.sun.jdi.ObjectReference;
@@ -178,6 +179,14 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         this.lifecycle.clearState(thread);
     }
 
+    boolean isInEvaluation(long threadId) {
+        return this.lifecycle.isInEvaluation(threadId);
+    }
+
+    void clearState(long threadId) {
+        this.lifecycle.clearState(threadId);
+    }
+
     @Override
     public List<Types.CompletionItem> codeComplete(StackFrame frame, String snippet, int line, int column) {
         int offset = DebuggerCompletionRange.offsetOf(snippet, line, column);
@@ -218,6 +227,9 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         }
         if (!range.memberAccess()) {
             for (String keyword : KEYWORDS) {
+                if ((keyword.equals("this") || keyword.equals("super")) && frame.thisObject() == null) {
+                    continue;
+                }
                 add(result, new DebuggerCompletionProposal(
                         keyword, keyword, DebuggerCompletionProposal.Kind.KEYWORD,
                         keyword.equals("null") ? "null literal" : "Java expression keyword",
@@ -732,11 +744,13 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                 if (!method.isStatic()) {
                     throw new IllegalArgumentException("Type-qualified invocation requires a static method: " + name);
                 }
-                if (!(receiver.type() instanceof ClassType classType)) {
-                    throw new UnsupportedOperationException(
-                            "Static interface invocation is not supported by JDI InterfaceType");
+                if (receiver.type() instanceof ClassType classType) {
+                    result = classType.invokeMethod(context.thread(), method, converted, invocationOptions);
+                } else if (receiver.type() instanceof InterfaceType interfaceType) {
+                    result = interfaceType.invokeMethod(context.thread(), method, converted, invocationOptions);
+                } else {
+                    throw new IllegalArgumentException("Type-qualified invocation requires a reference type: " + name);
                 }
-                result = classType.invokeMethod(context.thread(), method, converted, invocationOptions);
             } else {
                 ObjectReference object = (ObjectReference) receiver.value();
                 if (method.isStatic() && method.declaringType() instanceof ClassType declaringType) {
