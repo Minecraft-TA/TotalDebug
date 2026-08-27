@@ -229,18 +229,32 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
+    enum VariableKind {
+        THIS,
+        PARAMETER,
+        LOCAL,
+        FIELD,
+        ARRAY_ELEMENT,
+        RETURN_VALUE,
+        EXPRESSION
+    }
+
     record Variable(
             String name,
+            String evaluateName,
             String value,
             String type,
+            VariableKind kind,
             int variablesReference,
             int namedVariables,
             int indexedVariables
     ) {
         public Variable {
             name = Objects.requireNonNullElse(name, "");
+            evaluateName = Objects.requireNonNullElse(evaluateName, "");
             value = Objects.requireNonNullElse(value, "");
             type = Objects.requireNonNullElse(type, "");
+            Objects.requireNonNull(kind, "kind");
         }
     }
 

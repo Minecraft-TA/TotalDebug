@@ -4,7 +4,9 @@ import com.microsoft.java.debug.core.IEvaluatableBreakpoint;
 import com.microsoft.java.debug.core.adapter.ICompletionsProvider;
 import com.microsoft.java.debug.core.adapter.IDebugAdapterContext;
 import com.microsoft.java.debug.core.adapter.IEvaluationProvider;
+import com.microsoft.java.debug.core.adapter.variables.StackFrameReference;
 import com.microsoft.java.debug.core.protocol.Types;
+import com.sun.jdi.AbsentInformationException;
 import com.sun.jdi.ArrayReference;
 import com.sun.jdi.ArrayType;
 import com.sun.jdi.BooleanValue;
@@ -83,6 +85,35 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
 
     RichJavaExpressionEngine(VariableNameResolver variableNameResolver) {
         this.variableNameResolver = Objects.requireNonNull(variableNameResolver, "variableNameResolver");
+    }
+
+    Map<String, DebugEngine.VariableKind> variableKinds(int frameId) {
+        IDebugAdapterContext context = Objects.requireNonNull(this.debugContext, "debugContext");
+        Object reference = context.getRecyclableIdPool().getObjectById(frameId);
+        if (!(reference instanceof StackFrameReference frameReference)) {
+            throw new IllegalArgumentException("Unknown debugger stack frame " + frameId);
+        }
+        StackFrame frame = context.getStackFrameManager().getStackFrame(frameReference);
+        if (frame == null) {
+            throw new IllegalStateException("Debugger stack frame " + frameId + " is no longer available");
+        }
+        Map<String, DebugEngine.VariableKind> result = new LinkedHashMap<>();
+        try {
+            for (LocalVariable variable : frame.visibleVariables()) {
+                result.put(
+                        variable.name(),
+                        variable.isArgument()
+                                ? DebugEngine.VariableKind.PARAMETER
+                                : DebugEngine.VariableKind.LOCAL
+                );
+            }
+        } catch (AbsentInformationException exception) {
+            throw new IllegalStateException("Debugger variable metadata is unavailable for frame " + frameId, exception);
+        }
+        if (frame.thisObject() != null) {
+            result.put("this", DebugEngine.VariableKind.THIS);
+        }
+        return Map.copyOf(result);
     }
 
     @Override

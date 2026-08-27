@@ -77,7 +77,10 @@ class DebuggerPanelTest {
             panel.showPausedState(new DebuggerSessionController.PausedState(
                     new DebugEngine.StoppedEvent("breakpoint", 1, true),
                     List.of(frame),
-                    List.of(new DebugEngine.Variable("level", "ServerLevel@17", "ServerLevel", 5, 4, 0))
+                    List.of(new DebugEngine.Variable(
+                            "level", "level", "ServerLevel@17", "net.minecraft.server.level.ServerLevel",
+                            DebugEngine.VariableKind.PARAMETER, 5, 4, 0
+                    ))
             ));
 
             JTree variables = findVariableTreeOrNull(panel);

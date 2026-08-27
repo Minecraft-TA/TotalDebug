@@ -22,6 +22,7 @@ public class Icons {
     public static final FlatSVGIcon JAVA_CONSTANT = new FlatSVGIcon("icons/constant.svg");
     public static final FlatSVGIcon JAVA_PROPERTY = new FlatSVGIcon("icons/property.svg");
     public static final FlatSVGIcon JAVA_VARIABLE = new FlatSVGIcon("icons/variable.svg");
+    public static final FlatSVGIcon JAVA_PARAMETER = new FlatSVGIcon("icons/parameter.svg");
     public static final FlatSVGIcon JAVA_INTERFACE = new FlatSVGIcon("icons/interface.svg");
     public static final FlatSVGIcon JAVA_ENUM = new FlatSVGIcon("icons/enum.svg");
     public static final FlatSVGIcon JAVA_CONSTRUCTOR = new FlatSVGIcon("icons/constructor.svg");

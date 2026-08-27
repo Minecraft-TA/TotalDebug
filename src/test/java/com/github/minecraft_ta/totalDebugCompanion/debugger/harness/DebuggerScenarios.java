@@ -194,6 +194,15 @@ public final class DebuggerScenarios {
             harness.engine().resume(staticStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             DebugEngine.StoppedEvent stop = harness.awaitStop("rich expression breakpoint");
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+            Map<String, DebugEngine.Variable> variables = harness.variables(frame);
+            DebugEngine.Variable targetVariable = variable(variables, "renamedTarget");
+            equal(DebugEngine.VariableKind.THIS, variable(variables, "this").kind(), "this variable kind");
+            equal(DebugEngine.VariableKind.LOCAL, targetVariable.kind(), "local variable kind");
+            equal(DebugEngine.VariableKind.LOCAL, variable(variables, "warmedBoxingType").kind(), "local variable kind");
+            equal(RichExpressionDebuggeeMain.class.getName() + "$Child", targetVariable.type(),
+                    "qualified debugger type");
+            equal(DebugEngine.VariableKind.FIELD,
+                    variable(harness.children(targetVariable), "ownSecret").kind(), "field variable kind");
 
             equal("\"own-secret\"", value(harness.engine().evaluate("renamedTarget.ownSecret", frame.id())), "private field");
             equal("\"child-hidden\"", value(harness.engine().evaluate("renamedTarget.inheritedSecret", frame.id())), "hidden child field");
@@ -515,6 +524,9 @@ public final class DebuggerScenarios {
                     + variables.keySet());
             check(variables.containsKey("s1") && variables.containsKey("j"),
                     "Debugger did not expose Vineflower local names: " + variables.keySet());
+            equal(DebugEngine.VariableKind.PARAMETER, variable(variables, "s").kind(), "decompiled parameter kind");
+            equal(DebugEngine.VariableKind.PARAMETER, variable(variables, "i").kind(), "decompiled parameter kind");
+            equal(DebugEngine.VariableKind.LOCAL, variable(variables, "s1").kind(), "decompiled local kind");
             check(variables.keySet().stream().noneMatch(name -> name.startsWith("p_") || name.startsWith("var")),
                     "Debugger leaked raw generated variable names: " + variables.keySet());
             equal(

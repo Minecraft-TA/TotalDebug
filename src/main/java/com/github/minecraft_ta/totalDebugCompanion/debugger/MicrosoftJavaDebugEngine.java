@@ -46,7 +46,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Map<Integer, SourceVariableNames> variableNamesByFrame = new ConcurrentHashMap<>();
     private final Map<Integer, SourceVariableNames> variableNamesByScope = new ConcurrentHashMap<>();
+    private final Map<Integer, Map<String, VariableKind>> variableKindsByFrame = new ConcurrentHashMap<>();
+    private final Map<Integer, Map<String, VariableKind>> variableKindsByScope = new ConcurrentHashMap<>();
+    private final Map<Integer, VariableKind> childKindsByReference = new ConcurrentHashMap<>();
     private final SourceRegistry sourceRegistry;
+    private final RichJavaExpressionEngine expressionEngine;
     private final IDebugAdapter adapter;
 
     public MicrosoftJavaDebugEngine() {
@@ -63,11 +67,10 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 (IVirtualMachineManagerProvider) Bootstrap::virtualMachineManager
         );
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
-        RichJavaExpressionEngine expressionEngine =
-                new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
-        providers.registerProvider(IEvaluationProvider.class, expressionEngine);
+        this.expressionEngine = new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
+        providers.registerProvider(IEvaluationProvider.class, this.expressionEngine);
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
-        providers.registerProvider(ICompletionsProvider.class, expressionEngine);
+        providers.registerProvider(ICompletionsProvider.class, this.expressionEngine);
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
     }
 
@@ -75,6 +78,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         DebugSettings settings = DebugSettings.getCurrent();
         settings.showLogicalStructure = false;
         settings.showToString = false;
+        settings.showQualifiedNames = true;
         settings.debugSupportOnDecompiledSource = DebugSettings.Switch.ON;
     }
 
@@ -229,6 +233,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         if (!variableNames.isEmpty()) {
                             this.variableNamesByFrame.put(frame.id, variableNames);
                         }
+                        this.variableKindsByFrame.put(frame.id, this.expressionEngine.variableKinds(frame.id));
                         result.add(new StackFrame(
                                 frame.id,
                                 frame.name,
@@ -255,9 +260,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                             frameId,
                             SourceVariableNames.empty()
                     );
+                    Map<String, VariableKind> variableKinds = this.variableKindsByFrame.getOrDefault(
+                            frameId,
+                            Map.of()
+                    );
                     for (Types.Scope scope : body.scopes) {
-                        if (!scope.expensive && !variableNames.isEmpty()) {
-                            this.variableNamesByScope.put(scope.variablesReference, variableNames);
+                        if (!scope.expensive) {
+                            if (!variableNames.isEmpty()) {
+                                this.variableNamesByScope.put(scope.variablesReference, variableNames);
+                            }
+                            this.variableKindsByScope.put(scope.variablesReference, variableKinds);
                         }
                         result.add(new Scope(scope.name, scope.variablesReference, scope.expensive));
                     }
@@ -278,11 +290,28 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                             variablesReference,
                             SourceVariableNames.empty()
                     );
+                    Map<String, VariableKind> scopeKinds = this.variableKindsByScope.get(variablesReference);
+                    VariableKind childKind = this.childKindsByReference.get(variablesReference);
+                    if (scopeKinds == null && childKind == null) {
+                        throw new IllegalStateException("No debugger variable context exists for reference "
+                                + variablesReference);
+                    }
                     for (Types.Variable variable : body.variables) {
+                        VariableKind kind = scopeKinds == null
+                                ? childKind
+                                : scopeKinds.getOrDefault(
+                                        variable.name,
+                                        variable.name.startsWith("->")
+                                                ? VariableKind.RETURN_VALUE
+                                                : VariableKind.LOCAL
+                                );
+                        registerChildKind(variable.variablesReference, variable.type);
                         result.add(new Variable(
                                 variableNames.displayedName(variable.name),
+                                variable.evaluateName,
                                 variable.value,
                                 variable.type,
+                                kind,
                                 variable.variablesReference,
                                 variable.namedVariables,
                                 variable.indexedVariables
@@ -304,12 +333,15 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         arguments.context = "watch";
 
         return request(Requests.Command.EVALUATE, arguments, Responses.EvaluateResponseBody.class)
-                .thenApply(body -> new EvaluationResult(
-                        body.result,
-                        body.type,
-                        body.variablesReference,
-                        body.indexedVariables
-                ));
+                .thenApply(body -> {
+                    registerChildKind(body.variablesReference, body.type);
+                    return new EvaluationResult(
+                            body.result,
+                            body.type,
+                            body.variablesReference,
+                            body.indexedVariables
+                    );
+                });
     }
 
     @Override
@@ -561,6 +593,21 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private void clearVariableNameContexts() {
         this.variableNamesByFrame.clear();
         this.variableNamesByScope.clear();
+        this.variableKindsByFrame.clear();
+        this.variableKindsByScope.clear();
+        this.childKindsByReference.clear();
+    }
+
+    private void registerChildKind(int variablesReference, String type) {
+        if (variablesReference <= 0) {
+            return;
+        }
+        this.childKindsByReference.put(
+                variablesReference,
+                type != null && type.endsWith("[]")
+                        ? VariableKind.ARRAY_ELEMENT
+                        : VariableKind.FIELD
+        );
     }
 
     private void requireState(State... allowed) {

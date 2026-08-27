@@ -95,6 +95,15 @@ public final class DebuggerWindowPreview {
             int reference,
             int namedVariables
     ) {
-        return new DebugEngine.Variable(name, value, type, reference, namedVariables, 0);
+        return new DebugEngine.Variable(
+                name,
+                name,
+                value,
+                type,
+                "this".equals(name) ? DebugEngine.VariableKind.THIS : DebugEngine.VariableKind.PARAMETER,
+                reference,
+                namedVariables,
+                0
+        );
     }
 }

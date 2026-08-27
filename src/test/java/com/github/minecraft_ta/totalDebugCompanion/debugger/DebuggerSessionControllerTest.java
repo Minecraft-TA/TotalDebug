@@ -141,7 +141,9 @@ class DebuggerSessionControllerTest {
                     28,
                     1
             );
-            DebugEngine.Variable local = new DebugEngine.Variable("block", "StoneBlock", "Block", 0, 0, 0);
+            DebugEngine.Variable local = new DebugEngine.Variable(
+                    "block", "block", "StoneBlock", "Block", DebugEngine.VariableKind.LOCAL, 0, 0, 0
+            );
             engine.frames = List.of(frame);
             engine.scopes = List.of(new DebugEngine.Scope("Local", 9, false));
             engine.variables.put(9, List.of(local));
@@ -152,7 +154,9 @@ class DebuggerSessionControllerTest {
             assertEquals(List.of(frame), controller.pausedState().frames());
             assertEquals(List.of(local), controller.pausedState().variables());
 
-            DebugEngine.Variable child = new DebugEngine.Variable("name", "stone", "String", 0, 0, 0);
+            DebugEngine.Variable child = new DebugEngine.Variable(
+                    "name", "block.name", "stone", "String", DebugEngine.VariableKind.FIELD, 0, 0, 0
+            );
             engine.variables.put(15, List.of(child));
             assertEquals(
                     List.of(child),

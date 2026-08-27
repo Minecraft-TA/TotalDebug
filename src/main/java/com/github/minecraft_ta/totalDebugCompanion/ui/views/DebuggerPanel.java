@@ -656,16 +656,20 @@ public final class DebuggerPanel extends JPanel {
 
     private record DebugValue(
             String name,
+            String evaluateName,
             String value,
             String type,
+            DebugEngine.VariableKind kind,
             int variablesReference,
             int indexedVariables
     ) {
         private static DebugValue from(DebugEngine.Variable variable) {
             return new DebugValue(
                     variable.name(),
+                    variable.evaluateName(),
                     variable.value(),
                     variable.type(),
+                    variable.kind(),
                     variable.variablesReference(),
                     variable.indexedVariables()
             );
@@ -674,8 +678,10 @@ public final class DebuggerPanel extends JPanel {
         private static DebugValue from(String expression, DebugEngine.EvaluationResult result) {
             return new DebugValue(
                     expression,
+                    expression,
                     result.value(),
                     result.type(),
+                    DebugEngine.VariableKind.EXPRESSION,
                     result.variablesReference(),
                     result.indexedVariables()
             );
@@ -716,16 +722,15 @@ public final class DebuggerPanel extends JPanel {
             }
             DebugValue debugValue = debugValue(node.getUserObject());
             if (debugValue != null) {
-                String visibleValue = withoutObjectIdentity(debugValue.value(), debugValue.type());
-                String secondary = visibleValue.equals(debugValue.type()) ? "" : debugValue.type();
+                String visibleValue = visibleValue(debugValue.value(), debugValue.type());
+                String simpleType = simpleTypeName(debugValue.type());
+                String secondary = visibleValue.equals(simpleType) ? "" : simpleType;
                 this.valueLabel.configure(
                         new PrimarySecondaryText(
                                 debugValue.name() + " = " + visibleValue,
                                 secondary
                         ),
-                        debugValue.indexedVariables() > 0 || debugValue.type().endsWith("[]")
-                                ? Icons.ARRAY
-                                : debugValue.variablesReference() > 0 ? Icons.VALUE : Icons.PRIMITIVE,
+                        icon(debugValue),
                         tree.getFont(),
                         selected,
                         getTextSelectionColor(),
@@ -733,7 +738,7 @@ public final class DebuggerPanel extends JPanel {
                 );
                 this.valueLabel.setToolTipText(debugValue.type().isBlank()
                         ? debugValue.value()
-                        : debugValue.type() + " · " + debugValue.value());
+                        : debugValue.type() + "  " + debugValue.value());
                 return this.valueLabel;
             }
             switch (node.getUserObject()) {
@@ -757,7 +762,21 @@ public final class DebuggerPanel extends JPanel {
             return component;
         }
 
-        private static String withoutObjectIdentity(String value, String type) {
+        private static javax.swing.Icon icon(DebugValue value) {
+            return switch (value.kind()) {
+                case PARAMETER -> Icons.JAVA_PARAMETER;
+                case FIELD -> Icons.FIELD;
+                case LOCAL -> Icons.JAVA_VARIABLE;
+                case THIS -> Icons.VALUE;
+                case ARRAY_ELEMENT -> value.variablesReference() > 0 ? Icons.VALUE : Icons.PRIMITIVE;
+                case RETURN_VALUE -> Icons.JAVA_METHOD;
+                case EXPRESSION -> value.indexedVariables() > 0 || value.type().endsWith("[]")
+                        ? Icons.ARRAY
+                        : value.variablesReference() > 0 ? Icons.VALUE : Icons.PRIMITIVE;
+            };
+        }
+
+        private static String visibleValue(String value, String type) {
             if (value.isBlank() || type.isBlank()) {
                 return value;
             }
@@ -771,13 +790,19 @@ public final class DebuggerPanel extends JPanel {
                 }
             }
             String identityOwner = value.substring(0, separator);
-            String arrayElementType = type;
+            String simpleType = simpleTypeName(type);
+            String arrayElementType = simpleType;
             while (arrayElementType.endsWith("[]")) {
                 arrayElementType = arrayElementType.substring(0, arrayElementType.length() - 2);
             }
-            return identityOwner.equals(type) || identityOwner.startsWith(arrayElementType + "[")
+            return identityOwner.equals(simpleType) || identityOwner.startsWith(arrayElementType + "[")
                     ? identityOwner
                     : value;
+        }
+
+        private static String simpleTypeName(String type) {
+            int separator = type.lastIndexOf('.');
+            return separator < 0 ? type : type.substring(separator + 1);
         }
     }
 
