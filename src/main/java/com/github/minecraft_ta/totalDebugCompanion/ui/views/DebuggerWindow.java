@@ -4,8 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 
-import javax.swing.JDialog;
+import javax.swing.JFrame;
 import java.awt.Dimension;
+import java.awt.Frame;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
@@ -14,7 +15,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 
 /** Floating host for the reusable debugger workspace. */
-public final class DebuggerWindow extends JDialog {
+public final class DebuggerWindow extends JFrame {
     private static final Dimension DEFAULT_SIZE = new Dimension(1120, 620);
     private static final Dimension MINIMUM_SIZE = new Dimension(760, 420);
 
@@ -37,9 +38,12 @@ public final class DebuggerWindow extends JDialog {
             DebuggerSessionController controller,
             DebuggerPanel.FrameNavigation frameNavigation
     ) {
-        super(owner, "Minecraft Debugger", ModalityType.MODELESS);
+        super("Minecraft Debugger");
         this.controller = controller;
         this.panel = new DebuggerPanel(controller, frameNavigation);
+        if (owner instanceof Frame frame) {
+            setIconImages(frame.getIconImages());
+        }
 
         setContentPane(this.panel);
         setDefaultCloseOperation(HIDE_ON_CLOSE);
