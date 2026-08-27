@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -33,6 +34,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Keyboard-driven completion for the subset of Java expressions supported by the debugger. */
 public final class ExpressionCompletionSupport implements AutoCloseable {
@@ -44,8 +47,8 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private static final int ROW_HEIGHT = 24;
 
     private final JTextField field;
-    private final DefaultListModel<ExpressionSuggestion> model = new DefaultListModel<>();
-    private final JList<ExpressionSuggestion> list = new JList<>(this.model);
+    private final DefaultListModel<DebuggerCompletionProposal> model = new DefaultListModel<>();
+    private final JList<DebuggerCompletionProposal> list = new JList<>(this.model);
     private final JScrollPane content = new JScrollPane(this.list);
     private final DocumentListener documentListener = (DocumentChangeListener) this::documentChanged;
     private final FocusAdapter focusListener = new FocusAdapter() {
@@ -54,7 +57,9 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             hidePopup();
         }
     };
-    private List<ExpressionSuggestion> suggestions = List.of();
+    private List<DebuggerCompletionProposal> suggestions = List.of();
+    private CompletionProvider completionProvider;
+    private final AtomicLong completionRevision = new AtomicLong();
     private JWindow popup;
     private boolean applying;
 
@@ -67,7 +72,18 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     }
 
     public void setSuggestions(List<ExpressionSuggestion> suggestions) {
-        this.suggestions = List.copyOf(Objects.requireNonNull(suggestions, "suggestions"));
+        Objects.requireNonNull(suggestions, "suggestions");
+        this.suggestions = suggestions.stream()
+                .map(suggestion -> suggestion.toProposal(0, 0))
+                .toList();
+        if (isCompletionVisible()) {
+            updatePopup(true);
+        }
+    }
+
+    public void setCompletionProvider(CompletionProvider completionProvider) {
+        this.completionProvider = completionProvider;
+        this.completionRevision.incrementAndGet();
         if (isCompletionVisible()) {
             updatePopup(true);
         }
@@ -76,13 +92,15 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private void configurePopup() {
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(ROW_HEIGHT);
-        this.list.setCellRenderer((ListCellRenderer<ExpressionSuggestion>) (list, value, index, selected, focus) -> {
+        this.list.setCellRenderer((ListCellRenderer<DebuggerCompletionProposal>) (list, value, index, selected, focus) -> {
             PrimarySecondaryLabel label = new PrimarySecondaryLabel();
             label.configure(
-                    new PrimarySecondaryText(value.text(), value.detail()),
+                    new PrimarySecondaryText(value.label(), value.detail()),
                     switch (value.kind()) {
                         case VARIABLE -> Icons.JAVA_VARIABLE;
-                        case FIELD -> Icons.FIELD;
+                        case FIELD, CONSTANT -> Icons.FIELD;
+                        case METHOD -> Icons.JAVA_METHOD;
+                        case TYPE -> Icons.JAVA_CLASS;
                         case KEYWORD -> null;
                     },
                     list.getFont(),
@@ -172,16 +190,51 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             return;
         }
         CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        if (this.completionProvider != null) {
+            long revision = this.completionRevision.incrementAndGet();
+            String text = this.field.getText();
+            int caret = this.field.getCaretPosition();
+            if (!explicit && range.prefix().isEmpty() && !range.memberAccess()) {
+                hidePopup();
+                return;
+            }
+            CompletableFuture<List<DebuggerCompletionProposal>> request;
+            try {
+                request = Objects.requireNonNull(this.completionProvider.complete(text, caret, explicit),
+                        "completion provider result");
+            } catch (RuntimeException failure) {
+                hidePopup();
+                return;
+            }
+            request.whenComplete((matches, failure) -> SwingUtilities.invokeLater(() -> {
+                if (revision != this.completionRevision.get()
+                        || !text.equals(this.field.getText())
+                        || caret != this.field.getCaretPosition()) {
+                    return;
+                }
+                if (failure != null || matches == null) {
+                    hidePopup();
+                    return;
+                }
+                showMatches(matches);
+            }));
+            return;
+        }
         if (range.memberAccess() || !explicit && range.prefix().isEmpty()) {
             hidePopup();
             return;
         }
         String foldedPrefix = range.prefix().toLowerCase(Locale.ROOT);
-        List<ExpressionSuggestion> matches = this.suggestions.stream()
-                .filter(suggestion -> suggestion.text().toLowerCase(Locale.ROOT).startsWith(foldedPrefix))
-                .sorted(Comparator.comparing(ExpressionSuggestion::text, String.CASE_INSENSITIVE_ORDER))
+        List<DebuggerCompletionProposal> matches = this.suggestions.stream()
+                .filter(suggestion -> suggestion.label().toLowerCase(Locale.ROOT).startsWith(foldedPrefix))
+                .sorted(Comparator.comparing(DebuggerCompletionProposal::label, String.CASE_INSENSITIVE_ORDER))
                 .limit(12)
                 .toList();
+        showMatches(matches);
+    }
+
+    private void showMatches(List<DebuggerCompletionProposal> matches) {
+        matches = List.copyOf(matches);
         this.model.clear();
         this.model.addAll(matches);
         if (matches.isEmpty()) {
@@ -205,18 +258,26 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         if (!isCompletionVisible()) {
             return;
         }
-        ExpressionSuggestion selected = this.list.getSelectedValue();
+        DebuggerCompletionProposal selected = this.list.getSelectedValue();
         if (selected == null) {
             return;
         }
         CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        if ((this.completionProvider != null || selected.replacementEnd() > selected.replacementStart())
+                && selected.replacementStart() <= selected.replacementEnd()
+                && selected.replacementEnd() <= this.field.getDocument().getLength()
+                && selected.replacementStart() <= range.start()) {
+            range = new CompletionRange(
+                    selected.replacementStart(), selected.replacementEnd(), range.prefix(), range.memberAccess()
+            );
+        }
         String replacement = this.field.getText().substring(0, range.start())
-                + selected.text()
+                + selected.insertionText()
                 + this.field.getText().substring(range.end());
         this.applying = true;
         try {
             this.field.setText(replacement);
-            this.field.setCaretPosition(range.start() + selected.text().length());
+            this.field.setCaretPosition(range.start() + selected.caretOffset());
         } finally {
             this.applying = false;
         }
@@ -274,6 +335,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
 
     @Override
     public void close() {
+        this.completionRevision.incrementAndGet();
         disposePopup();
         this.field.getDocument().removeDocumentListener(this.documentListener);
         this.field.removeFocusListener(this.focusListener);
@@ -281,4 +343,10 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
 
     record CompletionRange(int start, int end, String prefix, boolean memberAccess) {
     }
+
+    @FunctionalInterface
+    public interface CompletionProvider {
+        CompletableFuture<List<DebuggerCompletionProposal>> complete(String text, int caret, boolean explicit);
+    }
+
 }

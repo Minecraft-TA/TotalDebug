@@ -63,12 +63,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 (IVirtualMachineManagerProvider) Bootstrap::virtualMachineManager
         );
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
-        providers.registerProvider(
-                IEvaluationProvider.class,
-                new SimpleJdiEvaluationProvider(this.sourceRegistry::displayedVariableName)
-        );
+        RichJavaExpressionEngine expressionEngine =
+                new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
+        providers.registerProvider(IEvaluationProvider.class, expressionEngine);
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
-        providers.registerProvider(ICompletionsProvider.class, new NoCompletionsProvider());
+        providers.registerProvider(ICompletionsProvider.class, expressionEngine);
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
     }
 
@@ -311,6 +310,53 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         body.variablesReference,
                         body.indexedVariables
                 ));
+    }
+
+    @Override
+    public CompletableFuture<List<DebuggerCompletionProposal>> completions(
+            String expression,
+            int frameId
+    ) {
+        requireState(State.STOPPED);
+        Requests.CompletionsArguments arguments = new Requests.CompletionsArguments();
+        arguments.frameId = frameId;
+        arguments.text = expression;
+        arguments.line = 0;
+        arguments.column = expression == null ? 0 : expression.length();
+        return request(Requests.Command.COMPLETIONS, arguments, Responses.CompletionsResponseBody.class)
+                .thenApply(body -> {
+                    List<DebuggerCompletionProposal> result = new ArrayList<>();
+                    if (body == null || body.targets == null) {
+                        return result;
+                    }
+                    for (Types.CompletionItem item : body.targets) {
+                        String text = item.text == null ? item.label : item.text;
+                        if (text == null || text.isBlank()) {
+                            continue;
+                        }
+                        int start = Math.max(0, item.start);
+                        int end = start + Math.max(0, item.number);
+                        DebuggerCompletionProposal.Kind kind;
+                        try {
+                            kind = DebuggerCompletionProposal.Kind.valueOf(
+                                    (item.type == null ? "TEXT" : item.type).toUpperCase()
+                            );
+                        } catch (IllegalArgumentException ignored) {
+                            kind = DebuggerCompletionProposal.Kind.FIELD;
+                        }
+                        result.add(new DebuggerCompletionProposal(
+                                item.label == null ? text : item.label,
+                                text,
+                                kind,
+                                item.type == null ? "" : item.type,
+                                start,
+                                end,
+                                text.endsWith("()") ? text.length() - 1 : text.length(),
+                                0
+                        ));
+                    }
+                    return List.copyOf(result);
+                });
     }
 
     @Override
@@ -745,15 +791,4 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         }
     }
 
-    private static final class NoCompletionsProvider implements ICompletionsProvider {
-        @Override
-        public List<Types.CompletionItem> codeComplete(
-                com.sun.jdi.StackFrame frame,
-                String snippet,
-                int line,
-                int column
-        ) {
-            return List.of();
-        }
-    }
 }

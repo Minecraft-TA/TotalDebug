@@ -338,6 +338,7 @@ public final class DebuggerPanel extends JPanel {
         this.addWatch.setEnabled(paused);
 
         if (!paused) {
+            this.expressionCompletion.setCompletionProvider(null);
             this.viewRevision++;
             updateExpressionSuggestions(List.of(), List.of());
             if (clearsPausedSnapshot(status.phase())) {
@@ -403,6 +404,8 @@ public final class DebuggerPanel extends JPanel {
         long revision = ++this.viewRevision;
         this.currentFrame = frame;
         this.currentVariables = List.of();
+        this.expressionCompletion.setCompletionProvider((text, caret, explicit) ->
+                this.controller.completions(text, frame));
         updateExpressionSuggestions(List.of(), List.of());
         this.frameLabel.setText(frameLocation(frame));
 

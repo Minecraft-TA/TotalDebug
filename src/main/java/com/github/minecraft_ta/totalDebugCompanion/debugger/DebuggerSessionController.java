@@ -429,6 +429,17 @@ public final class DebuggerSessionController implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<List<DebuggerCompletionProposal>> completions(
+            String expression,
+            DebugEngine.StackFrame frame
+    ) {
+        Objects.requireNonNull(frame, "frame");
+        return submitValue(() -> {
+            requirePausedFrame(frame);
+            return requireEngine().completions(expression, frame.id()).join();
+        });
+    }
+
     private CompletableFuture<Void> control(String detail, ThreadControl control) {
         return submitFuture(() -> {
             DebugEngine current = requireEngine();
