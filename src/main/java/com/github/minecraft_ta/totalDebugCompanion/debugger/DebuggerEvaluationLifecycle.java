@@ -35,21 +35,4 @@ final class DebuggerEvaluationLifecycle {
         }
     }
 
-    boolean isInEvaluation(long threadId) {
-        return this.activeEvaluations.containsKey(threadId);
-    }
-
-    void begin(long threadId) {
-        this.activeEvaluations.computeIfAbsent(threadId, ignored -> new AtomicInteger()).incrementAndGet();
-    }
-
-    void end(long threadId) {
-        this.activeEvaluations.computeIfPresent(threadId, (ignored, count) ->
-                count.decrementAndGet() <= 0 ? null : count);
-    }
-
-    void clearState(long threadId) {
-        this.activeEvaluations.computeIfPresent(threadId, (ignored, count) ->
-                count.get() > 0 ? count : null);
-    }
 }

@@ -47,7 +47,6 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final Map<Integer, SourceVariableNames> variableNamesByFrame = new ConcurrentHashMap<>();
     private final Map<Integer, SourceVariableNames> variableNamesByScope = new ConcurrentHashMap<>();
     private final SourceRegistry sourceRegistry;
-    private final RichJavaExpressionEngine expressionEngine;
     private final IDebugAdapter adapter;
 
     public MicrosoftJavaDebugEngine() {
@@ -64,19 +63,12 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 (IVirtualMachineManagerProvider) Bootstrap::virtualMachineManager
         );
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
-        this.expressionEngine = new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
-        providers.registerProvider(IEvaluationProvider.class, this.expressionEngine);
+        RichJavaExpressionEngine expressionEngine =
+                new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
+        providers.registerProvider(IEvaluationProvider.class, expressionEngine);
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
-        providers.registerProvider(ICompletionsProvider.class, this.expressionEngine);
+        providers.registerProvider(ICompletionsProvider.class, expressionEngine);
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
-    }
-
-    public boolean isInEvaluationForTesting(long threadId) {
-        return this.expressionEngine.isInEvaluation(threadId);
-    }
-
-    public void clearEvaluationStateForTesting(long threadId) {
-        this.expressionEngine.clearState(threadId);
     }
 
     private static void configureInitialCoreSettings() {

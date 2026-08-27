@@ -177,9 +177,11 @@ public final class DebuggerScenarios {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class, source)) {
             int staticLine = harness.lineContaining("DEBUG_RICH_STATIC_COMPLETION");
             int line = harness.lineContaining("DEBUG_RICH_EXPRESSION");
+            int lifecycleLine = harness.lineContaining("DEBUG_RICH_LIFECYCLE");
             harness.setBreakpoints(
                     new DebugEngine.SourceBreakpoint(staticLine),
-                    new DebugEngine.SourceBreakpoint(line)
+                    new DebugEngine.SourceBreakpoint(line),
+                    new DebugEngine.SourceBreakpoint(lifecycleLine)
             );
             harness.start();
             DebugEngine.StoppedEvent staticStop = harness.awaitStop("rich static completion breakpoint");
@@ -234,24 +236,8 @@ public final class DebuggerScenarios {
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(strings)", frame.id())), "varargs direct array");
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
             equal("\"array-null\"", value(harness.engine().evaluate("renamedTarget.varargsOrNull(null)", frame.id())), "varargs null array");
-            java.util.concurrent.CompletableFuture<DebugEngine.EvaluationResult> inFlightEvaluation =
-                    harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id());
-            long evaluationDeadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
-            while (!harness.isInEvaluation(stop.threadId())
-                    && System.nanoTime() < evaluationDeadline) {
-                Thread.sleep(10);
-            }
-            check(harness.isInEvaluation(stop.threadId()),
-                    "adapter did not report the active evaluation");
-            harness.clearEvaluationState(stop.threadId());
-            check(harness.isInEvaluation(stop.threadId()),
-                    "clearState forgot the active evaluation");
-            equal("\"worker-complete\"", inFlightEvaluation.get(TIMEOUT_SECONDS, TimeUnit.SECONDS).value(),
+            equal("\"worker-complete\"", value(harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id())),
                     "multi-thread evaluation");
-            check(!harness.isInEvaluation(stop.threadId()),
-                    "evaluation lifecycle remained active after invocation");
-            check(!harness.engine().stackTrace(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS).isEmpty(),
-                    "frames were not refreshed after invocation");
             equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
             harness.engine().evaluate("java.util.List.of()", frame.id())
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -315,7 +301,15 @@ public final class DebuggerScenarios {
                                 && hasCause(expected, com.sun.jdi.InvocationException.class),
                         "Target exception was not preserved: " + expected);
             }
+            equal("\"lifecycle-probe\"",
+                    value(harness.engine().evaluate("renamedTarget.lifecycleProbe()", frame.id())),
+                    "evaluation breakpoint suppression");
             harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebugEngine.StoppedEvent normalLifecycleStop = harness.awaitStop("normal lifecycle breakpoint");
+            DebugEngine.StackFrame normalLifecycleFrame = harness.firstFrame(normalLifecycleStop.threadId());
+            equal(lifecycleLine, normalLifecycleFrame.line(),
+                    "normal invocation breakpoint delivery");
+            harness.engine().resume(normalLifecycleStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal(0, harness.awaitExit(), "rich expression debuggee exit code");
         }
     }

@@ -179,14 +179,6 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         this.lifecycle.clearState(thread);
     }
 
-    boolean isInEvaluation(long threadId) {
-        return this.lifecycle.isInEvaluation(threadId);
-    }
-
-    void clearState(long threadId) {
-        this.lifecycle.clearState(threadId);
-    }
-
     @Override
     public List<Types.CompletionItem> codeComplete(StackFrame frame, String snippet, int line, int column) {
         int offset = DebuggerCompletionRange.offsetOf(snippet, line, column);

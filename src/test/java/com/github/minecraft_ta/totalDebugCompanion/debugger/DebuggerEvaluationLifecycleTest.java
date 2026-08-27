@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
+import com.sun.jdi.ThreadReference;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Proxy;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,25 +12,38 @@ class DebuggerEvaluationLifecycleTest {
     @Test
     void clearStateDoesNotForgetAnActiveEvaluation() {
         DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
-        lifecycle.begin(41L);
+        ThreadReference thread = thread(41L);
+        lifecycle.begin(thread);
 
-        lifecycle.clearState(41L);
+        lifecycle.clearState(thread);
 
-        assertTrue(lifecycle.isInEvaluation(41L));
-        lifecycle.end(41L);
-        assertFalse(lifecycle.isInEvaluation(41L));
+        assertTrue(lifecycle.isInEvaluation(thread));
+        lifecycle.end(thread);
+        assertFalse(lifecycle.isInEvaluation(thread));
     }
 
     @Test
     void nestedEvaluationStateSurvivesOneCompletionAndClear() {
         DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
-        lifecycle.begin(41L);
-        lifecycle.begin(41L);
-        lifecycle.end(41L);
-        lifecycle.clearState(41L);
+        ThreadReference thread = thread(41L);
+        lifecycle.begin(thread);
+        lifecycle.begin(thread);
+        lifecycle.end(thread);
+        lifecycle.clearState(thread);
 
-        assertTrue(lifecycle.isInEvaluation(41L));
-        lifecycle.end(41L);
-        assertFalse(lifecycle.isInEvaluation(41L));
+        assertTrue(lifecycle.isInEvaluation(thread));
+        lifecycle.end(thread);
+        assertFalse(lifecycle.isInEvaluation(thread));
+    }
+
+    private static ThreadReference thread(long id) {
+        return (ThreadReference) Proxy.newProxyInstance(
+                ThreadReference.class.getClassLoader(),
+                new Class<?>[]{ThreadReference.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("uniqueID")) return id;
+                    throw new UnsupportedOperationException(method.toString());
+                }
+        );
     }
 }

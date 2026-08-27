@@ -14,6 +14,7 @@ public final class RichExpressionDebuggeeMain {
         staticCompletionFrame();
         Child target = new Child();
         target.debugExpressions();
+        target.lifecycleProbe();
         System.out.println(target.value(2));
     }
 
@@ -147,8 +148,11 @@ public final class RichExpressionDebuggeeMain {
                 throw new IllegalStateException("worker did not run during evaluation");
             }
             worker.join();
-            Thread.sleep(250);
             return "worker-complete";
+        }
+
+        private String lifecycleProbe() {
+            return "lifecycle-probe"; // DEBUG_RICH_LIFECYCLE
         }
 
         private String varargs(String... values) {
