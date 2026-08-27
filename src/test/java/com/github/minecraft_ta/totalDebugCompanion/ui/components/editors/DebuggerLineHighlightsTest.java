@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,6 +62,20 @@ class DebuggerLineHighlightsTest {
         editor.setCaretPosition(editor.getDocument().getLength());
         assertEquals(palette.currentLine(), editor.getCurrentLineHighlightColor());
 
+        highlights.dispose();
+    }
+
+    @Test
+    void breakpointColorRemainsVisibleWhenTheCaretMovesOntoItsLine() throws Exception {
+        EditorPalette palette = EditorPalette.islandsDark();
+        RSyntaxTextArea editor = new RSyntaxTextArea("first\nbreakpoint\nlast");
+        editor.setCurrentLineHighlightColor(palette.currentLine());
+        DebuggerLineHighlights highlights = new DebuggerLineHighlights(editor, palette);
+
+        editor.setCaretPosition(editor.getLineStartOffset(1));
+        highlights.setBreakpointLines(List.of(2));
+
+        assertEquals(palette.breakpointLine(), editor.getCurrentLineHighlightColor());
         highlights.dispose();
     }
 

@@ -20,6 +20,7 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,6 +53,8 @@ final class BreakpointGutterMarkers {
     private final Handler handler;
     private final LineNumberList lineNumbers;
     private final JLayer<RTextScrollPane> paintLayer;
+    private final boolean restoreNativeMouseListener;
+    private final boolean restoreNativeMouseMotionListener;
     private List<DebuggerSessionController.Breakpoint> breakpoints = List.of();
 
     private final MouseAdapter lineNumberClicks = new MouseAdapter() {
@@ -96,6 +99,12 @@ final class BreakpointGutterMarkers {
         this.paintLayer = Objects.requireNonNull(paintLayer, "paintLayer");
         this.handler = Objects.requireNonNull(handler, "handler");
         this.lineNumbers = gutter.lineNumbers();
+        this.restoreNativeMouseListener = Arrays.stream(this.lineNumbers.getMouseListeners())
+                .anyMatch(listener -> listener == this.lineNumbers);
+        this.restoreNativeMouseMotionListener = Arrays.stream(this.lineNumbers.getMouseMotionListeners())
+                .anyMatch(listener -> listener == this.lineNumbers);
+        this.lineNumbers.removeMouseListener(this.lineNumbers);
+        this.lineNumbers.removeMouseMotionListener(this.lineNumbers);
         this.lineNumbers.addMouseListener(this.lineNumberClicks);
         this.lineNumbers.addMouseMotionListener(this.tooltipUpdater);
     }
@@ -108,6 +117,12 @@ final class BreakpointGutterMarkers {
     void dispose() {
         this.lineNumbers.removeMouseListener(this.lineNumberClicks);
         this.lineNumbers.removeMouseMotionListener(this.tooltipUpdater);
+        if (this.restoreNativeMouseListener) {
+            this.lineNumbers.addMouseListener(this.lineNumbers);
+        }
+        if (this.restoreNativeMouseMotionListener) {
+            this.lineNumbers.addMouseMotionListener(this.lineNumbers);
+        }
         this.lineNumbers.setToolTipText(null);
         this.breakpoints = List.of();
         this.paintLayer.repaint();

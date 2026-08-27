@@ -109,11 +109,11 @@ final class DebuggerLineHighlights {
     }
 
     private void updateCurrentLineColor() {
-        boolean caretOnExecutionLine = this.executionLine > 0
-                && this.editor.getCaretLineNumber() + 1 == this.executionLine;
-        this.editor.setCurrentLineHighlightColor(
-                caretOnExecutionLine ? this.executionColor : this.currentLineColor
-        );
+        int caretLine = this.editor.getCaretLineNumber() + 1;
+        Color color = this.executionLine == caretLine
+                ? this.executionColor
+                : this.breakpointLines.contains(caretLine) ? this.breakpointColor : this.currentLineColor;
+        this.editor.setCurrentLineHighlightColor(color);
     }
 
     private void removeEditorHighlights() {

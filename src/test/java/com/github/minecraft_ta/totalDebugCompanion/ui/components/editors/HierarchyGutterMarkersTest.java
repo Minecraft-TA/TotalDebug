@@ -157,6 +157,7 @@ class HierarchyGutterMarkersTest {
     @Test
     void clickingALineNumberRequestsABreakpointForThatDisplayedLine() throws Exception {
         AtomicInteger requestedLine = new AtomicInteger(-1);
+        AtomicInteger caretPosition = new AtomicInteger(-1);
 
         SwingUtilities.invokeAndWait(() -> {
             var editor = new RSyntaxTextArea("first\nsecond\nthird");
@@ -186,19 +187,12 @@ class HierarchyGutterMarkersTest {
             LineNumberList lineNumbers = editorGutter.lineNumbers();
             assertInstanceOf(LineNumberList.class, lineNumbers);
             try {
+                editor.setCaretPosition(editor.getLineStartOffset(0));
                 int secondLineOffset = editor.getLineStartOffset(1);
                 int y = (int) editor.modelToView2D(secondLineOffset).getCenterY();
-                lineNumbers.dispatchEvent(new MouseEvent(
-                        lineNumbers,
-                        MouseEvent.MOUSE_CLICKED,
-                        System.currentTimeMillis(),
-                        0,
-                        Math.max(0, lineNumbers.getWidth() / 2),
-                        y,
-                        1,
-                        false,
-                        MouseEvent.BUTTON1
-                ));
+                int x = Math.max(0, lineNumbers.getWidth() / 2);
+                dispatchLeftClick(lineNumbers, x, y);
+                caretPosition.set(editor.getCaretPosition());
             } catch (javax.swing.text.BadLocationException exception) {
                 throw new AssertionError(exception);
             }
@@ -208,6 +202,49 @@ class HierarchyGutterMarkersTest {
         });
 
         assertEquals(2, requestedLine.get());
+        assertEquals(0, caretPosition.get(), "A breakpoint gutter click must not move the editor caret");
+    }
+
+    @Test
+    void restoresNativeLineNumberInteractionWhenBreakpointMarkersAreDisposed() throws Exception {
+        AtomicInteger caretPosition = new AtomicInteger(-1);
+
+        SwingUtilities.invokeAndWait(() -> {
+            var editor = new RSyntaxTextArea("first\nsecond\nthird");
+            var scrollPane = new RTextScrollPane(editor);
+            var editorGutter = new EditorGutter(scrollPane.getGutter());
+            var paintLayer = new JLayer<>(scrollPane);
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    paintLayer,
+                    new EmptyBreakpointHandler()
+            );
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
+            breakpointMarkers.dispose();
+
+            try {
+                int y = (int) editor.modelToView2D(editor.getLineStartOffset(1)).getCenterY();
+                LineNumberList lineNumbers = editorGutter.lineNumbers();
+                lineNumbers.dispatchEvent(new MouseEvent(
+                        lineNumbers,
+                        MouseEvent.MOUSE_PRESSED,
+                        System.currentTimeMillis(),
+                        0,
+                        Math.max(0, lineNumbers.getWidth() / 2),
+                        y,
+                        1,
+                        false,
+                        MouseEvent.BUTTON1
+                ));
+                caretPosition.set(editor.getCaretPosition());
+            } catch (javax.swing.text.BadLocationException exception) {
+                throw new AssertionError(exception);
+            }
+        });
+
+        assertTrue(caretPosition.get() > 0, "Disposal must restore RSyntax's native line-number listener");
     }
 
     @Test
@@ -331,6 +368,19 @@ class HierarchyGutterMarkersTest {
         markers.paint(graphics, component, Color.BLACK, Color.DARK_GRAY);
         graphics.dispose();
         return image;
+    }
+
+    private static void dispatchLeftClick(Component target, int x, int y) {
+        long when = System.currentTimeMillis();
+        target.dispatchEvent(new MouseEvent(
+                target, MouseEvent.MOUSE_PRESSED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+        ));
+        target.dispatchEvent(new MouseEvent(
+                target, MouseEvent.MOUSE_RELEASED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+        ));
+        target.dispatchEvent(new MouseEvent(
+                target, MouseEvent.MOUSE_CLICKED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+        ));
     }
 
     private static int rowPixels(
