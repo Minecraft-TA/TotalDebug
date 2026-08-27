@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.JavaModelException;
@@ -13,12 +13,13 @@ import org.fife.ui.rsyntaxtextarea.LinkGenerator;
 import org.fife.ui.rsyntaxtextarea.LinkGeneratorResult;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.Token;
-import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.event.HyperlinkEvent;
 import javax.swing.text.BadLocationException;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.IntFunction;
 
 public class CustomJavaLinkGenerator implements LinkGenerator {
@@ -31,23 +32,41 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     private final ElementResolver elementResolver;
     private final IntFunction<String> ownerClassResolver;
     private final BiConsumer<String, String> packageNavigator;
+    private final Consumer<NavigationTarget> navigator;
+    private final Path sourcePath;
 
     public CustomJavaLinkGenerator(String identifier) {
         this(
                 offset -> JavaSymbolResolver.selectElement(identifier, offset),
                 offset -> JavaSymbolResolver.navigationOwnerClass(identifier, offset),
-                (packageName, ownerClass) -> MainWindow.INSTANCE.revealPackage(packageName, ownerClass)
+                MainWindow.INSTANCE::revealPackage,
+                Path.of(identifier),
+                target -> MainWindow.INSTANCE.navigation().navigate(target)
         );
     }
 
     CustomJavaLinkGenerator(
             ElementResolver elementResolver,
             IntFunction<String> ownerClassResolver,
-            BiConsumer<String, String> packageNavigator
+            BiConsumer<String, String> packageNavigator,
+            Path sourcePath
+    ) {
+        this(elementResolver, ownerClassResolver, packageNavigator, sourcePath, ignored -> {
+        });
+    }
+
+    CustomJavaLinkGenerator(
+            ElementResolver elementResolver,
+            IntFunction<String> ownerClassResolver,
+            BiConsumer<String, String> packageNavigator,
+            Path sourcePath,
+            Consumer<NavigationTarget> navigator
     ) {
         this.elementResolver = Objects.requireNonNull(elementResolver, "elementResolver");
         this.ownerClassResolver = Objects.requireNonNull(ownerClassResolver, "ownerClassResolver");
         this.packageNavigator = Objects.requireNonNull(packageNavigator, "packageNavigator");
+        this.sourcePath = Objects.requireNonNull(sourcePath, "sourcePath");
+        this.navigator = Objects.requireNonNull(navigator, "navigator");
     }
 
     @Override
@@ -66,7 +85,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
             if (element == null) {
                 return null;
             }
-            return new LinkResult(textArea, element, offs, token.getOffset());
+            return new LinkResult(element, offs, token.getOffset());
         } catch (JavaModelException | BadLocationException e) {
             e.printStackTrace();
             return null;
@@ -75,13 +94,11 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
     private class LinkResult implements LinkGeneratorResult {
 
-        private final RSyntaxTextArea textArea;
         private final IJavaElement el;
         private final int navigationOffset;
         private final int sourceOffset;
 
-        public LinkResult(RSyntaxTextArea textArea, IJavaElement el, int navigationOffset, int sourceOffset) {
-            this.textArea = textArea;
+        public LinkResult(IJavaElement el, int navigationOffset, int sourceOffset) {
             this.el = el;
             this.navigationOffset = navigationOffset;
             this.sourceOffset = sourceOffset;
@@ -104,7 +121,10 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                     }
 
-                    UIUtils.centerViewportOnRange(((RTextScrollPane) textArea.getParent().getParent()), sourceRange.getOffset(), sourceRange.getOffset());
+                    navigator.accept(new NavigationTarget.LocalFile(
+                            sourcePath,
+                            sourceRange.getOffset()
+                    ));
                     return null;
                 }
 
@@ -116,28 +136,16 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                     return null;
                 }
 
-                String className;
-                int targetMemberType = -1;
-                String targetMemberIdentifier = "";
                 switch (el) {
-                    case ResolvedBinaryMethod method:
-                        className = method.getDeclaringType().getFullyQualifiedName();
-                        targetMemberType = method.getElementType();
-                        targetMemberIdentifier = method.getKey();
-                        break;
-                    case ResolvedBinaryField field:
-                        className = field.getDeclaringType().getFullyQualifiedName();
-                        targetMemberType = field.getElementType();
-                        targetMemberIdentifier = field.getElementName();
-                        break;
-                    case ResolvedBinaryType type:
-                        className = type.getFullyQualifiedName();
-                        break;
-                    default:
+                    case ResolvedBinaryMethod ignored -> navigateResolvedSymbol();
+                    case ResolvedBinaryField ignored -> navigateResolvedSymbol();
+                    case ResolvedBinaryType type -> navigator.accept(
+                            new NavigationTarget.RuntimeClass(type.getFullyQualifiedName())
+                    );
+                    default -> {
                         return null;
+                    }
                 }
-
-                CompanionApp.openClass(className, targetMemberType, targetMemberIdentifier);
             } catch (JavaModelException e) {
                 e.printStackTrace();
             }
@@ -148,6 +156,24 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
         @Override
         public int getSourceOffset() {
             return this.sourceOffset;
+        }
+
+        private void navigateResolvedSymbol() throws JavaModelException {
+            JavaSymbolResolver.Resolution resolution = JavaSymbolResolver.resolve(
+                    sourcePath.toString(),
+                    this.navigationOffset
+            );
+            if (resolution.symbol() == null) {
+                throw new IllegalStateException(resolution.unavailableReason());
+            }
+            navigator.accept(switch (resolution.symbol()) {
+                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.ClassSymbol type ->
+                        new NavigationTarget.RuntimeClass(type.className());
+                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.FieldSymbol field ->
+                        new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(field));
+                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.MethodSymbol method ->
+                        new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(method));
+            });
         }
     }
 }

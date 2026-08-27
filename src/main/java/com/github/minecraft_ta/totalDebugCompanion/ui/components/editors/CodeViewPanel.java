@@ -13,7 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
-import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
@@ -535,11 +535,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void showUsages(CodeSymbol symbol) {
-        MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
-                UsagesView.class,
-                view -> view.symbol().equals(symbol),
-                () -> new UsagesView(symbol)
-        ).thenAccept(UsagesView::restartSearch);
+        MainWindow.INSTANCE.navigation().navigate(new NavigationTarget.SymbolUsages(symbol));
     }
 
     private void showImplementations(CodeSymbol symbol, int anchorOffset) {

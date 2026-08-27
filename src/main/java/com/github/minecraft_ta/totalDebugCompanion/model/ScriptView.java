@@ -60,6 +60,10 @@ public class ScriptView implements IEditorPanel {
         return path;
     }
 
+    public void centerViewportOnOffset(int offset) {
+        ((ScriptPanel) getComponent()).centerViewportOnOffset(offset);
+    }
+
     @Override
     public String getTitle() {
         return this.path.getFileName().toString();

@@ -3,7 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
@@ -24,7 +25,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.SymbolKind;
-import org.eclipse.jdt.core.IJavaElement;
 
 import javax.swing.*;
 import java.awt.*;
@@ -37,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -148,6 +149,17 @@ public class SearchEverywherePopup extends JFrame {
         this.searchTextField.requestFocusInWindow();
         this.searchTextField.selectAll();
         refreshResults();
+    }
+
+    void open(Set<String> moduleIds, String query) {
+        Objects.requireNonNull(moduleIds, "moduleIds");
+        Objects.requireNonNull(query, "query");
+        if (CompanionClassIndex.isOpen()) {
+            syncRuntimeModules();
+        }
+        setSelectedModules(moduleIds);
+        this.searchTextField.setText(query);
+        open();
     }
 
     @Override
@@ -485,17 +497,21 @@ public class SearchEverywherePopup extends JFrame {
         }
         setVisible(false);
         switch (selected) {
-            case ClassResult type -> CompanionApp.openClass(type.binaryName());
-            case SymbolResult symbol -> CompanionApp.openClass(
-                    symbol.ownerBinaryName(),
-                    symbol.kind() == SymbolKind.FIELD ? IJavaElement.FIELD : IJavaElement.METHOD,
-                    symbol.kind() == SymbolKind.FIELD ? symbol.name() : symbol.name() + symbol.descriptor()
+            case ClassResult type -> MainWindow.INSTANCE.navigation().navigate(
+                    new NavigationTarget.RuntimeClass(type.binaryName())
             );
-            case TextResult text -> MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
-                    LiteralUsagesView.class,
-                    view -> view.literal().equals(text.value()),
-                    () -> new LiteralUsagesView(text.value())
-            ).thenAccept(LiteralUsagesView::restartSearch);
+            case SymbolResult symbol -> MainWindow.INSTANCE.navigation().navigate(
+                    new NavigationTarget.RuntimeDeclaration(symbol.kind() == SymbolKind.FIELD
+                            ? new RuntimeMember.Field(symbol.ownerBinaryName(), symbol.name())
+                            : new RuntimeMember.Method(
+                                    symbol.ownerBinaryName(),
+                                    symbol.name(),
+                                    symbol.descriptor()
+                            ))
+            );
+            case TextResult text -> MainWindow.INSTANCE.navigation().navigate(
+                    new NavigationTarget.LiteralUsages(text.value())
+            );
         }
     }
 

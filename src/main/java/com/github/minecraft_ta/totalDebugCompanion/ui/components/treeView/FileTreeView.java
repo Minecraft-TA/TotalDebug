@@ -2,32 +2,31 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
-import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
-import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 
 import javax.swing.*;
 import java.awt.Color;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
 
-    public FileTreeView(EditorTabs tabs) {
+    public FileTreeView(Consumer<NavigationTarget> navigator) {
         super();
+        java.util.Objects.requireNonNull(navigator, "navigator");
 
         this.tree = new LazyFileJTree() {
             @Override
@@ -56,28 +55,26 @@ public class FileTreeView extends JScrollPane {
                         && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
                     var name = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
 
-                    tabs.focusOrCreateIfAbsent(ScriptView.class, sv -> sv.getTitle().equals(name + ".java"), () -> {
-                        if (name.equals("BaseScript"))
-                            return new BaseScriptView(name);
-                        else
-                            return new ScriptView(name);
-                    });
+                    navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
                 } else if (javaFile && fileItem.getPath().getParent().equals(
                         CompanionApp.getRootPath().resolve("decompiled-files")
                 )) {
                     String binaryName = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
-                    CompanionApp.openClass(binaryName);
-                } else if (javaFile) {
-                    tabs.focusOrCreateIfAbsent(CodeView.class, cv -> cv.getPath().equals(fileItem.getPath()), () -> new CodeView(fileItem.getPath(), 0));
+                    navigator.accept(new NavigationTarget.RuntimeClass(binaryName));
                 } else {
-                    openResource(tabs, new LocalFileSource(fileItem.getPath()));
+                    navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
                 }
             } else if (item instanceof ZipFileRootItem.Entry entry) {
                 String entryPath = entry.getEntryPath();
                 if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {
-                    CompanionApp.openClass(entryPath.substring(0, entryPath.length() - 6).replace('/', '.'));
+                    navigator.accept(new NavigationTarget.RuntimeClass(
+                            entryPath.substring(0, entryPath.length() - 6).replace('/', '.')
+                    ));
                 } else {
-                    openResource(tabs, entry.contentSource());
+                    navigator.accept(new NavigationTarget.ArchiveEntry(
+                            entry.getArchivePath(),
+                            entry.getEntryPath()
+                    ));
                 }
             }
         });
@@ -105,14 +102,6 @@ public class FileTreeView extends JScrollPane {
 
         setViewportView(this.tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
-    }
-
-    private static void openResource(EditorTabs tabs, ContentSource source) {
-        tabs.focusOrCreateIfAbsent(
-                ResourceView.class,
-                view -> view.source().identity().equals(source.identity()),
-                () -> new ResourceView(source)
-        );
     }
 
     public void reloadProfile() {
@@ -169,6 +158,27 @@ public class FileTreeView extends JScrollPane {
                 archiveName,
                 List.of(packageName.split("\\."))
         );
+    }
+
+    public static Optional<String> workspaceArchiveName(RuntimeSnapshotBytecodeSource.Source source) {
+        Path modsDirectory = CompanionApp.getWorkspaceDirectory().resolve("mods").toAbsolutePath().normalize();
+        Path archive = source.path().toAbsolutePath().normalize();
+        if (modsDirectory.equals(archive.getParent())) {
+            return Optional.of(archive.getFileName().toString());
+        }
+
+        String logicalRoot = source.logicalUri();
+        int nestedSeparator = logicalRoot.indexOf("!/");
+        if (nestedSeparator >= 0) {
+            logicalRoot = logicalRoot.substring(0, nestedSeparator);
+        }
+        if (!logicalRoot.startsWith("file:")) {
+            return Optional.empty();
+        }
+        Path logicalArchive = Path.of(URI.create(logicalRoot)).toAbsolutePath().normalize();
+        return modsDirectory.equals(logicalArchive.getParent())
+                ? Optional.of(logicalArchive.getFileName().toString())
+                : Optional.empty();
     }
 
     @Override

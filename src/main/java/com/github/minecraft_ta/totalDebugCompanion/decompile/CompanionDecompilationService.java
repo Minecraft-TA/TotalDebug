@@ -1,16 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilerDiagnostic;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.JavaDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -21,7 +17,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.nio.charset.StandardCharsets;
-import java.util.function.Consumer;
 
 public final class CompanionDecompilationService implements AutoCloseable {
     private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-3";
@@ -58,71 +53,6 @@ public final class CompanionDecompilationService implements AutoCloseable {
                 .daemon()
                 .name("Companion decompiler")
                 .unstarted(task));
-    }
-
-    public CompletableFuture<Path> openClass(String binaryName, int targetType, String targetIdentifier) {
-        ensureOpen();
-        String normalizedName = requireBinaryName(binaryName);
-        String identifier = Objects.requireNonNullElse(targetIdentifier, "");
-        return open(normalizedName, source -> SourceFileNavigation.open(
-                source,
-                targetType,
-                identifier,
-                normalizedName
-        ));
-    }
-
-    public CompletableFuture<Path> openClassAtLine(String binaryName, int displayedLine) {
-        return openClassAtLine(binaryName, displayedLine, true);
-    }
-
-    public CompletableFuture<Path> openClassAtLine(
-            String binaryName,
-            int displayedLine,
-            boolean activateEditor
-    ) {
-        if (displayedLine < 1) {
-            throw new IllegalArgumentException("Displayed source line must be positive");
-        }
-        String normalizedName = requireBinaryName(binaryName);
-        return open(normalizedName, source -> SourceFileNavigation.openLine(source, displayedLine, activateEditor));
-    }
-
-    public CompletableFuture<Path> openUsage(ReferenceUsage usage, ReferenceQuery query) {
-        Objects.requireNonNull(usage, "usage");
-        Objects.requireNonNull(query, "query");
-        String binaryName = requireBinaryName(usage.location().className());
-        return open(binaryName, source -> SourceFileNavigation.openUsage(
-                source,
-                usage.location(),
-                query,
-                binaryName
-        ));
-    }
-
-    private CompletableFuture<Path> open(
-            String binaryName,
-            Consumer<DecompiledSource> navigation
-    ) {
-        CompletableFuture<DecompiledSource> task = load(binaryName);
-        task.whenComplete((source, failure) -> {
-            if (this.closed) {
-                return;
-            }
-            if (failure == null) {
-                try {
-                    navigation.accept(source);
-                } catch (RuntimeException exception) {
-                    showFailure(binaryName, exception);
-                }
-            } else {
-                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
-                        ? failure.getCause()
-                        : failure;
-                showFailure(binaryName, cause);
-            }
-        });
-        return task.thenApply(DecompiledSource::path);
     }
 
     CompletableFuture<Path> decompile(String binaryName) {
@@ -243,21 +173,6 @@ public final class CompanionDecompilationService implements AutoCloseable {
             throw new IllegalArgumentException(name + " must not be blank");
         }
         return value;
-    }
-
-    private static void showFailure(String binaryName, Throwable failure) {
-        failure.printStackTrace(System.err);
-        String detail = failure.getMessage();
-        if (detail == null || detail.isBlank()) {
-            detail = failure.getClass().getSimpleName();
-        }
-        String message = "Unable to open " + binaryName + ": " + detail;
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-                null,
-                message,
-                "Decompilation failed",
-                JOptionPane.ERROR_MESSAGE
-        ));
     }
 
     @Override

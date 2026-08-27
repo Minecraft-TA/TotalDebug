@@ -8,6 +8,7 @@ import org.fife.ui.rsyntaxtextarea.Token;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,7 +25,8 @@ class CustomJavaLinkGeneratorTest {
         var generator = new CustomJavaLinkGenerator(
                 offset -> packageFragment,
                 offset -> "java.util.List",
-                (packageName, ownerClass) -> revealedPackage.set(packageName + " in " + ownerClass)
+                (packageName, ownerClass) -> revealedPackage.set(packageName + " in " + ownerClass),
+                Path.of("Sample.java")
         );
 
         var link = generator.isLinkAtOffset(new RSyntaxTextArea(source), source.indexOf("util"));
@@ -44,7 +46,8 @@ class CustomJavaLinkGeneratorTest {
                 offset -> packageFragment("java.util"),
                 offset -> "java.util.List",
                 (packageName, ownerClass) -> {
-                }
+                },
+                Path.of("Sample.java")
         );
 
         var link = generator.isLinkAtOffset(textArea, hoverOffset);
@@ -67,7 +70,8 @@ class CustomJavaLinkGeneratorTest {
                 offset -> packageFragment("example"),
                 offset -> "example.Target",
                 (packageName, ownerClass) -> {
-                }
+                },
+                Path.of("Sample.java")
         );
 
         assertNull(generator.isLinkAtOffset(textArea, source.indexOf(".call")));

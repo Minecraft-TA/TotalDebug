@@ -7,9 +7,11 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQ
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
@@ -379,7 +381,7 @@ public final class UsagesViewPanel extends JPanel {
         if (!(nodeValue instanceof UsageNode usage)) {
             return;
         }
-        CompanionApp.getDecompilationService().openUsage(usage.usage(), this.query);
+        MainWindow.INSTANCE.navigation().navigate(new NavigationTarget.UsageSite(usage.usage(), this.query));
     }
 
     private void cancelActiveSearch() {

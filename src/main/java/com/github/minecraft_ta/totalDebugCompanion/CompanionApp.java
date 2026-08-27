@@ -19,6 +19,9 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTarget
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTargets;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
@@ -83,12 +86,12 @@ public final class CompanionApp {
     private static RuntimeIndexService runtimeIndexService;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;
-    private static final List<PendingClassOpen> pendingClassOpens = new ArrayList<>();
+    private static final List<PendingNavigation> pendingNavigations = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
     private static DebuggerSessionController debuggerController;
     private static volatile boolean uiStarted;
 
-    private record PendingClassOpen(String binaryName, int targetType, String targetIdentifier) {
+    private record PendingNavigation(NavigationTarget target, NavigationService.Activation activation) {
     }
 
     private CompanionApp() {
@@ -350,10 +353,10 @@ public final class CompanionApp {
         activeRuntimeSignature = snapshot.signature();
         prewarmJavaParser();
 
-        List<PendingClassOpen> queued = List.copyOf(pendingClassOpens);
-        pendingClassOpens.clear();
-        for (PendingClassOpen pending : queued) {
-            replacement.openClass(pending.binaryName(), pending.targetType(), pending.targetIdentifier());
+        List<PendingNavigation> queued = List.copyOf(pendingNavigations);
+        pendingNavigations.clear();
+        for (PendingNavigation pending : queued) {
+            MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
         }
     }
 
@@ -628,17 +631,22 @@ public final class CompanionApp {
     }
 
     public static void openClass(String binaryName, int targetType, String targetIdentifier) {
-        CompanionDecompilationService service = decompilationService;
-        if (service == null) {
+        openOrQueue(
+                NavigationTargets.fromClassOpen(binaryName, targetType, targetIdentifier),
+                NavigationService.Activation.ACTIVATE_WINDOW
+        );
+    }
+
+    private static void openOrQueue(NavigationTarget target, NavigationService.Activation activation) {
+        if (decompilationService == null) {
             synchronized (CompanionApp.class) {
-                service = decompilationService;
-                if (service == null) {
-                    pendingClassOpens.add(new PendingClassOpen(binaryName, targetType, targetIdentifier));
+                if (decompilationService == null) {
+                    pendingNavigations.add(new PendingNavigation(target, activation));
                     return;
                 }
             }
         }
-        service.openClass(binaryName, targetType, targetIdentifier);
+        MainWindow.INSTANCE.navigation().navigate(target, activation);
     }
 
     public static void openDebugFrame(com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame) {
@@ -652,10 +660,12 @@ public final class CompanionApp {
         if (frame.binaryName().isBlank() || frame.line() < 1) {
             return;
         }
-        CompanionDecompilationService service = decompilationService;
-        if (service != null) {
-            service.openClassAtLine(frame.binaryName(), frame.line(), activateEditor);
-        }
+        openOrQueue(
+                new NavigationTarget.RuntimeLine(frame.binaryName(), frame.line()),
+                activateEditor
+                        ? NavigationService.Activation.ACTIVATE_WINDOW
+                        : NavigationService.Activation.KEEP_CURRENT_WINDOW
+        );
     }
 
     private static DebugEngine.Source loadDebugSource(String binaryName) throws IOException {

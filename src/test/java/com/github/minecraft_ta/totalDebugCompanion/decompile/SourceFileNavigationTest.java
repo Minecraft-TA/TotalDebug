@@ -3,8 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.decompile;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.tth05.jindex.ClassIndex;
-import org.eclipse.jdt.core.IJavaElement;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -108,15 +108,14 @@ final class SourceFileNavigationTest {
 
         assertEquals(
                 source.indexOf("apply(int"),
-                SourceFileNavigation.targetOffset(
+                SourceFileNavigation.memberOffset(
                         source,
-                        IJavaElement.METHOD,
-                        "Lsample/Target;.apply(I)V"
+                        new RuntimeMember.Method("sample.Target", "apply", "(I)V")
                 )
         );
         assertEquals(
                 source.indexOf("selected;"),
-                SourceFileNavigation.targetOffset(source, IJavaElement.FIELD, "selected")
+                SourceFileNavigation.memberOffset(source, new RuntimeMember.Field("sample.Target", "selected"))
         );
     }
 

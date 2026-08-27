@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
@@ -8,6 +7,8 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQue
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -15,7 +16,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import org.eclipse.jdt.core.IJavaElement;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -311,11 +311,11 @@ public final class ImplementationChooserPopup extends BasePopup {
 
     private static void openResult(HierarchyResult result) {
         switch (result.symbol()) {
-            case CodeSymbol.ClassSymbol type -> CompanionApp.openClass(type.className());
-            case CodeSymbol.MethodSymbol method -> CompanionApp.openClass(
-                    method.ownerClassName(),
-                    IJavaElement.METHOD,
-                    method.name() + method.descriptor()
+            case CodeSymbol.ClassSymbol type -> MainWindow.INSTANCE.navigation().navigate(
+                    new NavigationTarget.RuntimeClass(type.className())
+            );
+            case CodeSymbol.MethodSymbol method -> MainWindow.INSTANCE.navigation().navigate(
+                    new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(method))
             );
             case CodeSymbol.FieldSymbol ignored -> throw new IllegalStateException(
                     "Hierarchy result unexpectedly contains a field"

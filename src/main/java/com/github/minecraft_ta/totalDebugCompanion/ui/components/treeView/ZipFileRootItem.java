@@ -138,6 +138,10 @@ public class ZipFileRootItem extends DirectoryTreeItem {
             return this.entryPath;
         }
 
+        public Path getArchivePath() {
+            return this.archivePath;
+        }
+
         public long getSize() {
             return this.size;
         }

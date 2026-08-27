@@ -2,16 +2,16 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.WorkspacePanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
-import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -25,9 +25,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.net.URI;
-import java.nio.file.Path;
-import java.util.Optional;
 
 public class MainWindow extends JFrame implements AWTEventListener {
 
@@ -35,6 +32,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
+    private final NavigationService navigationService;
     private final JMenu toolsMenu = new JMenu("Tools");
     private final JMenu scriptMenu = new JMenu("Script");
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
@@ -49,12 +47,11 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private long lastShiftReleasedTime = 0;
     private SearchEverywherePopup searchEverywherePopup;
-    private CodeInsightService.SearchHandle packageReveal;
-
     private MainWindow() {
         setAutoRequestFocus(false);
 
-        this.fileTreeView = new FileTreeView(this.editorTabs);
+        this.fileTreeView = new FileTreeView(target -> navigation().navigate(target));
+        this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView);
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -242,83 +239,30 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.searchEverywherePopup.open();
     }
 
+    public void openSearchEverywhere(NavigationTarget.ModuleSearch search) {
+        if (this.searchEverywherePopup == null) {
+            this.searchEverywherePopup = new SearchEverywherePopup();
+        }
+        this.searchEverywherePopup.open(search.moduleIds(), search.query());
+    }
+
     public EditorTabs getEditorTabs() {
         return this.editorTabs;
     }
 
+    public NavigationService navigation() {
+        return this.navigationService;
+    }
+
     public void revealPackage(String packageName, String ownerClassName) {
-        if (ownerClassName == null) {
-            reportPackageRevealFailure("JDT could not resolve the class owning package " + packageName);
+        if (ownerClassName == null || ownerClassName.isBlank()) {
+            reportNavigationFailure("JDT could not resolve the class owning package " + packageName);
             return;
         }
-        if (this.packageReveal != null) {
-            this.packageReveal.cancel();
-        }
-        this.packageReveal = CompanionApp.getCodeInsightService().locateClass(
-                ownerClassName,
-                new CodeInsightService.Listener<>() {
-                    @Override
-                    public void onCompleted(RuntimeSnapshotBytecodeSource.Source source) {
-                        packageReveal = null;
-                        if (source == null) {
-                            reportPackageRevealFailure(
-                                    "Class " + ownerClassName + " is not present in the runtime index"
-                            );
-                            return;
-                        }
-                        Optional<String> archive = workspaceArchiveName(source);
-                        if (archive.isEmpty()) {
-                            reportPackageRevealFailure(
-                                    "Class " + ownerClassName + " is indexed outside the mods tree"
-                            );
-                            return;
-                        }
-                        fileTreeView.revealPackage(packageName, archive.get()).whenComplete((revealed, failure) ->
-                                SwingUtilities.invokeLater(() -> {
-                                    if (failure != null) {
-                                        failure.printStackTrace(System.err);
-                                        reportPackageRevealFailure("Unable to reveal package " + packageName);
-                                    } else if (!revealed) {
-                                        reportPackageRevealFailure(
-                                                "Package " + packageName + " is not present in the owning archive"
-                                        );
-                                    }
-                                })
-                        );
-                    }
-
-                    @Override
-                    public void onFailed(Throwable failure) {
-                        packageReveal = null;
-                        failure.printStackTrace(System.err);
-                        reportPackageRevealFailure("Unable to locate package " + packageName);
-                    }
-                }
-        );
+        this.navigationService.navigate(new NavigationTarget.RuntimePackage(packageName, ownerClassName));
     }
 
-    private static Optional<String> workspaceArchiveName(RuntimeSnapshotBytecodeSource.Source source) {
-        Path modsDirectory = CompanionApp.getWorkspaceDirectory().resolve("mods").toAbsolutePath().normalize();
-        Path archive = source.path().toAbsolutePath().normalize();
-        if (modsDirectory.equals(archive.getParent())) {
-            return Optional.of(archive.getFileName().toString());
-        }
-
-        String logicalRoot = source.logicalUri();
-        int nestedSeparator = logicalRoot.indexOf("!/");
-        if (nestedSeparator >= 0) {
-            logicalRoot = logicalRoot.substring(0, nestedSeparator);
-        }
-        if (!logicalRoot.startsWith("file:")) {
-            return Optional.empty();
-        }
-        Path logicalArchive = Path.of(URI.create(logicalRoot)).toAbsolutePath().normalize();
-        return modsDirectory.equals(logicalArchive.getParent())
-                ? Optional.of(logicalArchive.getFileName().toString())
-                : Optional.empty();
-    }
-
-    private void reportPackageRevealFailure(String message) {
+    private void reportNavigationFailure(String message) {
         var editor = this.editorTabs.getSelectedEditor();
         var informationBar = editor == null ? null : editor.getInformationBar();
         if (informationBar != null) {
