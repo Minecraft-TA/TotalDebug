@@ -23,6 +23,7 @@ import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -131,7 +132,10 @@ public class MainWindow extends JFrame implements AWTEventListener {
         ThemeManager.addThemeChangeListener(this::updateWindowIcon);
         refreshProfile();
 
-        Toolkit.getDefaultToolkit().addAWTEventListener(this, AWTEvent.KEY_EVENT_MASK);
+        Toolkit.getDefaultToolkit().addAWTEventListener(
+                this,
+                AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK
+        );
     }
 
     private void updateWindowIcon(CompanionTheme theme) {
@@ -213,10 +217,19 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     @Override
     public void eventDispatched(AWTEvent event) {
-        if (!(event instanceof KeyEvent keyEvent))
+        if (event instanceof MouseEvent mouseEvent) {
+            handleHistoryMouseButton(mouseEvent);
             return;
+        }
+        if (!(event instanceof KeyEvent keyEvent)) {
+            return;
+        }
 
-        if (keyEvent.getID() != 402 || keyEvent.getKeyCode() != KeyEvent.VK_SHIFT)
+        if (handleHistoryKey(keyEvent)) {
+            return;
+        }
+
+        if (keyEvent.getID() != KeyEvent.KEY_RELEASED || keyEvent.getKeyCode() != KeyEvent.VK_SHIFT)
             return;
 
         long currentTime = System.currentTimeMillis();
@@ -230,6 +243,45 @@ public class MainWindow extends JFrame implements AWTEventListener {
             return;
         }
         openSearchEverywhere();
+    }
+
+    private boolean handleHistoryKey(KeyEvent event) {
+        if (event.getID() != KeyEvent.KEY_PRESSED
+                || !event.isControlDown()
+                || !event.isAltDown()
+                || event.isShiftDown()) {
+            return false;
+        }
+        Action action = switch (event.getKeyCode()) {
+            case KeyEvent.VK_LEFT -> this.navigationService.backAction();
+            case KeyEvent.VK_RIGHT -> this.navigationService.forwardAction();
+            default -> null;
+        };
+        if (action == null || !action.isEnabled()) {
+            return false;
+        }
+        action.actionPerformed(new ActionEvent(event.getSource(), ActionEvent.ACTION_PERFORMED, "history"));
+        event.consume();
+        return true;
+    }
+
+    private void handleHistoryMouseButton(MouseEvent event) {
+        if (event.getID() != MouseEvent.MOUSE_PRESSED || !(event.getSource() instanceof Component component)) {
+            return;
+        }
+        if (SwingUtilities.getWindowAncestor(component) == null) {
+            return;
+        }
+        Action action = switch (event.getButton()) {
+            case 4 -> this.navigationService.backAction();
+            case 5 -> this.navigationService.forwardAction();
+            default -> null;
+        };
+        if (action == null || !action.isEnabled()) {
+            return;
+        }
+        action.actionPerformed(new ActionEvent(event.getSource(), ActionEvent.ACTION_PERFORMED, "history"));
+        event.consume();
     }
 
     public void openSearchEverywhere() {

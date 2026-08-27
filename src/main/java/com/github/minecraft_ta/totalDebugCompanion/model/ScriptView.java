@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
 import javax.swing.*;
@@ -94,6 +96,23 @@ public class ScriptView implements IEditorPanel {
     @Override
     public BottomInformationBar getInformationBar() {
         return this.scriptPanel == null ? null : this.scriptPanel.getBottomInformationBar();
+    }
+
+    @Override
+    public NavigationTarget getNavigationTarget() {
+        return new NavigationTarget.LocalFile(this.path);
+    }
+
+    @Override
+    public NavigationViewState captureNavigationViewState() {
+        return this.scriptPanel == null
+                ? NavigationViewState.EMPTY
+                : this.scriptPanel.captureNavigationViewState();
+    }
+
+    @Override
+    public void restoreNavigationViewState(NavigationViewState state) {
+        ((ScriptPanel) getComponent()).restoreNavigationViewState(state);
     }
 
     @Override

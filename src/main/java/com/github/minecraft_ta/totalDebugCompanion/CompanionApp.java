@@ -351,6 +351,9 @@ public final class CompanionApp {
         }
         activeIndexFile = snapshot.indexFile();
         activeRuntimeSignature = snapshot.signature();
+        if (uiStarted) {
+            MainWindow.INSTANCE.navigation().runtimeChanged();
+        }
         prewarmJavaParser();
 
         List<PendingNavigation> queued = List.copyOf(pendingNavigations);
@@ -619,6 +622,10 @@ public final class CompanionApp {
 
     public static boolean hasProfile() {
         return profile != null;
+    }
+
+    public static String getActiveRuntimeSignature() {
+        return activeRuntimeSignature;
     }
 
     public static boolean send(AbstractMessage message) {

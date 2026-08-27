@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.decompile.SourceFileNavigatio
 import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
@@ -20,14 +21,18 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTr
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import java.awt.event.ActionEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /** Resolves semantic destinations into the current Companion UI. */
@@ -40,11 +45,28 @@ public final class NavigationService {
     private final MainWindow window;
     private final EditorTabs tabs;
     private final FileTreeView fileTree;
+    private final NavigationHistory history = new NavigationHistory(100);
+    private final AtomicBoolean traversingHistory = new AtomicBoolean();
+    private volatile NavigationEntry currentEntry;
+    private final Action backAction = new AbstractAction("Back") {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            goBack();
+        }
+    };
+    private final Action forwardAction = new AbstractAction("Forward") {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            goForward();
+        }
+    };
 
     public NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree) {
         this.window = Objects.requireNonNull(window, "window");
         this.tabs = Objects.requireNonNull(tabs, "tabs");
         this.fileTree = Objects.requireNonNull(fileTree, "fileTree");
+        this.tabs.addSelectedEditorListener(this::selectedEditorChanged);
+        refreshHistoryActions();
     }
 
     public CompletableFuture<Void> navigate(NavigationTarget target) {
@@ -54,6 +76,40 @@ public final class NavigationService {
     public CompletableFuture<Void> navigate(NavigationTarget target, Activation activation) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
+        CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
+                performNavigation(target, activation)
+                        .thenCompose(ignored -> captureDestination(target))
+                        .thenAccept(destination -> {
+                            this.currentEntry = destination;
+                            this.history.recordNewNavigation(origin);
+                            refreshHistoryActions();
+                        })
+        );
+        reportFailure(navigation, target);
+        return navigation;
+    }
+
+    public Action backAction() {
+        return this.backAction;
+    }
+
+    public Action forwardAction() {
+        return this.forwardAction;
+    }
+
+    public void runtimeChanged() {
+        refreshHistoryActions();
+    }
+
+    public CompletableFuture<Void> goBack() {
+        return traverseHistory(NavigationHistory.Direction.BACK);
+    }
+
+    public CompletableFuture<Void> goForward() {
+        return traverseHistory(NavigationHistory.Direction.FORWARD);
+    }
+
+    private CompletableFuture<Void> performNavigation(NavigationTarget target, Activation activation) {
         CompletableFuture<Void> navigation;
         try {
             navigation = switch (target) {
@@ -109,12 +165,169 @@ public final class NavigationService {
         } catch (RuntimeException failure) {
             navigation = CompletableFuture.failedFuture(failure);
         }
+        return navigation;
+    }
+
+    private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
+        if (!this.traversingHistory.compareAndSet(false, true)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        NavigationEntry destination = this.history.destination(
+                direction,
+                CompanionApp.getActiveRuntimeSignature()
+        );
+        if (destination == null) {
+            this.traversingHistory.set(false);
+            refreshHistoryActions();
+            return CompletableFuture.completedFuture(null);
+        }
+
+        CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
+                performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
+                        .thenCompose(ignored -> restoreSelectedEntry(destination))
+                        .thenRun(() -> {
+                            this.currentEntry = destination;
+                            this.history.complete(direction, destination, origin);
+                        })
+        );
+        navigation.whenComplete((ignored, failure) -> {
+            if (failure != null) {
+                this.history.discard(direction, destination);
+            }
+            this.traversingHistory.set(false);
+            refreshHistoryActions();
+        });
+        reportFailure(navigation, destination.target());
+        return navigation;
+    }
+
+    private CompletableFuture<NavigationEntry> captureCurrentEntry() {
+        var result = new CompletableFuture<NavigationEntry>();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                IEditorPanel editor = this.tabs.getSelectedEditor();
+                NavigationEntry current = this.currentEntry;
+                if (current != null && (!isEditorDestination(current.target())
+                        || editor == null
+                        || sameEditorDestination(
+                        current.target(),
+                        editor.getNavigationTarget()
+                ))) {
+                    result.complete(editor == null
+                            ? current
+                            : entry(current.target(), editor.captureNavigationViewState()));
+                    return;
+                }
+                result.complete(entryForEditor(editor));
+            } catch (RuntimeException failure) {
+                result.completeExceptionally(failure);
+            }
+        });
+        return result;
+    }
+
+    private CompletableFuture<NavigationEntry> captureDestination(NavigationTarget target) {
+        var result = new CompletableFuture<NavigationEntry>();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                IEditorPanel editor = this.tabs.getSelectedEditor();
+                NavigationViewState state = editor != null && sameEditorDestination(
+                        target,
+                        editor.getNavigationTarget()
+                )
+                        ? editor.captureNavigationViewState()
+                        : NavigationViewState.EMPTY;
+                result.complete(entry(target, state));
+            } catch (RuntimeException failure) {
+                result.completeExceptionally(failure);
+            }
+        });
+        return result;
+    }
+
+    private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry) {
+        return onEdt(() -> {
+            IEditorPanel editor = this.tabs.getSelectedEditor();
+            if (!isEditorDestination(entry.target())) {
+                return CompletableFuture.completedFuture(null);
+            }
+            if (editor == null || !sameEditorDestination(entry.target(), editor.getNavigationTarget())) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Navigation opened a different editor than requested"
+                ));
+            }
+            editor.restoreNavigationViewState(entry.viewState());
+            return CompletableFuture.completedFuture(null);
+        }, Activation.KEEP_CURRENT_WINDOW);
+    }
+
+    private void selectedEditorChanged(IEditorPanel editor) {
+        this.currentEntry = entryForEditor(editor);
+    }
+
+    private NavigationEntry entryForEditor(IEditorPanel editor) {
+        return editor == null || editor.getNavigationTarget() == null
+                ? null
+                : entry(editor.getNavigationTarget(), editor.captureNavigationViewState());
+    }
+
+    private NavigationEntry entry(NavigationTarget target, NavigationViewState state) {
+        String runtimeSignature = null;
+        if (NavigationEntry.requiresRuntime(target)) {
+            runtimeSignature = CompanionApp.getActiveRuntimeSignature();
+            if (runtimeSignature == null || runtimeSignature.isBlank()) {
+                return null;
+            }
+        }
+        return new NavigationEntry(target, runtimeSignature, state);
+    }
+
+    private static boolean isEditorDestination(NavigationTarget target) {
+        return !(target instanceof NavigationTarget.RuntimePackage)
+                && !(target instanceof NavigationTarget.ModuleSearch);
+    }
+
+    private static boolean sameEditorDestination(NavigationTarget requested, NavigationTarget editorTarget) {
+        if (editorTarget == null) {
+            return false;
+        }
+        if (requested.equals(editorTarget)) {
+            return true;
+        }
+        if (!(editorTarget instanceof NavigationTarget.RuntimeClass editorClass)) {
+            return false;
+        }
+        String requestedClass = switch (requested) {
+            case NavigationTarget.RuntimeClass type -> type.binaryName();
+            case NavigationTarget.RuntimeDeclaration declaration -> declaration.member().ownerClassName();
+            case NavigationTarget.RuntimeLine line -> line.binaryName();
+            case NavigationTarget.UsageSite site -> site.usage().location().className();
+            default -> null;
+        };
+        return editorClass.binaryName().equals(requestedClass);
+    }
+
+    private void reportFailure(CompletableFuture<Void> navigation, NavigationTarget target) {
         navigation.whenComplete((ignored, failure) -> {
             if (failure != null) {
                 showFailure(target, unwrap(failure));
             }
         });
-        return navigation;
+    }
+
+    private void refreshHistoryActions() {
+        SwingUtilities.invokeLater(() -> {
+            String runtimeSignature = CompanionApp.getActiveRuntimeSignature();
+            boolean available = !this.traversingHistory.get();
+            this.backAction.setEnabled(available && this.history.canNavigate(
+                    NavigationHistory.Direction.BACK,
+                    runtimeSignature
+            ));
+            this.forwardAction.setEnabled(available && this.history.canNavigate(
+                    NavigationHistory.Direction.FORWARD,
+                    runtimeSignature
+            ));
+        });
     }
 
     private CompletableFuture<Void> openRuntimeSource(

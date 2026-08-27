@@ -3,11 +3,13 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -21,6 +23,8 @@ import java.awt.*;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.util.function.Consumer;
 
@@ -79,6 +83,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
             }
         });
         this.editorPane.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_NONE);
+        installNavigationHistoryMenu();
 
         add(this.editorLayer, BorderLayout.CENTER);
         applyTheme();
@@ -90,6 +95,21 @@ public abstract class AbstractTextViewPanel extends JPanel {
                 dispose();
             }
         });
+    }
+
+    private void installNavigationHistoryMenu() {
+        JPopupMenu menu = this.editorPane.getPopupMenu();
+        menu.addSeparator();
+        JMenuItem back = menu.add(MainWindow.INSTANCE.navigation().backAction());
+        back.setAccelerator(KeyStroke.getKeyStroke(
+                KeyEvent.VK_LEFT,
+                InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK
+        ));
+        JMenuItem forward = menu.add(MainWindow.INSTANCE.navigation().forwardAction());
+        forward.setAccelerator(KeyStroke.getKeyStroke(
+                KeyEvent.VK_RIGHT,
+                InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK
+        ));
     }
 
     protected final void enableSearch() {
@@ -174,6 +194,24 @@ public abstract class AbstractTextViewPanel extends JPanel {
 
     public void centerViewportOnOffset(int offset) {
         SwingUtilities.invokeLater(() -> UIUtils.centerViewportOnRange(this.editorScrollPane, offset, offset));
+    }
+
+    public NavigationViewState captureNavigationViewState() {
+        Point viewport = this.editorScrollPane.getViewport().getViewPosition();
+        return new NavigationViewState(this.editorPane.getCaretPosition(), viewport.x, viewport.y);
+    }
+
+    public void restoreNavigationViewState(NavigationViewState state) {
+        if (state.hasCaret()) {
+            this.editorPane.setCaretPosition(Math.min(state.caretOffset(), this.editorPane.getDocument().getLength()));
+        }
+        JViewport viewport = this.editorScrollPane.getViewport();
+        Dimension extent = viewport.getExtentSize();
+        Dimension view = viewport.getViewSize();
+        viewport.setViewPosition(new Point(
+                Math.min(state.viewportX(), Math.max(0, view.width - extent.width)),
+                Math.min(state.viewportY(), Math.max(0, view.height - extent.height))
+        ));
     }
 
     public void setHeaderComponent(JComponent component) {

@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.CodeViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
@@ -21,6 +23,7 @@ public class CodeView implements IEditorPanel {
     private final Path path;
     private final EditorLocation location;
     private final DebugEngine.Source debugSource;
+    private final NavigationTarget navigationTarget;
     private final CodeViewPanel codeViewPanel;
     private volatile CompletableFuture<Void> ready = CompletableFuture.completedFuture(null);
 
@@ -32,6 +35,7 @@ public class CodeView implements IEditorPanel {
         this.path = path;
         this.location = location;
         this.debugSource = null;
+        this.navigationTarget = new NavigationTarget.LocalFile(path);
         this.codeViewPanel = new CodeViewPanel(this);
         reload(offset);
     }
@@ -40,6 +44,7 @@ public class CodeView implements IEditorPanel {
         this.path = source.path();
         this.location = location;
         this.debugSource = source.debugSource();
+        this.navigationTarget = new NavigationTarget.RuntimeClass(source.binaryName());
         this.codeViewPanel = new CodeViewPanel(this);
         setCode(source.contents(), offset);
     }
@@ -118,6 +123,21 @@ public class CodeView implements IEditorPanel {
     @Override
     public BottomInformationBar getInformationBar() {
         return this.codeViewPanel.getBottomInformationBar();
+    }
+
+    @Override
+    public NavigationTarget getNavigationTarget() {
+        return this.navigationTarget;
+    }
+
+    @Override
+    public NavigationViewState captureNavigationViewState() {
+        return this.codeViewPanel.captureNavigationViewState();
+    }
+
+    @Override
+    public void restoreNavigationViewState(NavigationViewState state) {
+        this.codeViewPanel.restoreNavigationViewState(state);
     }
 
     @Override

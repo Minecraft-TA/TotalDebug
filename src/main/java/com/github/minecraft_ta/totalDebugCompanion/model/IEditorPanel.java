@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 
 import javax.swing.*;
 import java.awt.*;
@@ -26,6 +28,17 @@ public interface IEditorPanel {
 
     default BottomInformationBar getInformationBar() {
         return null;
+    }
+
+    default NavigationTarget getNavigationTarget() {
+        return null;
+    }
+
+    default NavigationViewState captureNavigationViewState() {
+        return NavigationViewState.EMPTY;
+    }
+
+    default void restoreNavigationViewState(NavigationViewState state) {
     }
 
     default boolean canClose() {

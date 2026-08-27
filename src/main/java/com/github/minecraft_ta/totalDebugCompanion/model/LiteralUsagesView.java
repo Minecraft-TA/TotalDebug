@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.UsagesViewPanel;
 
 import javax.swing.Icon;
@@ -49,6 +50,11 @@ public final class LiteralUsagesView implements IEditorPanel {
     @Override
     public Component getComponent() {
         return this.panel;
+    }
+
+    @Override
+    public NavigationTarget getNavigationTarget() {
+        return new NavigationTarget.LiteralUsages(this.literal);
     }
 
     private static String quotedPreview(String value) {
