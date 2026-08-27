@@ -164,7 +164,7 @@ final class UiScenarioDriver {
                 CloseButton close = header instanceof Container container
                         ? findComponent(container, CloseButton.class)
                         : null;
-                yield header != null && header.isOpaque() && close != null && close.isVisible();
+                yield header != null && !header.isOpaque() && close != null && close.isVisible();
             }
             case EDITOR_CURRENT_LINE -> {
                 RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);

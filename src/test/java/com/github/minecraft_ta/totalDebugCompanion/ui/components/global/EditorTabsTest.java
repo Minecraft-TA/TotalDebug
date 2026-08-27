@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import java.awt.Dimension;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -76,6 +78,53 @@ class EditorTabsTest {
     }
 
     @Test
+    void clickingTheTabTitleSelectsTheTab() throws Exception {
+        EditorTabs tabs = new EditorTabs();
+        tabs.openEditorTab(new TestEditor()).get(5, TimeUnit.SECONDS);
+        tabs.openEditorTab(new TestEditor()).get(5, TimeUnit.SECONDS);
+
+        SwingUtilities.invokeAndWait(() -> {
+            EditorTabHeader firstHeader = (EditorTabHeader) tabs.getTabComponentAt(0);
+            JLabel title = find(firstHeader, JLabel.class);
+
+            dispatchLeftClick(title, 1, 1);
+
+            assertEquals(0, tabs.getSelectedIndex());
+        });
+    }
+
+    @Test
+    void hoverStaysTransparentAndReachesTheTabbedPaneUi() throws Exception {
+        EditorTabs tabs = new EditorTabs();
+        tabs.openEditorTab(new TestEditor()).get(5, TimeUnit.SECONDS);
+        AtomicInteger forwardedMoves = new AtomicInteger();
+
+        SwingUtilities.invokeAndWait(() -> {
+            tabs.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                @Override
+                public void mouseMoved(MouseEvent event) {
+                    forwardedMoves.incrementAndGet();
+                }
+            });
+            EditorTabHeader header = (EditorTabHeader) tabs.getTabComponentAt(0);
+            JLabel title = find(header, JLabel.class);
+
+            title.dispatchEvent(mouseEvent(title, MouseEvent.MOUSE_ENTERED, 1, 1, MouseEvent.NOBUTTON));
+
+            assertFalse(header.isOpaque(), "The inner tab header must not paint a second hover rectangle");
+            assertTrue(forwardedMoves.get() > 0, "FlatLaf must receive hover movement for the full tab cell");
+        });
+    }
+
+    @Test
+    void closeButtonUsesTheButtonModelForItsRolloverIcon() {
+        CloseButton button = new CloseButton();
+
+        assertSame(Icons.CLOSE_ICON, button.getIcon());
+        assertSame(Icons.CLOSE_HOVERED_ICON, button.getRolloverIcon());
+    }
+
+    @Test
     void closeButtonAndMiddleClickBothDisposeTheEditor() throws Exception {
         EditorTabs tabs = new EditorTabs();
         TestEditor buttonEditor = new TestEditor();
@@ -105,6 +154,12 @@ class EditorTabsTest {
 
     private static MouseEvent mouseEvent(Component source, int id, int x, int y, int button) {
         return new MouseEvent(source, id, System.currentTimeMillis(), 0, x, y, 1, false, button);
+    }
+
+    private static void dispatchLeftClick(Component source, int x, int y) {
+        source.dispatchEvent(mouseEvent(source, MouseEvent.MOUSE_PRESSED, x, y, MouseEvent.BUTTON1));
+        source.dispatchEvent(mouseEvent(source, MouseEvent.MOUSE_RELEASED, x, y, MouseEvent.BUTTON1));
+        source.dispatchEvent(mouseEvent(source, MouseEvent.MOUSE_CLICKED, x, y, MouseEvent.BUTTON1));
     }
 
     private static <T extends Component> T find(Container root, Class<T> type) {

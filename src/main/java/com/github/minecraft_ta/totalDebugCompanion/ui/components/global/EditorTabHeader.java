@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -11,7 +10,6 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Graphics;
 import java.awt.GridBagLayout;
 import java.awt.Point;
 import java.awt.event.MouseAdapter;
@@ -62,6 +60,7 @@ final class EditorTabHeader extends JPanel {
             @Override
             public void mouseEntered(MouseEvent event) {
                 setHovered(true);
+                forwardToTabbedPane(event, MouseEvent.MOUSE_MOVED);
             }
 
             @Override
@@ -73,18 +72,22 @@ final class EditorTabHeader extends JPanel {
                 );
                 if (!contains(point)) {
                     setHovered(false);
+                    forwardToTabbedPane(event, MouseEvent.MOUSE_EXITED);
                 }
             }
 
             @Override
             public void mousePressed(MouseEvent event) {
-                if (!SwingUtilities.isMiddleMouseButton(event)) {
+                int index = EditorTabHeader.this.tabs.indexOfTabComponent(EditorTabHeader.this);
+                if (index < 0) {
                     return;
                 }
-                int index = EditorTabHeader.this.tabs.indexOfTabComponent(EditorTabHeader.this);
-                if (index >= 0) {
+                if (SwingUtilities.isMiddleMouseButton(event)) {
                     EditorTabHeader.this.tabs.removeTabAt(index);
                     event.consume();
+                } else if (SwingUtilities.isLeftMouseButton(event)
+                        && !SwingUtilities.isDescendingFrom(event.getComponent(), closeButton)) {
+                    EditorTabHeader.this.tabs.setSelectedIndex(index);
                 }
             }
         };
@@ -107,16 +110,22 @@ final class EditorTabHeader extends JPanel {
             return;
         }
         this.hovered = hovered;
-        setOpaque(hovered);
         refreshState();
     }
 
-    @Override
-    protected void paintComponent(Graphics graphics) {
-        if (this.hovered) {
-            setBackground(ThemeColors.hoverBackground());
-        }
-        super.paintComponent(graphics);
+    private void forwardToTabbedPane(MouseEvent event, int id) {
+        Point point = SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), this.tabs);
+        this.tabs.dispatchEvent(new MouseEvent(
+                this.tabs,
+                id,
+                event.getWhen(),
+                event.getModifiersEx(),
+                point.x,
+                point.y,
+                0,
+                false,
+                MouseEvent.NOBUTTON
+        ));
     }
 
     private static void installHoverTracking(Component component, MouseAdapter hover) {
