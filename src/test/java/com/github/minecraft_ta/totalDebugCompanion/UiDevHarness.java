@@ -819,6 +819,20 @@ public final class UiDevHarness {
                     ""
             ).join();
         }
+        if (scenario == UiRenderScenario.DEBUGGER_LOCATION) {
+            CompanionApp.getDebuggerController().configureBreakpoint(
+                    decompiledSample.debugSource(),
+                    sampleEntryLine + 2,
+                    "",
+                    ""
+            ).join();
+            CompanionApp.getDebuggerController().configureBreakpoint(
+                    decompiledSample.debugSource(),
+                    sampleEntryLine + 5,
+                    "",
+                    ""
+            ).join();
+        }
         Path screenshot = Arrays.stream(args)
                 .filter(argument -> argument.startsWith("--screenshot="))
                 .map(argument -> Path.of(argument.substring("--screenshot=".length())))

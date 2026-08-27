@@ -27,6 +27,8 @@ import java.awt.Color;
  * @param classReference    {@code DEFAULT_CLASS_REFERENCE}
  * @param caret             {@code CARET_COLOR}
  * @param currentLine       {@code CARET_ROW_COLOR}
+ * @param breakpointLine    debugger breakpoint row background
+ * @param executionLine     selected debugger frame row background
  * @param lineNumber        {@code LINE_NUMBERS_COLOR}
  * @param indentGuide       {@code INDENT_GUIDE}
  * @param matchedBracket    background behind a matched bracket pair
@@ -47,6 +49,8 @@ public record EditorPalette(
         Color classReference,
         Color caret,
         Color currentLine,
+        Color breakpointLine,
+        Color executionLine,
         Color lineNumber,
         Color indentGuide,
         Color matchedBracket,
@@ -69,6 +73,8 @@ public record EditorPalette(
                 hex("BCBEC4"),  // classReference
                 hex("CED0D6"),  // caret
                 hex("1F2024"),  // currentLine
+                hex("4A2425"),  // breakpointLine
+                hex("4A3A1E"),  // executionLine
                 hex("4B5059"),  // lineNumber
                 hex("323438"),  // indentGuide
                 hex("3E4145"),  // matchedBracket
@@ -92,6 +98,8 @@ public record EditorPalette(
                 hex("080808"),  // classReference
                 hex("000000"),  // caret
                 hex("F5F8FE"),  // currentLine
+                hex("FFE5E5"),  // breakpointLine
+                hex("FFF4CE"),  // executionLine
                 hex("AEB3C2"),  // lineNumber
                 hex("EBECF0"),  // indentGuide
                 hex("D4D4D4"),  // matchedBracket

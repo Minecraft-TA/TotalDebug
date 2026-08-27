@@ -10,6 +10,7 @@ enum UiRenderScenario {
     EDITOR_CURRENT_LINE("editor-current-line", "Current editor line and hierarchy gutter markers"),
     BREAKPOINT_EDITOR("breakpoint-editor", "Conditional breakpoint marker and anchored editor"),
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),
+    DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
     DEBUGGER_WATCHES("debugger-watches", "Debugger expression and watch controls"),
     HIERARCHY_ONE("hierarchy-one", "Hierarchy preview with one implementation"),

@@ -101,6 +101,17 @@ final class UiScenarioDriver {
             }
             case BREAKPOINT_EDITOR -> advanceBreakpointEditor(context);
             case METHOD_BREAKPOINT -> advanceMethodBreakpoint(context);
+            case DEBUGGER_LOCATION -> {
+                selectCodeEditor(context);
+                context.once("show-debugger-location", () -> {
+                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                    if (selected instanceof CodeView codeView) {
+                        int line = context.source().substring(0, context.source().indexOf("double ratio"))
+                                .split("\\n", -1).length;
+                        codeView.showExecutionLine(line);
+                    }
+                });
+            }
             case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(MainWindow.INSTANCE));
             case DEBUGGER_WATCHES -> context.once(
                     "open-debugger-watches",
@@ -184,6 +195,7 @@ final class UiScenarioDriver {
                                         .equals("(IZ)Ljava/util/List;"))
                         .orElse(false);
             }
+            case DEBUGGER_LOCATION -> MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER, DEBUGGER_WATCHES -> findShowingWindow(DebuggerWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);

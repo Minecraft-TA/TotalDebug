@@ -9,16 +9,13 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DecompiledDe
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.DebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExceptionDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationDebuggeeMain;
-import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationImplementation;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
 import net.minecraft.test.GeneratedNamesDebuggeeMain;
 
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -355,25 +352,33 @@ public final class DebuggerScenarios {
     }
 
     public static void unopenedCallerFrameNavigation() throws Exception {
-        DebugEngine.Source targetSource = sourceFor(FrameNavigationTarget.class);
+        DebugEngine.Source targetSource = decompiledSourceFor(FrameNavigationImplementation.class);
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(
                 FrameNavigationDebuggeeMain.class,
                 targetSource
         )) {
-            int breakpointLine = harness.lineContaining("DEBUG_CALLEE_FRAME");
+            int breakpointLine = harness.lineContaining("return value + 1");
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
             harness.start();
 
             DebugEngine.StoppedEvent stop = harness.awaitStop("frame-navigation breakpoint");
             List<DebugEngine.StackFrame> frames = harness.engine().stackTrace(stop.threadId())
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebugEngine.StackFrame implementation = frames.getFirst();
+            equal(
+                    FrameNavigationImplementation.class.getName(),
+                    implementation.binaryName(),
+                    "runtime implementation class"
+            );
+            equal(targetSource.uri(), implementation.sourceUri(), "runtime implementation source");
+            equal(breakpointLine, implementation.line(), "runtime implementation line");
             DebugEngine.StackFrame caller = frames.stream()
                     .filter(frame -> frame.name().contains("FrameNavigationDebuggeeMain.main"))
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Debugger returned no caller frame"));
             DebugEngine.Source callerSource = decompiledSourceFor(FrameNavigationDebuggeeMain.class);
             equal(callerSource.uri(), caller.sourceUri(), "unopened caller source");
-            int callerLine = lineContaining(callerSource.contents(), "FrameNavigationTarget.stopHere(41)");
+            int callerLine = lineContaining(callerSource.contents(), "target.stopHere(41)");
             equal(callerLine, caller.line(), "unopened caller mapped line");
 
             harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -469,18 +474,6 @@ public final class DebuggerScenarios {
                 return input == null ? null : input.readAllBytes();
             }
         };
-    }
-
-    private static DebugEngine.Source sourceFor(Class<?> type) throws Exception {
-        Path path = Path.of(System.getProperty("user.dir"), "src", "test", "java")
-                .resolve(type.getName().replace('.', '/') + ".java")
-                .toAbsolutePath()
-                .normalize();
-        return new DebugEngine.Source(
-                path.toUri(),
-                type.getName(),
-                Files.readString(path, StandardCharsets.UTF_8)
-        );
     }
 
     private static DebugEngine.Source decompiledSourceFor(Class<?> type) throws Exception {

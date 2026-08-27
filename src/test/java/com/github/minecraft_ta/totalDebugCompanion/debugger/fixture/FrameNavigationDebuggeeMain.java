@@ -5,7 +5,8 @@ public final class FrameNavigationDebuggeeMain {
     }
 
     public static void main(String[] args) {
-        int result = FrameNavigationTarget.stopHere(41); // DEBUG_CALLER_FRAME
+        FrameNavigationTarget target = new FrameNavigationImplementation();
+        int result = target.stopHere(41); // DEBUG_CALLER_FRAME
         System.out.println(result);
     }
 }

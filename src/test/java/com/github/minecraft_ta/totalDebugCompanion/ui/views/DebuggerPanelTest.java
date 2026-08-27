@@ -8,6 +8,7 @@ import javax.swing.JLabel;
 import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTree;
+import javax.swing.JList;
 import java.awt.Component;
 import java.awt.Container;
 import java.net.URI;
@@ -83,6 +84,46 @@ class DebuggerPanelTest {
             List<String> labels = labels(rendered);
             assertEquals("level = ServerLevel", labels.getFirst());
             assertFalse(labels.stream().anyMatch(text -> text.contains("@17")), labels.toString());
+            panel.dispose();
+        });
+    }
+
+    @Test
+    void selectingAStackFrameNavigatesItsExactRuntimeClassAndLine() throws Exception {
+        AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerPanel panel = new DebuggerPanel(
+                    new DebuggerSessionController(),
+                    (frame, activateEditor) -> navigated.set(frame)
+            );
+            DebugEngine.StackFrame implementation = new DebugEngine.StackFrame(
+                    1,
+                    "ConcreteBlock.update",
+                    "example.ConcreteBlock",
+                    URI.create("decompiled:///example/ConcreteBlock.java"),
+                    47,
+                    1
+            );
+            DebugEngine.StackFrame caller = new DebugEngine.StackFrame(
+                    2,
+                    "Dispatcher.tick",
+                    "example.Dispatcher",
+                    URI.create("decompiled:///example/Dispatcher.java"),
+                    92,
+                    1
+            );
+            panel.showPausedState(new DebuggerSessionController.PausedState(
+                    new DebugEngine.StoppedEvent("breakpoint", 1, true),
+                    List.of(implementation, caller),
+                    List.of()
+            ));
+
+            assertEquals(implementation, navigated.get());
+            @SuppressWarnings("rawtypes")
+            JList frames = find(panel, JList.class);
+            assertNotNull(frames);
+            frames.setSelectedIndex(1);
+            assertEquals(caller, navigated.get());
             panel.dispose();
         });
     }

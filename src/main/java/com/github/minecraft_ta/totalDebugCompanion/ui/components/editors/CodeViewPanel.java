@@ -18,6 +18,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightSer
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import org.eclipse.jdt.core.JavaModelException;
 
@@ -59,7 +60,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final DebuggerSessionController.Listener debuggerListener;
     private boolean codeVisionDisposed;
     private CodeInsightService.SearchHandle actionSearch;
-    private Object executionLineHighlight;
+    private final DebuggerLineHighlights debuggerLineHighlights;
 
     public CodeViewPanel(CodeView codeView) {
         super(codeView.getPath().toString(), codeView.getTitle());
@@ -97,6 +98,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         add(this.codeVisionLayer, BorderLayout.CENTER);
 
         EditorGutter editorGutter = new EditorGutter(this.editorScrollPane.getGutter());
+        this.debuggerLineHighlights = new DebuggerLineHighlights(
+                this.editorPane,
+                ThemeManager.palette()
+        );
         this.gutterMarkers = new HierarchyGutterMarkers(
                 editorGutter,
                 new HierarchyGutterMarkers.Handler() {
@@ -206,6 +211,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     public void setCode(String code) {
         CodeUtils.initSyntaxScheme(this.editorPane);
         this.editorPane.setText(code);
+        this.debuggerLineHighlights.sourceChanged();
     }
 
     public void showExecutionLine(int displayedLine) {
@@ -213,13 +219,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             throw new IllegalArgumentException("Displayed source line must be positive");
         }
         try {
-            if (this.executionLineHighlight != null) {
-                this.editorPane.removeLineHighlight(this.executionLineHighlight);
-            }
-            this.executionLineHighlight = this.editorPane.addLineHighlight(
-                    displayedLine - 1,
-                    new java.awt.Color(242, 182, 63, 72)
-            );
+            DebuggerExecutionLine.show(this.debuggerLineHighlights, displayedLine);
             centerViewportOnOffset(this.editorPane.getLineStartOffset(displayedLine - 1));
         } catch (BadLocationException exception) {
             throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
@@ -227,9 +227,14 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void clearExecutionLine() {
-        if (this.executionLineHighlight != null) {
-            this.editorPane.removeLineHighlight(this.executionLineHighlight);
-            this.executionLineHighlight = null;
+        DebuggerExecutionLine.clear(this.debuggerLineHighlights);
+    }
+
+    @Override
+    protected void applyTheme() {
+        super.applyTheme();
+        if (this.debuggerLineHighlights != null) {
+            this.debuggerLineHighlights.setPalette(ThemeManager.palette());
         }
     }
 
@@ -262,6 +267,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             if (this.breakpointMarkers != null) {
                 this.breakpointMarkers.dispose();
             }
+            DebuggerExecutionLine.clear(this.debuggerLineHighlights);
+            this.debuggerLineHighlights.dispose();
         }
         super.dispose();
     }
@@ -507,7 +514,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {
-        this.breakpointMarkers.setBreakpoints(debugger.breakpoints(this.debugSource.uri()));
+        List<DebuggerSessionController.Breakpoint> breakpoints = debugger.breakpoints(this.debugSource.uri());
+        this.breakpointMarkers.setBreakpoints(breakpoints);
+        this.debuggerLineHighlights.setBreakpointLines(
+                breakpoints.stream().map(DebuggerSessionController.Breakpoint::line).toList()
+        );
     }
 
     private void configureContextMenuCaret() {
