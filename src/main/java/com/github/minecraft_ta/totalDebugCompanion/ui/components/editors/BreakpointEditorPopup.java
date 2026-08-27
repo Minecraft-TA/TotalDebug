@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -83,6 +84,7 @@ final class BreakpointEditorPopup {
     }
 
     private void configureUi() {
+        this.popup.setBorder(PopupChrome.border());
         JPanel content = new JPanel(new BorderLayout(0, 10));
         content.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
 

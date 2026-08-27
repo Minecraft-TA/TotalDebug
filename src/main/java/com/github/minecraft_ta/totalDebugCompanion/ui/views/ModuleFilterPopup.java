@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
@@ -48,7 +49,8 @@ final class ModuleFilterPopup extends JPopupMenu {
         this.selectionListener = selectionListener;
 
         JPanel content = new JPanel(new BorderLayout(0, 6));
-        content.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        setBorder(PopupChrome.border());
+        content.setBorder(PopupChrome.contentPadding());
         content.add(this.searchField, BorderLayout.NORTH);
 
         this.moduleList.setLayout(new BoxLayout(this.moduleList, BoxLayout.Y_AXIS));

@@ -192,7 +192,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         StyleConstants.setSpaceBelow(spacingAttributeSet, 2);
         logPanelTextPane.setParagraphAttributes(spacingAttributeSet, false);
         logPanelTextPane.setEditable(false);
-        logPanelTextPane.setFont(JETBRAINS_MONO_FONT.deriveFont(12f));
+        logPanelTextPane.setFont(auxiliaryEditorFont());
         logPanelTextPane.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 0));
 
         centerSplitPane.setTopComponent(((BorderLayout) getLayout()).getLayoutComponent(BorderLayout.CENTER));
@@ -222,7 +222,17 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             var newFont = JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
             codeCompletionPopup.setFont(newFont);
             signatureHelpPopup.setFont(newFont);
+            if (logPanelTextPane != null) {
+                logPanelTextPane.setFont(auxiliaryEditorFont());
+            }
         });
+    }
+
+    private static Font auxiliaryEditorFont() {
+        return JETBRAINS_MONO_FONT.deriveFont(Math.max(
+                10f,
+                GlobalConfig.getInstance().editorFontSize() - 2f
+        ));
     }
 
     private void setupSaveBehavior() {

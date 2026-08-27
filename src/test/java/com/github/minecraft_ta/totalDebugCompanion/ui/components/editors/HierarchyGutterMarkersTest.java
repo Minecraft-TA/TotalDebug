@@ -426,9 +426,7 @@ class HierarchyGutterMarkersTest {
                 SourceDeclaration declaration,
                 HierarchyRelation relation,
                 int count,
-                boolean mixedBaseRelations,
-                Component invoker,
-                Point point
+                boolean mixedBaseRelations
         ) {
         }
 

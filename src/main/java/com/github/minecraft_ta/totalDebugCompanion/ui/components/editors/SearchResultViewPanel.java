@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.model.SearchResultView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.*;
@@ -11,14 +13,19 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.HierarchyEvent;
+import java.beans.PropertyChangeListener;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class SearchResultViewPanel extends JPanel {
 
+    private final JTable resultTable;
+    private final PropertyChangeListener editorFontListener = event -> updateEditorFont();
+
     public SearchResultViewPanel(SearchResultView searchResultView) {
         setLayout(new BorderLayout(0, 0));
-        JTable resultTable = new JTable(new DefaultTableModel(
+        this.resultTable = new JTable(new DefaultTableModel(
                 searchResultView.getResults().stream()
                         .sorted()
                         .map(r -> {
@@ -33,7 +40,7 @@ public class SearchResultViewPanel extends JPanel {
             }
         };
 
-        resultTable.addMouseListener(new MouseAdapter() {
+        this.resultTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2)
@@ -50,7 +57,7 @@ public class SearchResultViewPanel extends JPanel {
             }
         });
 
-        resultTable.addKeyListener(new KeyAdapter() {
+        this.resultTable.addKeyListener(new KeyAdapter() {
             @Override
             public void keyTyped(KeyEvent e) {
                 var selectedRow = resultTable.getSelectedRow();
@@ -65,12 +72,18 @@ public class SearchResultViewPanel extends JPanel {
             }
         });
 
-        resultTable.getColumnModel().getColumn(0).setPreferredWidth(500);
-        resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        resultTable.setFont(CodeViewPanel.JETBRAINS_MONO_FONT.deriveFont(14f));
+        this.resultTable.getColumnModel().getColumn(0).setPreferredWidth(500);
+        this.resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        updateEditorFont();
+        GlobalConfig.getInstance().addEditorFontSizeListener(this.editorFontListener);
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.PARENT_CHANGED) != 0 && getParent() == null) {
+                GlobalConfig.getInstance().removeEditorFontSizeListener(this.editorFontListener);
+            }
+        });
 
         add(constructHeader(searchResultView), BorderLayout.NORTH);
-        add(new JScrollPane(resultTable), BorderLayout.CENTER);
+        add(new JScrollPane(this.resultTable), BorderLayout.CENTER);
     }
 
     private Component constructHeader(SearchResultView view) {
@@ -78,7 +91,6 @@ public class SearchResultViewPanel extends JPanel {
 
         Function<String, JLabel> label = (String s) -> {
             JLabel l = new JLabel(s);
-            l.setFont(l.getFont().deriveFont(14f));
             return UIUtils.withBorder(l, BorderFactory.createEmptyBorder(5, 5, 5, 5));
         };
 
@@ -100,5 +112,14 @@ public class SearchResultViewPanel extends JPanel {
 
         box.setBorder(BorderFactory.createTitledBorder("Stats"));
         return box;
+    }
+
+    private void updateEditorFont() {
+        Font font = CodeViewPanel.JETBRAINS_MONO_FONT.deriveFont(GlobalConfig.getInstance().editorFontSize());
+        this.resultTable.setFont(font);
+        this.resultTable.setRowHeight(Math.max(
+                UiMetrics.TREE_ROW_HEIGHT,
+                this.resultTable.getFontMetrics(font).getHeight() + 6
+        ));
     }
 }

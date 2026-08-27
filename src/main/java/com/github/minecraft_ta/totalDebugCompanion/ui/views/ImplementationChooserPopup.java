@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
@@ -42,7 +43,6 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.geom.Rectangle2D;
 import java.util.Objects;
 
 /** Async implementation and base-declaration chooser shared by code vision, gutter markers and Ctrl+T/U. */
@@ -64,7 +64,7 @@ public final class ImplementationChooserPopup extends BasePopup {
     private HierarchyQuery query;
     private HierarchyRelation relation;
     private JTextComponent invoker;
-    private int anchorOffset;
+    private Rectangle sourceLine;
     private long generation;
     private boolean updatingOptions;
     private final KeyAdapter invokerKeys = new KeyAdapter() {
@@ -173,7 +173,6 @@ public final class ImplementationChooserPopup extends BasePopup {
     ) {
         Objects.requireNonNull(editor, "editor");
         this.invoker = editor;
-        this.anchorOffset = offset;
         this.query = nextQuery;
         this.relation = nextRelation;
         this.updatingOptions = true;
@@ -185,15 +184,16 @@ public final class ImplementationChooserPopup extends BasePopup {
 
     private void showAtAnchor(JTextComponent editor, int offset) {
         try {
-            Rectangle2D anchor = editor.modelToView2D(offset);
-            packForLoading();
-            super.show(
-                    editor,
-                    (int) anchor.getX(),
-                    (int) (anchor.getY() + anchor.getHeight()),
-                    Alignment.BOTTOM_CENTER
+            var anchor = editor.modelToView2D(offset);
+            Rectangle visible = editor.getVisibleRect();
+            this.sourceLine = new Rectangle(
+                    visible.x,
+                    (int) anchor.getY(),
+                    Math.max(1, visible.width),
+                    Math.max(1, (int) Math.ceil(anchor.getHeight()))
             );
-            fitToEditor(editor, anchor);
+            packForLoading();
+            super.showAdjacent(editor, this.sourceLine);
             installInvokerKeys();
         } catch (BadLocationException exception) {
             throw new IllegalArgumentException("Invalid hierarchy popup offset " + offset, exception);
@@ -202,14 +202,16 @@ public final class ImplementationChooserPopup extends BasePopup {
 
     private void configureUi() {
         JPanel content = (JPanel) getContentPane();
-        content.setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
+        content.setBorder(PopupChrome.border());
 
         JPanel header = new JPanel(new BorderLayout());
-        header.setBorder(DynamicMatteBorder.separatorRule(0, 0, 1, 0));
+        header.setBorder(new javax.swing.border.CompoundBorder(
+                DynamicMatteBorder.separatorRule(0, 0, 1, 0),
+                PopupChrome.contentPadding()
+        ));
         header.add(this.title, BorderLayout.CENTER);
         header.add(this.directOnly, BorderLayout.EAST);
-        this.title.setBorder(BorderFactory.createEmptyBorder(7, 12, 7, 12));
-        this.directOnly.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 10));
+        this.directOnly.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
         add(header, BorderLayout.NORTH);
 
         this.list.setCellRenderer(new ResultRenderer());
@@ -374,27 +376,9 @@ public final class ImplementationChooserPopup extends BasePopup {
         int rows = Math.max(2, Math.min(10, count));
         this.cards.setPreferredSize(new Dimension(760, rows * this.list.getFixedCellHeight() + 4));
         pack();
-        if (isVisible() && this.invoker != null) {
-            try {
-                fitToEditor(this.invoker, this.invoker.modelToView2D(this.anchorOffset));
-            } catch (BadLocationException ignored) {
-            }
+        if (isVisible() && this.invoker != null && this.sourceLine != null) {
+            super.showAdjacent(this.invoker, this.sourceLine);
         }
-    }
-
-    private void fitToEditor(JTextComponent editor, Rectangle2D anchor) {
-        var editorLocation = editor.getLocationOnScreen();
-        Rectangle visibleEditor = editor.getVisibleRect();
-        int minimumX = editorLocation.x + visibleEditor.x;
-        int maximumX = Math.max(minimumX, minimumX + visibleEditor.width - getWidth());
-        int fittedX = Math.max(minimumX, Math.min(getX(), maximumX));
-
-        Rectangle screen = editor.getGraphicsConfiguration().getBounds();
-        int fittedY = getY();
-        if (fittedY + getHeight() > screen.y + screen.height) {
-            fittedY = editorLocation.y + (int) anchor.getY() - getHeight();
-        }
-        setLocation(fittedX, Math.max(screen.y, fittedY));
     }
 
     static String targetLabel(CodeSymbol symbol) {

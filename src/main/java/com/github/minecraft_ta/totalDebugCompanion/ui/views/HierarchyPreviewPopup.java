@@ -8,9 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRes
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.HierarchyPresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.BorderFactory;
@@ -18,11 +18,11 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JWindow;
+import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Window;
 import java.util.HashMap;
@@ -41,7 +41,7 @@ public final class HierarchyPreviewPopup extends JWindow {
     private CodeInsightService.SearchHandle activeSearch;
     private long generation;
     private Component invoker;
-    private Point anchor;
+    private Rectangle sourceLine;
 
     public HierarchyPreviewPopup(Window owner, CodeInsightService service) {
         super(owner);
@@ -53,7 +53,7 @@ public final class HierarchyPreviewPopup extends JWindow {
 
     public void showHierarchy(
             Component invoker,
-            Point point,
+            Rectangle sourceLine,
             CodeSymbol symbol,
             HierarchyRelation relation,
             int count,
@@ -73,7 +73,7 @@ public final class HierarchyPreviewPopup extends JWindow {
         } else {
             query = HierarchyQuery.implementations(symbol);
         }
-        showPreview(invoker, point, query, relation, count, mixedBaseRelations);
+        showPreview(invoker, sourceLine, query, relation, count, mixedBaseRelations);
     }
 
     public void setContentFont(Font font) {
@@ -99,28 +99,27 @@ public final class HierarchyPreviewPopup extends JWindow {
 
     private void configureUi() {
         JPanel content = new JPanel(new BorderLayout());
-        content.setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
+        content.setBorder(new CompoundBorder(PopupChrome.border(), PopupChrome.contentPadding()));
         setContentPane(content);
 
-        this.title.setBorder(BorderFactory.createEmptyBorder(8, 10, 7, 10));
+        this.title.setBorder(BorderFactory.createEmptyBorder(0, 2, 7, 2));
         content.add(this.title, BorderLayout.NORTH);
 
         this.rows.setLayout(new BoxLayout(this.rows, BoxLayout.Y_AXIS));
-        this.rows.setBorder(BorderFactory.createEmptyBorder(0, 6, 2, 6));
         content.add(this.rows, BorderLayout.CENTER);
 
     }
 
     private void showPreview(
             Component nextInvoker,
-            Point point,
+            Rectangle sourceLine,
             HierarchyQuery query,
             HierarchyRelation relation,
             int count,
             boolean mixedBaseRelations
     ) {
         this.invoker = Objects.requireNonNull(nextInvoker, "invoker");
-        this.anchor = new Point(Objects.requireNonNull(point, "point"));
+        this.sourceLine = new Rectangle(Objects.requireNonNull(sourceLine, "sourceLine"));
         this.title.setText(HierarchyPresentation.previewTitle(relation, count, mixedBaseRelations));
         long searchGeneration = ++this.generation;
         if (this.activeSearch != null) {
@@ -245,15 +244,7 @@ public final class HierarchyPreviewPopup extends JWindow {
         int width = Math.max(360, Math.min(760, getWidth()));
         setSize(width, getHeight());
 
-        Point screenPoint = this.invoker.getLocationOnScreen();
-        int x = screenPoint.x + this.anchor.x;
-        int y = screenPoint.y + this.anchor.y;
-        Rectangle screen = this.invoker.getGraphicsConfiguration().getBounds();
-        if (screen.intersects(getOwner().getBounds())) {
-            x = Math.max(screen.x, Math.min(x, screen.x + screen.width - getWidth()));
-            y = Math.max(screen.y, Math.min(y, screen.y + screen.height - getHeight()));
-        }
-        setLocation(x, y);
+        PopupChrome.placeAdjacent(this, this.invoker, this.sourceLine);
         setVisible(true);
     }
 }

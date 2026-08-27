@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.FocusAdapter;
@@ -8,6 +10,25 @@ import java.awt.event.HierarchyBoundsAdapter;
 import java.awt.event.HierarchyEvent;
 
 public class BasePopup extends JWindow {
+
+    private Component activeInvoker;
+    private final FocusAdapter focusListener = new FocusAdapter() {
+        @Override
+        public void focusLost(FocusEvent event) {
+            setVisible(false);
+        }
+    };
+    private final HierarchyBoundsAdapter hierarchyBoundsListener = new HierarchyBoundsAdapter() {
+        @Override
+        public void ancestorMoved(HierarchyEvent event) {
+            setVisible(false);
+        }
+
+        @Override
+        public void ancestorResized(HierarchyEvent event) {
+            setVisible(false);
+        }
+    };
 
     public BasePopup(Window owner) {
         super(owner);
@@ -33,31 +54,50 @@ public class BasePopup extends JWindow {
             }
         }
 
-        setLocation(x, y);
-        setVisible(true);
+        showAt(invoker, PopupChrome.clampToScreen(invoker, new Point(x, y), getSize()));
+    }
 
-        //Detect focus lost
-        invoker.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent e) {
-                setVisible(false);
-                invoker.removeFocusListener(this);
-            }
-        });
-        //Detect window move and resize
-        invoker.addHierarchyBoundsListener(new HierarchyBoundsAdapter() {
-            @Override
-            public void ancestorMoved(HierarchyEvent e) {
-                setVisible(false);
-                invoker.removeHierarchyBoundsListener(this);
-            }
+    protected final void showAdjacent(Component invoker, Rectangle sourceLine) {
+        detachInvoker();
+        PopupChrome.placeAdjacent(this, invoker, sourceLine);
+        super.setVisible(true);
+        attachInvoker(invoker);
+    }
 
-            @Override
-            public void ancestorResized(HierarchyEvent e) {
-                setVisible(false);
-                invoker.removeHierarchyBoundsListener(this);
-            }
-        });
+    @Override
+    public void setVisible(boolean visible) {
+        if (!visible) {
+            detachInvoker();
+        }
+        super.setVisible(visible);
+    }
+
+    @Override
+    public void dispose() {
+        detachInvoker();
+        super.dispose();
+    }
+
+    private void showAt(Component invoker, Point location) {
+        detachInvoker();
+        setLocation(location);
+        super.setVisible(true);
+        attachInvoker(invoker);
+    }
+
+    private void attachInvoker(Component invoker) {
+        this.activeInvoker = invoker;
+        invoker.addFocusListener(this.focusListener);
+        invoker.addHierarchyBoundsListener(this.hierarchyBoundsListener);
+    }
+
+    private void detachInvoker() {
+        if (this.activeInvoker == null) {
+            return;
+        }
+        this.activeInvoker.removeFocusListener(this.focusListener);
+        this.activeInvoker.removeHierarchyBoundsListener(this.hierarchyBoundsListener);
+        this.activeInvoker = null;
     }
 
     public enum Alignment {

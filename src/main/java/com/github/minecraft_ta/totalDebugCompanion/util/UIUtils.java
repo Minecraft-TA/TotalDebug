@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.util;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
@@ -82,7 +83,7 @@ public class UIUtils {
     public static void centerJFrame(JFrame frame) {
         var gc = MainWindow.INSTANCE.getGraphicsConfiguration();
         var dim = gc.getBounds();
-        frame.setLocation(dim.x + (dim.width / 2 - frame.getSize().width / 2), dim.height / 2 - frame.getSize().height / 2);
+        frame.setLocation(PopupChrome.centeredLocation(dim, frame.getSize()));
     }
 
     public static void centerViewportOnRange(RTextScrollPane scrollPane, int offsetStart, int offsetEnd) {

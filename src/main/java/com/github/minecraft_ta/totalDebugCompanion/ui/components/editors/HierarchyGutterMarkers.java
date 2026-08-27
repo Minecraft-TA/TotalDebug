@@ -12,7 +12,6 @@ import org.fife.ui.rtextarea.IconRowListener;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.text.BadLocationException;
-import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.event.MouseAdapter;
@@ -33,9 +32,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
                 SourceDeclaration declaration,
                 HierarchyRelation relation,
                 int count,
-                boolean mixedBaseRelations,
-                Component invoker,
-                Point point
+                boolean mixedBaseRelations
         );
 
         void hidePreview();
@@ -48,18 +45,17 @@ final class HierarchyGutterMarkers implements IconRowListener {
     private final List<GutterIconInfo> installed = new ArrayList<>();
     private final Map<GutterIconInfo, Marker> markers = new IdentityHashMap<>();
     private Marker hovered;
-    private Point hoverPoint;
 
     private final MouseMotionAdapter hoverMotion = new MouseMotionAdapter() {
         @Override
         public void mouseMoved(MouseEvent event) {
-            updateHovered(markerAt(event.getPoint()), event.getPoint());
+            updateHovered(markerAt(event.getPoint()));
         }
     };
     private final MouseAdapter hoverExit = new MouseAdapter() {
         @Override
         public void mouseExited(MouseEvent event) {
-            updateHovered(null, null);
+            updateHovered(null);
         }
     };
 
@@ -76,7 +72,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
     }
 
     void setEntries(List<CodeVisionEntry> entries) {
-        updateHovered(null, null);
+        updateHovered(null);
         clear();
         for (CodeVisionEntry entry : entries) {
             HierarchyRelation relation = entry.insight().primaryGutterRelation().orElse(null);
@@ -105,7 +101,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
     }
 
     void dispose() {
-        updateHovered(null, null);
+        updateHovered(null);
         clear();
         this.gutter.removeIconRowListener(this);
         this.iconRowHeader.removeMouseMotionListener(this.hoverMotion);
@@ -134,20 +130,18 @@ final class HierarchyGutterMarkers implements IconRowListener {
         if (marker == null) {
             return;
         }
-        updateHovered(null, null);
+        updateHovered(null);
         this.handler.navigate(marker.declaration(), marker.relation(), marker.count());
         event.consume();
     }
 
-    private void updateHovered(Marker marker, Point point) {
+    private void updateHovered(Marker marker) {
         if (Objects.equals(this.hovered, marker)) {
-            this.hoverPoint = point == null ? null : new Point(point);
             return;
         }
         this.previewTimer.stop();
         this.handler.hidePreview();
         this.hovered = marker;
-        this.hoverPoint = point == null ? null : new Point(point);
         this.iconRowHeader.setCursor(marker == null
                 ? Cursor.getDefaultCursor()
                 : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -158,18 +152,14 @@ final class HierarchyGutterMarkers implements IconRowListener {
 
     private void showHoveredPreview() {
         Marker marker = this.hovered;
-        Point point = this.hoverPoint;
-        if (marker == null || point == null) {
+        if (marker == null) {
             return;
         }
-        Point popupPoint = new Point(this.iconRowHeader.getWidth() + 8, point.y + 4);
         this.handler.preview(
                 marker.declaration(),
                 marker.relation(),
                 marker.count(),
-                marker.mixedBaseRelations(),
-                this.iconRowHeader,
-                popupPoint
+                marker.mixedBaseRelations()
         );
     }
 

@@ -33,11 +33,13 @@ import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Rectangle2D;
 import javax.swing.text.BadLocationException;
 import java.util.List;
 import java.util.Map;
@@ -128,18 +130,28 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                             SourceDeclaration declaration,
                             HierarchyRelation relation,
                             int count,
-                            boolean mixedBaseRelations,
-                            Component invoker,
-                            Point point
+                            boolean mixedBaseRelations
                     ) {
-                        hierarchyPreview.showHierarchy(
-                                invoker,
-                                point,
-                                declaration.symbol(),
-                                relation,
-                                count,
-                                mixedBaseRelations
-                        );
+                        try {
+                            Rectangle2D declarationBounds = editorPane.modelToView2D(declaration.markerOffset());
+                            Rectangle visible = editorPane.getVisibleRect();
+                            Rectangle sourceLine = new Rectangle(
+                                    visible.x,
+                                    (int) declarationBounds.getY(),
+                                    Math.max(1, visible.width),
+                                    Math.max(1, (int) Math.ceil(declarationBounds.getHeight()))
+                            );
+                            hierarchyPreview.showHierarchy(
+                                    editorPane,
+                                    sourceLine,
+                                    declaration.symbol(),
+                                    relation,
+                                    count,
+                                    mixedBaseRelations
+                            );
+                        } catch (BadLocationException exception) {
+                            throw new IllegalStateException("Hierarchy declaration is outside the editor document", exception);
+                        }
                     }
 
                     @Override

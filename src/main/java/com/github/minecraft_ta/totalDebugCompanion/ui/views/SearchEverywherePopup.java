@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEvery
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.SymbolResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
@@ -121,7 +122,7 @@ public class SearchEverywherePopup extends JFrame {
             }
         }));
 
-        ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
+        ((JPanel) getContentPane()).setBorder(PopupChrome.border());
         setUndecorated(true);
         pack();
         addWindowFocusListener(new WindowAdapter() {
@@ -176,7 +177,7 @@ public class SearchEverywherePopup extends JFrame {
     private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout(8, 6));
         header.setName("searchEverywhere.header");
-        header.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        header.setBorder(PopupChrome.contentPadding());
 
         JPanel tabs = new JPanel();
         tabs.setName("searchEverywhere.dragSurface");

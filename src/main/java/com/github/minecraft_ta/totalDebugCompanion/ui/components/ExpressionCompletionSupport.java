@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
@@ -70,6 +71,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     }
 
     private void configurePopup() {
+        this.popup.setBorder(PopupChrome.border());
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(ROW_HEIGHT);
         this.list.setCellRenderer((ListCellRenderer<ExpressionSuggestion>) (list, value, index, selected, focus) -> {
