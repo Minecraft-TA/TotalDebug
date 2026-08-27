@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.Test;
@@ -79,11 +81,35 @@ class DebuggerLineHighlightsTest {
         highlights.dispose();
     }
 
+    @Test
+    void invalidBreakpointsDoNotPaintBreakpointRows() {
+        DebuggerLineHighlights highlights = highlights("one\ntwo\nthree");
+
+        highlights.setBreakpoints(List.of(
+                breakpoint(2, DebuggerSessionController.BreakpointState.INVALID),
+                breakpoint(3, DebuggerSessionController.BreakpointState.BOUND)
+        ));
+
+        assertEquals(1, highlights.paintedBreakpointCount());
+        highlights.dispose();
+    }
+
     private static DebuggerLineHighlights highlights(String source) {
         RSyntaxTextArea editor = new RSyntaxTextArea(source);
         return new DebuggerLineHighlights(
                 editor,
                 EditorPalette.islandsDark()
+        );
+    }
+
+    private static DebuggerSessionController.Breakpoint breakpoint(
+            int line,
+            DebuggerSessionController.BreakpointState state
+    ) {
+        return new DebuggerSessionController.Breakpoint(
+                new DebugEngine.SourceBreakpoint(line),
+                state,
+                ""
         );
     }
 }

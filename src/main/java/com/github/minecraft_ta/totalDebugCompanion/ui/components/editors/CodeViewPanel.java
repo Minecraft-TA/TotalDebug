@@ -40,6 +40,7 @@ import java.awt.event.MouseEvent;
 import javax.swing.text.BadLocationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_IMPLEMENTATIONS_KEY = "findImplementations";
@@ -364,7 +365,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void toggleBreakpointAtLine(int displayedLine) {
         DebuggerSessionController debugger = CompanionApp.getDebuggerController();
-        DebugEngine.SourceBreakpoint request;
+        Optional<DebugEngine.SourceBreakpoint> request;
         try {
             DebuggerSessionController.Breakpoint existing = debugger.breakpoint(
                     this.debugSource.uri(),
@@ -372,12 +373,15 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             );
             request = existing == null
                     ? breakpointRequestAtLine(displayedLine, null, null)
-                    : existing.request();
+                    : Optional.of(existing.request());
         } catch (RuntimeException exception) {
             this.bottomInformationBar.setFailureInfoText(exception.getMessage());
             return;
         }
-        debugger.toggleBreakpoint(this.debugSource, request)
+        if (request.isEmpty()) {
+            return;
+        }
+        debugger.toggleBreakpoint(this.debugSource, request.get())
                 .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
@@ -410,21 +414,24 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 this.debugSource.uri(),
                 displayedLine
         );
-        DebugEngine.SourceBreakpoint current;
+        Optional<DebugEngine.SourceBreakpoint> current;
         try {
             current = managed == null
                     ? breakpointRequestAtLine(displayedLine, null, null)
-                    : managed.request();
+                    : Optional.of(managed.request());
         } catch (RuntimeException exception) {
             this.bottomInformationBar.setFailureInfoText(exception.getMessage());
             return;
         }
-        DebugEngine.SourceBreakpoint template = current;
+        if (current.isEmpty()) {
+            return;
+        }
+        DebugEngine.SourceBreakpoint template = current.get();
         this.breakpointEditor.open(
                 invoker,
                 location,
                 displayedLine,
-                current,
+                template,
                 managed != null,
                 new BreakpointEditorPopup.Handler() {
                     @Override
@@ -459,7 +466,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 }));
     }
 
-    private DebugEngine.SourceBreakpoint breakpointRequestAtLine(
+    private Optional<DebugEngine.SourceBreakpoint> breakpointRequestAtLine(
             int displayedLine,
             String condition,
             String hitCount
@@ -485,10 +492,14 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 .findFirst()
                 .orElse(null);
         if (methodDeclaration == null) {
-            return new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null);
+            if (!this.debugSource.lineMap().isEmpty()
+                    && !this.debugSource.lineMap().containsDisplayedLine(displayedLine)) {
+                return Optional.empty();
+            }
+            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null));
         }
         if (this.debugSource.lineMap().isEmpty()) {
-            throw new IllegalStateException("Method breakpoints require decompiled line information");
+            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null));
         }
 
         CodeSymbol.MethodSymbol method = (CodeSymbol.MethodSymbol) methodDeclaration.symbol();
@@ -502,12 +513,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         } catch (BadLocationException exception) {
             throw new IllegalStateException("Unable to resolve method source range", exception);
         }
-        int debuggerLine = this.debugSource.lineMap()
-                .firstMappedDisplayedLine(displayedLine, methodEndLine)
-                .orElse(0);
-        return DebugEngine.SourceBreakpoint.methodEntry(
+        var debuggerLine = this.debugSource.lineMap().firstMappedDisplayedLine(displayedLine, methodEndLine);
+        if (debuggerLine.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(DebugEngine.SourceBreakpoint.methodEntry(
                 displayedLine,
-                debuggerLine,
+                debuggerLine.getAsInt(),
                 new DebugEngine.MethodTarget(
                         method.ownerClassName(),
                         method.name(),
@@ -515,15 +527,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 ),
                 condition,
                 hitCount
-        );
+        ));
     }
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {
         List<DebuggerSessionController.Breakpoint> breakpoints = debugger.breakpoints(this.debugSource.uri());
         this.breakpointMarkers.setBreakpoints(breakpoints);
-        this.debuggerLineHighlights.setBreakpointLines(
-                breakpoints.stream().map(DebuggerSessionController.Breakpoint::line).toList()
-        );
+        this.debuggerLineHighlights.setBreakpoints(breakpoints);
     }
 
     private void configureContextMenuCaret() {

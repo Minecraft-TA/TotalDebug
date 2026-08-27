@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
@@ -50,6 +51,14 @@ final class DebuggerLineHighlights {
         }
         this.breakpointLines = Set.copyOf(normalized);
         refreshEditorHighlights();
+    }
+
+    void setBreakpoints(Collection<DebuggerSessionController.Breakpoint> breakpoints) {
+        Objects.requireNonNull(breakpoints, "breakpoints");
+        setBreakpointLines(breakpoints.stream()
+                .filter(breakpoint -> breakpoint.state() != DebuggerSessionController.BreakpointState.INVALID)
+                .map(DebuggerSessionController.Breakpoint::line)
+                .toList());
     }
 
     void showExecutionLine(int displayedLine) {
