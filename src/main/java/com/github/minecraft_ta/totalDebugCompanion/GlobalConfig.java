@@ -36,9 +36,11 @@ public final class GlobalConfig {
     public static final float MAX_FONT_SIZE = 40f;
 
     /** Bumped only when the on-disk shape changes incompatibly. */
-    private static final int SETTINGS_VERSION = 2;
+    private static final int SETTINGS_VERSION = 3;
     private static final String SETTINGS_FILE_NAME = "companion-ui-settings.json";
     private static final String EDITOR_FONT_SIZE_PROPERTY = "editorFontSize";
+    private static final String DEBUGGER_INLINE_VALUES_PROPERTY = "debuggerInlineValues";
+    private static final String DEBUGGER_PREVIEWS_PROPERTY = "automaticDebuggerPreviews";
     private static final long SAVE_DELAY_MILLIS = 500;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -53,6 +55,8 @@ public final class GlobalConfig {
     private volatile List<String> debuggerWatches = List.of();
     private volatile boolean breakOnCaughtExceptions;
     private volatile boolean breakOnUncaughtExceptions;
+    private volatile boolean debuggerInlineValues = true;
+    private volatile boolean automaticDebuggerPreviews = true;
     private volatile Path settingsFile;
     private volatile ScheduledExecutorService saveExecutor;
 
@@ -151,12 +155,56 @@ public final class GlobalConfig {
         scheduleSave();
     }
 
+    public boolean debuggerInlineValues() {
+        return this.debuggerInlineValues;
+    }
+
+    public void setDebuggerInlineValues(boolean enabled) {
+        boolean previous = this.debuggerInlineValues;
+        if (previous == enabled) {
+            return;
+        }
+        this.debuggerInlineValues = enabled;
+        this.pcs.firePropertyChange(DEBUGGER_INLINE_VALUES_PROPERTY, previous, enabled);
+        scheduleSave();
+    }
+
+    public boolean automaticDebuggerPreviews() {
+        return this.automaticDebuggerPreviews;
+    }
+
+    public void setAutomaticDebuggerPreviews(boolean enabled) {
+        boolean previous = this.automaticDebuggerPreviews;
+        if (previous == enabled) {
+            return;
+        }
+        this.automaticDebuggerPreviews = enabled;
+        this.pcs.firePropertyChange(DEBUGGER_PREVIEWS_PROPERTY, previous, enabled);
+        scheduleSave();
+    }
+
     public void addEditorFontSizeListener(PropertyChangeListener listener) {
         pcs.addPropertyChangeListener(EDITOR_FONT_SIZE_PROPERTY, listener);
     }
 
     public void removeEditorFontSizeListener(PropertyChangeListener listener) {
         pcs.removePropertyChangeListener(EDITOR_FONT_SIZE_PROPERTY, listener);
+    }
+
+    public void addDebuggerInlineValuesListener(PropertyChangeListener listener) {
+        pcs.addPropertyChangeListener(DEBUGGER_INLINE_VALUES_PROPERTY, listener);
+    }
+
+    public void removeDebuggerInlineValuesListener(PropertyChangeListener listener) {
+        pcs.removePropertyChangeListener(DEBUGGER_INLINE_VALUES_PROPERTY, listener);
+    }
+
+    public void addAutomaticDebuggerPreviewsListener(PropertyChangeListener listener) {
+        pcs.addPropertyChangeListener(DEBUGGER_PREVIEWS_PROPERTY, listener);
+    }
+
+    public void removeAutomaticDebuggerPreviewsListener(PropertyChangeListener listener) {
+        pcs.removePropertyChangeListener(DEBUGGER_PREVIEWS_PROPERTY, listener);
     }
 
     // ---------------------------------------------------------------- persistence
@@ -220,6 +268,12 @@ public final class GlobalConfig {
         }
         if (persisted.breakOnUncaughtExceptions != null) {
             this.breakOnUncaughtExceptions = persisted.breakOnUncaughtExceptions;
+        }
+        if (persisted.debuggerInlineValues != null) {
+            this.debuggerInlineValues = persisted.debuggerInlineValues;
+        }
+        if (persisted.automaticDebuggerPreviews != null) {
+            this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
         }
     }
 
@@ -289,7 +343,9 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.height,
                 this.debuggerWatches,
                 this.breakOnCaughtExceptions,
-                this.breakOnUncaughtExceptions
+                this.breakOnUncaughtExceptions,
+                this.debuggerInlineValues,
+                this.automaticDebuggerPreviews
         );
 
         Path parent = target.toAbsolutePath().normalize().getParent();
@@ -328,7 +384,9 @@ public final class GlobalConfig {
             Integer debuggerWindowHeight,
             List<String> debuggerWatches,
             Boolean breakOnCaughtExceptions,
-            Boolean breakOnUncaughtExceptions
+            Boolean breakOnUncaughtExceptions,
+            Boolean debuggerInlineValues,
+            Boolean automaticDebuggerPreviews
     ) {
     }
 

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRelation;
@@ -41,6 +42,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
+import java.beans.PropertyChangeListener;
 import javax.swing.text.BadLocationException;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +67,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final BreakpointGutterMarkers breakpointMarkers;
     private final BreakpointEditorPopup breakpointEditor = new BreakpointEditorPopup();
     private final DebuggerSessionController.Listener debuggerListener;
+    private final Runnable removeInlineAstListener;
+    private final Runnable removeDebuggerPresentationListener;
+    private DebuggerEditorPresentation.Snapshot debuggerPresentation;
+    private final PropertyChangeListener inlineValueSettingsListener = event ->
+            SwingUtilities.invokeLater(this::updateInlineValueHints);
     private boolean codeVisionDisposed;
     private CodeInsightService.SearchHandle actionSearch;
     private final DebuggerLineHighlights debuggerLineHighlights;
@@ -219,7 +226,25 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             debugger.addListener(this.debuggerListener);
         }
 
+        if (this.debugSource == null) {
+            this.removeInlineAstListener = () -> {
+            };
+            this.removeDebuggerPresentationListener = () -> {
+            };
+        } else {
+            this.removeInlineAstListener = ASTCache.addChangeListener(this.identifier, (unit, version) ->
+                    SwingUtilities.invokeLater(this::updateInlineValueHints)
+            );
+            this.removeDebuggerPresentationListener = DebuggerEditorPresentation.addListener(snapshot ->
+                    SwingUtilities.invokeLater(() -> {
+                        this.debuggerPresentation = snapshot;
+                        updateInlineValueHints();
+                    })
+            );
+        }
+
         configureActions();
+        GlobalConfig.getInstance().addDebuggerInlineValuesListener(this.inlineValueSettingsListener);
         configureContextMenuCaret();
         this.editorPane.getCaret().addChangeListener(event -> {
             this.implementationChooser.setVisible(false);
@@ -249,6 +274,21 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void clearExecutionLine() {
         DebuggerExecutionLine.clear(this.debuggerLineHighlights);
+    }
+
+    private void updateInlineValueHints() {
+        DebuggerEditorPresentation.Snapshot snapshot = this.debuggerPresentation;
+        if (!GlobalConfig.getInstance().debuggerInlineValues()
+                || snapshot == null || this.debugSource == null
+                || !this.debugSource.binaryName().equals(snapshot.frame().binaryName())) {
+            this.codeVisionLayerUI.setInlineValues(Map.of(), this.codeVisionLayer);
+            return;
+        }
+        this.codeVisionLayerUI.setInlineValues(DebuggerInlineValueHints.create(
+                ASTCache.getFromCache(this.identifier),
+                ASTCache.getContents(this.identifier),
+                snapshot
+        ), this.codeVisionLayer);
     }
 
     @Override
@@ -285,6 +325,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             if (this.debuggerListener != null) {
                 CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
             }
+            this.removeInlineAstListener.run();
+            this.removeDebuggerPresentationListener.run();
+            GlobalConfig.getInstance().removeDebuggerInlineValuesListener(this.inlineValueSettingsListener);
+            this.codeVisionLayerUI.setInlineValues(Map.of(), this.codeVisionLayer);
             if (this.breakpointMarkers != null) {
                 this.editorChromeLayerUI.setBreakpointMarkers(null);
                 this.breakpointMarkers.dispose();

@@ -109,8 +109,8 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                                 : DebugEngine.VariableKind.LOCAL
                 );
             }
-        } catch (AbsentInformationException exception) {
-            throw new IllegalStateException("Debugger variable metadata is unavailable for frame " + frameId, exception);
+        } catch (AbsentInformationException ignored) {
+            // The frame remains inspectable, but JDI cannot authoritatively distinguish parameters from locals.
         }
         if (frame.thisObject() != null) {
             result.put("this", DebugEngine.VariableKind.THIS);

@@ -4,7 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -49,6 +51,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -103,6 +106,11 @@ public final class DebuggerPanel extends JPanel {
             onEventThread(() -> showPausedState(state));
         }
     };
+    private final PropertyChangeListener previewSettingsListener = event -> onEventThread(() -> {
+        if (this.currentFrame != null) {
+            showVariables(this.currentVariables);
+        }
+    });
 
     private long viewRevision;
     private DebugEngine.StackFrame currentFrame;
@@ -151,6 +159,7 @@ public final class DebuggerPanel extends JPanel {
         add(split, BorderLayout.CENTER);
 
         this.controller.addListener(this.listener);
+        GlobalConfig.getInstance().addAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
     }
 
     private JComponent createToolbar() {
@@ -340,6 +349,7 @@ public final class DebuggerPanel extends JPanel {
             this.expressionCompletion.setCompletionProvider(null);
             this.viewRevision++;
             if (clearsPausedSnapshot(status.phase())) {
+                DebuggerEditorPresentation.clear();
                 clearPausedSnapshot();
             }
         }
@@ -406,6 +416,7 @@ public final class DebuggerPanel extends JPanel {
         this.frameLabel.setText(frameLocation(frame));
 
         this.frameNavigation.open(frame, false);
+        DebuggerEditorPresentation.select(frame, List.of());
         refreshExpressions(frame, revision);
 
         DebuggerSessionController.PausedState pause = this.currentPause;
@@ -434,6 +445,9 @@ public final class DebuggerPanel extends JPanel {
 
     private void showVariables(List<DebugEngine.Variable> values) {
         this.currentVariables = List.copyOf(values);
+        if (this.currentFrame != null) {
+            DebuggerEditorPresentation.select(this.currentFrame, values);
+        }
         this.variableRoot.removeAllChildren();
         List<DefaultMutableTreeNode> nodes = new ArrayList<>();
         for (DebugEngine.Variable variable : values) {
@@ -608,7 +622,8 @@ public final class DebuggerPanel extends JPanel {
 
     private void requestPreview(DefaultMutableTreeNode node, DefaultTreeModel model, long revision) {
         DebugValue value = debugValue(node.getUserObject());
-        if (value == null || value.variablesReference() <= 0) {
+        if (value == null || value.variablesReference() <= 0
+                || !GlobalConfig.getInstance().automaticDebuggerPreviews()) {
             return;
         }
         this.controller.preview(value.variablesReference()).whenComplete((preview, failure) ->
@@ -622,6 +637,10 @@ public final class DebuggerPanel extends JPanel {
                             ? new ExpressionValue(replacement)
                             : replacement);
                     model.nodeChanged(node);
+                    DebugEngine.StackFrame frame = this.currentFrame;
+                    if (frame != null) {
+                        DebuggerEditorPresentation.updatePreview(frame, value.variablesReference(), preview);
+                    }
                 })
         );
     }
@@ -675,8 +694,10 @@ public final class DebuggerPanel extends JPanel {
             return;
         }
         this.disposed = true;
+        DebuggerEditorPresentation.clear();
         this.expressionCompletion.close();
         this.controller.removeListener(this.listener);
+        GlobalConfig.getInstance().removeAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
     }
 
     void showWatchesForPreview() {
@@ -768,8 +789,8 @@ public final class DebuggerPanel extends JPanel {
             }
             DebugValue debugValue = debugValue(node.getUserObject());
             if (debugValue != null) {
-                String visibleValue = visibleValue(debugValue.value(), debugValue.type());
-                String simpleType = simpleTypeName(debugValue.type());
+                String visibleValue = DebuggerValueText.visibleValue(debugValue.value(), debugValue.type());
+                String simpleType = DebuggerValueText.simpleTypeName(debugValue.type());
                 String secondary = debugValue.preview().available()
                         ? debugValue.preview().summary()
                         : visibleValue.equals(simpleType) ? "" : simpleType;
@@ -815,6 +836,7 @@ public final class DebuggerPanel extends JPanel {
 
         private static javax.swing.Icon icon(DebugValue value) {
             return switch (value.kind()) {
+                case UNKNOWN -> Icons.JAVA_VARIABLE;
                 case PARAMETER -> Icons.JAVA_PARAMETER;
                 case FIELD -> Icons.FIELD;
                 case LOCAL -> Icons.JAVA_VARIABLE;
@@ -827,34 +849,6 @@ public final class DebuggerPanel extends JPanel {
             };
         }
 
-        private static String visibleValue(String value, String type) {
-            if (value.isBlank() || type.isBlank()) {
-                return value;
-            }
-            int separator = value.lastIndexOf('@');
-            if (separator <= 0 || separator == value.length() - 1) {
-                return value;
-            }
-            for (int index = separator + 1; index < value.length(); index++) {
-                if (!Character.isDigit(value.charAt(index))) {
-                    return value;
-                }
-            }
-            String identityOwner = value.substring(0, separator);
-            String simpleType = simpleTypeName(type);
-            String arrayElementType = simpleType;
-            while (arrayElementType.endsWith("[]")) {
-                arrayElementType = arrayElementType.substring(0, arrayElementType.length() - 2);
-            }
-            return identityOwner.equals(simpleType) || identityOwner.startsWith(arrayElementType + "[")
-                    ? identityOwner
-                    : value;
-        }
-
-        private static String simpleTypeName(String type) {
-            int separator = type.lastIndexOf('.');
-            return separator < 0 ? type : type.substring(separator + 1);
-        }
     }
 
     private static final class FrameListModel extends AbstractListModel<DebugEngine.StackFrame> {

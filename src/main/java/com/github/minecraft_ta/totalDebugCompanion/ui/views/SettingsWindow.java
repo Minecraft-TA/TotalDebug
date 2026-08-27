@@ -62,10 +62,20 @@ public class SettingsWindow extends JDialog {
                 config.breakOnCaughtExceptions(),
                 config::setBreakOnCaughtExceptions
         ));
-        addWideRow(form, row, createExceptionBreakpointToggle(
+        addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on uncaught exceptions",
                 config.breakOnUncaughtExceptions(),
                 config::setBreakOnUncaughtExceptions
+        ));
+        addWideRow(form, row++, createToggle(
+                "Show inline values while paused",
+                config.debuggerInlineValues(),
+                config::setDebuggerInlineValues
+        ));
+        addWideRow(form, row, createToggle(
+                "Show automatic value previews",
+                config.automaticDebuggerPreviews(),
+                config::setAutomaticDebuggerPreviews
         ));
 
         content.add(form, BorderLayout.CENTER);
@@ -120,6 +130,12 @@ public class SettingsWindow extends JDialog {
                             config.breakOnUncaughtExceptions()
                     );
         });
+        return toggle;
+    }
+
+    private JComponent createToggle(String label, boolean selected, Consumer<Boolean> setter) {
+        JCheckBox toggle = new JCheckBox(label, selected);
+        toggle.addActionListener(event -> setter.accept(toggle.isSelected()));
         return toggle;
     }
 

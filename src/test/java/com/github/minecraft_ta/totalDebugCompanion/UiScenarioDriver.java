@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -8,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
@@ -35,6 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /** Applies one named UI state, waits until it is stable, and optionally captures it. */
@@ -109,6 +112,20 @@ final class UiScenarioDriver {
                         int line = context.source().substring(0, context.source().indexOf("double ratio"))
                                 .split("\\n", -1).length;
                         codeView.showExecutionLine(line);
+                        DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                                1,
+                                "ThemeSample.describe",
+                                "sample.ThemeSample",
+                                java.net.URI.create("decompiled:///sample/ThemeSample.java"),
+                                line,
+                                1
+                        );
+                        DebuggerEditorPresentation.select(frame, List.of(
+                                variable("count", "7", "int", DebugEngine.VariableKind.PARAMETER),
+                                variable("verbose", "true", "boolean", DebugEngine.VariableKind.PARAMETER),
+                                variable("ratio", "2.0", "double", DebugEngine.VariableKind.LOCAL),
+                                variable("marker", "'x'", "char", DebugEngine.VariableKind.LOCAL)
+                        ));
                     }
                 });
             }
@@ -152,6 +169,15 @@ final class UiScenarioDriver {
                 ));
             }
         }
+    }
+
+    private static DebugEngine.Variable variable(
+            String name,
+            String value,
+            String type,
+            DebugEngine.VariableKind kind
+    ) {
+        return new DebugEngine.Variable(name, name, value, type, kind, 0, 0, 0);
     }
 
     private static boolean ready(UiRenderScenario scenario, ScenarioContext context) {

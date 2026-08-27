@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -33,6 +34,8 @@ class GlobalConfigPersistenceTest {
         config.setDebuggerWatches(List.of("player", "level.gameTime", "player"));
         config.setBreakOnCaughtExceptions(true);
         config.setBreakOnUncaughtExceptions(true);
+        config.setDebuggerInlineValues(false);
+        config.setAutomaticDebuggerPreviews(false);
         config.saveNow();
 
         assertTrue(Files.isRegularFile(dataDirectory.resolve(SETTINGS_FILE)));
@@ -45,6 +48,8 @@ class GlobalConfigPersistenceTest {
         config.setDebuggerWatches(List.of());
         config.setBreakOnCaughtExceptions(false);
         config.setBreakOnUncaughtExceptions(false);
+        config.setDebuggerInlineValues(true);
+        config.setAutomaticDebuggerPreviews(true);
         config.loadFrom(dataDirectory);
 
         assertEquals("islands-light", config.themeId());
@@ -54,6 +59,10 @@ class GlobalConfigPersistenceTest {
         assertEquals(List.of("player", "level.gameTime"), config.debuggerWatches());
         assertTrue(config.breakOnCaughtExceptions());
         assertTrue(config.breakOnUncaughtExceptions());
+        assertFalse(config.debuggerInlineValues());
+        assertFalse(config.automaticDebuggerPreviews());
+        config.setDebuggerInlineValues(true);
+        config.setAutomaticDebuggerPreviews(true);
     }
 
     @Test
@@ -84,7 +93,7 @@ class GlobalConfigPersistenceTest {
     void ignoresUnknownAndAbsentFields(@TempDir Path dataDirectory) throws IOException {
         Files.writeString(
                 dataDirectory.resolve(SETTINGS_FILE),
-                "{\"version\":2,\"theme\":\"islands-light\",\"somethingElse\":true}",
+                "{\"version\":3,\"theme\":\"islands-light\",\"somethingElse\":true}",
                 StandardCharsets.UTF_8
         );
 
@@ -101,7 +110,7 @@ class GlobalConfigPersistenceTest {
     void clampsAbsurdFontSizes(@TempDir Path dataDirectory) throws IOException {
         Files.writeString(
                 dataDirectory.resolve(SETTINGS_FILE),
-                "{\"version\":2,\"editorFontSize\":9999.0,\"uiFontSize\":-4.0}",
+                "{\"version\":3,\"editorFontSize\":9999.0,\"uiFontSize\":-4.0}",
                 StandardCharsets.UTF_8
         );
 

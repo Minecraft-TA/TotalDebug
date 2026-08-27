@@ -303,7 +303,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                                         variable.name,
                                         variable.name.startsWith("->")
                                                 ? VariableKind.RETURN_VALUE
-                                                : VariableKind.LOCAL
+                                                : VariableKind.UNKNOWN
                                 );
                         registerChildKind(variable.variablesReference, variable.type);
                         result.add(new Variable(

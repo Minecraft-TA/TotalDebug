@@ -234,6 +234,7 @@ public interface DebugEngine extends AutoCloseable {
     }
 
     enum VariableKind {
+        UNKNOWN,
         THIS,
         PARAMETER,
         LOCAL,

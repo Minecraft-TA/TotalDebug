@@ -26,11 +26,15 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /** Paints clickable code-vision counts without inserting text into the decompiled document. */
 final class CodeVisionLayerUI extends LayerUI<JComponent> {
+    private static final int INLINE_VALUE_GAP = 18;
+
     interface Handler {
         void showUsages(CodeSymbol symbol);
 
@@ -46,6 +50,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
     private final Handler handler;
     private final List<HitTarget> hitTargets = new ArrayList<>();
     private List<CodeVisionEntry> entries = List.of();
+    private Map<Integer, String> inlineValues = Map.of();
     private HitTarget hovered;
 
     CodeVisionLayerUI(RSyntaxTextArea editor, Handler handler) {
@@ -53,10 +58,19 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         this.handler = Objects.requireNonNull(handler, "handler");
     }
 
+    static int inlineValueStart(int lineEnd, int codeVisionEnd) {
+        return Math.max(lineEnd, codeVisionEnd) + INLINE_VALUE_GAP;
+    }
+
     void setEntries(List<CodeVisionEntry> entries, JLayer<JComponent> layer) {
         this.entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         this.hovered = null;
         this.hitTargets.clear();
+        layer.repaint();
+    }
+
+    void setInlineValues(Map<Integer, String> inlineValues, JLayer<JComponent> layer) {
+        this.inlineValues = Map.copyOf(Objects.requireNonNull(inlineValues, "inlineValues"));
         layer.repaint();
     }
 
@@ -87,16 +101,21 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
             draw.setFont(hintFont);
             FontMetrics metrics = draw.getFontMetrics();
             this.hitTargets.clear();
+            Map<Integer, Integer> codeVisionEnds = new HashMap<>();
 
             for (CodeVisionEntry entry : this.entries) {
-                paintEntry(draw, layer, metrics, entry);
+                LineEnd lineEnd = paintEntry(draw, layer, metrics, entry);
+                if (lineEnd != null) {
+                    codeVisionEnds.merge(lineEnd.line(), lineEnd.x(), Math::max);
+                }
             }
+            paintInlineValues(draw, layer, codeVisionEnds);
         } finally {
             draw.dispose();
         }
     }
 
-    private void paintEntry(
+    private LineEnd paintEntry(
             Graphics2D draw,
             JLayer<JComponent> layer,
             FontMetrics metrics,
@@ -112,7 +131,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
             );
             Rectangle visible = layer.getVisibleRect();
             if (point.y + anchor.getHeight() < visible.y || point.y > visible.y + visible.height) {
-                return;
+                return null;
             }
 
             int x = point.x + 10;
@@ -135,7 +154,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                 if (x > point.x + 10) {
                     x += 12;
                 }
-                paintSegment(
+                x = paintSegment(
                         draw,
                         metrics,
                         entry,
@@ -145,8 +164,83 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                         baseline
                 );
             }
+            return x == point.x + 10
+                    ? null
+                    : new LineEnd(this.editor.getLineOfOffset(entry.declaration().anchorOffset()) + 1, x);
         } catch (BadLocationException ignored) {
+            return null;
         }
+    }
+
+    private void paintInlineValues(
+            Graphics2D draw,
+            JLayer<JComponent> layer,
+            Map<Integer, Integer> codeVisionEnds
+    ) {
+        if (this.inlineValues.isEmpty()) {
+            return;
+        }
+        Rectangle visible = this.editor.getVisibleRect();
+        Point visibleOrigin = SwingUtilities.convertPoint(this.editor, visible.x, visible.y, layer);
+        Rectangle clip = new Rectangle(visibleOrigin.x, visibleOrigin.y, visible.width, visible.height);
+        Graphics2D hints = (Graphics2D) draw.create();
+        try {
+            hints.clip(clip);
+            hints.setFont(this.editor.getFont().deriveFont(Font.ITALIC));
+            hints.setColor(ThemeColors.mutedText());
+            FontMetrics metrics = hints.getFontMetrics();
+            for (Map.Entry<Integer, String> entry : this.inlineValues.entrySet()) {
+                int line = entry.getKey();
+                if (line < 1 || line > this.editor.getLineCount()) {
+                    continue;
+                }
+                int start = this.editor.getLineStartOffset(line - 1);
+                int end = this.editor.getLineEndOffset(line - 1);
+                while (end > start && Character.isWhitespace(this.editor.getText(end - 1, 1).charAt(0))) {
+                    end--;
+                }
+                Rectangle2D endBounds = this.editor.modelToView2D(end);
+                Point point = SwingUtilities.convertPoint(
+                        this.editor,
+                        (int) Math.ceil(endBounds.getX()),
+                        (int) Math.floor(endBounds.getY()),
+                        layer
+                );
+                point.x = inlineValueStart(point.x, codeVisionEnds.getOrDefault(line, Integer.MIN_VALUE));
+                if (point.y + endBounds.getHeight() < clip.y || point.y > clip.y + clip.height) {
+                    continue;
+                }
+                int available = clip.x + clip.width - point.x - 8;
+                if (available <= metrics.charWidth('…')) {
+                    continue;
+                }
+                String text = fit(entry.getValue(), metrics, available);
+                int baseline = point.y + ((int) Math.ceil(endBounds.getHeight()) - metrics.getHeight()) / 2
+                        + metrics.getAscent();
+                hints.drawString(text, point.x, baseline);
+            }
+        } catch (BadLocationException ignored) {
+        } finally {
+            hints.dispose();
+        }
+    }
+
+    private static String fit(String text, FontMetrics metrics, int width) {
+        if (metrics.stringWidth(text) <= width) {
+            return text;
+        }
+        String suffix = "…";
+        int low = 0;
+        int high = text.length();
+        while (low < high) {
+            int middle = (low + high + 1) >>> 1;
+            if (metrics.stringWidth(text.substring(0, middle) + suffix) <= width) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        return text.substring(0, low) + suffix;
     }
 
     private int paintSegment(
@@ -252,5 +346,8 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                 }
             };
         }
+    }
+
+    private record LineEnd(int line, int x) {
     }
 }
