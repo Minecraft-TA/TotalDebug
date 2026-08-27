@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -78,6 +80,7 @@ public final class DebuggerPanel extends JPanel {
     private final DefaultTreeModel watchModel = new DefaultTreeModel(this.watchRoot);
     private final JTree watchTree = createValueTree(this.watchModel);
     private final JTextField expression = new JTextField();
+    private final ExpressionCompletionSupport expressionCompletion = new ExpressionCompletionSupport(this.expression);
     private final JButton evaluate = new JButton("Evaluate");
     private final JButton addWatch = new JButton("Add Watch");
     private final JButton removeWatch = toolbarButton(Icons.DELETE, "Remove selected watch (Delete)");
@@ -104,6 +107,7 @@ public final class DebuggerPanel extends JPanel {
 
     private long viewRevision;
     private DebugEngine.StackFrame currentFrame;
+    private List<DebugEngine.Variable> currentVariables = List.of();
     private DebuggerSessionController.PausedState currentPause;
     private String lastEvaluationExpression = "";
     private boolean disposed;
@@ -336,6 +340,8 @@ public final class DebuggerPanel extends JPanel {
         if (!paused) {
             this.viewRevision++;
             this.currentFrame = null;
+            this.currentVariables = List.of();
+            updateExpressionSuggestions(List.of(), List.of());
             this.currentPause = null;
             this.lastEvaluationExpression = "";
             this.frameLabel.setText("");
@@ -348,6 +354,8 @@ public final class DebuggerPanel extends JPanel {
     void showPausedState(DebuggerSessionController.PausedState state) {
         this.viewRevision++;
         this.currentFrame = null;
+        this.currentVariables = List.of();
+        updateExpressionSuggestions(List.of(), List.of());
         this.currentPause = Objects.requireNonNull(state, "state");
         this.statusLabel.setText(stopDescription(state.event()));
         this.statusLabel.setIcon(Icons.WARNING);
@@ -379,6 +387,8 @@ public final class DebuggerPanel extends JPanel {
         }
         long revision = ++this.viewRevision;
         this.currentFrame = frame;
+        this.currentVariables = List.of();
+        updateExpressionSuggestions(List.of(), List.of());
         this.frameLabel.setText(frameLocation(frame));
 
         this.frameNavigation.open(frame, false);
@@ -409,6 +419,8 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private void showVariables(List<DebugEngine.Variable> values) {
+        this.currentVariables = List.copyOf(values);
+        updateExpressionSuggestions(this.currentVariables, List.of());
         this.variableRoot.removeAllChildren();
         for (DebugEngine.Variable variable : values) {
             this.variableRoot.add(valueNode(DebugValue.from(variable)));
@@ -417,6 +429,53 @@ public final class DebuggerPanel extends JPanel {
             this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue("No variables available", false)));
         }
         this.variableModel.reload();
+
+        DebugEngine.Variable thisVariable = values.stream()
+                .filter(variable -> variable.name().equals("this"))
+                .filter(variable -> variable.variablesReference() > 0)
+                .findFirst()
+                .orElse(null);
+        if (thisVariable == null) {
+            return;
+        }
+        DebugEngine.StackFrame frame = this.currentFrame;
+        long revision = this.viewRevision;
+        this.controller.variables(thisVariable.variablesReference()).whenComplete((fields, failure) ->
+                SwingUtilities.invokeLater(() -> {
+                    if (failure == null && isCurrent(frame, revision)) {
+                        updateExpressionSuggestions(this.currentVariables, fields);
+                    }
+                })
+        );
+    }
+
+    private void updateExpressionSuggestions(
+            List<DebugEngine.Variable> variables,
+            List<DebugEngine.Variable> fields
+    ) {
+        java.util.LinkedHashMap<String, ExpressionSuggestion> suggestions = new java.util.LinkedHashMap<>();
+        for (DebugEngine.Variable variable : variables) {
+            suggestions.putIfAbsent(variable.name(), new ExpressionSuggestion(
+                    variable.name(),
+                    variable.type(),
+                    ExpressionSuggestion.Kind.VARIABLE
+            ));
+        }
+        for (DebugEngine.Variable field : fields) {
+            suggestions.putIfAbsent(field.name(), new ExpressionSuggestion(
+                    field.name(),
+                    field.type(),
+                    ExpressionSuggestion.Kind.FIELD
+            ));
+        }
+        for (String literal : List.of("true", "false", "null")) {
+            suggestions.put(literal, new ExpressionSuggestion(
+                    literal,
+                    literal.equals("null") ? "null literal" : "boolean literal",
+                    ExpressionSuggestion.Kind.KEYWORD
+            ));
+        }
+        this.expressionCompletion.setSuggestions(List.copyOf(suggestions.values()));
     }
 
     private void showVariableStatus(String text) {
@@ -611,6 +670,7 @@ public final class DebuggerPanel extends JPanel {
             return;
         }
         this.disposed = true;
+        this.expressionCompletion.close();
         this.controller.removeListener(this.listener);
     }
 

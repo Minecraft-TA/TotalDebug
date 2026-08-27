@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.ExpressionScopeAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
@@ -407,6 +408,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 displayedLine,
                 template,
                 managed != null,
+                expressionSuggestionsAtLine(displayedLine),
                 new BreakpointEditorPopup.Handler() {
                     @Override
                     public void save(int line, String condition, String hitCount) {
@@ -422,6 +424,29 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     }
                 }
         );
+    }
+
+    private List<com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion>
+    expressionSuggestionsAtLine(int displayedLine) {
+        String source = ASTCache.getContents(this.identifier);
+        var unit = ASTCache.getFromCache(this.identifier);
+        if (source == null || unit == null) {
+            return List.of();
+        }
+        int lineStart;
+        int lineEnd;
+        try {
+            lineStart = this.editorPane.getLineStartOffset(displayedLine - 1);
+            lineEnd = this.editorPane.getLineEndOffset(displayedLine - 1);
+        } catch (BadLocationException exception) {
+            return List.of();
+        }
+        int sourceOffset = lineStart;
+        while (sourceOffset < lineEnd && sourceOffset < source.length()
+                && Character.isWhitespace(source.charAt(sourceOffset))) {
+            sourceOffset++;
+        }
+        return ExpressionScopeAnalyzer.analyze(unit, sourceOffset);
     }
 
     private void configureBreakpoint(

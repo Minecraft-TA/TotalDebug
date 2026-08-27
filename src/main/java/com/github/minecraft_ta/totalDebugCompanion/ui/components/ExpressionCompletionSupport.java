@@ -1,0 +1,244 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.components;
+
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
+
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import javax.swing.JComponent;
+import javax.swing.JList;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.KeyStroke;
+import javax.swing.ListCellRenderer;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.JTextField;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+/** Lightweight completion for the subset of Java expressions supported by the debugger. */
+public final class ExpressionCompletionSupport implements AutoCloseable {
+    private static final String NEXT = "debugExpressionCompletion.next";
+    private static final String PREVIOUS = "debugExpressionCompletion.previous";
+    private static final String ACCEPT_ENTER = "debugExpressionCompletion.acceptEnter";
+    private static final String ACCEPT_TAB = "debugExpressionCompletion.acceptTab";
+    private static final String SHOW = "debugExpressionCompletion.show";
+    private static final int ROW_HEIGHT = 24;
+
+    private final JTextField field;
+    private final DefaultListModel<ExpressionSuggestion> model = new DefaultListModel<>();
+    private final JList<ExpressionSuggestion> list = new JList<>(this.model);
+    private final JPopupMenu popup = new JPopupMenu();
+    private final DocumentListener documentListener = (DocumentChangeListener) this::documentChanged;
+    private final FocusAdapter focusListener = new FocusAdapter() {
+        @Override
+        public void focusLost(FocusEvent event) {
+            popup.setVisible(false);
+        }
+    };
+    private List<ExpressionSuggestion> suggestions = List.of();
+    private boolean applying;
+
+    public ExpressionCompletionSupport(JTextField field) {
+        this.field = Objects.requireNonNull(field, "field");
+        configurePopup();
+        configureKeys();
+        this.field.getDocument().addDocumentListener(this.documentListener);
+        this.field.addFocusListener(this.focusListener);
+    }
+
+    public void setSuggestions(List<ExpressionSuggestion> suggestions) {
+        this.suggestions = List.copyOf(Objects.requireNonNull(suggestions, "suggestions"));
+        if (this.popup.isVisible()) {
+            updatePopup(true);
+        }
+    }
+
+    private void configurePopup() {
+        this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        this.list.setFixedCellHeight(ROW_HEIGHT);
+        this.list.setCellRenderer((ListCellRenderer<ExpressionSuggestion>) (list, value, index, selected, focus) -> {
+            PrimarySecondaryLabel label = new PrimarySecondaryLabel();
+            label.configure(
+                    new PrimarySecondaryText(value.text(), value.detail()),
+                    switch (value.kind()) {
+                        case VARIABLE -> Icons.JAVA_VARIABLE;
+                        case FIELD -> Icons.FIELD;
+                        case KEYWORD -> null;
+                    },
+                    list.getFont(),
+                    selected,
+                    list.getSelectionForeground(),
+                    list.getSelectionBackground()
+            );
+            label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+            return label;
+        });
+        this.list.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) {
+                    acceptSelection();
+                }
+            }
+        });
+        JScrollPane scroll = new JScrollPane(this.list);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        this.popup.add(scroll);
+    }
+
+    private void configureKeys() {
+        bind("DOWN", NEXT, 1);
+        bind("UP", PREVIOUS, -1);
+        this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), ACCEPT_ENTER);
+        this.field.getActionMap().put(ACCEPT_ENTER, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (popup.isVisible()) {
+                    acceptSelection();
+                } else {
+                    field.postActionEvent();
+                }
+            }
+        });
+        this.field.setFocusTraversalKeysEnabled(false);
+        this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("TAB"), ACCEPT_TAB);
+        this.field.getActionMap().put(ACCEPT_TAB, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (popup.isVisible()) {
+                    acceptSelection();
+                } else {
+                    field.transferFocus();
+                }
+            }
+        });
+        this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl SPACE"), SHOW);
+        this.field.getActionMap().put(SHOW, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                updatePopup(true);
+            }
+        });
+    }
+
+    private void bind(String keyStroke, String actionKey, int direction) {
+        this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(keyStroke), actionKey);
+        this.field.getActionMap().put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (!popup.isVisible()) {
+                    updatePopup(true);
+                    return;
+                }
+                int size = model.size();
+                if (size == 0) {
+                    return;
+                }
+                int selected = list.getSelectedIndex();
+                list.setSelectedIndex(Math.floorMod(selected + direction, size));
+                list.ensureIndexIsVisible(list.getSelectedIndex());
+            }
+        });
+    }
+
+    private void documentChanged(DocumentEvent event) {
+        if (event.getType() == DocumentEvent.EventType.CHANGE || this.applying) {
+            return;
+        }
+        SwingUtilities.invokeLater(() -> updatePopup(false));
+    }
+
+    private void updatePopup(boolean explicit) {
+        if (!this.field.isShowing() || !this.field.isEnabled()) {
+            this.popup.setVisible(false);
+            return;
+        }
+        CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        if (range.memberAccess() || !explicit && range.prefix().isEmpty()) {
+            this.popup.setVisible(false);
+            return;
+        }
+        String foldedPrefix = range.prefix().toLowerCase(Locale.ROOT);
+        List<ExpressionSuggestion> matches = this.suggestions.stream()
+                .filter(suggestion -> suggestion.text().toLowerCase(Locale.ROOT).startsWith(foldedPrefix))
+                .sorted(Comparator.comparing(ExpressionSuggestion::text, String.CASE_INSENSITIVE_ORDER))
+                .limit(12)
+                .toList();
+        this.model.clear();
+        this.model.addAll(matches);
+        if (matches.isEmpty()) {
+            this.popup.setVisible(false);
+            return;
+        }
+        this.list.setSelectedIndex(0);
+        int width = Math.max(this.field.getWidth(), 300);
+        int height = Math.min(8, matches.size()) * ROW_HEIGHT + 2;
+        this.popup.setPopupSize(new Dimension(width, height));
+        if (!this.popup.isVisible()) {
+            this.popup.show(this.field, 0, this.field.getHeight());
+        }
+    }
+
+    private void acceptSelection() {
+        if (!this.popup.isVisible()) {
+            return;
+        }
+        ExpressionSuggestion selected = this.list.getSelectedValue();
+        if (selected == null) {
+            return;
+        }
+        CompletionRange range = completionRange(this.field.getText(), this.field.getCaretPosition());
+        String replacement = this.field.getText().substring(0, range.start())
+                + selected.text()
+                + this.field.getText().substring(range.end());
+        this.applying = true;
+        try {
+            this.field.setText(replacement);
+            this.field.setCaretPosition(range.start() + selected.text().length());
+        } finally {
+            this.applying = false;
+        }
+        this.popup.setVisible(false);
+    }
+
+    static CompletionRange completionRange(String text, int caret) {
+        if (caret < 0 || caret > text.length()) {
+            throw new IllegalArgumentException("caret is outside the expression");
+        }
+        int start = caret;
+        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) {
+            start--;
+        }
+        int end = caret;
+        while (end < text.length() && Character.isJavaIdentifierPart(text.charAt(end))) {
+            end++;
+        }
+        return new CompletionRange(start, end, text.substring(start, caret), start > 0 && text.charAt(start - 1) == '.');
+    }
+
+    @Override
+    public void close() {
+        this.popup.setVisible(false);
+        this.field.getDocument().removeDocumentListener(this.documentListener);
+        this.field.removeFocusListener(this.focusListener);
+    }
+
+    record CompletionRange(int start, int end, String prefix, boolean memberAccess) {
+    }
+}

@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.ExpressionSuggestion;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -17,6 +19,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
 import java.util.Objects;
+import java.util.List;
 
 /** Compact editor for the breakpoint at one source line. */
 final class BreakpointEditorPopup {
@@ -29,6 +32,7 @@ final class BreakpointEditorPopup {
     private final JPopupMenu popup = new JPopupMenu();
     private final JLabel title = new JLabel();
     private final JTextField condition = new JTextField(28);
+    private final ExpressionCompletionSupport conditionCompletion = new ExpressionCompletionSupport(this.condition);
     private final JTextField hitCount = new JTextField(10);
     private final JLabel validation = new JLabel(" ");
     private final JButton remove = new JButton("Remove");
@@ -46,6 +50,7 @@ final class BreakpointEditorPopup {
             int displayedLine,
             DebugEngine.SourceBreakpoint breakpoint,
             boolean installed,
+            List<ExpressionSuggestion> suggestions,
             Handler handler
     ) {
         if (displayedLine < 1) {
@@ -63,6 +68,7 @@ final class BreakpointEditorPopup {
                 ? ""
                 : breakpoint.hitCondition());
         this.remove.setVisible(installed);
+        this.conditionCompletion.setSuggestions(suggestions);
         clearValidation();
         this.popup.show(invoker, location.x, location.y);
         SwingUtilities.invokeLater(() -> {
@@ -73,6 +79,7 @@ final class BreakpointEditorPopup {
 
     void hide() {
         this.popup.setVisible(false);
+        this.conditionCompletion.setSuggestions(List.of());
     }
 
     private void configureUi() {
