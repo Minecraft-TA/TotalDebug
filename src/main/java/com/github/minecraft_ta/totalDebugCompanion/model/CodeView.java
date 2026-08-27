@@ -131,6 +131,11 @@ public class CodeView implements IEditorPanel {
     }
 
     @Override
+    public JavaEditorContext getJavaEditorContext() {
+        return this.codeViewPanel;
+    }
+
+    @Override
     public NavigationViewState captureNavigationViewState() {
         return this.codeViewPanel.captureNavigationViewState();
     }

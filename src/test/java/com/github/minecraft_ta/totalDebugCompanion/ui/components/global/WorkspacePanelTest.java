@@ -29,7 +29,7 @@ class WorkspacePanelTest {
         AtomicReference<WorkspaceFixture> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
             FileTreeViewHeader header = new FileTreeViewHeader();
-            ApplicationStatusBar statusBar = new ApplicationStatusBar();
+            ApplicationStatusBar statusBar = new ApplicationStatusBar(target -> {});
             assertEquals(0, header.getBorder().getBorderInsets(header).bottom);
             assertEquals(1, statusBar.getBorder().getBorderInsets(statusBar).top);
 
@@ -65,7 +65,7 @@ class WorkspacePanelTest {
                     new FileTreeViewHeader(),
                     new JPanel(),
                     new JPanel(),
-                    new ApplicationStatusBar()
+                    new ApplicationStatusBar(target -> {})
             );
             workspace.setSize(500, 300);
             layoutRecursively(workspace);

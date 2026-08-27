@@ -2,8 +2,14 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
+import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.EditorBreadcrumbs;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.JavaBreadcrumbResolver;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
@@ -21,12 +27,14 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class ApplicationStatusBar extends JPanel {
-    private final JLabel pathLabel = new JLabel();
+    private final BreadcrumbBar breadcrumbs;
     private final JLabel editorStatusLabel = new JLabel();
     private final JLabel taskLabel = new JLabel();
     private final JProgressBar taskProgress = new JProgressBar();
@@ -51,21 +59,31 @@ public final class ApplicationStatusBar extends JPanel {
     private final AnimatedFlatSVGIcon processIcon = new AnimatedFlatSVGIcon("icons/process");
     private final Consumer<BottomInformationBar.State> editorStatusListener = this::setEditorStatus;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
+    private final Timer memberDebounce;
 
     private BottomInformationBar selectedEditorStatus;
+    private EditorLocation selectedLocation = EditorLocation.empty();
+    private NavigationTarget selectedTarget;
+    private JavaEditorContext selectedJavaContext;
+    private JavaBreadcrumbResolver.Member selectedMember;
+    private Runnable removeCaretListener = () -> {};
+    private Runnable removeAstListener = () -> {};
     private RuntimeIndexService.Status runtimeStatus = new RuntimeIndexService.Status(
             RuntimeIndexService.Phase.WAITING,
             "Waiting for runtime inventory",
             null
     );
 
-    public ApplicationStatusBar() {
+    public ApplicationStatusBar(Consumer<NavigationTarget> navigator) {
+        this.breadcrumbs = new BreadcrumbBar(Objects.requireNonNull(navigator, "navigator"));
+        this.memberDebounce = new Timer(140, event -> refreshMember());
+        this.memberDebounce.setRepeats(false);
         setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
         setBorder(BorderFactory.createEmptyBorder(1, 7, 1, 5));
         setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
         setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 
-        add(this.pathLabel);
+        add(this.breadcrumbs);
         add(Box.createHorizontalStrut(12));
         add(this.editorStatusLabel);
         add(Box.createHorizontalGlue());
@@ -105,19 +123,66 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     public void setEditor(IEditorPanel editor) {
+        this.memberDebounce.stop();
+        this.removeCaretListener.run();
+        this.removeAstListener.run();
+        this.removeCaretListener = () -> {};
+        this.removeAstListener = () -> {};
         if (this.selectedEditorStatus != null) {
             this.selectedEditorStatus.removeListener(this.editorStatusListener);
         }
         this.selectedEditorStatus = editor == null ? null : editor.getInformationBar();
-        var location = editor == null ? com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation.empty()
-                : editor.getLocation();
-        this.pathLabel.setText(location.breadcrumb());
-        this.pathLabel.setToolTipText(location.tooltip().isBlank() ? null : location.tooltip());
+        this.selectedLocation = editor == null ? EditorLocation.empty() : editor.getLocation();
+        this.selectedTarget = editor == null ? null : editor.getNavigationTarget();
+        this.selectedJavaContext = editor == null ? null : editor.getJavaEditorContext();
+        this.selectedMember = null;
+        renderBreadcrumbs();
+        if (this.selectedJavaContext != null && this.selectedTarget != null) {
+            JavaEditorContext context = this.selectedJavaContext;
+            this.removeCaretListener = context.addCaretOffsetListener(ignored -> requestMemberRefresh());
+            this.removeAstListener = ASTCache.addChangeListener(
+                    context.astKey(),
+                    (unit, version) -> requestMemberRefresh()
+            );
+            requestMemberRefresh();
+        }
         if (this.selectedEditorStatus == null) {
             setEditorStatus(new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN));
         } else {
             this.selectedEditorStatus.addListener(this.editorStatusListener);
         }
+    }
+
+    private void requestMemberRefresh() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::requestMemberRefresh);
+            return;
+        }
+        this.memberDebounce.restart();
+    }
+
+    private void refreshMember() {
+        JavaEditorContext context = this.selectedJavaContext;
+        NavigationTarget target = this.selectedTarget;
+        JavaBreadcrumbResolver.Member member = null;
+        if (context != null && target != null) {
+            var unit = ASTCache.getFromCache(context.astKey());
+            if (unit != null) {
+                member = JavaBreadcrumbResolver.resolve(unit, context.caretOffset(), target);
+            }
+        }
+        if (!Objects.equals(this.selectedMember, member)) {
+            this.selectedMember = member;
+            renderBreadcrumbs();
+        }
+    }
+
+    private void renderBreadcrumbs() {
+        this.breadcrumbs.setSegments(EditorBreadcrumbs.create(
+                this.selectedLocation,
+                this.selectedTarget,
+                this.selectedMember
+        ));
     }
 
     public void setRuntimeStatus(RuntimeIndexService.Status status) {
@@ -173,7 +238,7 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     private void applyTheme() {
-        this.pathLabel.setForeground(ThemeColors.mutedText());
+        this.breadcrumbs.applyTheme();
         this.taskLabel.setForeground(ThemeColors.mutedText());
         setEditorStatus(this.selectedEditorStatus == null
                 ? new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN)

@@ -37,7 +37,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final JMenu toolsMenu = new JMenu("Tools");
     private final JMenu scriptMenu = new JMenu("Script");
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
-    private final ApplicationStatusBar statusBar = new ApplicationStatusBar();
+    private final ApplicationStatusBar statusBar;
     private final Action chunkGridAction;
     private final Action packetLoggerAction;
     private final Action newScriptAction;
@@ -53,6 +53,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
         this.fileTreeView = new FileTreeView(target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView);
+        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target));
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,

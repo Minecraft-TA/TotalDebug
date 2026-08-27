@@ -104,6 +104,11 @@ public class ScriptView implements IEditorPanel {
     }
 
     @Override
+    public JavaEditorContext getJavaEditorContext() {
+        return (ScriptPanel) getComponent();
+    }
+
+    @Override
     public NavigationViewState captureNavigationViewState() {
         return this.scriptPanel == null
                 ? NavigationViewState.EMPTY

@@ -8,12 +8,14 @@ import org.eclipse.jdt.core.dom.CompilationUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 public class ASTCache {
 
     private static final Map<String, Entry> CACHE = new HashMap<>();
-    private static final Map<String, List<BiConsumer<CompilationUnit, Integer>>> LISTENERS = new ConcurrentHashMap<>();
+    private static final Map<String, CopyOnWriteArrayList<BiConsumer<CompilationUnit, Integer>>> LISTENERS =
+            new ConcurrentHashMap<>();
 
     public static void update(String key, String className, String contents) {
         int version = 0;
@@ -36,9 +38,8 @@ public class ASTCache {
                 entry.version = finalVersion;
                 entry.unit = ast;
                 entry.contents = contents;
-
-                notifyListeners(key, ast, finalVersion);
             }
+            notifyListeners(key, ast, finalVersion);
         });
     }
 
@@ -51,13 +52,23 @@ public class ASTCache {
         return (CompilationUnit) parser.createAST(null);
     }
 
-    public static void addChangeListener(String key, BiConsumer<CompilationUnit, Integer> listener) {
-        LISTENERS.computeIfAbsent(key, (k) -> new ArrayList<>()).add(listener);
+    public static Runnable addChangeListener(String key, BiConsumer<CompilationUnit, Integer> listener) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(listener, "listener");
+        var listeners = LISTENERS.computeIfAbsent(key, ignored -> new CopyOnWriteArrayList<>());
+        listeners.add(listener);
+        Entry existing;
         synchronized (CACHE) {
-            var existing = CACHE.get(key);
-            if (existing != null)
-                listener.accept(existing.unit, existing.version);
+            existing = CACHE.get(key);
         }
+        if (existing != null)
+            listener.accept(existing.unit, existing.version);
+        return () -> {
+            listeners.remove(listener);
+            if (listeners.isEmpty()) {
+                LISTENERS.remove(key, listeners);
+            }
+        };
     }
 
     public static void removeFromCache(String key) {
@@ -85,7 +96,11 @@ public class ASTCache {
     }
 
     private static void notifyListeners(String key, CompilationUnit ast, int version) {
-        for (var listener : LISTENERS.getOrDefault(key, Collections.emptyList())) {
+        var listeners = LISTENERS.get(key);
+        if (listeners == null) {
+            return;
+        }
+        for (var listener : listeners) {
             listener.accept(ast, version);
         }
     }

@@ -8,19 +8,24 @@ import java.util.Locale;
 import java.util.Objects;
 
 /** A module-relative editor location. The full source location is retained for the tooltip. */
-public record EditorLocation(String module, List<String> path, String tooltip) {
+public record EditorLocation(String module, String moduleId, List<String> path, String tooltip) {
     private static final String SEPARATOR = "  ›  ";
 
     public EditorLocation {
         module = Objects.requireNonNullElse(module, "").trim();
+        moduleId = Objects.requireNonNullElse(moduleId, "").trim();
         path = List.copyOf(Objects.requireNonNull(path, "path").stream()
                 .filter(segment -> segment != null && !segment.isBlank())
                 .toList());
         tooltip = Objects.requireNonNullElse(tooltip, "");
     }
 
+    public EditorLocation(String module, List<String> path, String tooltip) {
+        this(module, "", path, tooltip);
+    }
+
     public static EditorLocation empty() {
-        return new EditorLocation("", List.of(), "");
+        return new EditorLocation("", "", List.of(), "");
     }
 
     public static EditorLocation forFile(Path file, Path workspaceDirectory) {
@@ -52,13 +57,22 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
     }
 
     public static EditorLocation forRuntimeClass(String binaryName, String logicalSource) {
-        return forRuntimeClass(binaryName, logicalSource, "");
+        return forRuntimeClass(binaryName, logicalSource, "", "");
     }
 
     public static EditorLocation forRuntimeClass(
             String binaryName,
             String logicalSource,
             String moduleDisplayName
+    ) {
+        return forRuntimeClass(binaryName, logicalSource, moduleDisplayName, "");
+    }
+
+    public static EditorLocation forRuntimeClass(
+            String binaryName,
+            String logicalSource,
+            String moduleDisplayName,
+            String moduleId
     ) {
         String classPath = Objects.requireNonNull(binaryName, "binaryName").replace('.', '/') + ".java";
         String source = Objects.requireNonNullElse(logicalSource, "");
@@ -71,6 +85,7 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
             }
             return new EditorLocation(
                     preferredModule.isBlank() ? module : preferredModule,
+                    moduleId,
                     split(classPath),
                     source + "/" + classPath
             );
@@ -94,7 +109,8 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
                         sourcePath,
                         classPath,
                         sourceTooltip,
-                        preferredModule
+                        preferredModule,
+                        moduleId
                 );
                 if (buildOutput != null) {
                     return buildOutput;
@@ -103,6 +119,7 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
                 relative.addAll(split(classPath));
                 return new EditorLocation(
                         preferredModule.isBlank() ? fileName(sourcePath) : preferredModule,
+                        moduleId,
                         relative,
                         sourceTooltip
                 );
@@ -114,6 +131,7 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
         fallback.addAll(split(classPath));
         return new EditorLocation(
                 preferredModule.isBlank() ? sourceName(baseSource) : preferredModule,
+                moduleId,
                 fallback,
                 source + "!/" + classPath
         );
@@ -140,7 +158,8 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
             Path source,
             String classPath,
             String tooltip,
-            String preferredModule
+            String preferredModule,
+            String moduleId
     ) {
         List<String> names = segments(source);
         for (int index = 0; index + 3 < names.size(); index++) {
@@ -161,6 +180,7 @@ public record EditorLocation(String module, List<String> path, String tooltip) {
             relative.addAll(split(classPath));
             return new EditorLocation(
                     preferredModule.isBlank() ? fileName(moduleRoot) : preferredModule,
+                    moduleId,
                     relative,
                     tooltip
             );

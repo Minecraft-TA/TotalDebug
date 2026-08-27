@@ -81,7 +81,7 @@ class ThemeLoadingTest {
             tabs.doLayout();
             Rectangle tabBounds = tabs.getBoundsAt(0);
 
-            ApplicationStatusBar statusBar = new ApplicationStatusBar();
+            ApplicationStatusBar statusBar = new ApplicationStatusBar(target -> {});
             JScrollBar scrollBar = new JScrollBar();
             result.set(new RuntimeMetrics(
                     tree.getRowHeight(),

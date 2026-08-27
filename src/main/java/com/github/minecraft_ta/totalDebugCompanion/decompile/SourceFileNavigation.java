@@ -66,7 +66,8 @@ public final class SourceFileNavigation {
                 : EditorLocation.forRuntimeClass(
                         binaryName,
                         origin.logicalSource(),
-                        RuntimeModulePresentation.of(origin.module()).label()
+                        RuntimeModulePresentation.of(origin.module()).label(),
+                        origin.module().id()
                 );
     }
 

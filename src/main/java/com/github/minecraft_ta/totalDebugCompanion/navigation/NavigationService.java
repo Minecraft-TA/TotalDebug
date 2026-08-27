@@ -131,10 +131,12 @@ public final class NavigationService {
                         activation
                 );
                 case NavigationTarget.LocalFile file -> openLocalFile(file, activation);
+                case NavigationTarget.LocalDirectory directory -> revealLocalDirectory(directory);
                 case NavigationTarget.ArchiveEntry entry -> openResource(
                         new ArchiveEntrySource(entry.archive(), entry.entryName(), -1),
                         activation
                 );
+                case NavigationTarget.ArchiveDirectory directory -> revealArchiveDirectory(directory);
                 case NavigationTarget.UsageSite site -> openRuntimeSource(
                         site.usage().location().className(),
                         source -> SourceFileNavigation.usageOffset(
@@ -283,6 +285,8 @@ public final class NavigationService {
 
     private static boolean isEditorDestination(NavigationTarget target) {
         return !(target instanceof NavigationTarget.RuntimePackage)
+                && !(target instanceof NavigationTarget.LocalDirectory)
+                && !(target instanceof NavigationTarget.ArchiveDirectory)
                 && !(target instanceof NavigationTarget.ModuleSearch);
     }
 
@@ -424,6 +428,25 @@ public final class NavigationService {
         return result;
     }
 
+    private CompletableFuture<Void> revealLocalDirectory(NavigationTarget.LocalDirectory target) {
+        return this.fileTree.revealLocalDirectory(target.path()).thenCompose(revealed -> revealed
+                ? CompletableFuture.completedFuture(null)
+                : CompletableFuture.failedFuture(new IllegalStateException(
+                "Directory is not present in the file tree: " + target.path()
+        )));
+    }
+
+    private CompletableFuture<Void> revealArchiveDirectory(NavigationTarget.ArchiveDirectory target) {
+        return this.fileTree.revealArchiveDirectory(target.archive(), target.entryName()).thenCompose(revealed ->
+                revealed
+                        ? CompletableFuture.completedFuture(null)
+                        : CompletableFuture.failedFuture(new IllegalStateException(
+                        "Archive directory is not present in the file tree: "
+                                + target.archive() + "!/" + target.entryName()
+                ))
+        );
+    }
+
     private CompletableFuture<Void> onEdt(
             Supplier<CompletableFuture<Void>> operation,
             Activation activation
@@ -469,7 +492,10 @@ public final class NavigationService {
             case NavigationTarget.RuntimeDeclaration declaration -> declaration.member().ownerClassName();
             case NavigationTarget.RuntimeLine line -> line.binaryName() + ':' + line.displayedLine();
             case NavigationTarget.LocalFile file -> file.path().toString();
+            case NavigationTarget.LocalDirectory directory -> directory.path().toString();
             case NavigationTarget.ArchiveEntry entry -> entry.archive() + "!/" + entry.entryName();
+            case NavigationTarget.ArchiveDirectory directory ->
+                    directory.archive() + "!/" + directory.entryName();
             case NavigationTarget.UsageSite site -> site.usage().location().className();
             case NavigationTarget.SymbolUsages usages -> usages.symbol().displayName();
             case NavigationTarget.LiteralUsages usages -> '"' + usages.literal() + '"';

@@ -14,7 +14,9 @@ public sealed interface NavigationTarget permits
         NavigationTarget.RuntimeDeclaration,
         NavigationTarget.RuntimeLine,
         NavigationTarget.LocalFile,
+        NavigationTarget.LocalDirectory,
         NavigationTarget.ArchiveEntry,
+        NavigationTarget.ArchiveDirectory,
         NavigationTarget.UsageSite,
         NavigationTarget.SymbolUsages,
         NavigationTarget.LiteralUsages,
@@ -55,10 +57,29 @@ public sealed interface NavigationTarget permits
         }
     }
 
+    record LocalDirectory(Path path) implements NavigationTarget {
+        public LocalDirectory {
+            path = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
+        }
+    }
+
     record ArchiveEntry(Path archive, String entryName) implements NavigationTarget {
         public ArchiveEntry {
             archive = Objects.requireNonNull(archive, "archive").toAbsolutePath().normalize();
             entryName = requireText(entryName, "entryName").replace('\\', '/');
+        }
+    }
+
+    record ArchiveDirectory(Path archive, String entryName) implements NavigationTarget {
+        public ArchiveDirectory {
+            archive = Objects.requireNonNull(archive, "archive").toAbsolutePath().normalize();
+            entryName = Objects.requireNonNullElse(entryName, "").replace('\\', '/');
+            while (entryName.startsWith("/")) {
+                entryName = entryName.substring(1);
+            }
+            while (entryName.endsWith("/")) {
+                entryName = entryName.substring(0, entryName.length() - 1);
+            }
         }
     }
 

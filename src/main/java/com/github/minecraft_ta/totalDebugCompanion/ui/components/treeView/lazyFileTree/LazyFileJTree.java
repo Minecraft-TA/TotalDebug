@@ -217,8 +217,8 @@ public class LazyFileJTree extends JTree {
             throw new IllegalArgumentException("A container name must not be blank");
         }
         List<String> segments = List.copyOf(Objects.requireNonNull(directorySegments, "directorySegments"));
-        if (segments.isEmpty() || segments.stream().anyMatch(String::isBlank)) {
-            throw new IllegalArgumentException("A directory path must contain non-blank segments");
+        if (segments.stream().anyMatch(String::isBlank)) {
+            throw new IllegalArgumentException("A directory path must contain only non-blank segments");
         }
 
         CompletableFuture<Boolean> result = new CompletableFuture<>();
@@ -230,6 +230,25 @@ public class LazyFileJTree extends JTree {
                         result.complete(revealed);
                     }
                 }));
+        return result;
+    }
+
+    /** Reveals a directory path relative to a top-level directory root. */
+    public CompletableFuture<Boolean> revealDirectoryPath(String topLevelRoot, List<String> directorySegments) {
+        Objects.requireNonNull(topLevelRoot, "topLevelRoot");
+        List<String> segments = List.copyOf(Objects.requireNonNull(directorySegments, "directorySegments"));
+        if (segments.stream().anyMatch(String::isBlank)) {
+            throw new IllegalArgumentException("A directory path must contain only non-blank segments");
+        }
+
+        CompletableFuture<Boolean> result = new CompletableFuture<>();
+        SwingUtilities.invokeLater(() -> {
+            LazyTreeNode root = findTopLevelNode(topLevelRoot);
+            CompletableFuture<TreePath> path = root == null
+                    ? CompletableFuture.completedFuture(null)
+                    : findDirectoryPath(root, segments, 0);
+            path.whenComplete((revealedPath, failure) -> completeReveal(result, revealedPath, failure));
+        });
         return result;
     }
 
@@ -251,16 +270,30 @@ public class LazyFileJTree extends JTree {
             return container == null
                     ? CompletableFuture.completedFuture(null)
                     : findDirectoryPath(container, segments, 0);
-        }).thenApply(path -> {
-            if (path != null && isAttached((LazyTreeNode) path.getLastPathComponent())) {
-                setSelectionPath(path);
-                expandPath(path);
-                scrollPathToVisible(path);
-                requestFocusInWindow();
-                return true;
-            }
+        }).thenApply(this::revealPath);
+    }
+
+    private void completeReveal(
+            CompletableFuture<Boolean> result,
+            TreePath path,
+            Throwable failure
+    ) {
+        if (failure != null) {
+            result.completeExceptionally(failure);
+        } else {
+            result.complete(revealPath(path));
+        }
+    }
+
+    private boolean revealPath(TreePath path) {
+        if (path == null || !isAttached((LazyTreeNode) path.getLastPathComponent())) {
             return false;
-        });
+        }
+        setSelectionPath(path);
+        expandPath(path);
+        scrollPathToVisible(path);
+        requestFocusInWindow();
+        return true;
     }
 
     private CompletableFuture<TreePath> findDirectoryPath(

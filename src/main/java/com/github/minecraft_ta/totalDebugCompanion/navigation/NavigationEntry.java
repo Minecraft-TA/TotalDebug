@@ -25,7 +25,9 @@ record NavigationEntry(
     static boolean requiresRuntime(NavigationTarget target) {
         return switch (target) {
             case NavigationTarget.LocalFile ignored -> false;
+            case NavigationTarget.LocalDirectory ignored -> false;
             case NavigationTarget.ArchiveEntry ignored -> false;
+            case NavigationTarget.ArchiveDirectory ignored -> false;
             default -> true;
         };
     }

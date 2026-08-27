@@ -34,6 +34,10 @@ public interface IEditorPanel {
         return null;
     }
 
+    default JavaEditorContext getJavaEditorContext() {
+        return null;
+    }
+
     default NavigationViewState captureNavigationViewState() {
         return NavigationViewState.EMPTY;
     }

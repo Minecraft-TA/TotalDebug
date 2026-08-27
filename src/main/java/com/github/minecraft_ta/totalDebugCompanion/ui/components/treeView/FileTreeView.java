@@ -184,6 +184,50 @@ public class FileTreeView extends JScrollPane {
         );
     }
 
+    public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
+        Path target = directory.toAbsolutePath().normalize();
+        for (Path root : List.of(
+                CompanionApp.getRootPath().resolve("scripts").toAbsolutePath().normalize(),
+                CompanionApp.getRootPath().resolve("decompiled-files").toAbsolutePath().normalize()
+        )) {
+            if (!target.startsWith(root)) {
+                continue;
+            }
+            List<String> relative = new ArrayList<>();
+            for (Path segment : root.relativize(target)) {
+                relative.add(segment.toString());
+            }
+            return this.tree.revealDirectoryPath(root.getFileName().toString(), relative);
+        }
+        return CompletableFuture.completedFuture(false);
+    }
+
+    public CompletableFuture<Boolean> revealArchiveDirectory(Path archive, String entryName) {
+        Path normalizedArchive = archive.toAbsolutePath().normalize();
+        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
+        for (var module : catalog.modules()) {
+            List<RuntimeSnapshotBytecodeSource.Source> sources = catalog.sourcesForModule(module.id());
+            for (RuntimeSnapshotBytecodeSource.Source source : sources) {
+                if (!source.path().equals(normalizedArchive)) {
+                    continue;
+                }
+                List<String> path = new ArrayList<>();
+                if (sources.size() > 1) {
+                    path.add(RuntimeSourceTreeItem.nodeName(source));
+                }
+                if (!entryName.isBlank()) {
+                    path.addAll(List.of(entryName.split("/")));
+                }
+                return this.tree.revealDirectoryPath(
+                        "runtime",
+                        RuntimeModuleTreeItem.nodeName(module),
+                        path
+                );
+            }
+        }
+        return CompletableFuture.completedFuture(false);
+    }
+
     private static String findJrtModule(String ownerClassName) {
         Path modules = FileSystems.getFileSystem(URI.create("jrt:/")).getPath("/modules");
         String resource = ownerClassName.replace('.', '/') + ".class";

@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
+import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import org.junit.jupiter.api.Test;
@@ -13,9 +16,12 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class ApplicationStatusBarTest {
@@ -24,7 +30,7 @@ class ApplicationStatusBarTest {
     void usesAThinFixedWidthActivityIndicator() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
-            ApplicationStatusBar bar = new ApplicationStatusBar();
+            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {});
             bar.setRuntimeStatus(new RuntimeIndexService.Status(
                     RuntimeIndexService.Phase.BUILDING,
                     "Building class index",
@@ -46,7 +52,7 @@ class ApplicationStatusBarTest {
     @Test
     void serviceWidgetsRenderOnlyPublishedState() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
-        SwingUtilities.invokeAndWait(() -> result.set(new ApplicationStatusBar()));
+        SwingUtilities.invokeAndWait(() -> result.set(new ApplicationStatusBar(target -> {})));
         ApplicationStatusBar bar = result.get();
 
         assertNotNull(findButton(bar, "Game: Offline"));
@@ -73,7 +79,7 @@ class ApplicationStatusBarTest {
     void centersContentWithinTheStatusBar() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
-            ApplicationStatusBar bar = new ApplicationStatusBar();
+            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {});
             bar.setRuntimeStatus(new RuntimeIndexService.Status(
                     RuntimeIndexService.Phase.READY,
                     "Runtime index ready",
@@ -100,6 +106,41 @@ class ApplicationStatusBarTest {
             assertEquals(statusBarCenter, childCenter, 0.5,
                     child.getClass().getSimpleName() + " bounds were " + child.getBounds());
         }
+    }
+
+    @Test
+    void breadcrumbButtonsPublishSemanticTargets() throws Exception {
+        List<NavigationTarget> navigated = new ArrayList<>();
+        AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            ApplicationStatusBar bar = new ApplicationStatusBar(navigated::add);
+            bar.setEditor(new IEditorPanel() {
+                @Override public String getTitle() { return "GrassBlock"; }
+                @Override public String getTooltip() { return "GrassBlock"; }
+                @Override public javax.swing.Icon getIcon() { return null; }
+                @Override public Component getComponent() { return new JPanel(); }
+                @Override public EditorLocation getLocation() {
+                    return new EditorLocation(
+                            "Minecraft",
+                            "minecraft",
+                            List.of("net", "minecraft", "GrassBlock.java"),
+                            "runtime"
+                    );
+                }
+                @Override public NavigationTarget getNavigationTarget() {
+                    return new NavigationTarget.RuntimeClass("net.minecraft.GrassBlock");
+                }
+            });
+            result.set(bar);
+        });
+
+        SwingUtilities.invokeAndWait(() -> {
+            findButton(result.get(), "Minecraft").doClick();
+            findButton(result.get(), "GrassBlock.java").doClick();
+        });
+
+        assertInstanceOf(NavigationTarget.ModuleSearch.class, navigated.getFirst());
+        assertEquals(new NavigationTarget.RuntimeClass("net.minecraft.GrassBlock"), navigated.getLast());
     }
 
     private static <T extends Component> T find(Container parent, Class<T> type) {
