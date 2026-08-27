@@ -250,7 +250,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
                 && selected.replacementStart() <= range.start()) {
             range = new DebuggerCompletionRange(
                     selected.replacementStart(), selected.replacementEnd(), range.prefix(),
-                    range.memberAccess(), range.ownerEnd()
+                    range.memberAccess(), range.ownerStart(), range.ownerEnd()
             );
         }
         String replacement = this.field.getText().substring(0, range.start())

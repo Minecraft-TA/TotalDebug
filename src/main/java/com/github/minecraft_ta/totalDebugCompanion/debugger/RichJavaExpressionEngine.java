@@ -205,7 +205,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         Map<String, DebuggerCompletionProposal> result = new LinkedHashMap<>();
         try {
             if (range.memberAccess()) {
-                String ownerText = snippet.substring(0, range.ownerEnd()).trim();
+                String ownerText = range.ownerExpression(snippet).trim();
                 if (!ownerText.isEmpty()) {
                     CompletionOwner owner = resolveCompletionOwner(parse(ownerText),
                             new Context(frame, frame.thisObject(), this.variableNameResolver, this, frame.thread()));

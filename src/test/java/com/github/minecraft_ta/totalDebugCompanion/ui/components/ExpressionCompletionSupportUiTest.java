@@ -51,6 +51,32 @@ final class ExpressionCompletionSupportUiTest {
     }
 
     @Test
+    void opensMemberCompletionAtTheFinalDotOfACompoundExpression() throws Exception {
+        withPopupFactory(ignored -> {
+            Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            try {
+                String expression = "pos.y + pos.";
+                onEdt(() -> fixture.completion().setCompletionProvider((text, caret, explicit) ->
+                        CompletableFuture.completedFuture(List.of(new DebuggerCompletionProposal(
+                                "x", "x", DebuggerCompletionProposal.Kind.FIELD,
+                                "long", caret, caret
+                        )))));
+
+                onEdt(() -> fixture.field().setText(expression));
+                await(fixture.completion()::isCompletionVisible);
+
+                onEdt(() -> {
+                    assertTrue(fixture.completion().isCompletionVisible());
+                    invokeFieldAction(fixture.field(), "TAB");
+                    assertEquals("pos.y + pos.x", fixture.field().getText());
+                });
+            } finally {
+                onEdt(fixture::close);
+            }
+        });
+    }
+
+    @Test
     void keepsBreakpointEditorOpenWhenCompletionAppears() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::breakpointFixture);

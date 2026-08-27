@@ -252,6 +252,15 @@ public final class DebuggerScenarios {
             check(completions.stream().anyMatch(item -> item.label().startsWith("overload")), "overload missing from completion");
             check(completions.stream().allMatch(item -> item.replacementStart() == "renamedTarget.".length()
                     && item.replacementEnd() == "renamedTarget.".length()), "completion replacement range is not after dot");
+            String compoundCompletion = "renamedTarget.ownSecret + renamedTarget.";
+            List<DebuggerCompletionProposal> compoundCompletions = harness.engine()
+                    .completions(compoundCompletion, compoundCompletion.length(), frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(compoundCompletions.stream().anyMatch(item -> item.label().equals("ownSecret")),
+                    "compound-expression member completion did not isolate the owner at the caret");
+            check(compoundCompletions.stream().allMatch(item -> item.replacementStart() == compoundCompletion.length()
+                            && item.replacementEnd() == compoundCompletion.length()),
+                    "compound-expression completion replacement range is not after the final dot");
             String middleCompletion = "renamedTarget.ownSecret";
             int middleCaret = "renamedTarget.o".length();
             List<DebuggerCompletionProposal> middleCompletions = harness.engine()

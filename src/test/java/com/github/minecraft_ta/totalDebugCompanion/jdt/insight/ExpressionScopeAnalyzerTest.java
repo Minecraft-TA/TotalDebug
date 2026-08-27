@@ -101,6 +101,29 @@ class ExpressionScopeAnalyzerTest {
     }
 
     @Test
+    void completesTheMemberOwnerAtTheCaretInsideACompoundExpression() {
+        String source = """
+                class Sample {
+                    private int own;
+                    void run() {
+                        Sample target = null;
+                    }
+                }
+                """;
+        var unit = ASTCache.rawParse("Sample", source);
+        int context = source.indexOf("target =");
+        String expression = "target.own + target.";
+
+        List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
+                unit, context, expression, expression.length()
+        );
+
+        assertTrue(names(completions).contains("own"), names(completions).toString());
+        assertTrue(completions.stream().allMatch(proposal -> proposal.replacementStart() == expression.length()
+                && proposal.replacementEnd() == expression.length()));
+    }
+
+    @Test
     void completesMembersOfAnIndexedCrossFileTypeFromAParameter() throws Exception {
         String externalSource = """
                 package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;

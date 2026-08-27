@@ -94,7 +94,7 @@ public final class ExpressionScopeAnalyzer {
                     .filter(proposal -> startsWith(proposal.label(), range.prefix()))
                     .toList();
         }
-        String owner = expression.substring(0, range.ownerEnd()).trim();
+        String owner = range.ownerExpression(expression).trim();
         ASTNode selected = NodeFinder.perform(unit, sourceOffset, 0);
         AbstractTypeDeclaration type = ancestor(selected, AbstractTypeDeclaration.class);
         Map<String, DebuggerCompletionProposal> members = new LinkedHashMap<>();

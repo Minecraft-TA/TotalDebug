@@ -14,7 +14,20 @@ class DebuggerCompletionRangeTest {
         assertEquals("target.ownSecret".length(), range.end());
         assertEquals("ow", range.prefix());
         assertTrue(range.memberAccess());
+        assertEquals(0, range.ownerStart());
         assertEquals(6, range.ownerEnd());
+        assertEquals("target", range.ownerExpression("target.ownSecret"));
+    }
+
+    @Test
+    void isolatesTheMemberOwnerInsideACompoundExpression() {
+        String expression = "pos.y + pos.";
+
+        DebuggerCompletionRange range = DebuggerCompletionRange.around(expression, expression.length());
+
+        assertEquals(8, range.ownerStart());
+        assertEquals(11, range.ownerEnd());
+        assertEquals("pos", range.ownerExpression(expression));
     }
 
     @Test
