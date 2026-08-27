@@ -185,9 +185,11 @@ public final class DebuggerScenarios {
             equal("\"inherited-secret\"", value(harness.engine().evaluate("renamedTarget.privateBaseCall()", frame.id())), "inherited private method");
             equal("\"child\"", value(harness.engine().evaluate("renamedTarget.virtualCall()", frame.id())), "virtual dispatch");
             equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload(1)", frame.id())), "exact overload");
+            equal("\"int\"", value(harness.engine().evaluate("renamedTarget.overload((short) 1)", frame.id())), "primitive widening overload");
             equal("\"long\"", value(harness.engine().evaluate("renamedTarget.overload((long) 1)", frame.id())), "primitive widening overload");
             equal("\"string\"", value(harness.engine().evaluate("renamedTarget.overload(\"text\")", frame.id())), "reference overload");
             equal("\"boxed3\"", value(harness.engine().evaluate("renamedTarget.boxed(3)", frame.id())), "boxing");
+            equal("\"unboxed0\"", value(harness.engine().evaluate("renamedTarget.unboxed(warmedBoxingType)", frame.id())), "unboxing");
             equal("\"a,b\"", value(harness.engine().evaluate("renamedTarget.varargs(\"a\", \"b\")", frame.id())), "varargs");
             equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");

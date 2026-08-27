@@ -58,6 +58,10 @@ public final class RichExpressionDebuggeeMain {
             return "boxed" + input;
         }
 
+        private String unboxed(int input) {
+            return "unboxed" + input;
+        }
+
         private String varargs(String... values) {
             return String.join(",", values);
         }
