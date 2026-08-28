@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
 import javax.swing.JTree;
@@ -117,8 +119,9 @@ class DebuggerPanelTest {
                     new DebugEngine.StoppedEvent("breakpoint", 1, true),
                     List.of(frame),
                     List.of(new DebugEngine.Variable(
-                            "level", "level", "ServerLevel@17", "net.minecraft.server.level.ServerLevel",
-                            DebugEngine.VariableKind.PARAMETER, 5, 4, 0
+                            "level", "level", "level", "ServerLevel@17",
+                            "net.minecraft.server.level.ServerLevel", DebugEngine.VariableKind.PARAMETER,
+                            1, 5, 4, 0
                     ))
             ));
 
@@ -161,9 +164,11 @@ class DebuggerPanelTest {
             DebugEngine.Variable random = new DebugEngine.Variable(
                     "random",
                     "random",
+                    "random",
                     "net.minecraft.world.level.levelgen.LegacyRandomSource@45",
                     "net.minecraft.util.RandomSource",
                     DebugEngine.VariableKind.PARAMETER,
+                    1,
                     5,
                     4,
                     0
@@ -206,11 +211,12 @@ class DebuggerPanelTest {
                     List.of(frame),
                     List.of(
                             new DebugEngine.Variable(
-                                    "input", "input", "7", "int", DebugEngine.VariableKind.PARAMETER, 0, 0, 0
+                                    "input", "input", "input", "7", "int",
+                                    DebugEngine.VariableKind.PARAMETER, 1, 0, 0, 0
                             ),
                             new DebugEngine.Variable(
-                                    "this", "this", "Target@1", "example.Target",
-                                    DebugEngine.VariableKind.THIS, 2, 2, 0
+                                    "this", "this", "this", "Target@1", "example.Target",
+                                    DebugEngine.VariableKind.THIS, 1, 2, 2, 0
                             )
                     )
             ));
@@ -227,6 +233,58 @@ class DebuggerPanelTest {
                     false
             );
             assertTrue(labels(rendered).getFirst().startsWith("this = "));
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
+    @Test
+    void offersNavigationAssignmentAndCopyActionsForAddressableVariables() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            DebuggerPanel panel = new DebuggerPanel(
+                    controller,
+                    actions,
+                    (frame, activateEditor) -> {
+                    },
+                    () -> {
+                    },
+                    target -> {
+                    }
+            );
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    1,
+                    "Target.run",
+                    "example.Target",
+                    URI.create("decompiled:///example/Target.java"),
+                    20,
+                    1
+            );
+            panel.showPausedState(new DebuggerSessionController.PausedState(
+                    new DebugEngine.StoppedEvent("breakpoint", 1, true),
+                    List.of(frame),
+                    List.of(new DebugEngine.Variable(
+                            "input", "p_12345_", "input", "Target@1", "example.Target",
+                            DebugEngine.VariableKind.PARAMETER, 9, 2, 2, 0
+                    ))
+            ));
+
+            JTree variables = findVariableTreeOrNull(panel);
+            assertNotNull(variables);
+            JPopupMenu menu = panel.createVariableContextMenu(variables.getPathForRow(0));
+            assertEquals(
+                    List.of(
+                            "Jump to Source",
+                            "Jump to Type Source",
+                            "Set Value…",
+                            "Copy Value",
+                            "Copy Expression"
+                    ),
+                    menuItems(menu)
+            );
+
             panel.dispose();
             actions.close();
             controller.close();
@@ -472,5 +530,15 @@ class DebuggerPanelTest {
             }
         }
         return List.copyOf(labels);
+    }
+
+    private static List<String> menuItems(JPopupMenu menu) {
+        java.util.ArrayList<String> items = new java.util.ArrayList<>();
+        for (Component component : menu.getComponents()) {
+            if (component instanceof JMenuItem item) {
+                items.add(item.getText());
+            }
+        }
+        return List.copyOf(items);
     }
 }

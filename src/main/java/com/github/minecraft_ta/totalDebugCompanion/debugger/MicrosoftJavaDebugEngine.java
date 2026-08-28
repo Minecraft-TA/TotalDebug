@@ -317,10 +317,12 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         registerChildKind(variable.variablesReference, variable.type);
                         result.add(new Variable(
                                 variableNames.getOrDefault(variable.name, variable.name),
+                                variable.name,
                                 variable.evaluateName,
                                 variable.value,
                                 variable.type,
                                 kind,
+                                variablesReference,
                                 variable.variablesReference,
                                 variable.namedVariables,
                                 variable.indexedVariables
@@ -328,6 +330,30 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                     }
                     return List.copyOf(result);
                 });
+    }
+
+    @Override
+    public CompletableFuture<Void> setVariable(int variablesReference, String name, String value) {
+        requireState(State.STOPPED);
+        if (variablesReference <= 0) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Variable container reference must be positive"
+            ));
+        }
+        if (name == null || name.isBlank()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Variable name must not be blank"));
+        }
+        if (value == null) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Variable value must not be null"));
+        }
+
+        Requests.SetVariableArguments arguments = new Requests.SetVariableArguments();
+        arguments.variablesReference = variablesReference;
+        arguments.name = name;
+        arguments.value = value;
+
+        return request(Requests.Command.SETVARIABLE, arguments, Responses.SetVariablesResponseBody.class)
+                .thenAccept(body -> registerChildKind(body.variablesReference, body.type));
     }
 
     @Override

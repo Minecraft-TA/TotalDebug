@@ -179,7 +179,7 @@ final class UiScenarioDriver {
             String type,
             DebugEngine.VariableKind kind
     ) {
-        return new DebugEngine.Variable(name, name, value, type, kind, 0, 0, 0);
+        return new DebugEngine.Variable(name, name, name, value, type, kind, 0, 0, 0, 0);
     }
 
     private static boolean ready(UiRenderScenario scenario, ScenarioContext context) {

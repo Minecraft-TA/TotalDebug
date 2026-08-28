@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
@@ -25,7 +26,10 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
@@ -47,6 +51,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Insets;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -59,7 +65,10 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /** Reusable debugger workspace. Its host decides whether it is docked or placed in a window. */
 public final class DebuggerPanel extends JPanel {
@@ -74,6 +83,7 @@ public final class DebuggerPanel extends JPanel {
     private final DebuggerSessionController controller;
     private final DebuggerActions debuggerActions;
     private final FrameNavigation frameNavigation;
+    private final Consumer<NavigationTarget> navigation;
     private final JLabel statusLabel = new JLabel("Debugger is unavailable", Icons.INFORMATION, JLabel.LEADING);
     private final JLabel frameLabel = new MutedLabel();
     private final FrameListModel frameModel = new FrameListModel();
@@ -129,6 +139,7 @@ public final class DebuggerPanel extends JPanel {
             FrameNavigation frameNavigation
     ) {
         this(controller, debuggerActions, frameNavigation, () -> {
+        }, target -> {
         });
     }
 
@@ -138,10 +149,22 @@ public final class DebuggerPanel extends JPanel {
             FrameNavigation frameNavigation,
             Runnable showBreakpoints
     ) {
+        this(controller, debuggerActions, frameNavigation, showBreakpoints, target -> {
+        });
+    }
+
+    DebuggerPanel(
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            FrameNavigation frameNavigation,
+            Runnable showBreakpoints,
+            Consumer<NavigationTarget> navigation
+    ) {
         super(new BorderLayout());
         this.controller = Objects.requireNonNull(controller, "controller");
         this.debuggerActions = Objects.requireNonNull(debuggerActions, "debuggerActions");
         this.frameNavigation = Objects.requireNonNull(frameNavigation, "frameNavigation");
+        this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.attach = toolbarButton(debuggerActions.attach());
         this.resume = toolbarButton(debuggerActions.resume());
         this.stepOver = toolbarButton(debuggerActions.stepOver());
@@ -160,6 +183,7 @@ public final class DebuggerPanel extends JPanel {
 
         configureFrames();
         installExpansion(this.variables, this.variableModel);
+        installVariableContextMenu();
         JComponent inspector = createInspectorPanel();
 
         JSplitPane split = new InitialProportionSplitPane(
@@ -354,6 +378,183 @@ public final class DebuggerPanel extends JPanel {
             public void treeWillCollapse(TreeExpansionEvent event) throws ExpandVetoException {
             }
         });
+    }
+
+    private void installVariableContextMenu() {
+        this.variables.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                showPopup(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                showPopup(event);
+            }
+
+            private void showPopup(MouseEvent event) {
+                if (!event.isPopupTrigger()) {
+                    return;
+                }
+                TreePath path = variables.getPathForLocation(event.getX(), event.getY());
+                if (path == null) {
+                    return;
+                }
+                variables.setSelectionPath(path);
+                JPopupMenu menu = createVariableContextMenu(path);
+                if (menu.getComponentCount() > 0) {
+                    menu.show(variables, event.getX(), event.getY());
+                }
+            }
+        });
+    }
+
+    JPopupMenu createVariableContextMenu(TreePath path) {
+        JPopupMenu menu = new JPopupMenu();
+        if (path == null || !(path.getLastPathComponent() instanceof DefaultMutableTreeNode selected)) {
+            return menu;
+        }
+
+        Object selectedValue = selected.getUserObject();
+        DebugValue value = debugValue(selectedValue);
+        DebugEngine.Variable variable = value == null ? null : value.sourceVariable();
+        DebugEngine.StackFrame frame = this.currentFrame;
+        DebugEngine.Variable parent = parentVariable(selected);
+
+        if (variable != null && frame != null && supportsDeclarationNavigation(variable)) {
+            menu.add(menuItem("Jump to Source", Icons.JAVA_VARIABLE,
+                    () -> navigateToDeclaration(frame, variable, parent)));
+        }
+        if (value != null && frame != null) {
+            Optional<NavigationTarget.RuntimeClass> typeTarget = variable == null
+                    ? DebuggerVariableNavigation.typeTarget(value.type())
+                    : DebuggerVariableNavigation.typeTarget(frame, variable);
+            typeTarget.ifPresent(target ->
+                    menu.add(menuItem("Jump to Type Source", Icons.JAVA_CLASS,
+                            () -> this.navigation.accept(target))));
+        }
+        if (menu.getComponentCount() > 0) {
+            menu.addSeparator();
+        }
+
+        if (variable != null && isAssignable(variable)) {
+            menu.add(menuItem("Set Value…", Icons.VALUE, () -> setValue(variable)));
+        }
+        if (value != null) {
+            menu.add(menuItem("Copy Value", Icons.COPY, () -> copy(value.value())));
+            if (!value.evaluateName().isBlank()) {
+                menu.add(menuItem("Copy Expression", Icons.COPY, () -> copy(value.evaluateName())));
+            }
+        } else {
+            String expression = expressionOf(selectedValue);
+            if (!expression.isBlank()) {
+                menu.add(menuItem("Copy Expression", Icons.COPY, () -> copy(expression)));
+            }
+        }
+
+        String expression = expressionOf(selectedValue);
+        if (!expression.isBlank()) {
+            menu.addSeparator();
+            if (isWatch(selectedValue)) {
+                menu.add(menuItem("Remove Watch", Icons.DELETE, () -> removeExpression(expression, true)));
+            } else {
+                menu.add(menuItem("Add to Watches", Icons.ADD_TO_WATCH, () -> addWatch(expression)));
+            }
+        }
+        return menu;
+    }
+
+    private void navigateToDeclaration(
+            DebugEngine.StackFrame frame,
+            DebugEngine.Variable variable,
+            DebugEngine.Variable parent
+    ) {
+        DebugEngine.Source source = frame.sourceUri() == null ? null : this.controller.source(frame.sourceUri());
+        CompletableFuture.supplyAsync(() ->
+                DebuggerVariableNavigation.declarationTarget(source, frame, variable, parent)
+        ).whenComplete((target, failure) -> SwingUtilities.invokeLater(() -> {
+            if (failure != null) {
+                showOperationFailure("Unable to Jump to Source", failure);
+            } else if (target.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "No source declaration was found for " + variable.name(),
+                        "Unable to Jump to Source",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            } else {
+                this.navigation.accept(target.get());
+            }
+        }));
+    }
+
+    private void setValue(DebugEngine.Variable variable) {
+        DebugEngine.StackFrame frame = this.currentFrame;
+        if (frame == null) {
+            return;
+        }
+        Object replacement = JOptionPane.showInputDialog(
+                this,
+                "New value:",
+                "Set Value: " + variable.name(),
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                variable.value()
+        );
+        if (replacement == null) {
+            return;
+        }
+        this.controller.setVariable(variable, replacement.toString(), frame)
+                .whenComplete((variables, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (failure != null) {
+                        showOperationFailure("Unable to Set Value", failure);
+                    } else if (Objects.equals(frame, this.currentFrame)) {
+                        showVariables(variables);
+                    }
+                }));
+    }
+
+    private void showOperationFailure(String title, Throwable failure) {
+        JOptionPane.showMessageDialog(
+                this,
+                failureMessage(failure, title),
+                title,
+                JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    private static JMenuItem menuItem(String text, Icon icon, Runnable action) {
+        JMenuItem item = new JMenuItem(text, icon);
+        item.addActionListener(event -> action.run());
+        return item;
+    }
+
+    private static DebugEngine.Variable parentVariable(DefaultMutableTreeNode node) {
+        if (!(node.getParent() instanceof DefaultMutableTreeNode parent)) {
+            return null;
+        }
+        DebugValue parentValue = debugValue(parent.getUserObject());
+        return parentValue == null ? null : parentValue.sourceVariable();
+    }
+
+    private static boolean supportsDeclarationNavigation(DebugEngine.Variable variable) {
+        return variable.kind() == DebugEngine.VariableKind.THIS
+                || variable.kind() == DebugEngine.VariableKind.PARAMETER
+                || variable.kind() == DebugEngine.VariableKind.LOCAL
+                || variable.kind() == DebugEngine.VariableKind.FIELD;
+    }
+
+    private static boolean isAssignable(DebugEngine.Variable variable) {
+        return variable.containerReference() > 0
+                && !variable.adapterName().isBlank()
+                && variable.kind() != DebugEngine.VariableKind.THIS
+                && variable.kind() != DebugEngine.VariableKind.RETURN_VALUE
+                && variable.kind() != DebugEngine.VariableKind.EXPRESSION;
+    }
+
+    private static void copy(String text) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
     }
 
     void applyStatus(DebuggerSessionController.Status status) {
@@ -555,12 +756,17 @@ public final class DebuggerPanel extends JPanel {
             return;
         }
         if (addAsWatch) {
-            if (this.watches.add(requested)) {
-                GlobalConfig.getInstance().setDebuggerWatches(List.copyOf(this.watches));
-            }
+            addWatch(requested);
             this.expression.setText("");
         } else {
             this.lastEvaluationExpression = requested;
+            rebuildInspector();
+        }
+    }
+
+    private void addWatch(String expression) {
+        if (this.watches.add(expression)) {
+            GlobalConfig.getInstance().setDebuggerWatches(List.copyOf(this.watches));
         }
         rebuildInspector();
     }
@@ -578,13 +784,16 @@ public final class DebuggerPanel extends JPanel {
                 && !(node.getUserObject() instanceof ExpressionStatus)) {
             return;
         }
-        String selectedExpression = expressionOf(node.getUserObject());
-        if (selectedExpression.equals(this.lastEvaluationExpression)) {
-            this.lastEvaluationExpression = "";
-        } else {
-            if (this.watches.remove(selectedExpression)) {
+        removeExpression(expressionOf(node.getUserObject()), isWatch(node.getUserObject()));
+    }
+
+    private void removeExpression(String expression, boolean watch) {
+        if (watch) {
+            if (this.watches.remove(expression)) {
                 GlobalConfig.getInstance().setDebuggerWatches(List.copyOf(this.watches));
             }
+        } else if (expression.equals(this.lastEvaluationExpression)) {
+            this.lastEvaluationExpression = "";
         }
         rebuildInspector();
     }
@@ -639,11 +848,12 @@ public final class DebuggerPanel extends JPanel {
                             request.node().setUserObject(new ExpressionStatus(
                                     request.expression(),
                                     failureMessage(failure, "Evaluation failed"),
-                                    true
+                                    true,
+                                    request.watch()
                             ));
                         } else {
                             DebugValue value = DebugValue.from(request.expression(), result);
-                            request.node().setUserObject(new ExpressionValue(value));
+                            request.node().setUserObject(new ExpressionValue(value, request.watch()));
                             addPlaceholder(request.node(), value);
                         }
                         this.variableModel.nodeStructureChanged(request.node());
@@ -660,10 +870,10 @@ public final class DebuggerPanel extends JPanel {
                 ? "Not available while running"
                 : watch ? "Watch  " + LOADING : LOADING;
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(
-                new ExpressionStatus(expression, status, false)
+                new ExpressionStatus(expression, status, false, watch)
         );
         this.variableRoot.add(node);
-        requests.add(new ExpressionRequest(expression, node));
+        requests.add(new ExpressionRequest(expression, node, watch));
     }
 
     private boolean isCurrent(DebugEngine.StackFrame frame, long revision) {
@@ -697,8 +907,8 @@ public final class DebuggerPanel extends JPanel {
                         return;
                     }
                     DebugValue replacement = value.withPreview(resolvedPreview);
-                    node.setUserObject(node.getUserObject() instanceof ExpressionValue
-                            ? new ExpressionValue(replacement)
+                    node.setUserObject(node.getUserObject() instanceof ExpressionValue expressionValue
+                            ? new ExpressionValue(replacement, expressionValue.watch())
                             : replacement);
                     model.nodeChanged(node);
                 })
@@ -738,6 +948,14 @@ public final class DebuggerPanel extends JPanel {
         };
     }
 
+    private static boolean isWatch(Object value) {
+        return switch (value) {
+            case ExpressionValue expressionValue -> expressionValue.watch();
+            case ExpressionStatus status -> status.watch();
+            default -> false;
+        };
+    }
+
     private static String failureMessage(Throwable failure, String fallback) {
         Throwable current = failure;
         while ((current instanceof java.util.concurrent.CompletionException
@@ -760,13 +978,13 @@ public final class DebuggerPanel extends JPanel {
         GlobalConfig.getInstance().removeAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
     }
 
-    private record ExpressionRequest(String expression, DefaultMutableTreeNode node) {
+    private record ExpressionRequest(String expression, DefaultMutableTreeNode node, boolean watch) {
     }
 
-    private record ExpressionValue(DebugValue value) {
+    private record ExpressionValue(DebugValue value, boolean watch) {
     }
 
-    private record ExpressionStatus(String expression, String text, boolean error) {
+    private record ExpressionStatus(String expression, String text, boolean error, boolean watch) {
     }
 
     private record DebugValue(
@@ -777,7 +995,8 @@ public final class DebuggerPanel extends JPanel {
             DebugEngine.VariableKind kind,
             int variablesReference,
             int indexedVariables,
-            DebugEngine.ValuePreview preview
+            DebugEngine.ValuePreview preview,
+            DebugEngine.Variable sourceVariable
     ) {
         private static DebugValue from(DebugEngine.Variable variable) {
             return new DebugValue(
@@ -788,7 +1007,8 @@ public final class DebuggerPanel extends JPanel {
                     variable.kind(),
                     variable.variablesReference(),
                     variable.indexedVariables(),
-                    DebugEngine.ValuePreview.NONE
+                    DebugEngine.ValuePreview.NONE,
+                    variable
             );
         }
 
@@ -801,13 +1021,14 @@ public final class DebuggerPanel extends JPanel {
                     DebugEngine.VariableKind.EXPRESSION,
                     result.variablesReference(),
                     result.indexedVariables(),
-                    DebugEngine.ValuePreview.NONE
+                    DebugEngine.ValuePreview.NONE,
+                    null
             );
         }
 
         private DebugValue withPreview(DebugEngine.ValuePreview replacement) {
             return new DebugValue(this.name, this.evaluateName, this.value, this.type, this.kind,
-                    this.variablesReference, this.indexedVariables, replacement);
+                    this.variablesReference, this.indexedVariables, replacement, this.sourceVariable);
         }
     }
 
@@ -845,6 +1066,12 @@ public final class DebuggerPanel extends JPanel {
             }
             DebugValue debugValue = debugValue(node.getUserObject());
             if (debugValue != null) {
+                Icon rowIcon = switch (node.getUserObject()) {
+                    case ExpressionValue expressionValue -> expressionValue.watch()
+                            ? Icons.WATCH
+                            : Icons.EVALUATE_EXPRESSION;
+                    default -> icon(debugValue);
+                };
                 String visibleValue = DebuggerValueText.visibleValue(debugValue.value(), debugValue.type());
                 String simpleType = DebuggerValueText.simpleTypeName(debugValue.type());
                 String secondary = debugValue.preview().available()
@@ -855,7 +1082,7 @@ public final class DebuggerPanel extends JPanel {
                                 debugValue.name() + " = " + visibleValue,
                                 secondary
                         ),
-                        icon(debugValue),
+                        rowIcon,
                         tree.getFont(),
                         selected,
                         getTextSelectionColor(),
@@ -873,7 +1100,9 @@ public final class DebuggerPanel extends JPanel {
                 case ExpressionStatus status -> {
                     setText(status.expression() + " = " + status.text());
                     setToolTipText(status.error() ? status.text() : null);
-                    setIcon(status.error() ? Icons.ERROR : Icons.JAVA_VARIABLE);
+                    setIcon(status.error()
+                            ? Icons.ERROR
+                            : status.watch() ? Icons.WATCH : Icons.EVALUATE_EXPRESSION);
                 }
                 case StatusValue status -> {
                     setText(status.text());

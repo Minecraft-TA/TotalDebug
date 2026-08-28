@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 
 import javax.swing.JFrame;
 import java.awt.Dimension;
@@ -15,6 +16,7 @@ import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /** Floating host for the reusable debugger workspace. */
 public final class DebuggerWindow extends JFrame {
@@ -55,7 +57,9 @@ public final class DebuggerWindow extends JFrame {
                 debuggerActions,
                 debuggerShortcuts,
                 (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor),
-                showBreakpoints
+                showBreakpoints,
+                target -> {
+                }
         );
     }
 
@@ -78,10 +82,23 @@ public final class DebuggerWindow extends JFrame {
             DebuggerPanel.FrameNavigation frameNavigation,
             Runnable showBreakpoints
     ) {
+        this(owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, showBreakpoints, target -> {
+        });
+    }
+
+    DebuggerWindow(
+            Window owner,
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            DebuggerShortcuts debuggerShortcuts,
+            DebuggerPanel.FrameNavigation frameNavigation,
+            Runnable showBreakpoints,
+            Consumer<NavigationTarget> navigation
+    ) {
         super("Minecraft Debugger");
         this.controller = controller;
         this.debuggerShortcuts = Objects.requireNonNull(debuggerShortcuts, "debuggerShortcuts");
-        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation, showBreakpoints);
+        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation, showBreakpoints, navigation);
         this.debuggerShortcuts.install(this);
         if (owner instanceof Frame frame) {
             setIconImages(frame.getIconImages());

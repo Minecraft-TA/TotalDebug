@@ -114,12 +114,17 @@ public final class DebuggerScenarios {
                     "watch expression"
             );
 
+            DebugEngine.Variable counter = variable(variables, "counter");
+            harness.engine().setVariable(counter.containerReference(), counter.adapterName(), "99")
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal("99", variable(harness.variables(breakpointFrame), "counter").value(), "assigned counter");
+
             harness.engine().stepOver(breakpointStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             DebugEngine.StoppedEvent stepStop = harness.awaitStop("step over");
             equal("step", stepStop.reason(), "step stop reason");
             DebugEngine.StackFrame steppedFrame = harness.firstFrame(stepStop.threadId());
             equal(afterStepLine, steppedFrame.line(), "line after step");
-            equal("42", variable(harness.variables(steppedFrame), "counter").value(), "counter after step");
+            equal("100", variable(harness.variables(steppedFrame), "counter").value(), "counter after step");
 
             harness.engine().resume(stepStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal(0, harness.awaitExit(), "debuggee exit code");

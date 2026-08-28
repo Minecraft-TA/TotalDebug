@@ -32,6 +32,8 @@ public interface DebugEngine extends AutoCloseable {
 
     CompletableFuture<List<Variable>> variables(int variablesReference);
 
+    CompletableFuture<Void> setVariable(int variablesReference, String name, String value);
+
     default CompletableFuture<ValuePreview> preview(int variablesReference) {
         return CompletableFuture.completedFuture(ValuePreview.NONE);
     }
@@ -250,16 +252,19 @@ public interface DebugEngine extends AutoCloseable {
 
     record Variable(
             String name,
+            String adapterName,
             String evaluateName,
             String value,
             String type,
             VariableKind kind,
+            int containerReference,
             int variablesReference,
             int namedVariables,
             int indexedVariables
     ) {
         public Variable {
             name = Objects.requireNonNullElse(name, "");
+            adapterName = Objects.requireNonNullElse(adapterName, "");
             evaluateName = Objects.requireNonNullElse(evaluateName, "");
             value = Objects.requireNonNullElse(value, "");
             type = Objects.requireNonNullElse(type, "");

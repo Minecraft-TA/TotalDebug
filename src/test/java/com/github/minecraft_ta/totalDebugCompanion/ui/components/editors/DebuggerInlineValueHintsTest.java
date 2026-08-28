@@ -145,7 +145,7 @@ class DebuggerInlineValueHintsTest {
             String type,
             DebugEngine.VariableKind kind
     ) {
-        return new DebugEngine.Variable(name, name, value, type, kind, 1, 0, 0);
+        return new DebugEngine.Variable(name, name, name, value, type, kind, 0, 1, 0, 0);
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {

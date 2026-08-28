@@ -142,7 +142,8 @@ class DebuggerSessionControllerTest {
                     1
             );
             DebugEngine.Variable local = new DebugEngine.Variable(
-                    "block", "block", "StoneBlock", "Block", DebugEngine.VariableKind.LOCAL, 0, 0, 0
+                    "block", "block", "block", "StoneBlock", "Block", DebugEngine.VariableKind.LOCAL,
+                    9, 0, 0, 0
             );
             engine.frames = List.of(frame);
             engine.scopes = List.of(new DebugEngine.Scope("Local", 9, false));
@@ -155,7 +156,8 @@ class DebuggerSessionControllerTest {
             assertEquals(List.of(local), controller.pausedState().variables());
 
             DebugEngine.Variable child = new DebugEngine.Variable(
-                    "name", "block.name", "stone", "String", DebugEngine.VariableKind.FIELD, 0, 0, 0
+                    "name", "name", "block.name", "stone", "String", DebugEngine.VariableKind.FIELD,
+                    15, 0, 0, 0
             );
             engine.variables.put(15, List.of(child));
             assertEquals(
@@ -173,6 +175,20 @@ class DebuggerSessionControllerTest {
                     controller.evaluate("block != null", frame)
                             .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
             );
+
+            DebugEngine.Variable updatedLocal = new DebugEngine.Variable(
+                    "block", "block", "block", "DirtBlock", "Block", DebugEngine.VariableKind.LOCAL,
+                    9, 0, 0, 0
+            );
+            engine.variables.put(9, List.of(updatedLocal));
+            assertEquals(
+                    List.of(updatedLocal),
+                    controller.setVariable(local, "DirtBlock", frame)
+                            .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+            );
+            assertEquals(9, engine.assignedReference);
+            assertEquals("block", engine.assignedName);
+            assertEquals("DirtBlock", engine.assignedValue);
 
             controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertEquals(DebuggerSessionController.Phase.RUNNING, controller.status().phase());
@@ -657,6 +673,9 @@ class DebuggerSessionControllerTest {
         private boolean caughtExceptions;
         private boolean uncaughtExceptions;
         private int exceptionBreakpointUpdates;
+        private int assignedReference;
+        private String assignedName = "";
+        private String assignedValue = "";
 
         static DebugEngine newProxy() {
             return new RecordingEngine().proxy();
@@ -707,6 +726,12 @@ class DebuggerSessionControllerTest {
                         case "stackTrace" -> completed(this.frames);
                         case "scopes" -> completed(this.scopes);
                         case "variables" -> completed(this.variables.getOrDefault((Integer) arguments[0], List.of()));
+                        case "setVariable" -> {
+                            this.assignedReference = (Integer) arguments[0];
+                            this.assignedName = (String) arguments[1];
+                            this.assignedValue = (String) arguments[2];
+                            yield completed(null);
+                        }
                         case "preview" -> completed(this.preview);
                         case "threads" -> completed(List.of());
                         case "evaluate" -> completed(this.evaluationResult);

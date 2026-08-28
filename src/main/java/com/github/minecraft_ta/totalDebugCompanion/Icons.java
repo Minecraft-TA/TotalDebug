@@ -94,6 +94,8 @@ public class Icons {
     public static final FlatSVGIcon VIEW_BREAKPOINTS = new FlatSVGIcon("icons/viewBreakpoints.svg");
     public static final FlatSVGIcon MUTE_BREAKPOINTS = new FlatSVGIcon("icons/muteBreakpoints.svg");
     public static final FlatSVGIcon ADD_TO_WATCH = new FlatSVGIcon("icons/addToWatch.svg");
+    public static final FlatSVGIcon WATCH = new FlatSVGIcon("icons/watch.svg");
+    public static final FlatSVGIcon EVALUATE_EXPRESSION = new FlatSVGIcon("icons/evaluateExpression.svg");
 
     public static final FlatSVGIcon OVERLAY_MODE = new FlatSVGIcon("icons/overlayMode.svg");
     public static final FlatSVGIcon TARGET = new FlatSVGIcon("icons/target.svg");

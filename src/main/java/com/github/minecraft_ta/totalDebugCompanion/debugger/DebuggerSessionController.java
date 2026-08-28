@@ -676,6 +676,27 @@ public final class DebuggerSessionController implements AutoCloseable {
         });
     }
 
+    public CompletableFuture<List<DebugEngine.Variable>> setVariable(
+            DebugEngine.Variable variable,
+            String value,
+            DebugEngine.StackFrame frame
+    ) {
+        Objects.requireNonNull(variable, "variable");
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(frame, "frame");
+        if (variable.containerReference() <= 0 || variable.adapterName().isBlank()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Selected debugger value cannot be assigned"
+            ));
+        }
+        return submitValue(() -> {
+            requirePausedFrame(frame);
+            DebugEngine current = requireEngine();
+            current.setVariable(variable.containerReference(), variable.adapterName(), value).join();
+            return loadVariables(current, frame);
+        });
+    }
+
     public CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
         if (variablesReference <= 0) {
             return CompletableFuture.completedFuture(DebugEngine.ValuePreview.NONE);

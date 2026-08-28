@@ -225,7 +225,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
                     debugger,
                     this.debuggerActions,
                     this.debuggerShortcuts,
-                    () -> breakpointsWindow(debugger).showWindow()
+                    (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor),
+                    () -> breakpointsWindow(debugger).showWindow(),
+                    target -> this.navigationService.navigate(target)
             );
         }
         return this.debuggerWindow;
