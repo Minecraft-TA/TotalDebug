@@ -89,7 +89,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         this.variableNameResolver = Objects.requireNonNull(variableNameResolver, "variableNameResolver");
     }
 
-    Map<String, DebugEngine.VariableKind> variableKinds(int frameId) {
+    FrameVariables frameVariables(int frameId) {
         IDebugAdapterContext context = Objects.requireNonNull(this.debugContext, "debugContext");
         Object reference = context.getRecyclableIdPool().getObjectById(frameId);
         if (!(reference instanceof StackFrameReference frameReference)) {
@@ -115,7 +115,8 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         if (frame.thisObject() != null) {
             result.put("this", DebugEngine.VariableKind.THIS);
         }
-        return Map.copyOf(result);
+        Method method = frame.location().method();
+        return new FrameVariables(method.name(), method.signature(), Map.copyOf(result));
     }
 
     CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
@@ -289,8 +290,14 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             DebuggerCompletionRange range
     ) throws Exception {
         String binaryName = frame.location().declaringType().name();
+        Method method = frame.location().method();
         for (LocalVariable local : frame.visibleVariables()) {
-            String name = this.variableNameResolver.displayedName(binaryName, local.name());
+            String name = this.variableNameResolver.displayedName(
+                    binaryName,
+                    method.name(),
+                    method.signature(),
+                    local.name()
+            );
             add(result, proposal(name, name, DebuggerCompletionProposal.Kind.VARIABLE,
                     local.typeName(), range, 10));
         }
@@ -356,9 +363,15 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
 
     private static CompletionOwner resolveSimpleCompletionOwner(String name, Context context) throws Exception {
         StackFrame frame = context.frame();
+        Method method = frame.location().method();
         for (LocalVariable local : frame.visibleVariables()) {
             if (local.name().equals(name)
-                    || context.variableNameResolver().displayedName(frame.location().declaringType().name(), local.name()).equals(name)) {
+                    || context.variableNameResolver().displayedName(
+                            frame.location().declaringType().name(),
+                            method.name(),
+                            method.signature(),
+                            local.name()
+                    ).equals(name)) {
                 ReferenceType type = resolveType(local.typeName(), context.vm());
                 return type == null && local.typeName().endsWith("[]")
                         ? new CompletionOwner(null, false, true)
@@ -657,8 +670,14 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             LocalVariable local = context.frame().visibleVariableByName(name);
             if (local == null) {
                 String binaryName = context.frame().location().declaringType().name();
+                Method method = context.frame().location().method();
                 for (LocalVariable candidate : context.frame().visibleVariables()) {
-                    if (context.variableNameResolver().displayedName(binaryName, candidate.name()).equals(name)) {
+                    if (context.variableNameResolver().displayedName(
+                            binaryName,
+                            method.name(),
+                            method.signature(),
+                            candidate.name()
+                    ).equals(name)) {
                         if (local != null) {
                             throw new IllegalArgumentException("Displayed variable name is ambiguous in the selected frame: " + name);
                         }
@@ -1045,7 +1064,19 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
 
     @FunctionalInterface
     interface VariableNameResolver {
-        String displayedName(String binaryName, String runtimeName);
+        String displayedName(
+                String binaryName,
+                String methodName,
+                String methodDescriptor,
+                String runtimeName
+        );
+    }
+
+    record FrameVariables(
+            String methodName,
+            String methodDescriptor,
+            Map<String, DebugEngine.VariableKind> kinds
+    ) {
     }
 
     private record EvalValue(Value value, ReferenceType type, boolean typeLiteral) { }

@@ -59,6 +59,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
         DiagnosticLogger logger = new DiagnosticLogger();
 
         SourceVariableNames variableNames;
+        SourceLineMap lineMap;
         try (VariableNameCapture capture = VariableNameCapture.open(internalName)) {
             try {
                 Decompiler.builder()
@@ -76,7 +77,8 @@ public final class VineflowerDecompiler implements JavaDecompiler {
             } catch (RuntimeException failure) {
                 throw new DecompilationException("Vineflower failed to decompile " + binaryName, failure);
             }
-            variableNames = capture.result();
+            lineMap = SourceLineMap.fromOriginalToDisplayed(resultSaver.mappingFor(binaryName));
+            variableNames = capture.result(lineMap);
         }
 
         String source = resultSaver.sourceFor(binaryName);
@@ -94,7 +96,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 source,
                 status,
                 diagnostics,
-                SourceLineMap.fromOriginalToDisplayed(resultSaver.mappingFor(binaryName)),
+                lineMap,
                 variableNames
         );
     }

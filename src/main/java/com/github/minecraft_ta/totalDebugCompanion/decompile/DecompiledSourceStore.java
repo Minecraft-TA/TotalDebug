@@ -21,7 +21,7 @@ final class DecompiledSourceStore {
     private static final int LINE_MAP_MAGIC = 0x54444C4D;
     private static final int LINE_MAP_VERSION = 1;
     private static final int VARIABLE_NAMES_MAGIC = 0x5444564E;
-    private static final int VARIABLE_NAMES_VERSION = 1;
+    private static final int VARIABLE_NAMES_VERSION = 2;
     private static final String SOURCE_DIRECTORY_NAME = "decompiled-files";
     private static final String METADATA_DIRECTORY_NAME = "decompiled-source-metadata";
     private static final String STATE_FILE_NAME = "state.properties";
@@ -110,23 +110,37 @@ final class DecompiledSourceStore {
             if (version != VARIABLE_NAMES_VERSION) {
                 throw new IOException("Unsupported decompiled variable-name version " + version + ": " + path);
             }
-            int count = input.readInt();
-            if (count < 0) {
-                throw new IOException("Invalid decompiled variable-name count " + count + ": " + path);
+            int methodCount = input.readInt();
+            if (methodCount < 0) {
+                throw new IOException("Invalid decompiled variable-name method count " + methodCount + ": " + path);
             }
-            Map<String, String> mappings = new java.util.LinkedHashMap<>(count);
-            for (int index = 0; index < count; index++) {
-                String runtimeName = input.readUTF();
-                String previous = mappings.put(runtimeName, input.readUTF());
-                if (previous != null) {
-                    throw new IOException("Duplicate runtime variable name " + runtimeName + ": " + path);
+            Map<SourceVariableNames.MethodKey, Map<String, String>> methods = new java.util.LinkedHashMap<>(methodCount);
+            for (int methodIndex = 0; methodIndex < methodCount; methodIndex++) {
+                SourceVariableNames.MethodKey method = new SourceVariableNames.MethodKey(
+                        input.readUTF(),
+                        input.readUTF()
+                );
+                int variableCount = input.readInt();
+                if (variableCount < 0) {
+                    throw new IOException("Invalid decompiled variable-name count " + variableCount + ": " + path);
+                }
+                Map<String, String> mappings = new java.util.LinkedHashMap<>(variableCount);
+                for (int variableIndex = 0; variableIndex < variableCount; variableIndex++) {
+                    String runtimeName = input.readUTF();
+                    String previous = mappings.put(runtimeName, input.readUTF());
+                    if (previous != null) {
+                        throw new IOException("Duplicate runtime variable name " + runtimeName + ": " + path);
+                    }
+                }
+                if (methods.put(method, Map.copyOf(mappings)) != null) {
+                    throw new IOException("Duplicate method variable names for " + method + ": " + path);
                 }
             }
             if (input.read() != -1) {
                 throw new IOException("Trailing data in decompiled variable names: " + path);
             }
             try {
-                return SourceVariableNames.of(mappings);
+                return SourceVariableNames.of(methods);
             } catch (IllegalArgumentException exception) {
                 throw new IOException("Invalid decompiled variable names: " + path, exception);
             }
@@ -214,9 +228,15 @@ final class DecompiledSourceStore {
             output.writeInt(VARIABLE_NAMES_MAGIC);
             output.writeInt(VARIABLE_NAMES_VERSION);
             output.writeInt(variableNames.mappings().size());
-            for (Map.Entry<String, String> mapping : variableNames.mappings().entrySet()) {
-                output.writeUTF(mapping.getKey());
-                output.writeUTF(mapping.getValue());
+            for (Map.Entry<SourceVariableNames.MethodKey, Map<String, String>> method
+                    : variableNames.mappings().entrySet()) {
+                output.writeUTF(method.getKey().name());
+                output.writeUTF(method.getKey().descriptor());
+                output.writeInt(method.getValue().size());
+                for (Map.Entry<String, String> mapping : method.getValue().entrySet()) {
+                    output.writeUTF(mapping.getKey());
+                    output.writeUTF(mapping.getValue());
+                }
             }
         }
     }

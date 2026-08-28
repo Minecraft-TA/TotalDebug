@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.RichExpressi
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import net.minecraft.test.GeneratedNamesDebuggeeMain;
+import net.minecraft.test.LocalNameDisambiguationFixture;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -172,7 +173,11 @@ public final class DebuggerScenarios {
                 path.toUri(), RichExpressionDebuggeeMain.class.getName(),
                 java.nio.file.Files.readString(path),
                 com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap.empty(),
-                SourceVariableNames.of(Map.of("target", "renamedTarget", "local", "renamedLocal"))
+                SourceVariableNames.forMethod(
+                        "debugExpressions",
+                        "()V",
+                        Map.of("target", "renamedTarget", "local", "renamedLocal")
+                )
         );
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class, source)) {
             int staticLine = harness.lineContaining("DEBUG_RICH_STATIC_COMPLETION");
@@ -542,6 +547,47 @@ public final class DebuggerScenarios {
 
             harness.engine().resume(stopped.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal(0, harness.awaitExit(), "generated-name debuggee exit code");
+        }
+
+        DecompilationResult disambiguated = new VineflowerDecompiler().decompile(
+                LocalNameDisambiguationFixture.class.getName(),
+                classPathSource(LocalNameDisambiguationFixture.class.getClassLoader())
+        );
+        DebugEngine.Source disambiguatedSource = new DebugEngine.Source(
+                URI.create("decompiled:///" + LocalNameDisambiguationFixture.class.getName()
+                        .replace('.', '/') + ".java"),
+                LocalNameDisambiguationFixture.class.getName(),
+                disambiguated.source(),
+                disambiguated.lineMap(),
+                disambiguated.variableNames()
+        );
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(
+                LocalNameDisambiguationFixture.class,
+                disambiguatedSource
+        )) {
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(
+                    lineContaining(disambiguated.source(), "if (s.equals(blockstate))")
+            ));
+            harness.start();
+            DebugEngine.StoppedEvent stopped = harness.awaitStop("Vineflower-disambiguated local name");
+            DebugEngine.StackFrame frame = harness.firstFrame(stopped.threadId());
+            Map<String, DebugEngine.Variable> variables = harness.variables(frame);
+
+            check(variables.containsKey("s"), "Debugger did not expose final Vineflower local name: "
+                    + variables.keySet());
+            check(!variables.containsKey("blockstate1"), "Debugger leaked runtime local name blockstate1");
+            equal(
+                    "false",
+                    harness.engine().evaluate("s.equals(blockstate)", frame.id())
+                            .thenApply(DebugEngine.EvaluationResult::value)
+                            .get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                    "Vineflower-disambiguated local evaluation"
+            );
+
+            harness.engine().resume(stopped.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebugEngine.StoppedEvent secondStop = harness.awaitStop("second disambiguated local iteration");
+            harness.engine().resume(secondStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "disambiguated-name debuggee exit code");
         }
     }
 

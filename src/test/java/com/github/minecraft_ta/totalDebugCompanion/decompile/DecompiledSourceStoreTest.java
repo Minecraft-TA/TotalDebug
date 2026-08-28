@@ -18,7 +18,11 @@ class DecompiledSourceStoreTest {
         SourceLineMap lineMap = SourceLineMap.fromOriginalToDisplayed(new int[]{20, 8, 10, 4, 21, 8});
         DecompiledSourceStore store = DecompiledSourceStore.open(directory, "runtime", "format");
 
-        SourceVariableNames variableNames = SourceVariableNames.of(java.util.Map.of("p_1_", "level"));
+        SourceVariableNames variableNames = SourceVariableNames.forMethod(
+                "run",
+                "()V",
+                java.util.Map.of("p_1_", "level")
+        );
         Path source = store.write("sample.Target", "class Target {}", lineMap, variableNames);
 
         assertEquals(source, store.find("sample.Target"));

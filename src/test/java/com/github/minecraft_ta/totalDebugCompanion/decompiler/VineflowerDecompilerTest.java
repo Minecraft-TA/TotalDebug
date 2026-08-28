@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.decompiler;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.ClassBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.fixture.ModernJavaFixture;
 import net.minecraft.test.GeneratedNamesFixture;
+import net.minecraft.test.LocalNameDisambiguationFixture;
 import net.minecraft.world.level.block.BonemealableBlock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -57,10 +58,11 @@ class VineflowerDecompilerTest {
         assertFalse(result.source().contains("p_100_"), result.source());
         assertFalse(result.source().contains("var3"), result.source());
         assertFalse(result.source().contains("var4"), result.source());
-        assertEquals("s", result.variableNames().displayedName("p_100_"));
-        assertEquals("i", result.variableNames().displayedName("p_101_"));
-        assertEquals("s1", result.variableNames().displayedName("var3"));
-        assertEquals("j", result.variableNames().displayedName("var4"));
+        String descriptor = "(Ljava/lang/String;I)Ljava/lang/String;";
+        assertEquals("s", result.variableNames().displayedName("format", descriptor, "p_100_"));
+        assertEquals("i", result.variableNames().displayedName("format", descriptor, "p_101_"));
+        assertEquals("s1", result.variableNames().displayedName("format", descriptor, "var3"));
+        assertEquals("j", result.variableNames().displayedName("format", descriptor, "var4"));
     }
 
     @Test
@@ -72,10 +74,30 @@ class VineflowerDecompilerTest {
                 "performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, BlockState state)"
         ), result.source());
         assertFalse(result.source().contains("p_220836_"), result.source());
-        assertEquals("level", result.variableNames().displayedName("p_220836_"));
-        assertEquals("random", result.variableNames().displayedName("p_220837_"));
-        assertEquals("pos", result.variableNames().displayedName("p_220838_"));
-        assertEquals("state", result.variableNames().displayedName("p_220839_"));
+        String descriptor = "(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/util/RandomSource;"
+                + "Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)V";
+        assertEquals("level", result.variableNames().displayedName("performBonemeal", descriptor, "p_220836_"));
+        assertEquals("random", result.variableNames().displayedName("performBonemeal", descriptor, "p_220837_"));
+        assertEquals("pos", result.variableNames().displayedName("performBonemeal", descriptor, "p_220838_"));
+        assertEquals("state", result.variableNames().displayedName("performBonemeal", descriptor, "p_220839_"));
+    }
+
+    @Test
+    void capturesVineflowerLocalNameDisambiguation() throws Exception {
+        DecompilationResult result = decompile(LocalNameDisambiguationFixture.class);
+
+        assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
+        assertTrue(result.source().contains("String s = values[i]"), result.source());
+        assertEquals(
+                "s",
+                result.variableNames().displayedName(
+                        "inspect",
+                        "(Ljava/lang/String;[Ljava/lang/String;)I",
+                        "blockstate1"
+                ),
+                result.source() + System.lineSeparator()
+                        + java.util.Arrays.toString(result.lineMap().originalToDisplayed())
+        );
     }
 
     @Test

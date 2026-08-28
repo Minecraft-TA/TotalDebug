@@ -6,6 +6,7 @@ import org.jetbrains.java.decompiler.modules.decompiler.ExprProcessor;
 import org.jetbrains.java.decompiler.modules.decompiler.vars.VarVersionPair;
 import org.jetbrains.java.decompiler.struct.StructMethod;
 import org.jetbrains.java.decompiler.struct.attr.StructGeneralAttribute;
+import org.jetbrains.java.decompiler.struct.attr.StructLineNumberTableAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructLocalVariableTableAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructMethodParametersAttribute;
 import org.jetbrains.java.decompiler.struct.gen.MethodDescriptor;
@@ -55,8 +56,9 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                 .comparingInt((VarVersionPair variable) -> variable.var)
                 .thenComparingInt(variable -> variable.version));
 
+        recordRuntimeDeclarations();
+
         Map<VarVersionPair, String> replacements = new LinkedHashMap<>();
-        Map<VarVersionPair, String> runtimeNames = new HashMap<>();
         for (VarVersionPair variable : variablesInSlotOrder) {
             if (variable.var == 0 && !this.method.hasModifier(CodeConstants.ACC_STATIC)) {
                 continue;
@@ -69,11 +71,10 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             String runtimeName = existingName == null
                     ? uniqueGeneratedName(localVariableNamesBySlot.get(variable.var))
                     : existingName;
-            runtimeNames.put(variable, runtimeName == null ? variables.get(variable).b : runtimeName);
-
             String mappedName = variable.var < parameterEnd ? this.parchmentNames.get(variable.var) : null;
             if (mappedName != null) {
                 replacements.put(variable, mappedName);
+                recordRename(runtimeName, mappedName);
                 continue;
             }
 
@@ -85,13 +86,9 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                         ? generatedParameterName(variable.var, variables.get(variable).b)
                         : this.nameGenerator.next(variables.get(variable).b);
                 replacements.put(variable, replacement);
+                recordRename(runtimeName, replacement);
             }
         }
-        runtimeNames.forEach((variable, runtimeName) -> VariableNameCapture.record(
-                this.method.getClassQualifiedName(),
-                runtimeName,
-                replacements.getOrDefault(variable, runtimeName)
-        ));
         return replacements.isEmpty() ? null : replacements;
     }
 
@@ -102,11 +99,11 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         }
         String mappedName = this.parchmentNames.get(index);
         if (mappedName != null) {
-            VariableNameCapture.record(this.method.getClassQualifiedName(), name, mappedName);
+            recordRename(name, mappedName);
             return mappedName;
         }
         String renamed = isGenerated(name) ? generatedParameterName(index, parameterType(index)) : name;
-        VariableNameCapture.record(this.method.getClassQualifiedName(), name, renamed);
+        recordRename(name, renamed);
         return renamed;
     }
 
@@ -117,14 +114,45 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         }
         String mappedName = this.parchmentNames.get(index);
         if (mappedName != null) {
-            VariableNameCapture.record(this.method.getClassQualifiedName(), name, mappedName);
+            recordRename(name, mappedName);
             return mappedName;
         }
         String renamed = isGenerated(name)
                 ? generatedParameterName(index, ExprProcessor.getCastTypeName(type))
                 : name;
-        VariableNameCapture.record(this.method.getClassQualifiedName(), name, renamed);
+        recordRename(name, renamed);
         return renamed;
+    }
+
+    private void recordRename(String runtimeName, String displayedName) {
+        VariableNameCapture.recordRename(
+                this.method.getClassQualifiedName(),
+                this.method.getName(),
+                this.method.getDescriptor(),
+                runtimeName,
+                displayedName
+        );
+    }
+
+    private void recordRuntimeDeclarations() {
+        StructLocalVariableTableAttribute variables = this.method.getLocalVariableAttr();
+        StructLineNumberTableAttribute lines = this.method.getAttribute(
+                StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE
+        );
+        if (variables == null || lines == null) {
+            return;
+        }
+        variables.getVariables().forEach(variable -> {
+            // An LVT scope begins after the store which declares the local.
+            int declarationOffset = Math.max(0, variable.getStart() - 1);
+            VariableNameCapture.recordRuntimeName(
+                    this.method.getClassQualifiedName(),
+                    this.method.getName(),
+                    this.method.getDescriptor(),
+                    lines.findLineNumber(declarationOffset),
+                    variable.getName()
+            );
+        });
     }
 
     @Override
@@ -166,7 +194,7 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         }
         String unique = null;
         for (String name : names) {
-            if (name == null || !GeneratedVariableNames.matches(name)) {
+            if (name == null || !isGenerated(name)) {
                 continue;
             }
             if (unique == null) {

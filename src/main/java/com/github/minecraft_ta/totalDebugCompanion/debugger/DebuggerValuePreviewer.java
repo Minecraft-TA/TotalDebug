@@ -24,9 +24,7 @@ final class DebuggerValuePreviewer {
             renderer("net.neoforged.neoforge.fluids.FluidStack",
                     "net.minecraft.core.registries.BuiltInRegistries.FLUID.getKey(getFluid()).toString()"
                             + " + \"  \" + getAmount() + \" mB\""),
-            renderer("net.minecraft.world.level.block.state.BlockState",
-                    "net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(getBlock()).toString()"
-                            + " + (getValues().isEmpty() ? \"\" : \"  \" + ((Object) getValues()).toString())"),
+            renderer("net.minecraft.world.level.block.state.BlockState", "toString()"),
             renderer("net.minecraft.core.BlockPos",
                     "\"x=\" + getX() + \", y=\" + getY() + \", z=\" + getZ()"),
             renderer("net.minecraft.world.level.ChunkPos",

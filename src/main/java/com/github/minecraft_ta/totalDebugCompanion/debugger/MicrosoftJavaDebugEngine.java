@@ -44,8 +44,8 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final AtomicInteger requestSequence = new AtomicInteger();
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
-    private final Map<Integer, SourceVariableNames> variableNamesByFrame = new ConcurrentHashMap<>();
-    private final Map<Integer, SourceVariableNames> variableNamesByScope = new ConcurrentHashMap<>();
+    private final Map<Integer, Map<String, String>> variableNamesByFrame = new ConcurrentHashMap<>();
+    private final Map<Integer, Map<String, String>> variableNamesByScope = new ConcurrentHashMap<>();
     private final Map<Integer, Map<String, VariableKind>> variableKindsByFrame = new ConcurrentHashMap<>();
     private final Map<Integer, Map<String, VariableKind>> variableKindsByScope = new ConcurrentHashMap<>();
     private final Map<Integer, VariableKind> childKindsByReference = new ConcurrentHashMap<>();
@@ -230,10 +230,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                     for (Types.StackFrame frame : body.stackFrames) {
                         URI uri = sourceUri(frame.source);
                         SourceVariableNames variableNames = this.sourceRegistry.variableNames(uri);
-                        if (!variableNames.isEmpty()) {
-                            this.variableNamesByFrame.put(frame.id, variableNames);
+                        RichJavaExpressionEngine.FrameVariables frameVariables =
+                                this.expressionEngine.frameVariables(frame.id);
+                        Map<String, String> frameNames = variableNames.namesForMethod(
+                                frameVariables.methodName(),
+                                frameVariables.methodDescriptor()
+                        );
+                        if (!frameNames.isEmpty()) {
+                            this.variableNamesByFrame.put(frame.id, frameNames);
                         }
-                        this.variableKindsByFrame.put(frame.id, this.expressionEngine.variableKinds(frame.id));
+                        this.variableKindsByFrame.put(frame.id, frameVariables.kinds());
                         result.add(new StackFrame(
                                 frame.id,
                                 frame.name,
@@ -256,9 +262,9 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return request(Requests.Command.SCOPES, arguments, Responses.ScopesResponseBody.class)
                 .thenApply(body -> {
                     List<Scope> result = new ArrayList<>(body.scopes.length);
-                    SourceVariableNames variableNames = this.variableNamesByFrame.getOrDefault(
+                    Map<String, String> variableNames = this.variableNamesByFrame.getOrDefault(
                             frameId,
-                            SourceVariableNames.empty()
+                            Map.of()
                     );
                     Map<String, VariableKind> variableKinds = this.variableKindsByFrame.getOrDefault(
                             frameId,
@@ -286,9 +292,9 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return request(Requests.Command.VARIABLES, arguments, Responses.VariablesResponseBody.class)
                 .thenApply(body -> {
                     List<Variable> result = new ArrayList<>(body.variables.length);
-                    SourceVariableNames variableNames = this.variableNamesByScope.getOrDefault(
+                    Map<String, String> variableNames = this.variableNamesByScope.getOrDefault(
                             variablesReference,
-                            SourceVariableNames.empty()
+                            Map.of()
                     );
                     Map<String, VariableKind> scopeKinds = this.variableKindsByScope.get(variablesReference);
                     VariableKind childKind = this.childKindsByReference.get(variablesReference);
@@ -307,7 +313,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                                 );
                         registerChildKind(variable.variablesReference, variable.type);
                         result.add(new Variable(
-                                variableNames.displayedName(variable.name),
+                                variableNames.getOrDefault(variable.name, variable.name),
                                 variable.evaluateName,
                                 variable.value,
                                 variable.type,
@@ -750,9 +756,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return source == null ? SourceVariableNames.empty() : source.variableNames();
         }
 
-        private String displayedVariableName(String binaryName, String runtimeName) {
+        private String displayedVariableName(
+                String binaryName,
+                String methodName,
+                String methodDescriptor,
+                String runtimeName
+        ) {
             Source source = sourceForClass(binaryName);
-            return source == null ? runtimeName : source.variableNames().displayedName(runtimeName);
+            return source == null
+                    ? runtimeName
+                    : source.variableNames().displayedName(methodName, methodDescriptor, runtimeName);
         }
 
         @Override
