@@ -150,6 +150,53 @@ class DebuggerPanelTest {
     }
 
     @Test
+    void displaysThisBeforeParametersAndLocals() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            DebuggerPanel panel = new DebuggerPanel(controller, actions, (frame, activateEditor) -> {
+            });
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    1,
+                    "Target.run",
+                    "example.Target",
+                    URI.create("decompiled:///example/Target.java"),
+                    20,
+                    1
+            );
+            panel.showPausedState(new DebuggerSessionController.PausedState(
+                    new DebugEngine.StoppedEvent("breakpoint", 1, true),
+                    List.of(frame),
+                    List.of(
+                            new DebugEngine.Variable(
+                                    "input", "input", "7", "int", DebugEngine.VariableKind.PARAMETER, 0, 0, 0
+                            ),
+                            new DebugEngine.Variable(
+                                    "this", "this", "Target@1", "example.Target",
+                                    DebugEngine.VariableKind.THIS, 2, 2, 0
+                            )
+                    )
+            ));
+
+            JTree variables = findVariableTreeOrNull(panel);
+            assertNotNull(variables);
+            Component rendered = variables.getCellRenderer().getTreeCellRendererComponent(
+                    variables,
+                    variables.getPathForRow(0).getLastPathComponent(),
+                    false,
+                    false,
+                    false,
+                    0,
+                    false
+            );
+            assertTrue(labels(rendered).getFirst().startsWith("this = "));
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
+    @Test
     void selectingAStackFrameNavigatesItsExactRuntimeClassAndLine() throws Exception {
         AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {

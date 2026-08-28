@@ -86,7 +86,9 @@ public final class DebuggerWindow extends JFrame {
         if (!isVisible()) {
             setVisible(true);
         }
-        toFront();
+        if (!isActive()) {
+            toFront();
+        }
     }
 
     void showVariable(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {

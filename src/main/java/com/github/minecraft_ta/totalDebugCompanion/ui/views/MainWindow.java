@@ -218,7 +218,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
-        debuggerWindow(CompanionApp.getDebuggerController()).showVariable(frame, variable);
+        SwingUtilities.invokeLater(() ->
+                debuggerWindow(CompanionApp.getDebuggerController()).showVariable(frame, variable));
     }
 
     @Override

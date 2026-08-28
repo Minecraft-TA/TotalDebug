@@ -54,6 +54,7 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -450,7 +451,10 @@ public final class DebuggerPanel extends JPanel {
         }
         this.variableRoot.removeAllChildren();
         List<DefaultMutableTreeNode> nodes = new ArrayList<>();
-        for (DebugEngine.Variable variable : values) {
+        List<DebugEngine.Variable> displayedValues = new ArrayList<>(values);
+        displayedValues.sort(Comparator.comparingInt(variable ->
+                variable.kind() == DebugEngine.VariableKind.THIS ? 0 : 1));
+        for (DebugEngine.Variable variable : displayedValues) {
             DefaultMutableTreeNode node = valueNode(DebugValue.from(variable));
             this.variableRoot.add(node);
             nodes.add(node);
