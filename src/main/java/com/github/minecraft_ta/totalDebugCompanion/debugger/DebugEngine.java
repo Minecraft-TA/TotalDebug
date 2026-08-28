@@ -48,6 +48,10 @@ public interface DebugEngine extends AutoCloseable {
         ));
     }
 
+    default CompletableFuture<List<ExpressionToken>> expressionTokens(String expression, int frameId) {
+        return CompletableFuture.completedFuture(List.of());
+    }
+
     CompletableFuture<Void> setExceptionBreakpoints(boolean caught, boolean uncaught);
 
     CompletableFuture<ExceptionInfo> exceptionInfo(long threadId);
@@ -281,6 +285,21 @@ public interface DebugEngine extends AutoCloseable {
             value = Objects.requireNonNullElse(value, "");
             type = Objects.requireNonNullElse(type, "");
         }
+    }
+
+    record ExpressionToken(int start, int length, ExpressionTokenKind kind) {
+        public ExpressionToken {
+            if (start < 0 || length < 1) {
+                throw new IllegalArgumentException("Invalid debugger expression token range");
+            }
+            Objects.requireNonNull(kind, "kind");
+        }
+    }
+
+    enum ExpressionTokenKind {
+        TYPE,
+        FIELD,
+        METHOD
     }
 
     record ExceptionInfo(String typeName, String description, String breakMode) {

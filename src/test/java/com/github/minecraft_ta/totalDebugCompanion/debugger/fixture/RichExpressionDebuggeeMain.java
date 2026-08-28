@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks;
+
 public final class RichExpressionDebuggeeMain {
     private static final String STATIC_SECRET = "static-secret";
 
@@ -11,6 +13,8 @@ public final class RichExpressionDebuggeeMain {
     }
 
     public static void main(String[] args) {
+        System.out.println(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.a.Blocks.WRONG);
+        System.out.println(Blocks.CORRECT);
         staticCompletionFrame();
         Child target = new Child();
         target.debugExpressions();

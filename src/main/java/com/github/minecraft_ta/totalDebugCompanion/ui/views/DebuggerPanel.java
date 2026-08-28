@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -28,7 +29,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
-import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
@@ -82,7 +82,7 @@ public final class DebuggerPanel extends JPanel {
     private final DefaultMutableTreeNode watchRoot = new DefaultMutableTreeNode("Watches");
     private final DefaultTreeModel watchModel = new DefaultTreeModel(this.watchRoot);
     private final JTree watchTree = createValueTree(this.watchModel);
-    private final JTextField expression = new JTextField();
+    private final JavaExpressionField expression = new JavaExpressionField();
     private final ExpressionCompletionSupport expressionCompletion = new ExpressionCompletionSupport(this.expression);
     private final JButton evaluate = new JButton("Evaluate");
     private final JButton addWatch = new JButton("Add Watch");
@@ -226,7 +226,7 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private JPanel createWatchesPanel() {
-        this.expression.putClientProperty("JTextField.placeholderText", "Evaluate expression or add a watch");
+        this.expression.setPlaceholder("Evaluate expression or add a watch");
         this.expression.setToolTipText(
                 "Supports rich Java expressions, including members, operators, and method calls"
         );
@@ -250,7 +250,7 @@ public final class DebuggerPanel extends JPanel {
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
                 BorderFactory.createEmptyBorder(6, 8, 6, 8)
         ));
-        input.add(this.expression, BorderLayout.CENTER);
+        input.add(this.expression.component(), BorderLayout.CENTER);
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.TRAILING, 4, 0));
         actions.setOpaque(false);
@@ -348,6 +348,7 @@ public final class DebuggerPanel extends JPanel {
 
         if (!paused) {
             this.expressionCompletion.setCompletionProvider(null);
+            this.expression.setSemanticTokenProvider(null);
             this.viewRevision++;
             DebuggerEditorPresentation.clear();
             if (clearsPausedSnapshot(status.phase())) {
@@ -414,6 +415,7 @@ public final class DebuggerPanel extends JPanel {
         this.currentVariables = List.of();
         this.expressionCompletion.setCompletionProvider((text, caret, explicit) ->
                 this.controller.completions(text, caret, frame));
+        this.expression.setSemanticTokenProvider(text -> this.controller.expressionTokens(text, frame));
         this.frameLabel.setText(frameLocation(frame));
 
         this.frameNavigation.open(frame, false);

@@ -21,7 +21,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.JTextField;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Rectangle;
@@ -44,7 +43,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private static final String SHOW = "debugExpressionCompletion.show";
     private static final int ROW_HEIGHT = 24;
 
-    private final JTextField field;
+    private final JavaExpressionField field;
     private final DefaultListModel<DebuggerCompletionProposal> model = new DefaultListModel<>();
     private final JList<DebuggerCompletionProposal> list = new JList<>(this.model);
     private final JScrollPane content = new JScrollPane(this.list);
@@ -60,7 +59,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private JWindow popup;
     private boolean applying;
 
-    public ExpressionCompletionSupport(JTextField field) {
+    public ExpressionCompletionSupport(JavaExpressionField field) {
         this.field = Objects.requireNonNull(field, "field");
         configurePopup();
         configureKeys();

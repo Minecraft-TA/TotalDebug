@@ -256,6 +256,42 @@ public final class DebuggerScenarios {
             equal("\"worker-complete\"", value(harness.engine().evaluate("renamedTarget.waitsForWorker()", frame.id())),
                     "multi-thread evaluation");
             equal("\"static-secret\"", value(harness.engine().evaluate("RichExpressionDebuggeeMain.staticCall()", frame.id())), "private static call");
+            equal("\"correct\"", value(harness.engine().evaluate("Blocks.CORRECT", frame.id())),
+                    "imported simple type name");
+            List<DebuggerCompletionProposal> typeCompletions = harness.engine()
+                    .completions("Blo", 3, frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebuggerCompletionProposal importedBlocks = typeCompletions.stream()
+                    .filter(item -> item.kind() == DebuggerCompletionProposal.Kind.TYPE
+                            && item.insertionText().equals("Blocks"))
+                    .findFirst().orElseThrow(() -> new AssertionError("imported type missing from completion"));
+            check(importedBlocks.detail().endsWith("fixture.z.Blocks"),
+                    "imported type completion resolved the wrong Blocks: " + importedBlocks);
+            check(typeCompletions.stream().anyMatch(item ->
+                            item.kind() == DebuggerCompletionProposal.Kind.TYPE
+                                    && item.insertionText().endsWith("fixture.a.Blocks")),
+                    "out-of-scope duplicate type missing from completion");
+            List<DebuggerCompletionProposal> staticTypeMembers = harness.engine()
+                    .completions("Blocks.", "Blocks.".length(), frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(staticTypeMembers.stream().anyMatch(item -> item.label().equals("CORRECT")),
+                    "imported type members missing from completion");
+            check(staticTypeMembers.stream().noneMatch(item -> item.label().equals("WRONG")),
+                    "member completion used the wrong same-named type");
+            String highlightedExpression = "Blocks.CORRECT + renamedTarget.sideEffect()";
+            List<DebugEngine.ExpressionToken> expressionTokens = harness.engine()
+                    .expressionTokens(highlightedExpression, frame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            check(expressionTokens.contains(new DebugEngine.ExpressionToken(
+                            0, "Blocks".length(), DebugEngine.ExpressionTokenKind.TYPE)),
+                    "runtime semantic tokens did not classify the imported type");
+            check(expressionTokens.contains(new DebugEngine.ExpressionToken(
+                            "Blocks.".length(), "CORRECT".length(), DebugEngine.ExpressionTokenKind.FIELD)),
+                    "runtime semantic tokens did not classify the static field");
+            int methodOffset = highlightedExpression.indexOf("sideEffect");
+            check(expressionTokens.contains(new DebugEngine.ExpressionToken(
+                            methodOffset, "sideEffect".length(), DebugEngine.ExpressionTokenKind.METHOD)),
+                    "runtime semantic tokens did not classify the method");
             harness.engine().evaluate("java.util.List.of()", frame.id())
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");

@@ -35,11 +35,28 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
             if (version != lastVisitedVersion)
                 return;
 
-            synchronized (this.tokenTypeLock) {
-                this.overwrittenTokenTypes = tokenTypes;
-                SwingUtilities.invokeLater(textComponent::repaint);
-            }
+            setSemanticTokenTypes(tokenTypes, textComponent);
         });
+    }
+
+    public void setSemanticTokenTypes(Map<Integer, Integer> tokenTypes, JComponent textComponent) {
+        synchronized (this.tokenTypeLock) {
+            this.overwrittenTokenTypes = Map.copyOf(tokenTypes);
+        }
+        if (textComponent instanceof RSyntaxTextArea textArea) {
+            invalidateTokenCache((RSyntaxDocument) textArea.getDocument());
+        }
+        SwingUtilities.invokeLater(textComponent::repaint);
+    }
+
+    private static void invalidateTokenCache(RSyntaxDocument document) {
+        try {
+            var field = RSyntaxDocument.class.getDeclaredField("lastLine");
+            field.setAccessible(true);
+            field.setInt(document, -1);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Unable to invalidate RSyntaxDocument's token cache", exception);
+        }
     }
 
     @Override

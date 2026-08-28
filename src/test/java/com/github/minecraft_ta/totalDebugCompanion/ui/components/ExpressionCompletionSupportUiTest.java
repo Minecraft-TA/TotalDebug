@@ -1,13 +1,19 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.ShadowedTokenTypes;
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLayeredPane;
 import javax.swing.JPopupMenu;
-import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.Popup;
 import javax.swing.PopupFactory;
@@ -29,6 +35,42 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ExpressionCompletionSupportUiTest {
+    @Test
+    void derivesBreakpointExpressionColorsFromSourceCompletionTruth() throws Exception {
+        List<DebugEngine.ExpressionToken> tokens = ExpressionCompletionSemantics.tokens(
+                "Blocks.VALUE",
+                (expression, caret, explicit) -> CompletableFuture.completedFuture(caret <= 6
+                        ? List.of(new DebuggerCompletionProposal(
+                        "Blocks", "Blocks", DebuggerCompletionProposal.Kind.TYPE,
+                        "sample.Blocks", 0, 6))
+                        : List.of(new DebuggerCompletionProposal(
+                        "VALUE", "VALUE", DebuggerCompletionProposal.Kind.CONSTANT,
+                        "int", 7, 12)))
+        ).get();
+        assertEquals(List.of(
+                new DebugEngine.ExpressionToken(0, 6, DebugEngine.ExpressionTokenKind.TYPE),
+                new DebugEngine.ExpressionToken(7, 5, DebugEngine.ExpressionTokenKind.FIELD)
+        ), tokens);
+    }
+
+    @Test
+    void appliesRuntimeSemanticTokensToJavaExpressions() throws Exception {
+        AbstractTokenMakerFactory mappings = (AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance();
+        mappings.putMapping(RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
+        JavaExpressionField field = onEdt(() -> new JavaExpressionField(24));
+        onEdt(() -> {
+            field.setSemanticTokenProvider(expression -> CompletableFuture.completedFuture(List.of(
+                    new DebugEngine.ExpressionToken(0, 6, DebugEngine.ExpressionTokenKind.TYPE),
+                    new DebugEngine.ExpressionToken(7, 5, DebugEngine.ExpressionTokenKind.FIELD)
+            )));
+            field.setText("Blocks.VALUE");
+        });
+        await(() -> tokenTypeAt(field, 0) == ShadowedTokenTypes.TYPE
+                && tokenTypeAt(field, 7) == ShadowedTokenTypes.FIELD);
+        assertEquals(ShadowedTokenTypes.TYPE, onEdt(() -> tokenTypeAt(field, 0)));
+        assertEquals(ShadowedTokenTypes.FIELD, onEdt(() -> tokenTypeAt(field, 7)));
+    }
+
     @Test
     void opensCompletionForAnEvaluateField() throws Exception {
         withPopupFactory(ignored -> {
@@ -151,8 +193,8 @@ final class ExpressionCompletionSupportUiTest {
 
     private static Fixture evaluateFixture() {
         JFrame frame = frame();
-        JTextField field = new JTextField(24);
-        frame.add(field, BorderLayout.CENTER);
+        JavaExpressionField field = new JavaExpressionField(24);
+        frame.add(field.component(), BorderLayout.CENTER);
         frame.pack();
         frame.setVisible(true);
         ExpressionCompletionSupport completion = completion(field);
@@ -166,9 +208,9 @@ final class ExpressionCompletionSupportUiTest {
         frame.pack();
         frame.setVisible(true);
 
-        JTextField field = new JTextField(24);
+        JavaExpressionField field = new JavaExpressionField(24);
         JPopupMenu editor = new JPopupMenu();
-        editor.add(field);
+        editor.add(field.component());
         editor.show(invoker, 0, invoker.getHeight());
         ExpressionCompletionSupport completion = completion(field);
         return new Fixture(frame, editor, field, completion);
@@ -181,7 +223,7 @@ final class ExpressionCompletionSupportUiTest {
         return frame;
     }
 
-    private static ExpressionCompletionSupport completion(JTextField field) {
+    private static ExpressionCompletionSupport completion(JavaExpressionField field) {
         ExpressionCompletionSupport completion = new ExpressionCompletionSupport(field);
         List<DebuggerCompletionProposal> proposals = List.of(new DebuggerCompletionProposal(
                 "false", "false", DebuggerCompletionProposal.Kind.KEYWORD,
@@ -216,9 +258,19 @@ final class ExpressionCompletionSupportUiTest {
         }
     }
 
-    private static void invokeFieldAction(JTextField field, String keyStroke) {
+    private static void invokeFieldAction(JavaExpressionField field, String keyStroke) {
         Object actionKey = field.getInputMap().get(KeyStroke.getKeyStroke(keyStroke));
         field.getActionMap().get(actionKey).actionPerformed(null);
+    }
+
+    private static int tokenTypeAt(JavaExpressionField field, int offset) {
+        for (Token token = field.getTokenListForLine(0); token != null && token.isPaintable();
+             token = token.getNextToken()) {
+            if (offset >= token.getOffset() && offset < token.getEndOffset()) {
+                return token.getType();
+            }
+        }
+        return -1;
     }
 
     private static void onEdt(Runnable action) throws Exception {
@@ -242,7 +294,7 @@ final class ExpressionCompletionSupportUiTest {
     private record Fixture(
             JFrame frame,
             JPopupMenu parentPopup,
-            JTextField field,
+            JavaExpressionField field,
             ExpressionCompletionSupport completion
     ) implements AutoCloseable {
         @Override

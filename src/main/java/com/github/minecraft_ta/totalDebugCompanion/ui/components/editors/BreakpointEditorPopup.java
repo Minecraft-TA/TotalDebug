@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSemantics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 
 import javax.swing.BorderFactory;
@@ -31,7 +33,7 @@ final class BreakpointEditorPopup {
 
     private final JPopupMenu popup = new JPopupMenu();
     private final JLabel title = new JLabel();
-    private final JTextField condition = new JTextField(28);
+    private final JavaExpressionField condition = new JavaExpressionField(28);
     private final ExpressionCompletionSupport conditionCompletion = new ExpressionCompletionSupport(this.condition);
     private final JTextField hitCount = new JTextField(10);
     private final JLabel validation = new JLabel(" ");
@@ -69,6 +71,8 @@ final class BreakpointEditorPopup {
                 : breakpoint.hitCondition());
         this.remove.setVisible(installed);
         this.conditionCompletion.setCompletionProvider(completionProvider);
+        this.condition.setSemanticTokenProvider(expression ->
+                ExpressionCompletionSemantics.tokens(expression, completionProvider));
         clearValidation();
         this.popup.show(invoker, location.x, location.y);
         SwingUtilities.invokeLater(() -> {
@@ -79,6 +83,7 @@ final class BreakpointEditorPopup {
 
     void dispose() {
         this.popup.setVisible(false);
+        this.condition.setSemanticTokenProvider(null);
         this.conditionCompletion.close();
     }
 
@@ -102,8 +107,8 @@ final class BreakpointEditorPopup {
         constraints.weightx = 1;
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.insets = new Insets(0, 0, 5, 0);
-        this.condition.putClientProperty("JTextField.placeholderText", "Java expression");
-        fields.add(this.condition, constraints);
+        this.condition.setPlaceholder("Java expression");
+        fields.add(this.condition.component(), constraints);
 
         constraints.gridx = 0;
         constraints.gridy = 1;

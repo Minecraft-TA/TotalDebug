@@ -63,23 +63,13 @@ final class DebuggerJdiMembers {
         if (isPrimitive(normalized)) return null;
         List<ReferenceType> exact = vm.classesByName(normalized);
         if (!exact.isEmpty()) return exact.getFirst();
-        int dot = normalized.lastIndexOf('.');
+        String nestedName = normalized;
+        int dot = nestedName.lastIndexOf('.');
         while (dot > 0) {
-            String nested = normalized.substring(0, dot) + "$" + normalized.substring(dot + 1);
-            exact = vm.classesByName(nested);
+            nestedName = nestedName.substring(0, dot) + "$" + nestedName.substring(dot + 1);
+            exact = vm.classesByName(nestedName);
             if (!exact.isEmpty()) return exact.getFirst();
-            dot = normalized.lastIndexOf('.', dot - 1);
-        }
-        if (!normalized.contains(".")) {
-            for (ReferenceType type : vm.allClasses()) {
-                String typeName = type.name();
-                if (typeName.substring(typeName.lastIndexOf('.') + 1).equals(normalized)) return type;
-            }
-        } else {
-            String nestedSuffix = normalized.replace('.', '$');
-            for (ReferenceType type : vm.allClasses()) {
-                if (type.name().endsWith("." + nestedSuffix)) return type;
-            }
+            dot = nestedName.lastIndexOf('.', dot - 1);
         }
         return null;
     }

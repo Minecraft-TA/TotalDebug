@@ -35,6 +35,7 @@ import com.sun.jdi.VirtualMachine;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.CastExpression;
@@ -75,30 +76,25 @@ import static com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerJdiMe
 import static com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerJdiMembers.isAssignableName;
 import static com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerJdiMembers.isPrimitive;
 import static com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerJdiMembers.methods;
-import static com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerJdiMembers.resolveType;
 
 /** One JDI-backed expression engine used for evaluation and runtime completion. */
 final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletionsProvider {
     private static final List<String> KEYWORDS = List.of("true", "false", "null", "this", "super");
     private final VariableNameResolver variableNameResolver;
+    private final TypeScopeResolver typeScopeResolver;
     private final DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
     private final DebuggerValuePreviewer valuePreviewer = new DebuggerValuePreviewer(this::evaluate);
     private volatile IDebugAdapterContext debugContext;
+    private volatile VirtualMachine typeCatalogVm;
+    private volatile List<ReferenceType> typeCatalog = List.of();
 
-    RichJavaExpressionEngine(VariableNameResolver variableNameResolver) {
+    RichJavaExpressionEngine(VariableNameResolver variableNameResolver, TypeScopeResolver typeScopeResolver) {
         this.variableNameResolver = Objects.requireNonNull(variableNameResolver, "variableNameResolver");
+        this.typeScopeResolver = Objects.requireNonNull(typeScopeResolver, "typeScopeResolver");
     }
 
     FrameVariables frameVariables(int frameId) {
-        IDebugAdapterContext context = Objects.requireNonNull(this.debugContext, "debugContext");
-        Object reference = context.getRecyclableIdPool().getObjectById(frameId);
-        if (!(reference instanceof StackFrameReference frameReference)) {
-            throw new IllegalArgumentException("Unknown debugger stack frame " + frameId);
-        }
-        StackFrame frame = context.getStackFrameManager().getStackFrame(frameReference);
-        if (frame == null) {
-            throw new IllegalStateException("Debugger stack frame " + frameId + " is no longer available");
-        }
+        StackFrame frame = requireFrame(frameId);
         Map<String, DebugEngine.VariableKind> result = new LinkedHashMap<>();
         try {
             for (LocalVariable variable : frame.visibleVariables()) {
@@ -117,6 +113,42 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         }
         Method method = frame.location().method();
         return new FrameVariables(method.name(), method.signature(), Map.copyOf(result));
+    }
+
+    List<DebugEngine.ExpressionToken> expressionTokens(String expression, int frameId) {
+        StackFrame frame = requireFrame(frameId);
+        Context context = new Context(frame, frame.thisObject(), this.variableNameResolver, this, frame.thread());
+        List<DebugEngine.ExpressionToken> result = new ArrayList<>();
+        parse(expression).accept(new ASTVisitor() {
+            @Override
+            public boolean visit(SimpleName node) {
+                DebugEngine.ExpressionTokenKind kind;
+                try {
+                    kind = expressionTokenKind(node, context);
+                } catch (Exception ignored) {
+                    return true;
+                }
+                if (kind != null) {
+                    result.add(new DebugEngine.ExpressionToken(
+                            node.getStartPosition(), node.getLength(), kind));
+                }
+                return true;
+            }
+        });
+        return List.copyOf(result);
+    }
+
+    private StackFrame requireFrame(int frameId) {
+        IDebugAdapterContext context = Objects.requireNonNull(this.debugContext, "debugContext");
+        Object reference = context.getRecyclableIdPool().getObjectById(frameId);
+        if (!(reference instanceof StackFrameReference frameReference)) {
+            throw new IllegalArgumentException("Unknown debugger stack frame " + frameId);
+        }
+        StackFrame frame = context.getStackFrameManager().getStackFrame(frameReference);
+        if (frame == null) {
+            throw new IllegalStateException("Debugger stack frame " + frameId + " is no longer available");
+        }
+        return frame;
     }
 
     CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
@@ -223,6 +255,8 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
     @Override
     public void clearState(ThreadReference thread) {
         this.lifecycle.clearState(thread);
+        this.typeCatalogVm = null;
+        this.typeCatalog = List.of();
     }
 
     @Override
@@ -259,6 +293,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                 }
             } else {
                 addLocalsAndFields(result, frame, range);
+                addTypes(result, frame, range);
             }
         } catch (Exception ignored) {
             // Incomplete expressions are expected while the user is typing.
@@ -310,6 +345,23 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         }
     }
 
+    private void addTypes(
+            Map<String, DebuggerCompletionProposal> result,
+            StackFrame frame,
+            DebuggerCompletionRange range
+    ) {
+        DebuggerTypeScope scope = this.typeScopeResolver.scope(frame.location().declaringType().name());
+        if (scope == null) {
+            return;
+        }
+        for (DebuggerTypeScope.TypeCandidate type : scope.complete(
+                range.prefix(), frame.location().declaringType(),
+                loadedTypes(frame.virtualMachine()))) {
+            add(result, proposal(type.label(), type.insertion(), DebuggerCompletionProposal.Kind.TYPE,
+                    type.detail(), range, type.rank()));
+        }
+    }
+
     /** Resolves only static/runtime metadata. This method must never invoke a target method. */
     private static CompletionOwner resolveCompletionOwner(Expression expression, Context context) throws Exception {
         if (expression instanceof ParenthesizedExpression parenthesized) {
@@ -319,10 +371,10 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             return new CompletionOwner(context.frame().location().declaringType(), false, false);
         }
         if (expression instanceof TypeLiteral typeLiteral) {
-            return new CompletionOwner(resolveType(typeLiteral.getType().toString(), context.vm()), true, false);
+            return new CompletionOwner(resolveType(typeLiteral.getType().toString(), context), true, false);
         }
         if (expression instanceof CastExpression cast) {
-            return new CompletionOwner(resolveType(cast.getType().toString(), context.vm()), false, false);
+            return new CompletionOwner(resolveType(cast.getType().toString(), context), false, false);
         }
         if (expression instanceof ArrayAccess access) {
             CompletionOwner array = resolveCompletionOwner(access.getArray(), context);
@@ -332,7 +384,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             return resolveSimpleCompletionOwner(name.getIdentifier(), context);
         }
         if (expression instanceof QualifiedName name) {
-            ReferenceType type = resolveType(name.getFullyQualifiedName(), context.vm());
+            ReferenceType type = resolveType(name.getFullyQualifiedName(), context);
             if (type != null) {
                 return new CompletionOwner(type, true, false);
             }
@@ -372,7 +424,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                             method.signature(),
                             local.name()
                     ).equals(name)) {
-                ReferenceType type = resolveType(local.typeName(), context.vm());
+                ReferenceType type = resolveType(local.typeName(), context);
                 return type == null && local.typeName().endsWith("[]")
                         ? new CompletionOwner(null, false, true)
                         : new CompletionOwner(type, false, false);
@@ -380,9 +432,9 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         }
         Field field = findField(frame.location().declaringType(), name, false);
         if (field != null) {
-            return new CompletionOwner(resolveType(field.typeName(), context.vm()), false, false);
+            return new CompletionOwner(resolveType(field.typeName(), context), false, false);
         }
-        ReferenceType type = resolveType(name, context.vm());
+        ReferenceType type = resolveType(name, context);
         return type == null ? null : new CompletionOwner(type, true, false);
     }
 
@@ -391,7 +443,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             return null;
         }
         Field field = findField(owner.type(), name, owner.typeLiteral());
-        return field == null ? null : new CompletionOwner(resolveType(field.typeName(), context.vm()), false, false);
+        return field == null ? null : new CompletionOwner(resolveType(field.typeName(), context), false, false);
     }
 
     private static CompletionOwner methodCompletionOwner(
@@ -426,7 +478,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                 .toList();
         Method method = mostSpecific.size() == 1 ? mostSpecific.getFirst().method() : null;
         return method == null ? null
-                : new CompletionOwner(resolveType(method.returnTypeName(), context.vm()), false, false);
+                : new CompletionOwner(resolveType(method.returnTypeName(), context), false, false);
     }
 
     private static int staticCompatibility(Method method, List<Expression> arguments, Context context) {
@@ -562,7 +614,8 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
     }
 
     private static void add(Map<String, DebuggerCompletionProposal> result, DebuggerCompletionProposal proposal) {
-        result.merge(proposal.label(), proposal, (oldValue, newValue) ->
+        String key = proposal.kind() + "\0" + proposal.label() + "\0" + proposal.insertionText();
+        result.merge(key, proposal, (oldValue, newValue) ->
                 newValue.rank() < oldValue.rank() ? newValue : oldValue);
     }
 
@@ -649,12 +702,12 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         }
         if (expression instanceof InstanceofExpression instanceofExpression) {
             EvalValue candidate = evaluate(instanceofExpression.getLeftOperand(), context);
-            ReferenceType target = resolveType(instanceofExpression.getRightOperand().toString(), context.vm());
+            ReferenceType target = resolveType(instanceofExpression.getRightOperand().toString(), context);
             return value(context.vm().mirrorOf(candidate.value() instanceof ObjectReference object
                     && target != null && isAssignable(object.referenceType(), target)));
         }
         if (expression instanceof TypeLiteral typeLiteral) {
-            ReferenceType type = resolveType(typeLiteral.getType().toString(), context.vm());
+            ReferenceType type = resolveType(typeLiteral.getType().toString(), context);
             if (type == null) {
                 throw new IllegalArgumentException("Unknown type " + typeLiteral.getType());
             }
@@ -686,23 +739,23 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                 }
             }
             if (local != null) {
-                return value(context.frame().getValue(local), resolveType(local.typeName(), context.vm()));
+                return value(context.frame().getValue(local), resolveType(local.typeName(), context));
             }
         }
         if (context.thisObject() != null) {
             Field field = findField(context.thisObject().referenceType(), name, false);
             if (field != null) {
-            return value(context.thisObject().getValue(field), resolveType(field.typeName(), context.vm()));
+                return value(context.thisObject().getValue(field), resolveType(field.typeName(), context));
             }
         }
         if (context.frame() != null) {
             Field field = findField(context.frame().location().declaringType(), name, true);
             if (field != null) {
-            return value(context.frame().location().declaringType().getValue(field),
-                    resolveType(field.typeName(), context.vm()));
+                return value(context.frame().location().declaringType().getValue(field),
+                        resolveType(field.typeName(), context));
             }
         }
-        ReferenceType type = resolveType(name, context.vm());
+        ReferenceType type = resolveType(name, context);
         if (type != null) {
             return type(type);
         }
@@ -710,13 +763,13 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
     }
 
     private static EvalValue qualifiedName(QualifiedName name, Context context) throws Exception {
-        ReferenceType fullType = resolveType(name.getFullyQualifiedName(), context.vm());
+        ReferenceType fullType = resolveType(name.getFullyQualifiedName(), context);
         if (fullType != null) {
             return type(fullType);
         }
         EvalValue qualifier = evaluate(name.getQualifier(), context);
         if (qualifier.typeLiteral() && qualifier.type() != null) {
-            ReferenceType nested = resolveType(qualifier.type().name() + "$" + name.getName(), context.vm());
+            ReferenceType nested = resolveType(qualifier.type().name() + "$" + name.getName(), context);
             if (nested != null) return type(nested);
         }
         return field(qualifier, name.getName().getIdentifier(), context);
@@ -728,14 +781,14 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
             if (field == null) {
                 throw new IllegalArgumentException("Unknown static field " + owner.type().name() + "." + name);
             }
-            return value(owner.type().getValue(field), resolveType(field.typeName(), context.vm()));
+            return value(owner.type().getValue(field), resolveType(field.typeName(), context));
         }
         if (owner.value() == null) {
             throw new IllegalArgumentException("Cannot read field '" + name + "' from null");
         }
         if (owner.value() instanceof ArrayReference array && name.equals("length")) {
             return value(array.virtualMachine().mirrorOf(array.length()),
-                    resolveType("int", context.vm()));
+                    resolveType("int", context));
         }
         if (!(owner.value() instanceof ObjectReference object)) {
             throw new IllegalArgumentException("Field access requires an object value");
@@ -744,7 +797,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         if (field == null) {
             throw new IllegalArgumentException("Unknown field " + object.referenceType().name() + "." + name);
         }
-        return value(object.getValue(field), resolveType(field.typeName(), context.vm()));
+        return value(object.getValue(field), resolveType(field.typeName(), context));
     }
 
     private static EvalValue methodInvocation(MethodInvocation invocation, Context context) throws Exception {
@@ -821,7 +874,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
         } finally {
             context.engine().refreshStackFrames(context.thread());
         }
-        return value(result, resolveType(method.returnTypeName(), context.vm()));
+        return value(result, resolveType(method.returnTypeName(), context));
     }
 
     private static Value invoke(
@@ -869,7 +922,7 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
 
     private static EvalValue cast(EvalValue value, String target, Context context) {
         if (!isPrimitive(target)) {
-            ReferenceType type = resolveType(target, context.vm());
+            ReferenceType type = resolveType(target, context);
             if (type == null) {
                 throw new IllegalArgumentException("Cannot cast value to " + target);
             }
@@ -1043,6 +1096,111 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
     }
     private static EvalValue type(ReferenceType type) { return new EvalValue(null, type, true); }
 
+    private static ReferenceType resolveType(String name, Context context) {
+        ReferenceType exact = DebuggerJdiMembers.resolveType(name, context.vm());
+        if (exact != null || DebuggerJdiMembers.isPrimitive(name)) {
+            return exact;
+        }
+        ReferenceType declaringType = context.frame().location().declaringType();
+        DebuggerTypeScope scope = context.engine().typeScopeResolver.scope(declaringType.name());
+        return scope == null ? null : scope.resolve(name, declaringType, context.vm());
+    }
+
+    private static DebugEngine.ExpressionTokenKind expressionTokenKind(
+            SimpleName name,
+            Context context
+    ) throws Exception {
+        ASTNode parent = name.getParent();
+        if (parent instanceof MethodInvocation invocation && invocation.getName() == name) {
+            CompletionOwner owner = invocation.getExpression() == null
+                    ? new CompletionOwner(context.frame().location().declaringType(), false, false)
+                    : resolveCompletionOwner(invocation.getExpression(), context);
+            return hasMethod(owner, name.getIdentifier()) ? DebugEngine.ExpressionTokenKind.METHOD : null;
+        }
+        if (parent instanceof SuperMethodInvocation invocation && invocation.getName() == name) {
+            return methods(lexicalSuperclass(context)).stream().anyMatch(method -> method.name().equals(name.getIdentifier()))
+                    ? DebugEngine.ExpressionTokenKind.METHOD
+                    : null;
+        }
+
+        boolean qualifiedMember = parent instanceof QualifiedName qualified && qualified.getName() == name
+                || parent instanceof FieldAccess access && access.getName() == name
+                || parent instanceof SuperFieldAccess access && access.getName() == name;
+        if (!qualifiedMember) {
+            Field lexicalField = lexicalField(name.getIdentifier(), context);
+            if (lexicalField != null) {
+                return DebugEngine.ExpressionTokenKind.FIELD;
+            }
+            if (visibleLocal(name.getIdentifier(), context) != null) {
+                return null;
+            }
+        }
+
+        String typeName = name.getIdentifier();
+        if (parent instanceof QualifiedName qualified && qualified.getName() == name) {
+            typeName = qualified.getFullyQualifiedName();
+        }
+        if (resolveType(typeName, context) != null) {
+            return DebugEngine.ExpressionTokenKind.TYPE;
+        }
+
+        Field member = memberField(name, context);
+        return member == null ? null : DebugEngine.ExpressionTokenKind.FIELD;
+    }
+
+    private static boolean hasMethod(CompletionOwner owner, String name) {
+        return owner != null && owner.type() != null && methods(owner.type()).stream()
+                .anyMatch(method -> method.name().equals(name)
+                        && (!owner.typeLiteral() || method.isStatic()));
+    }
+
+    private static LocalVariable visibleLocal(String displayedName, Context context) throws AbsentInformationException {
+        Method method = context.frame().location().method();
+        String binaryName = context.frame().location().declaringType().name();
+        for (LocalVariable local : context.frame().visibleVariables()) {
+            if (local.name().equals(displayedName) || context.variableNameResolver().displayedName(
+                    binaryName, method.name(), method.signature(), local.name()).equals(displayedName)) {
+                return local;
+            }
+        }
+        return null;
+    }
+
+    private static Field lexicalField(String name, Context context) {
+        if (context.thisObject() != null) {
+            Field field = findField(context.thisObject().referenceType(), name, false);
+            if (field != null) {
+                return field;
+            }
+        }
+        return findField(context.frame().location().declaringType(), name, true);
+    }
+
+    private static Field memberField(SimpleName name, Context context) throws Exception {
+        ASTNode parent = name.getParent();
+        CompletionOwner owner;
+        if (parent instanceof QualifiedName qualified && qualified.getName() == name) {
+            owner = resolveCompletionOwner(qualified.getQualifier(), context);
+        } else if (parent instanceof FieldAccess access && access.getName() == name) {
+            owner = resolveCompletionOwner(access.getExpression(), context);
+        } else if (parent instanceof SuperFieldAccess access && access.getName() == name) {
+            owner = new CompletionOwner(lexicalSuperclass(context), false, false);
+        } else {
+            return null;
+        }
+        return owner == null || owner.type() == null
+                ? null
+                : findField(owner.type(), name.getIdentifier(), owner.typeLiteral());
+    }
+
+    private synchronized List<ReferenceType> loadedTypes(VirtualMachine vm) {
+        if (this.typeCatalogVm != vm) {
+            this.typeCatalogVm = vm;
+            this.typeCatalog = List.copyOf(vm.allClasses());
+        }
+        return this.typeCatalog;
+    }
+
     private void begin(ThreadReference thread) {
         this.lifecycle.begin(thread);
     }
@@ -1070,6 +1228,11 @@ final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletion
                 String methodDescriptor,
                 String runtimeName
         );
+    }
+
+    @FunctionalInterface
+    interface TypeScopeResolver {
+        DebuggerTypeScope scope(String binaryName);
     }
 
     record FrameVariables(

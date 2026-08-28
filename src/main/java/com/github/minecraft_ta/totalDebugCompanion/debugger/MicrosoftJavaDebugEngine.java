@@ -67,7 +67,10 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 (IVirtualMachineManagerProvider) Bootstrap::virtualMachineManager
         );
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
-        this.expressionEngine = new RichJavaExpressionEngine(this.sourceRegistry::displayedVariableName);
+        this.expressionEngine = new RichJavaExpressionEngine(
+                this.sourceRegistry::displayedVariableName,
+                this.sourceRegistry::typeScope
+        );
         providers.registerProvider(IEvaluationProvider.class, this.expressionEngine);
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
         providers.registerProvider(ICompletionsProvider.class, this.expressionEngine);
@@ -400,6 +403,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     }
 
     @Override
+    public CompletableFuture<List<ExpressionToken>> expressionTokens(String expression, int frameId) {
+        requireState(State.STOPPED);
+        try {
+            return CompletableFuture.completedFuture(this.expressionEngine.expressionTokens(expression, frameId));
+        } catch (Throwable failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    @Override
     public CompletableFuture<Void> setExceptionBreakpoints(boolean caught, boolean uncaught) {
         requireState(State.ATTACHED, State.RUNNING, State.STOPPED);
         List<String> filters = new ArrayList<>(2);
@@ -706,6 +719,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         private final DebuggerSessionController.SourceLoader sourceLoader;
         private final Map<URI, Source> sourcesByUri = new ConcurrentHashMap<>();
         private final Map<String, Source> sourcesByBinaryName = new ConcurrentHashMap<>();
+        private final Map<String, DebuggerTypeScope> typeScopesByBinaryName = new ConcurrentHashMap<>();
 
         private SourceRegistry(DebuggerSessionController.SourceLoader sourceLoader) {
             this.sourceLoader = Objects.requireNonNull(sourceLoader, "sourceLoader");
@@ -715,6 +729,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             URI normalizedUri = source.uri().normalize();
             this.sourcesByUri.put(normalizedUri, source);
             this.sourcesByBinaryName.put(source.binaryName(), source);
+            this.typeScopesByBinaryName.put(source.binaryName(), DebuggerTypeScope.parse(source));
         }
 
         private Source require(URI sourceUri) {
@@ -732,6 +747,17 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             }
             int nestedSeparator = binaryName.indexOf('$');
             return nestedSeparator < 0 ? null : this.sourcesByBinaryName.get(binaryName.substring(0, nestedSeparator));
+        }
+
+        private DebuggerTypeScope typeScope(String binaryName) {
+            DebuggerTypeScope scope = this.typeScopesByBinaryName.get(binaryName);
+            if (scope != null) {
+                return scope;
+            }
+            int nestedSeparator = binaryName.indexOf('$');
+            return nestedSeparator < 0
+                    ? null
+                    : this.typeScopesByBinaryName.get(binaryName.substring(0, nestedSeparator));
         }
 
         private String binaryName(Types.Source protocolSource) {
