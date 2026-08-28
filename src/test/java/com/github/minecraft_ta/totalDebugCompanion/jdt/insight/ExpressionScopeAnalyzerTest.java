@@ -41,7 +41,10 @@ class ExpressionScopeAnalyzerTest {
     @BeforeAll
     static void initializeClassIndex() throws IOException {
         CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
-                classBytes(Object.class), classBytes(ExternalCompletionType.class)
+                classBytes(Object.class),
+                classBytes(ExternalCompletionType.class),
+                classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.a.Blocks.class),
+                classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks.class)
         )));
     }
 
@@ -156,6 +159,39 @@ class ExpressionScopeAnalyzerTest {
         assertTrue(names(completions).containsAll(List.of("externalMethod()", "externalStatic()")),
                 names(completions).toString());
         ASTCache.removeFromCache("external-completion-type");
+    }
+
+    @Test
+    void completesTheSourceVisibleTypeWhenIndexedTypesShareItsSimpleName() {
+        String source = """
+                package sample;
+                import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks;
+                class Sample {
+                    int field;
+                    void run() {
+                    }
+                }
+                """;
+        var unit = ASTCache.rawParse("Sample", source);
+        int context = source.indexOf("void run");
+
+        List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
+                unit, context, "Blo", 3
+        );
+
+        assertTrue(completions.stream().anyMatch(proposal ->
+                        proposal.kind() == DebuggerCompletionProposal.Kind.TYPE
+                                && proposal.label().equals("Blocks")
+                                && proposal.insertionText().equals("Blocks")
+                                && proposal.detail().endsWith("fixture.z.Blocks")),
+                completions.toString());
+        assertTrue(completions.stream().anyMatch(proposal ->
+                        proposal.kind() == DebuggerCompletionProposal.Kind.TYPE
+                                && proposal.insertionText().endsWith("fixture.a.Blocks")),
+                completions.toString());
+        assertTrue(names(ExpressionScopeAnalyzer.complete(unit, context, "thi", 3)).contains("this"));
+        assertTrue(names(ExpressionScopeAnalyzer.complete(unit, context, "this.", 5)).contains("field"));
+        assertTrue(names(ExpressionScopeAnalyzer.complete(unit, context, "Blocks.", 7)).contains("CORRECT"));
     }
 
     private static List<String> names(List<DebuggerCompletionProposal> suggestions) {

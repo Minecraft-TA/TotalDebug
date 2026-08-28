@@ -89,10 +89,17 @@ public final class ExpressionScopeAnalyzer {
         Objects.requireNonNull(expression, "expression");
         DebuggerCompletionRange range = DebuggerCompletionRange.around(expression, caret);
         if (!range.memberAccess()) {
-            return analyze(unit, sourceOffset).stream()
+            Map<String, DebuggerCompletionProposal> proposals = new LinkedHashMap<>();
+            analyze(unit, sourceOffset).stream()
                     .map(proposal -> proposal.withRange(range.start(), range.end()))
                     .filter(proposal -> startsWith(proposal.label(), range.prefix()))
-                    .toList();
+                    .forEach(proposal -> add(proposals, proposal));
+            java.util.Set<String> occupiedNames = proposals.values().stream()
+                    .map(DebuggerCompletionProposal::label)
+                    .collect(java.util.stream.Collectors.toSet());
+            IndexedTypeCompletion.types(unit, range, occupiedNames).forEach(proposal ->
+                    proposals.putIfAbsent("type\0" + proposal.insertionText(), proposal));
+            return sorted(proposals);
         }
         String owner = range.ownerExpression(expression).trim();
         ASTNode selected = NodeFinder.perform(unit, sourceOffset, 0);
@@ -115,8 +122,11 @@ public final class ExpressionScopeAnalyzer {
         }
         AbstractTypeDeclaration ownerType = resolveOwnerType(type, owner, sourceOffset);
         if (owner.equals("super") && ownerType != null) staticOwner = false;
-        if (ownerType == null) return;
-        addTypeMembers(result, ownerType, staticOwner, 20, 30, range, new java.util.HashSet<>());
+        if (ownerType != null) {
+            addTypeMembers(result, ownerType, staticOwner, 20, 30, range, new java.util.HashSet<>());
+        }
+        IndexedTypeCompletion.staticMembers((CompilationUnit) type.getRoot(), owner, range)
+                .forEach(proposal -> add(result, proposal));
     }
 
     private static ITypeBinding resolveOwnerBinding(

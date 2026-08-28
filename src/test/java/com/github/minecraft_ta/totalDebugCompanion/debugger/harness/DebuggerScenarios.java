@@ -162,6 +162,7 @@ public final class DebuggerScenarios {
 
     public static void conditionalAndHitCountBreakpoints() throws Exception {
         assertLoopBreakpoint("isTarget(iteration)", null, "2");
+        assertLoopBreakpoint("this != null && iteration == 2", null, "2");
         assertLoopBreakpoint(null, "2", "1");
     }
 

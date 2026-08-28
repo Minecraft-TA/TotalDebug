@@ -9,6 +9,10 @@ public final class ConditionalDebuggeeMain {
     }
 
     public static void main(String[] args) {
+        new ConditionalDebuggeeMain().run();
+    }
+
+    private void run() {
         for (int iteration = 0; iteration < 3; iteration++) {
             int snapshot = iteration; // DEBUG_CONDITIONAL_BREAKPOINT
             System.out.println(snapshot);

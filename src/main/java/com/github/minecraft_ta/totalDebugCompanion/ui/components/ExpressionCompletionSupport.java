@@ -42,6 +42,8 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private static final String ACCEPT_TAB = "debugExpressionCompletion.acceptTab";
     private static final String SHOW = "debugExpressionCompletion.show";
     private static final int ROW_HEIGHT = 24;
+    private static final int MINIMUM_WIDTH = 300;
+    private static final int MAXIMUM_CONTENT_WIDTH = 640;
 
     private final JavaExpressionField field;
     private final DefaultListModel<DebuggerCompletionProposal> model = new DefaultListModel<>();
@@ -94,6 +96,9 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
                     list.getSelectionForeground(),
                     list.getSelectionBackground()
             );
+            label.setToolTipText(value.detail().isBlank()
+                    ? value.label()
+                    : value.label() + "  " + value.detail());
             label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
             return label;
         });
@@ -105,6 +110,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
                 }
             }
         });
+        this.content.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         this.content.setBorder(PopupChrome.border());
     }
 
@@ -220,7 +226,9 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             return;
         }
         this.list.setSelectedIndex(0);
-        int width = Math.max(this.field.getWidth(), 300);
+        int renderedWidth = this.list.getPreferredSize().width + 20;
+        int width = Math.max(this.field.getWidth(),
+                Math.max(MINIMUM_WIDTH, Math.min(MAXIMUM_CONTENT_WIDTH, renderedWidth)));
         int height = Math.min(8, matches.size()) * ROW_HEIGHT + 2;
         JWindow completionWindow = popupForFieldOwner();
         completionWindow.setSize(new Dimension(width, height));

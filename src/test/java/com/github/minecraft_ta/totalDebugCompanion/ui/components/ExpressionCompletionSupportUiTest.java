@@ -18,6 +18,7 @@ import javax.swing.KeyStroke;
 import javax.swing.Popup;
 import javax.swing.PopupFactory;
 import javax.swing.RootPaneContainer;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -111,6 +112,38 @@ final class ExpressionCompletionSupportUiTest {
                     assertTrue(fixture.completion().isCompletionVisible());
                     invokeFieldAction(fixture.field(), "TAB");
                     assertEquals("pos.y + pos.x", fixture.field().getText());
+                });
+            } finally {
+                onEdt(fixture::close);
+            }
+        });
+    }
+
+    @Test
+    void givesOneLongCompletionEnoughWidthWithoutHorizontalScrolling() throws Exception {
+        withPopupFactory(ignored -> {
+            Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            try {
+                onEdt(() -> fixture.completion().setCompletionProvider((text, caret, explicit) ->
+                        CompletableFuture.completedFuture(List.of(new DebuggerCompletionProposal(
+                                "stateDefinition", "stateDefinition", DebuggerCompletionProposal.Kind.FIELD,
+                                "net.minecraft.world.level.block.state.StateDefinition<Block, BlockState>",
+                                0, text.length()
+                        )))));
+                onEdt(() -> fixture.field().setText("stated"));
+                await(fixture.completion()::isCompletionVisible);
+
+                onEdt(() -> {
+                    Window completionWindow = java.util.Arrays.stream(fixture.frame().getOwnedWindows())
+                            .filter(Window::isVisible)
+                            .findFirst()
+                            .orElseThrow();
+                    assertTrue(completionWindow.getWidth() > 300,
+                            "A long single result should not be squeezed into the minimum popup width");
+                    JScrollPane content = (JScrollPane) ((RootPaneContainer) completionWindow)
+                            .getContentPane();
+                    assertEquals(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER,
+                            content.getHorizontalScrollBarPolicy());
                 });
             } finally {
                 onEdt(fixture::close);
