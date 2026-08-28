@@ -18,6 +18,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.List;
@@ -177,6 +178,10 @@ class HierarchyGutterMarkersTest {
                         }
 
                         @Override
+                        public void toggleEnabled(int displayedLine) {
+                        }
+
+                        @Override
                         public void configure(int displayedLine, Component invoker, Point location) {
                         }
                     }
@@ -203,6 +208,63 @@ class HierarchyGutterMarkersTest {
 
         assertEquals(2, requestedLine.get());
         assertEquals(0, caretPosition.get(), "A breakpoint gutter click must not move the editor caret");
+    }
+
+    @Test
+    void altClickingABreakpointTogglesItsEnabledStateWithoutRemovingIt() throws Exception {
+        AtomicInteger toggledLine = new AtomicInteger(-1);
+        AtomicInteger enabledLine = new AtomicInteger(-1);
+
+        SwingUtilities.invokeAndWait(() -> {
+            var editor = new RSyntaxTextArea("first\nsecond\nthird");
+            var scrollPane = new RTextScrollPane(editor);
+            var editorGutter = new EditorGutter(scrollPane.getGutter());
+            var paintLayer = new JLayer<>(scrollPane);
+            var breakpointMarkers = new BreakpointGutterMarkers(
+                    editorGutter,
+                    editor,
+                    paintLayer,
+                    new BreakpointGutterMarkers.Handler() {
+                        @Override
+                        public void toggle(int displayedLine) {
+                            toggledLine.set(displayedLine);
+                        }
+
+                        @Override
+                        public void toggleEnabled(int displayedLine) {
+                            enabledLine.set(displayedLine);
+                        }
+
+                        @Override
+                        public void configure(int displayedLine, Component invoker, Point location) {
+                        }
+                    }
+            );
+            breakpointMarkers.setBreakpoints(List.of(managed(
+                    new DebugEngine.SourceBreakpoint(2),
+                    DebuggerSessionController.BreakpointState.BOUND
+            )));
+            scrollPane.setSize(320, 120);
+            layoutRecursively(scrollPane);
+
+            try {
+                int y = (int) editor.modelToView2D(editor.getLineStartOffset(1)).getCenterY();
+                LineNumberList lineNumbers = editorGutter.lineNumbers();
+                dispatchLeftClick(
+                        lineNumbers,
+                        Math.max(0, lineNumbers.getWidth() / 2),
+                        y,
+                        InputEvent.ALT_DOWN_MASK
+                );
+            } catch (javax.swing.text.BadLocationException exception) {
+                throw new AssertionError(exception);
+            }
+
+            breakpointMarkers.dispose();
+        });
+
+        assertEquals(-1, toggledLine.get());
+        assertEquals(2, enabledLine.get());
     }
 
     @Test
@@ -266,6 +328,10 @@ class HierarchyGutterMarkersTest {
                         }
 
                         @Override
+                        public void toggleEnabled(int displayedLine) {
+                        }
+
+                        @Override
                         public void configure(int displayedLine, Component invoker, Point location) {
                             requestedLine.set(displayedLine);
                         }
@@ -325,6 +391,10 @@ class HierarchyGutterMarkersTest {
                 plain,
                 DebuggerSessionController.BreakpointState.INVALID
         )));
+        assertSame(Icons.BREAKPOINT_DISABLED, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.DISABLED
+        )));
         assertEquals(14, BreakpointGutterMarkers.iconFor(managed(
                 conditional,
                 DebuggerSessionController.BreakpointState.UNBOUND
@@ -371,15 +441,19 @@ class HierarchyGutterMarkersTest {
     }
 
     private static void dispatchLeftClick(Component target, int x, int y) {
+        dispatchLeftClick(target, x, y, 0);
+    }
+
+    private static void dispatchLeftClick(Component target, int x, int y, int modifiers) {
         long when = System.currentTimeMillis();
         target.dispatchEvent(new MouseEvent(
-                target, MouseEvent.MOUSE_PRESSED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+                target, MouseEvent.MOUSE_PRESSED, when, modifiers, x, y, 1, false, MouseEvent.BUTTON1
         ));
         target.dispatchEvent(new MouseEvent(
-                target, MouseEvent.MOUSE_RELEASED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+                target, MouseEvent.MOUSE_RELEASED, when, modifiers, x, y, 1, false, MouseEvent.BUTTON1
         ));
         target.dispatchEvent(new MouseEvent(
-                target, MouseEvent.MOUSE_CLICKED, when, 0, x, y, 1, false, MouseEvent.BUTTON1
+                target, MouseEvent.MOUSE_CLICKED, when, modifiers, x, y, 1, false, MouseEvent.BUTTON1
         ));
     }
 
@@ -438,6 +512,10 @@ class HierarchyGutterMarkersTest {
     private static final class EmptyBreakpointHandler implements BreakpointGutterMarkers.Handler {
         @Override
         public void toggle(int displayedLine) {
+        }
+
+        @Override
+        public void toggleEnabled(int displayedLine) {
         }
 
         @Override

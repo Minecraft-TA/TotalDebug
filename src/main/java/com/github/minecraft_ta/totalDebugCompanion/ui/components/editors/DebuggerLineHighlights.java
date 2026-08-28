@@ -56,6 +56,7 @@ final class DebuggerLineHighlights {
     void setBreakpoints(Collection<DebuggerSessionController.Breakpoint> breakpoints) {
         Objects.requireNonNull(breakpoints, "breakpoints");
         setBreakpointLines(breakpoints.stream()
+                .filter(breakpoint -> breakpoint.state() != DebuggerSessionController.BreakpointState.DISABLED)
                 .filter(breakpoint -> breakpoint.state() != DebuggerSessionController.BreakpointState.INVALID)
                 .map(DebuggerSessionController.Breakpoint::line)
                 .toList());

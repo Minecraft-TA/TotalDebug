@@ -219,6 +219,68 @@ class DebuggerSessionControllerTest {
     }
 
     @Test
+    void disabledBreakpointKeepsItsConfigurationAndStaysDisabledAcrossReconnects() throws Exception {
+        List<RecordingEngine> engines = new ArrayList<>();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                () -> {
+                    RecordingEngine engine = new RecordingEngine();
+                    engines.add(engine);
+                    return engine.proxy();
+                },
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            DebugEngine.Source source = new DebugEngine.Source(
+                    URI.create("decompiled:///sample/Target.java"),
+                    "sample.Target",
+                    "class Target {}"
+            );
+            controller.configureBreakpoint(source, 19, "state != null", "3")
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertFalse(controller.toggleBreakpointEnabled(source, 19)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+            assertEquals(
+                    DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(source.uri(), 19).state()
+            );
+            assertTrue(engines.getFirst().breakpoints.get(source.uri()).isEmpty());
+
+            controller.configureBreakpoint(source, 19, "state.isAir()", "5")
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            DebuggerSessionController.Breakpoint disabled = controller.breakpoint(source.uri(), 19);
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED, disabled.state());
+            assertEquals(
+                    new DebugEngine.SourceBreakpoint(19, "state.isAir()", "5", null),
+                    disabled.request()
+            );
+            assertTrue(engines.getFirst().breakpoints.get(source.uri()).isEmpty());
+
+            controller.detach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(source.uri(), 19).state());
+            assertTrue(engines.get(1).breakpoints.get(source.uri()).isEmpty());
+
+            engines.get(1).fireBreakpointChanged(new DebugEngine.Breakpoint(19, 19, true, ""));
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(source.uri(), 19).state());
+
+            assertTrue(controller.toggleBreakpointEnabled(source, 19)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+            DebuggerSessionController.Breakpoint enabled = controller.breakpoint(source.uri(), 19);
+            assertEquals(DebuggerSessionController.BreakpointState.BOUND, enabled.state());
+            assertEquals(disabled.request(), enabled.request());
+            assertEquals(List.of(disabled.request()), engines.get(1).breakpoints.get(source.uri()));
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
     void methodBreakpointKeepsItsDeclarationLineAndUsesItsExactEntryLine() throws Exception {
         List<RecordingEngine> engines = new ArrayList<>();
         DebuggerSessionController controller = new DebuggerSessionController(

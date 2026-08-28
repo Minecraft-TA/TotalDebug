@@ -82,12 +82,13 @@ class DebuggerLineHighlightsTest {
     }
 
     @Test
-    void invalidBreakpointsDoNotPaintBreakpointRows() {
+    void invalidAndDisabledBreakpointsDoNotPaintBreakpointRows() {
         DebuggerLineHighlights highlights = highlights("one\ntwo\nthree");
 
         highlights.setBreakpoints(List.of(
                 breakpoint(2, DebuggerSessionController.BreakpointState.INVALID),
-                breakpoint(3, DebuggerSessionController.BreakpointState.BOUND)
+                breakpoint(3, DebuggerSessionController.BreakpointState.DISABLED),
+                breakpoint(1, DebuggerSessionController.BreakpointState.BOUND)
         ));
 
         assertEquals(1, highlights.paintedBreakpointCount());

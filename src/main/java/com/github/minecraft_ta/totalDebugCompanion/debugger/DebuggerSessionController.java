@@ -49,6 +49,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     public enum BreakpointState {
+        DISABLED,
         UNBOUND,
         PENDING,
         BOUND,
@@ -335,6 +336,39 @@ public final class DebuggerSessionController implements AutoCloseable {
         }).thenApply(ignored -> result);
     }
 
+    public CompletableFuture<Boolean> toggleBreakpointEnabled(DebugEngine.Source source, int line) {
+        DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
+        registerSource(checkedSource);
+        boolean enabled;
+        List<Breakpoint> snapshot;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedSource.uri());
+            Breakpoint current = sourceBreakpoints == null ? null : sourceBreakpoints.get(line);
+            if (current == null) {
+                return CompletableFuture.failedFuture(
+                        new IllegalArgumentException("No breakpoint exists at line " + line)
+                );
+            }
+            removeBreakpointBindingLocked(checkedSource.uri(), line);
+            enabled = current.state() == BreakpointState.DISABLED;
+            sourceBreakpoints.put(
+                    line,
+                    enabled
+                            ? createdBreakpoint(checkedSource, current.request())
+                            : new Breakpoint(current.request(), BreakpointState.DISABLED, "")
+            );
+            snapshot = List.copyOf(sourceBreakpoints.values());
+        }
+        notifyBreakpointsChanged(checkedSource.uri(), snapshot);
+        boolean result = enabled;
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) {
+                applyBreakpoints(current, checkedSource.uri());
+            }
+        }).thenApply(ignored -> result);
+    }
+
     public CompletableFuture<Void> configureBreakpoint(
             DebugEngine.Source source,
             int line,
@@ -368,10 +402,13 @@ public final class DebuggerSessionController implements AutoCloseable {
         synchronized (this.modelLock) {
             NavigableMap<Integer, Breakpoint> sourceBreakpoints =
                     this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
+            Breakpoint existing = sourceBreakpoints.get(checkedRequest.line());
             removeBreakpointBindingLocked(checkedSource.uri(), checkedRequest.line());
             sourceBreakpoints.put(
                     checkedRequest.line(),
-                    createdBreakpoint(checkedSource, checkedRequest)
+                    existing != null && existing.state() == BreakpointState.DISABLED
+                            ? new Breakpoint(checkedRequest, BreakpointState.DISABLED, "")
+                            : createdBreakpoint(checkedSource, checkedRequest)
             );
             snapshot = List.copyOf(sourceBreakpoints.values());
         }
@@ -549,6 +586,7 @@ public final class DebuggerSessionController implements AutoCloseable {
             NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(key.sourceUri());
             Breakpoint current = sourceBreakpoints == null ? null : sourceBreakpoints.get(key.line());
             if (current == null || !current.request().equals(key.request())
+                    || current.state() == BreakpointState.DISABLED
                     || current.state() == BreakpointState.INVALID) {
                 return;
             }
@@ -627,6 +665,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 pendingSnapshot = List.of();
             } else {
                 requested = sourceBreakpoints.values().stream()
+                        .filter(breakpoint -> breakpoint.state() != BreakpointState.DISABLED)
                         .filter(breakpoint -> breakpoint.state() != BreakpointState.INVALID)
                         .toList();
                 for (Breakpoint breakpoint : requested) {
@@ -665,6 +704,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 DebugEngine.Breakpoint response = responses.get(index);
                 Breakpoint current = sourceBreakpoints.get(requestedBreakpoint.line());
                 if (current == null || !current.request().equals(requestedBreakpoint.request())
+                        || current.state() == BreakpointState.DISABLED
                         || current.state() == BreakpointState.INVALID) {
                     continue;
                 }
@@ -721,6 +761,9 @@ public final class DebuggerSessionController implements AutoCloseable {
         boolean changed = false;
         for (Map.Entry<Integer, Breakpoint> entry : sourceBreakpoints.entrySet()) {
             Breakpoint current = entry.getValue();
+            if (current.state() == BreakpointState.DISABLED) {
+                continue;
+            }
             if (isStaticallyInvalid(source, current.request())) {
                 if (current.state() != BreakpointState.INVALID) {
                     removeBreakpointBindingLocked(source.uri(), current.line());

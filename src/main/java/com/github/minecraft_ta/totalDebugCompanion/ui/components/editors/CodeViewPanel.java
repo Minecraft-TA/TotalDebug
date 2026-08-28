@@ -199,6 +199,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                         }
 
                         @Override
+                        public void toggleEnabled(int displayedLine) {
+                            toggleBreakpointEnabledAtLine(displayedLine);
+                        }
+
+                        @Override
                         public void configure(int displayedLine, Component invoker, Point location) {
                             showBreakpointEditor(displayedLine, invoker, location);
                         }
@@ -434,6 +439,20 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             return;
         }
         debugger.toggleBreakpoint(this.debugSource, request.get())
+                .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (failure != null) {
+                        failure.printStackTrace(System.err);
+                        String detail = failure.getMessage();
+                        this.bottomInformationBar.setFailureInfoText(
+                                detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
+                        );
+                    }
+                }));
+    }
+
+    private void toggleBreakpointEnabledAtLine(int displayedLine) {
+        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        debugger.toggleBreakpointEnabled(this.debugSource, displayedLine)
                 .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
                     if (failure != null) {
                         failure.printStackTrace(System.err);

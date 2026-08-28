@@ -78,6 +78,7 @@ public class Icons {
     public static final FlatSVGIcon DEBUG_STEP_OUT = new FlatSVGIcon("icons/stepOut.svg");
     public static final FlatSVGIcon DEBUG_DETACH = new FlatSVGIcon("icons/detach.svg");
     public static final FlatSVGIcon BREAKPOINT = new FlatSVGIcon("icons/breakpoint.svg");
+    public static final FlatSVGIcon BREAKPOINT_DISABLED = new FlatSVGIcon("icons/breakpointDisabled.svg");
     public static final FlatSVGIcon BREAKPOINT_VALID = new FlatSVGIcon("icons/breakpointValid.svg");
     public static final FlatSVGIcon BREAKPOINT_INVALID = new FlatSVGIcon("icons/breakpointInvalid.svg");
     public static final FlatSVGIcon BREAKPOINT_QUESTION_BADGE = new FlatSVGIcon("icons/questionBadge.svg");

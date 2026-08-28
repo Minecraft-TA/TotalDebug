@@ -46,6 +46,8 @@ final class BreakpointGutterMarkers {
     interface Handler {
         void toggle(int displayedLine);
 
+        void toggleEnabled(int displayedLine);
+
         void configure(int displayedLine, Component invoker, Point location);
     }
 
@@ -65,7 +67,13 @@ final class BreakpointGutterMarkers {
             }
             int displayedLine = displayedLineAt(event.getY());
             if (displayedLine > 0) {
-                handler.toggle(displayedLine);
+                if (event.isAltDown()) {
+                    if (breakpointAt(displayedLine) != null) {
+                        handler.toggleEnabled(displayedLine);
+                    }
+                } else {
+                    handler.toggle(displayedLine);
+                }
             }
         }
 
@@ -147,6 +155,9 @@ final class BreakpointGutterMarkers {
     }
 
     static Icon iconFor(DebuggerSessionController.Breakpoint breakpoint) {
+        if (breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED) {
+            return Icons.BREAKPOINT_DISABLED;
+        }
         if (breakpoint.state() == DebuggerSessionController.BreakpointState.INVALID) {
             return Icons.BREAKPOINT_INVALID;
         }
@@ -224,6 +235,9 @@ final class BreakpointGutterMarkers {
         }
         DebugEngine.SourceBreakpoint request = breakpoint.request();
         String state = switch (breakpoint.state()) {
+            case DISABLED -> breakpoint.request().isMethodEntry()
+                    ? "Method breakpoint disabled"
+                    : "Breakpoint disabled";
             case UNBOUND -> breakpoint.request().isMethodEntry()
                     ? "Method breakpoint not bound"
                     : "Breakpoint not bound";
