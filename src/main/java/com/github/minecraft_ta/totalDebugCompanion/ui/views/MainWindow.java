@@ -45,6 +45,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final DebuggerActions debuggerActions;
     private final DebuggerShortcuts debuggerShortcuts;
     private DebuggerWindow debuggerWindow;
+    private BreakpointsWindow breakpointsWindow;
     private final DebuggerSessionController.Listener debuggerListener;
 
     private long lastShiftReleasedTime = 0;
@@ -164,6 +165,18 @@ public class MainWindow extends JFrame implements AWTEventListener {
         popup.add(detail);
         popup.addSeparator();
 
+        popup.add(new AbstractAction("View Breakpoints", Icons.VIEW_BREAKPOINTS) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                breakpointsWindow(debugger).showWindow();
+            }
+        });
+        JCheckBoxMenuItem mute = new JCheckBoxMenuItem("Mute Breakpoints", debugger.breakpointsMuted());
+        mute.setIcon(Icons.MUTE_BREAKPOINTS);
+        mute.addActionListener(event -> debugger.setBreakpointsMuted(mute.isSelected()));
+        popup.add(mute);
+        popup.addSeparator();
+
         switch (status.phase()) {
             case DETACHED, FAILED -> popup.add(this.debuggerActions.attach());
             case RUNNING, ATTACHING, DETACHING -> popup.add(this.debuggerActions.detach());
@@ -211,10 +224,22 @@ public class MainWindow extends JFrame implements AWTEventListener {
                     this,
                     debugger,
                     this.debuggerActions,
-                    this.debuggerShortcuts
+                    this.debuggerShortcuts,
+                    () -> breakpointsWindow(debugger).showWindow()
             );
         }
         return this.debuggerWindow;
+    }
+
+    private BreakpointsWindow breakpointsWindow(DebuggerSessionController debugger) {
+        if (this.breakpointsWindow == null) {
+            this.breakpointsWindow = new BreakpointsWindow(
+                    this,
+                    debugger,
+                    target -> this.navigationService.navigate(target)
+            );
+        }
+        return this.breakpointsWindow;
     }
 
     public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {

@@ -18,6 +18,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopu
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SettingsWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindowPreview;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.BreakpointsWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.BreakpointsWindowPreview;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
 import org.fife.ui.rtextarea.LineNumberList;
@@ -130,9 +132,9 @@ final class UiScenarioDriver {
                 });
             }
             case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(MainWindow.INSTANCE));
-            case DEBUGGER_WATCHES -> context.once(
-                    "open-debugger-watches",
-                    () -> DebuggerWindowPreview.open(MainWindow.INSTANCE, true)
+            case BREAKPOINTS -> context.once(
+                    "open-breakpoints",
+                    () -> BreakpointsWindowPreview.open(MainWindow.INSTANCE)
             );
             case HIERARCHY_ONE -> advanceHierarchyPreview(
                     context,
@@ -222,7 +224,8 @@ final class UiScenarioDriver {
                         .orElse(false);
             }
             case DEBUGGER_LOCATION -> MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView;
-            case DEBUGGER, DEBUGGER_WATCHES -> findShowingWindow(DebuggerWindow.class) != null;
+            case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
+            case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);
                 yield popup != null && findLabelContaining(popup, "Looking up") == null;

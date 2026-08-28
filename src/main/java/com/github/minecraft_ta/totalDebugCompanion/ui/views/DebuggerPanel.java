@@ -28,7 +28,7 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
+import javax.swing.JToggleButton;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
@@ -48,6 +48,7 @@ import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -63,6 +64,7 @@ import java.util.Set;
 /** Reusable debugger workspace. Its host decides whether it is docked or placed in a window. */
 public final class DebuggerPanel extends JPanel {
     private static final String LOADING = "Loading…";
+    private static final String ADD_WATCH_ACTION = "debugger.addWatch";
 
     @FunctionalInterface
     public interface FrameNavigation {
@@ -79,23 +81,18 @@ public final class DebuggerPanel extends JPanel {
     private final DefaultMutableTreeNode variableRoot = new DefaultMutableTreeNode("Variables");
     private final DefaultTreeModel variableModel = new DefaultTreeModel(this.variableRoot);
     private final JTree variables = createValueTree(this.variableModel);
-    private final DefaultMutableTreeNode watchRoot = new DefaultMutableTreeNode("Watches");
-    private final DefaultTreeModel watchModel = new DefaultTreeModel(this.watchRoot);
-    private final JTree watchTree = createValueTree(this.watchModel);
     private final JavaExpressionField expression = new JavaExpressionField();
     private final ExpressionCompletionSupport expressionCompletion = new ExpressionCompletionSupport(this.expression);
-    private final JButton evaluate = new JButton("Evaluate");
-    private final JButton addWatch = new JButton("Add Watch");
-    private final JButton removeWatch = toolbarButton(Icons.DELETE, "Remove selected watch (Delete)");
+    private final JButton addWatch = toolbarButton(Icons.ADD_TO_WATCH, "Add Watch (Shift+Enter)");
     private final Set<String> watches = new LinkedHashSet<>(GlobalConfig.getInstance().debuggerWatches());
-    private final JTabbedPane inspectorTabs = new JTabbedPane();
     private final JButton attach;
     private final JButton resume;
     private final JButton stepOver;
     private final JButton stepInto;
     private final JButton stepOut;
     private final JButton detach;
-    private final JPanel watchesPanel;
+    private final JButton viewBreakpoints;
+    private final JToggleButton muteBreakpoints;
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void statusChanged(DebuggerSessionController.Status status) {
@@ -105,6 +102,11 @@ public final class DebuggerPanel extends JPanel {
         @Override
         public void paused(DebuggerSessionController.PausedState state) {
             onEventThread(() -> showPausedState(state));
+        }
+
+        @Override
+        public void breakpointsMutedChanged(boolean muted) {
+            onEventThread(() -> DebuggerPanel.this.muteBreakpoints.setSelected(muted));
         }
     };
     private final PropertyChangeListener previewSettingsListener = event -> onEventThread(() -> {
@@ -118,12 +120,23 @@ public final class DebuggerPanel extends JPanel {
     private List<DebugEngine.Variable> currentVariables = List.of();
     private DebuggerSessionController.PausedState currentPause;
     private String lastEvaluationExpression = "";
+    private String variableStatus = "Variables are available while paused";
     private boolean disposed;
 
     DebuggerPanel(
             DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation
+    ) {
+        this(controller, debuggerActions, frameNavigation, () -> {
+        });
+    }
+
+    DebuggerPanel(
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            FrameNavigation frameNavigation,
+            Runnable showBreakpoints
     ) {
         super(new BorderLayout());
         this.controller = Objects.requireNonNull(controller, "controller");
@@ -135,23 +148,24 @@ public final class DebuggerPanel extends JPanel {
         this.stepInto = toolbarButton(debuggerActions.stepInto());
         this.stepOut = toolbarButton(debuggerActions.stepOut());
         this.detach = toolbarButton(debuggerActions.detach());
-        this.watchesPanel = createWatchesPanel();
+        this.viewBreakpoints = toolbarButton(Icons.VIEW_BREAKPOINTS, "View breakpoints");
+        this.viewBreakpoints.addActionListener(event -> showBreakpoints.run());
+        this.muteBreakpoints = toolbarToggle(Icons.MUTE_BREAKPOINTS, "Mute breakpoints");
+        this.muteBreakpoints.setSelected(controller.breakpointsMuted());
+        this.muteBreakpoints.addActionListener(event ->
+                controller.setBreakpointsMuted(this.muteBreakpoints.isSelected()));
 
         setBorder(BorderFactory.createEmptyBorder());
         add(createToolbar(), BorderLayout.NORTH);
 
         configureFrames();
         installExpansion(this.variables, this.variableModel);
-        installExpansion(this.watchTree, this.watchModel);
-
-        this.inspectorTabs.setBorder(BorderFactory.createEmptyBorder());
-        this.inspectorTabs.addTab("Variables", scroll(this.variables));
-        this.inspectorTabs.addTab("Watches", this.watchesPanel);
+        JComponent inspector = createInspectorPanel();
 
         JSplitPane split = new InitialProportionSplitPane(
                 0.42,
                 createFramesPanel(),
-                this.inspectorTabs
+                inspector
         );
         split.setBorder(BorderFactory.createEmptyBorder());
         split.setDividerSize(1);
@@ -173,6 +187,9 @@ public final class DebuggerPanel extends JPanel {
         actions.add(this.stepOut);
         actions.add(toolbarSeparator());
         actions.add(this.detach);
+        actions.add(toolbarSeparator());
+        actions.add(this.viewBreakpoints);
+        actions.add(this.muteBreakpoints);
 
         JPanel state = new JPanel();
         state.setOpaque(false);
@@ -225,20 +242,25 @@ public final class DebuggerPanel extends JPanel {
         return panel;
     }
 
-    private JPanel createWatchesPanel() {
-        this.expression.setPlaceholder("Evaluate expression or add a watch");
+    private JPanel createInspectorPanel() {
+        this.expression.setPlaceholder("Evaluate Expression (Enter)");
         this.expression.setToolTipText(
-                "Supports rich Java expressions, including members, operators, and method calls"
+                "Evaluate Expression (Enter); Add Watch (Shift+Enter)"
         );
         this.expression.addActionListener(event -> evaluateExpression(false));
-        this.evaluate.addActionListener(event -> evaluateExpression(false));
+        this.expression.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK),
+                ADD_WATCH_ACTION
+        );
+        this.expression.getActionMap().put(ADD_WATCH_ACTION, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                evaluateExpression(true);
+            }
+        });
         this.addWatch.addActionListener(event -> evaluateExpression(true));
-        this.removeWatch.addActionListener(event -> removeSelectedExpression());
-        this.removeWatch.setEnabled(false);
-        this.watchTree.addTreeSelectionListener(event ->
-                this.removeWatch.setEnabled(this.watchTree.getSelectionPath() != null));
-        this.watchTree.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "removeWatch");
-        this.watchTree.getActionMap().put("removeWatch", new AbstractAction() {
+        this.variables.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "removeWatch");
+        this.variables.getActionMap().put("removeWatch", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 removeSelectedExpression();
@@ -251,17 +273,11 @@ public final class DebuggerPanel extends JPanel {
                 BorderFactory.createEmptyBorder(6, 8, 6, 8)
         ));
         input.add(this.expression.component(), BorderLayout.CENTER);
-
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.TRAILING, 4, 0));
-        actions.setOpaque(false);
-        actions.add(this.evaluate);
-        actions.add(this.addWatch);
-        actions.add(this.removeWatch);
-        input.add(actions, BorderLayout.EAST);
+        input.add(this.addWatch, BorderLayout.EAST);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(input, BorderLayout.NORTH);
-        panel.add(scroll(this.watchTree), BorderLayout.CENTER);
+        panel.add(scroll(this.variables), BorderLayout.CENTER);
         return panel;
     }
 
@@ -305,6 +321,15 @@ public final class DebuggerPanel extends JPanel {
         return button;
     }
 
+    private static JToggleButton toolbarToggle(Icon icon, String tooltip) {
+        JToggleButton button = new JToggleButton(icon);
+        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        button.setToolTipText(tooltip);
+        button.setFocusable(false);
+        button.setMargin(new Insets(4, 6, 4, 6));
+        return button;
+    }
+
     private static JTree createValueTree(DefaultTreeModel model) {
         JTree tree = new JTree(model);
         tree.setRootVisible(false);
@@ -343,7 +368,6 @@ public final class DebuggerPanel extends JPanel {
 
         boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED;
         this.expression.setEnabled(paused);
-        this.evaluate.setEnabled(paused);
         this.addWatch.setEnabled(paused);
 
         if (!paused) {
@@ -371,7 +395,6 @@ public final class DebuggerPanel extends JPanel {
         this.frameLabel.setText("");
         this.frameModel.setFrames(List.of());
         showVariableStatus("Variables are available while paused");
-        showUnavailableWatches();
     }
 
     void showPausedState(DebuggerSessionController.PausedState state) {
@@ -390,7 +413,6 @@ public final class DebuggerPanel extends JPanel {
         } else {
             this.frameLabel.setText("");
             showVariableStatus("No stack frames available");
-            showUnavailableWatches();
         }
     }
 
@@ -420,7 +442,7 @@ public final class DebuggerPanel extends JPanel {
 
         this.frameNavigation.open(frame, false);
         DebuggerEditorPresentation.select(frame, List.of());
-        refreshExpressions(frame, revision);
+        rebuildInspector();
 
         DebuggerSessionController.PausedState pause = this.currentPause;
         if (pause != null && !pause.frames().isEmpty() && pause.frames().getFirst().equals(frame)) {
@@ -448,6 +470,7 @@ public final class DebuggerPanel extends JPanel {
 
     private void showVariables(List<DebugEngine.Variable> values) {
         this.currentVariables = List.copyOf(values);
+        this.variableStatus = null;
         if (this.currentFrame != null) {
             DebuggerEditorPresentation.select(
                     this.currentFrame,
@@ -455,32 +478,13 @@ public final class DebuggerPanel extends JPanel {
                     GlobalConfig.getInstance().automaticDebuggerPreviews()
             );
         }
-        this.variableRoot.removeAllChildren();
-        List<DefaultMutableTreeNode> nodes = new ArrayList<>();
-        List<DebugEngine.Variable> displayedValues = new ArrayList<>(values);
-        displayedValues.sort(Comparator.comparingInt(variable ->
-                variable.kind() == DebugEngine.VariableKind.THIS ? 0 : 1));
-        for (DebugEngine.Variable variable : displayedValues) {
-            DefaultMutableTreeNode node = valueNode(DebugValue.from(variable));
-            this.variableRoot.add(node);
-            nodes.add(node);
-        }
-        if (values.isEmpty()) {
-            this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue("No variables available", false)));
-        }
-        this.variableModel.reload();
-        long revision = this.viewRevision;
-        for (DefaultMutableTreeNode node : nodes) {
-            requestPreview(node, this.variableModel, revision);
-        }
-
+        rebuildInspector();
     }
 
     void focusVariable(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
         if (!Objects.equals(frame, this.currentFrame)) {
             return;
         }
-        this.inspectorTabs.setSelectedIndex(0);
         for (int index = 0; index < this.variableRoot.getChildCount(); index++) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) this.variableRoot.getChildAt(index);
             DebugValue value = debugValue(node.getUserObject());
@@ -503,9 +507,8 @@ public final class DebuggerPanel extends JPanel {
     }
 
     private void showVariableStatus(String text) {
-        this.variableRoot.removeAllChildren();
-        this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue(text, false)));
-        this.variableModel.reload();
+        this.variableStatus = text;
+        rebuildInspector();
     }
 
     private void loadChildren(DefaultMutableTreeNode node, DefaultTreeModel model) {
@@ -559,49 +562,76 @@ public final class DebuggerPanel extends JPanel {
         } else {
             this.lastEvaluationExpression = requested;
         }
-        this.inspectorTabs.setSelectedComponent(this.watchesPanel);
-        refreshExpressions(this.currentFrame, this.viewRevision);
+        rebuildInspector();
     }
 
     private void removeSelectedExpression() {
-        TreePath selection = this.watchTree.getSelectionPath();
+        TreePath selection = this.variables.getSelectionPath();
         if (selection == null) {
             return;
         }
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) selection.getLastPathComponent();
-        while (node.getParent() != this.watchRoot && node.getParent() instanceof DefaultMutableTreeNode parent) {
+        while (node.getParent() != this.variableRoot && node.getParent() instanceof DefaultMutableTreeNode parent) {
             node = parent;
         }
-        int rootIndex = this.watchRoot.getIndex(node);
-        if (!this.lastEvaluationExpression.isBlank() && rootIndex == 0) {
+        if (!(node.getUserObject() instanceof ExpressionValue)
+                && !(node.getUserObject() instanceof ExpressionStatus)) {
+            return;
+        }
+        String selectedExpression = expressionOf(node.getUserObject());
+        if (selectedExpression.equals(this.lastEvaluationExpression)) {
             this.lastEvaluationExpression = "";
         } else {
-            String expression = expressionOf(node.getUserObject());
-            if (this.watches.remove(expression)) {
+            if (this.watches.remove(selectedExpression)) {
                 GlobalConfig.getInstance().setDebuggerWatches(List.copyOf(this.watches));
             }
         }
-        refreshExpressions(this.currentFrame, this.viewRevision);
+        rebuildInspector();
     }
 
-    private void refreshExpressions(DebugEngine.StackFrame frame, long revision) {
-        this.watchRoot.removeAllChildren();
-        List<ExpressionRequest> requests = new ArrayList<>();
+    private void rebuildInspector() {
+        this.variableRoot.removeAllChildren();
+        List<ExpressionRequest> expressionRequests = new ArrayList<>();
         if (!this.lastEvaluationExpression.isBlank()) {
-            addExpressionRequest(requests, this.lastEvaluationExpression, false);
+            addExpressionNode(expressionRequests, this.lastEvaluationExpression, false);
         }
-        for (String expression : this.watches) {
-            addExpressionRequest(requests, expression, true);
+        for (String watch : this.watches) {
+            addExpressionNode(expressionRequests, watch, true);
         }
-        this.watchModel.reload();
+
+        List<DefaultMutableTreeNode> variableNodes = new ArrayList<>();
+        if (this.variableStatus != null) {
+            this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue(this.variableStatus, false)));
+        } else {
+            List<DebugEngine.Variable> displayedValues = new ArrayList<>(this.currentVariables);
+            displayedValues.sort(Comparator.comparingInt(variable ->
+                    variable.kind() == DebugEngine.VariableKind.THIS ? 0 : 1));
+            for (DebugEngine.Variable variable : displayedValues) {
+                DefaultMutableTreeNode node = valueNode(DebugValue.from(variable));
+                this.variableRoot.add(node);
+                variableNodes.add(node);
+            }
+            if (displayedValues.isEmpty()) {
+                this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue(
+                        "No variables available",
+                        false
+                )));
+            }
+        }
+        this.variableModel.reload();
+
+        long revision = this.viewRevision;
+        for (DefaultMutableTreeNode node : variableNodes) {
+            requestPreview(node, this.variableModel, revision);
+        }
+        DebugEngine.StackFrame frame = this.currentFrame;
         if (frame == null) {
-            showUnavailableWatches();
             return;
         }
-        for (ExpressionRequest request : requests) {
+        for (ExpressionRequest request : expressionRequests) {
             this.controller.evaluate(request.expression(), frame).whenComplete((result, failure) ->
                     SwingUtilities.invokeLater(() -> {
-                        if (!isCurrent(frame, revision) || request.node().getParent() != this.watchRoot) {
+                        if (!isCurrent(frame, revision) || request.node().getParent() != this.variableRoot) {
                             return;
                         }
                         request.node().removeAllChildren();
@@ -616,40 +646,24 @@ public final class DebuggerPanel extends JPanel {
                             request.node().setUserObject(new ExpressionValue(value));
                             addPlaceholder(request.node(), value);
                         }
-                        this.watchModel.nodeStructureChanged(request.node());
+                        this.variableModel.nodeStructureChanged(request.node());
                         if (failure == null) {
-                            requestPreview(request.node(), this.watchModel, revision);
+                            requestPreview(request.node(), this.variableModel, revision);
                         }
                     })
             );
         }
     }
 
-    private void addExpressionRequest(List<ExpressionRequest> requests, String expression, boolean watch) {
+    private void addExpressionNode(List<ExpressionRequest> requests, String expression, boolean watch) {
+        String status = this.currentFrame == null
+                ? "Not available while running"
+                : watch ? "Watch  " + LOADING : LOADING;
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(
-                new ExpressionStatus(expression, watch ? "Watch  " + LOADING : LOADING, false)
+                new ExpressionStatus(expression, status, false)
         );
-        this.watchRoot.add(node);
+        this.variableRoot.add(node);
         requests.add(new ExpressionRequest(expression, node));
-    }
-
-    private void showUnavailableWatches() {
-        this.watchRoot.removeAllChildren();
-        if (!this.lastEvaluationExpression.isBlank()) {
-            this.watchRoot.add(new DefaultMutableTreeNode(new ExpressionStatus(
-                    this.lastEvaluationExpression,
-                    "Not available while running",
-                    false
-            )));
-        }
-        for (String expression : this.watches) {
-            this.watchRoot.add(new DefaultMutableTreeNode(new ExpressionStatus(
-                    expression,
-                    "Not available while running",
-                    false
-            )));
-        }
-        this.watchModel.reload();
     }
 
     private boolean isCurrent(DebugEngine.StackFrame frame, long revision) {
@@ -744,10 +758,6 @@ public final class DebuggerPanel extends JPanel {
         this.expressionCompletion.close();
         this.controller.removeListener(this.listener);
         GlobalConfig.getInstance().removeAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
-    }
-
-    void showWatchesForPreview() {
-        this.inspectorTabs.setSelectedComponent(this.watchesPanel);
     }
 
     private record ExpressionRequest(String expression, DefaultMutableTreeNode node) {

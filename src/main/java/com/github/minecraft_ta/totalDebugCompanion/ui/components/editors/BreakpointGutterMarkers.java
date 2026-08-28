@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Paints and handles breakpoints directly in the line-number column. */
-final class BreakpointGutterMarkers {
+public final class BreakpointGutterMarkers {
     private static final Icon CONDITIONAL_BREAKPOINT = new BadgeIcon(
             Icons.BREAKPOINT,
             Icons.BREAKPOINT_QUESTION_BADGE
@@ -40,6 +40,14 @@ final class BreakpointGutterMarkers {
     );
     private static final Icon CONDITIONAL_METHOD_BREAKPOINT_VALID = new BadgeIcon(
             Icons.BREAKPOINT_METHOD_VALID,
+            Icons.BREAKPOINT_QUESTION_BADGE
+    );
+    private static final Icon CONDITIONAL_BREAKPOINT_MUTED = new BadgeIcon(
+            Icons.BREAKPOINT_MUTED,
+            Icons.BREAKPOINT_QUESTION_BADGE
+    );
+    private static final Icon CONDITIONAL_METHOD_BREAKPOINT_MUTED = new BadgeIcon(
+            Icons.BREAKPOINT_METHOD_MUTED,
             Icons.BREAKPOINT_QUESTION_BADGE
     );
 
@@ -58,6 +66,7 @@ final class BreakpointGutterMarkers {
     private final boolean restoreNativeMouseListener;
     private final boolean restoreNativeMouseMotionListener;
     private List<DebuggerSessionController.Breakpoint> breakpoints = List.of();
+    private boolean muted;
 
     private final MouseAdapter lineNumberClicks = new MouseAdapter() {
         @Override
@@ -92,7 +101,7 @@ final class BreakpointGutterMarkers {
         public void mouseMoved(MouseEvent event) {
             int displayedLine = displayedLineAt(event.getY());
             DebuggerSessionController.Breakpoint breakpoint = breakpointAt(displayedLine);
-            lineNumbers.setToolTipText(breakpoint == null ? null : tooltipFor(breakpoint));
+            lineNumbers.setToolTipText(breakpoint == null ? null : tooltipFor(breakpoint, muted));
         }
     };
 
@@ -117,8 +126,9 @@ final class BreakpointGutterMarkers {
         this.lineNumbers.addMouseMotionListener(this.tooltipUpdater);
     }
 
-    void setBreakpoints(List<DebuggerSessionController.Breakpoint> breakpoints) {
+    void setBreakpoints(List<DebuggerSessionController.Breakpoint> breakpoints, boolean muted) {
         this.breakpoints = List.copyOf(Objects.requireNonNull(breakpoints, "breakpoints"));
+        this.muted = muted;
         this.paintLayer.repaint();
     }
 
@@ -147,22 +157,31 @@ final class BreakpointGutterMarkers {
                     ? currentLine
                     : gutterBackground);
             graphics.fillRect(row.x, row.y, row.width, row.height);
-            Icon icon = iconFor(breakpoint);
+            Icon icon = iconFor(breakpoint, this.muted);
             int x = row.x + Math.max(0, (row.width - icon.getIconWidth()) / 2);
             int y = row.y + Math.max(0, (row.height - icon.getIconHeight()) / 2);
             icon.paintIcon(layer, graphics, x, y);
         }
     }
 
-    static Icon iconFor(DebuggerSessionController.Breakpoint breakpoint) {
-        if (breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED) {
-            return Icons.BREAKPOINT_DISABLED;
-        }
+    public static Icon iconFor(DebuggerSessionController.Breakpoint breakpoint, boolean muted) {
+        boolean method = breakpoint.request().isMethodEntry();
         if (breakpoint.state() == DebuggerSessionController.BreakpointState.INVALID) {
             return Icons.BREAKPOINT_INVALID;
         }
+        if (muted) {
+            if (breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED) {
+                return method ? Icons.BREAKPOINT_METHOD_MUTED_DISABLED : Icons.BREAKPOINT_MUTED_DISABLED;
+            }
+            if (isConditional(breakpoint.request())) {
+                return method ? CONDITIONAL_METHOD_BREAKPOINT_MUTED : CONDITIONAL_BREAKPOINT_MUTED;
+            }
+            return method ? Icons.BREAKPOINT_METHOD_MUTED : Icons.BREAKPOINT_MUTED;
+        }
+        if (breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED) {
+            return Icons.BREAKPOINT_DISABLED;
+        }
         boolean bound = breakpoint.state() == DebuggerSessionController.BreakpointState.BOUND;
-        boolean method = breakpoint.request().isMethodEntry();
         if (isConditional(breakpoint.request())) {
             if (method) {
                 return bound ? CONDITIONAL_METHOD_BREAKPOINT_VALID : CONDITIONAL_METHOD_BREAKPOINT;
@@ -229,9 +248,14 @@ final class BreakpointGutterMarkers {
                 || breakpoint.hitCondition() != null && !breakpoint.hitCondition().isBlank();
     }
 
-    private static String tooltipFor(DebuggerSessionController.Breakpoint breakpoint) {
+    private static String tooltipFor(DebuggerSessionController.Breakpoint breakpoint, boolean muted) {
         if (breakpoint.state() == DebuggerSessionController.BreakpointState.INVALID) {
             return breakpoint.detail();
+        }
+        if (muted) {
+            return breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED
+                    ? "Breakpoint disabled while all breakpoints are muted"
+                    : "All breakpoints are muted";
         }
         DebugEngine.SourceBreakpoint request = breakpoint.request();
         String state = switch (breakpoint.state()) {

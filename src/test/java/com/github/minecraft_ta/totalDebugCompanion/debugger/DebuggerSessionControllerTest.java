@@ -281,6 +281,93 @@ class DebuggerSessionControllerTest {
     }
 
     @Test
+    void globalMuteSuspendsEnabledBreakpointsWithoutChangingIndividualEnabledState() throws Exception {
+        List<RecordingEngine> engines = new ArrayList<>();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                () -> {
+                    RecordingEngine engine = new RecordingEngine();
+                    engines.add(engine);
+                    return engine.proxy();
+                },
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            DebugEngine.Source source = new DebugEngine.Source(
+                    URI.create("decompiled:///sample/Target.java"),
+                    "sample.Target",
+                    "class Target {}"
+            );
+            controller.toggleBreakpoint(source, 12).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.toggleBreakpoint(source, 19).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.setBreakpointEnabled(source.uri(), 19, false)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertEquals(List.of(12), breakpointLines(engines.getFirst(), source.uri()));
+            controller.setBreakpointsMuted(true).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertTrue(controller.breakpointsMuted());
+            assertTrue(engines.getFirst().breakpoints.get(source.uri()).isEmpty());
+            assertEquals(DebuggerSessionController.BreakpointState.UNBOUND,
+                    controller.breakpoint(source.uri(), 12).state());
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(source.uri(), 19).state());
+
+            controller.setBreakpointsMuted(false).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertFalse(controller.breakpointsMuted());
+            assertEquals(List.of(12), breakpointLines(engines.getFirst(), source.uri()));
+            assertEquals(DebuggerSessionController.BreakpointState.BOUND,
+                    controller.breakpoint(source.uri(), 12).state());
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(source.uri(), 19).state());
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void breakpointDefinitionsRoundTripBeforeTheirSourcesAreOpened() throws Exception {
+        DebuggerSessionController controller = new DebuggerSessionController(
+                RecordingEngine::newProxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            URI sourceUri = URI.create("decompiled:///sample/Target.java");
+            DebugEngine.SourceBreakpoint method = DebugEngine.SourceBreakpoint.methodEntry(
+                    10,
+                    12,
+                    new DebugEngine.MethodTarget("sample.Target", "run", "(I)V"),
+                    "value > 0",
+                    "3"
+            );
+            DebuggerSessionController.BreakpointDefinition definition =
+                    new DebuggerSessionController.BreakpointDefinition(
+                            sourceUri,
+                            "sample.Target",
+                            method,
+                            false
+                    );
+
+            controller.replaceBreakpointDefinitions(List.of(definition))
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertEquals(List.of(definition), controller.breakpointDefinitions());
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(sourceUri, 10).state());
+            assertEquals("sample.Target", controller.breakpointEntries().getFirst().binaryName());
+
+            controller.registerSource(mappedSource(sourceUri, 12));
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
+                    controller.breakpoint(sourceUri, 10).state());
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
     void methodBreakpointKeepsItsDeclarationLineAndUsesItsExactEntryLine() throws Exception {
         List<RecordingEngine> engines = new ArrayList<>();
         DebuggerSessionController controller = new DebuggerSessionController(

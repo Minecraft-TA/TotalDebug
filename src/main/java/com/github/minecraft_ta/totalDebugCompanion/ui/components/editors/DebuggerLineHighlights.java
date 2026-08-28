@@ -10,6 +10,7 @@ import java.awt.Color;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -53,9 +54,9 @@ final class DebuggerLineHighlights {
         refreshEditorHighlights();
     }
 
-    void setBreakpoints(Collection<DebuggerSessionController.Breakpoint> breakpoints) {
+    void setBreakpoints(Collection<DebuggerSessionController.Breakpoint> breakpoints, boolean muted) {
         Objects.requireNonNull(breakpoints, "breakpoints");
-        setBreakpointLines(breakpoints.stream()
+        setBreakpointLines(muted ? List.of() : breakpoints.stream()
                 .filter(breakpoint -> breakpoint.state() != DebuggerSessionController.BreakpointState.DISABLED)
                 .filter(breakpoint -> breakpoint.state() != DebuggerSessionController.BreakpointState.INVALID)
                 .map(DebuggerSessionController.Breakpoint::line)

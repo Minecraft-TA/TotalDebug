@@ -4,6 +4,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -80,11 +81,40 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
+    public record BreakpointDefinition(
+            URI sourceUri,
+            String binaryName,
+            DebugEngine.SourceBreakpoint request,
+            boolean enabled
+    ) {
+        public BreakpointDefinition {
+            Objects.requireNonNull(sourceUri, "sourceUri");
+            if (!sourceUri.isAbsolute()) {
+                throw new IllegalArgumentException("Breakpoint source URI must be absolute");
+            }
+            if (binaryName == null || binaryName.isBlank()) {
+                throw new IllegalArgumentException("Breakpoint binary name must not be blank");
+            }
+            Objects.requireNonNull(request, "request");
+        }
+    }
+
+    public record BreakpointEntry(URI sourceUri, String binaryName, Breakpoint breakpoint) {
+        public BreakpointEntry {
+            Objects.requireNonNull(sourceUri, "sourceUri");
+            Objects.requireNonNull(binaryName, "binaryName");
+            Objects.requireNonNull(breakpoint, "breakpoint");
+        }
+    }
+
     public interface Listener {
         default void statusChanged(Status status) {
         }
 
         default void breakpointsChanged(URI sourceUri, List<Breakpoint> breakpoints) {
+        }
+
+        default void breakpointsMutedChanged(boolean muted) {
         }
 
         default void paused(PausedState state) {
@@ -108,6 +138,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Map<URI, DebugEngine.Source> sources = new HashMap<>();
     private final Map<URI, NavigableMap<Integer, Breakpoint>> breakpoints = new HashMap<>();
+    private final Map<URI, String> breakpointBinaryNames = new HashMap<>();
     private final Map<Integer, BreakpointKey> engineBreakpointIds = new HashMap<>();
 
     private volatile Status status = new Status(Phase.UNAVAILABLE, null, "No Minecraft debug target", null);
@@ -116,6 +147,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     private volatile PausedState pausedState;
     private volatile boolean breakOnCaughtExceptions;
     private volatile boolean breakOnUncaughtExceptions;
+    private volatile boolean breakpointsMuted;
     private volatile boolean closed;
 
     public DebuggerSessionController() {
@@ -154,6 +186,7 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (currentPause != null) {
             checked.paused(currentPause);
         }
+        checked.breakpointsMutedChanged(this.breakpointsMuted);
     }
 
     public void removeListener(Listener listener) {
@@ -250,6 +283,9 @@ public final class DebuggerSessionController implements AutoCloseable {
         List<Breakpoint> changedBreakpoints;
         synchronized (this.modelLock) {
             this.sources.put(checked.uri(), checked);
+            if (this.breakpoints.containsKey(checked.uri())) {
+                this.breakpointBinaryNames.put(checked.uri(), checked.binaryName());
+            }
             changedBreakpoints = revalidateBreakpointsLocked(checked);
         }
         if (changedBreakpoints != null) {
@@ -275,6 +311,131 @@ public final class DebuggerSessionController implements AutoCloseable {
             NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(sourceUri);
             return sourceBreakpoints == null ? List.of() : List.copyOf(sourceBreakpoints.values());
         }
+    }
+
+    public List<BreakpointEntry> breakpointEntries() {
+        synchronized (this.modelLock) {
+            List<BreakpointEntry> result = new ArrayList<>();
+            for (Map.Entry<URI, NavigableMap<Integer, Breakpoint>> sourceEntry : this.breakpoints.entrySet()) {
+                String binaryName = this.breakpointBinaryNames.get(sourceEntry.getKey());
+                if (binaryName == null) {
+                    throw new IllegalStateException("Breakpoint source has no runtime binary name: "
+                            + sourceEntry.getKey());
+                }
+                for (Breakpoint breakpoint : sourceEntry.getValue().values()) {
+                    result.add(new BreakpointEntry(sourceEntry.getKey(), binaryName, breakpoint));
+                }
+            }
+            result.sort((left, right) -> {
+                int byClass = left.binaryName().compareTo(right.binaryName());
+                return byClass != 0 ? byClass : Integer.compare(
+                        left.breakpoint().line(),
+                        right.breakpoint().line()
+                );
+            });
+            return List.copyOf(result);
+        }
+    }
+
+    public List<BreakpointDefinition> breakpointDefinitions() {
+        return breakpointEntries().stream()
+                .map(entry -> new BreakpointDefinition(
+                        entry.sourceUri(),
+                        entry.binaryName(),
+                        entry.breakpoint().request(),
+                        entry.breakpoint().state() != BreakpointState.DISABLED
+                ))
+                .toList();
+    }
+
+    public boolean breakpointsMuted() {
+        return this.breakpointsMuted;
+    }
+
+    public CompletableFuture<Void> setBreakpointsMuted(boolean muted) {
+        if (this.breakpointsMuted == muted) {
+            return CompletableFuture.completedFuture(null);
+        }
+        Map<URI, List<Breakpoint>> changed = new HashMap<>();
+        synchronized (this.modelLock) {
+            this.breakpointsMuted = muted;
+            if (muted) {
+                this.engineBreakpointIds.clear();
+                for (Map.Entry<URI, NavigableMap<Integer, Breakpoint>> sourceEntry : this.breakpoints.entrySet()) {
+                    boolean sourceChanged = false;
+                    for (Map.Entry<Integer, Breakpoint> breakpointEntry : sourceEntry.getValue().entrySet()) {
+                        Breakpoint breakpoint = breakpointEntry.getValue();
+                        if (breakpoint.state() == BreakpointState.BOUND
+                                || breakpoint.state() == BreakpointState.PENDING) {
+                            breakpointEntry.setValue(new Breakpoint(
+                                    breakpoint.request(),
+                                    BreakpointState.UNBOUND,
+                                    ""
+                            ));
+                            sourceChanged = true;
+                        }
+                    }
+                    if (sourceChanged) {
+                        changed.put(sourceEntry.getKey(), List.copyOf(sourceEntry.getValue().values()));
+                    }
+                }
+            }
+        }
+        for (Listener listener : this.listeners) {
+            listener.breakpointsMutedChanged(muted);
+        }
+        changed.forEach(this::notifyBreakpointsChanged);
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) {
+                applyAllBreakpoints(current);
+            }
+        });
+    }
+
+    public CompletableFuture<Void> replaceBreakpointDefinitions(List<BreakpointDefinition> definitions) {
+        List<BreakpointDefinition> checked = List.copyOf(Objects.requireNonNull(definitions, "definitions"));
+        LinkedHashSet<URI> changedUris = new LinkedHashSet<>();
+        synchronized (this.modelLock) {
+            changedUris.addAll(this.breakpoints.keySet());
+            this.sources.clear();
+            this.breakpoints.clear();
+            this.breakpointBinaryNames.clear();
+            this.engineBreakpointIds.clear();
+            for (BreakpointDefinition definition : checked) {
+                NavigableMap<Integer, Breakpoint> sourceBreakpoints =
+                        this.breakpoints.computeIfAbsent(definition.sourceUri(), ignored -> new TreeMap<>());
+                if (sourceBreakpoints.containsKey(definition.request().line())) {
+                    throw new IllegalArgumentException(
+                            "Duplicate breakpoint at " + definition.sourceUri() + ":" + definition.request().line()
+                    );
+                }
+                DebugEngine.Source source = this.sources.get(definition.sourceUri());
+                sourceBreakpoints.put(
+                        definition.request().line(),
+                        definition.enabled()
+                                ? createdBreakpoint(source, definition.request())
+                                : new Breakpoint(definition.request(), BreakpointState.DISABLED, "")
+                );
+                this.breakpointBinaryNames.put(definition.sourceUri(), definition.binaryName());
+                changedUris.add(definition.sourceUri());
+            }
+        }
+        for (URI sourceUri : changedUris) {
+            notifyBreakpointsChanged(sourceUri, breakpoints(sourceUri));
+        }
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) {
+                for (URI sourceUri : changedUris) {
+                    if (source(sourceUri) == null) {
+                        current.setBreakpoints(sourceUri, List.of()).join();
+                    } else {
+                        applyBreakpoints(current, sourceUri);
+                    }
+                }
+            }
+        });
     }
 
     public CompletableFuture<Void> setExceptionBreakpoints(boolean caught, boolean uncaught) {
@@ -311,6 +472,7 @@ public final class DebuggerSessionController implements AutoCloseable {
         synchronized (this.modelLock) {
             NavigableMap<Integer, Breakpoint> sourceBreakpoints =
                     this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
+            this.breakpointBinaryNames.put(checkedSource.uri(), checkedSource.binaryName());
             if (sourceBreakpoints.remove(checkedRequest.line()) != null) {
                 removeBreakpointBindingLocked(checkedSource.uri(), checkedRequest.line());
                 enabled = false;
@@ -323,6 +485,7 @@ public final class DebuggerSessionController implements AutoCloseable {
             }
             if (sourceBreakpoints.isEmpty()) {
                 this.breakpoints.remove(checkedSource.uri());
+                this.breakpointBinaryNames.remove(checkedSource.uri());
             }
             snapshot = List.copyOf(sourceBreakpoints.values());
         }
@@ -339,34 +502,74 @@ public final class DebuggerSessionController implements AutoCloseable {
     public CompletableFuture<Boolean> toggleBreakpointEnabled(DebugEngine.Source source, int line) {
         DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
         registerSource(checkedSource);
-        boolean enabled;
+        Breakpoint existing = breakpoint(checkedSource.uri(), line);
+        if (existing == null) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("No breakpoint exists at line " + line)
+            );
+        }
+        return setBreakpointEnabled(
+                checkedSource.uri(),
+                line,
+                existing.state() == BreakpointState.DISABLED
+        );
+    }
+
+    public CompletableFuture<Boolean> setBreakpointEnabled(URI sourceUri, int line, boolean enabled) {
+        URI checkedUri = Objects.requireNonNull(sourceUri, "sourceUri");
         List<Breakpoint> snapshot;
         synchronized (this.modelLock) {
-            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedSource.uri());
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedUri);
             Breakpoint current = sourceBreakpoints == null ? null : sourceBreakpoints.get(line);
             if (current == null) {
                 return CompletableFuture.failedFuture(
                         new IllegalArgumentException("No breakpoint exists at line " + line)
                 );
             }
-            removeBreakpointBindingLocked(checkedSource.uri(), line);
-            enabled = current.state() == BreakpointState.DISABLED;
+            removeBreakpointBindingLocked(checkedUri, line);
+            DebugEngine.Source registeredSource = this.sources.get(checkedUri);
             sourceBreakpoints.put(
                     line,
                     enabled
-                            ? createdBreakpoint(checkedSource, current.request())
+                            ? createdBreakpoint(registeredSource, current.request())
                             : new Breakpoint(current.request(), BreakpointState.DISABLED, "")
             );
             snapshot = List.copyOf(sourceBreakpoints.values());
         }
-        notifyBreakpointsChanged(checkedSource.uri(), snapshot);
+        notifyBreakpointsChanged(checkedUri, snapshot);
         boolean result = enabled;
         return submitFuture(() -> {
             DebugEngine current = this.engine;
             if (current != null) {
-                applyBreakpoints(current, checkedSource.uri());
+                applyBreakpoints(current, checkedUri);
             }
         }).thenApply(ignored -> result);
+    }
+
+    public CompletableFuture<Void> removeBreakpoint(URI sourceUri, int line) {
+        URI checkedUri = Objects.requireNonNull(sourceUri, "sourceUri");
+        List<Breakpoint> snapshot;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedUri);
+            if (sourceBreakpoints == null || sourceBreakpoints.remove(line) == null) {
+                return CompletableFuture.completedFuture(null);
+            }
+            removeBreakpointBindingLocked(checkedUri, line);
+            if (sourceBreakpoints.isEmpty()) {
+                this.breakpoints.remove(checkedUri);
+                this.breakpointBinaryNames.remove(checkedUri);
+                snapshot = List.of();
+            } else {
+                snapshot = List.copyOf(sourceBreakpoints.values());
+            }
+        }
+        notifyBreakpointsChanged(checkedUri, snapshot);
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) {
+                applyBreakpoints(current, checkedUri);
+            }
+        });
     }
 
     public CompletableFuture<Void> configureBreakpoint(
@@ -394,29 +597,47 @@ public final class DebuggerSessionController implements AutoCloseable {
         DebugEngine.Source checkedSource = Objects.requireNonNull(source, "source");
         DebugEngine.SourceBreakpoint checkedRequest = Objects.requireNonNull(request, "request");
         registerSource(checkedSource);
+        return configureBreakpoint(checkedSource.uri(), checkedRequest);
+    }
+
+    public CompletableFuture<Void> configureBreakpoint(
+            URI sourceUri,
+            DebugEngine.SourceBreakpoint request
+    ) {
+        URI checkedUri = Objects.requireNonNull(sourceUri, "sourceUri");
+        DebugEngine.SourceBreakpoint checkedRequest = Objects.requireNonNull(request, "request");
         checkedRequest = checkedRequest.withConditions(
                 normalizeExpression(checkedRequest.condition()),
                 normalizeExpression(checkedRequest.hitCondition())
         );
         List<Breakpoint> snapshot;
         synchronized (this.modelLock) {
-            NavigableMap<Integer, Breakpoint> sourceBreakpoints =
-                    this.breakpoints.computeIfAbsent(checkedSource.uri(), ignored -> new TreeMap<>());
-            Breakpoint existing = sourceBreakpoints.get(checkedRequest.line());
-            removeBreakpointBindingLocked(checkedSource.uri(), checkedRequest.line());
+            NavigableMap<Integer, Breakpoint> sourceBreakpoints = this.breakpoints.get(checkedUri);
+            Breakpoint existing = sourceBreakpoints == null ? null : sourceBreakpoints.get(checkedRequest.line());
+            DebugEngine.Source registeredSource = this.sources.get(checkedUri);
+            if (registeredSource != null) {
+                this.breakpointBinaryNames.put(checkedUri, registeredSource.binaryName());
+            } else if (existing == null) {
+                throw new IllegalArgumentException("No breakpoint exists at line " + checkedRequest.line());
+            }
+            if (sourceBreakpoints == null) {
+                sourceBreakpoints = new TreeMap<>();
+                this.breakpoints.put(checkedUri, sourceBreakpoints);
+            }
+            removeBreakpointBindingLocked(checkedUri, checkedRequest.line());
             sourceBreakpoints.put(
                     checkedRequest.line(),
                     existing != null && existing.state() == BreakpointState.DISABLED
                             ? new Breakpoint(checkedRequest, BreakpointState.DISABLED, "")
-                            : createdBreakpoint(checkedSource, checkedRequest)
+                            : createdBreakpoint(registeredSource, checkedRequest)
             );
             snapshot = List.copyOf(sourceBreakpoints.values());
         }
-        notifyBreakpointsChanged(checkedSource.uri(), snapshot);
+        notifyBreakpointsChanged(checkedUri, snapshot);
         return submitFuture(() -> {
             DebugEngine current = this.engine;
             if (current != null) {
-                applyBreakpoints(current, checkedSource.uri());
+                applyBreakpoints(current, checkedUri);
             }
         });
     }
@@ -664,7 +885,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 requested = List.of();
                 pendingSnapshot = List.of();
             } else {
-                requested = sourceBreakpoints.values().stream()
+                requested = this.breakpointsMuted ? List.of() : sourceBreakpoints.values().stream()
                         .filter(breakpoint -> breakpoint.state() != BreakpointState.DISABLED)
                         .filter(breakpoint -> breakpoint.state() != BreakpointState.INVALID)
                         .toList();
@@ -746,10 +967,12 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private Breakpoint createdBreakpoint(DebugEngine.Source source, DebugEngine.SourceBreakpoint request) {
-        if (isStaticallyInvalid(source, request)) {
+        if (source != null && isStaticallyInvalid(source, request)) {
             return invalidBreakpoint(request);
         }
-        BreakpointState state = this.engine == null ? BreakpointState.UNBOUND : BreakpointState.PENDING;
+        BreakpointState state = this.engine == null || this.breakpointsMuted
+                ? BreakpointState.UNBOUND
+                : BreakpointState.PENDING;
         return new Breakpoint(request, state, "");
     }
 

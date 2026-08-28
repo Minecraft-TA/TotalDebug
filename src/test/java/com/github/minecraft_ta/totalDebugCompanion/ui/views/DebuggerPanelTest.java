@@ -2,9 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JSplitPane;
 import javax.swing.SwingUtilities;
@@ -14,6 +17,8 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,6 +31,38 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerPanelTest {
+    @Test
+    void exposesExplicitEvaluateAndAddWatchActions() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            DebuggerPanel panel = new DebuggerPanel(controller, actions, (frame, activateEditor) -> {
+            });
+
+            JavaExpressionField field = find(panel, JavaExpressionField.class);
+            assertNotNull(field);
+            assertEquals(
+                    "Evaluate Expression (Enter); Add Watch (Shift+Enter)",
+                    field.getToolTipText()
+            );
+
+            JButton addWatch = findButtonByTooltip(panel, "Add Watch (Shift+Enter)");
+            assertNotNull(addWatch);
+            assertTrue(addWatch.getText() == null || addWatch.getText().isBlank());
+            assertEquals("Add Watch (Shift+Enter)", addWatch.getToolTipText());
+
+            Object actionKey = field.getInputMap(JComponent.WHEN_FOCUSED).get(
+                    javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK)
+            );
+            assertNotNull(actionKey);
+            assertNotNull(field.getActionMap().get(actionKey));
+
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
     @Test
     void establishesFrameInspectorSplitOnFirstRealLayout() throws Exception {
         AtomicReference<DebuggerPanel> panelReference = new AtomicReference<>();
@@ -401,6 +438,21 @@ class DebuggerPanelTest {
             }
             if (component instanceof Container child) {
                 JTree match = findVariableTreeOrNull(child);
+                if (match != null) {
+                    return match;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JButton findButtonByTooltip(Container root, String tooltip) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof JButton button && tooltip.equals(button.getToolTipText())) {
+                return button;
+            }
+            if (component instanceof Container child) {
+                JButton match = findButtonByTooltip(child, tooltip);
                 if (match != null) {
                     return match;
                 }

@@ -55,12 +55,12 @@ class HierarchyGutterMarkersTest {
             breakpointMarkers.setBreakpoints(List.of(managed(
                     new DebugEngine.SourceBreakpoint(1),
                     DebuggerSessionController.BreakpointState.UNBOUND
-            )));
+            )), false);
             BufferedImage first = paint(breakpointMarkers, paintLayer);
             breakpointMarkers.setBreakpoints(List.of(
                     managed(new DebugEngine.SourceBreakpoint(1), DebuggerSessionController.BreakpointState.UNBOUND),
                     managed(new DebugEngine.SourceBreakpoint(2), DebuggerSessionController.BreakpointState.UNBOUND)
-            ));
+            ), false);
             BufferedImage second = paint(breakpointMarkers, paintLayer);
 
             assertNotEquals(rowPixels(empty, editor, paintLayer, 1), rowPixels(first, editor, paintLayer, 1));
@@ -118,7 +118,7 @@ class HierarchyGutterMarkersTest {
                     new DebugEngine.SourceBreakpoint(2),
                     DebuggerSessionController.BreakpointState.UNBOUND,
                     ""
-            )));
+            )), false);
             scrollPane.setSize(320, 120);
             layoutRecursively(scrollPane);
 
@@ -243,7 +243,7 @@ class HierarchyGutterMarkersTest {
             breakpointMarkers.setBreakpoints(List.of(managed(
                     new DebugEngine.SourceBreakpoint(2),
                     DebuggerSessionController.BreakpointState.BOUND
-            )));
+            )), false);
             scrollPane.setSize(320, 120);
             layoutRecursively(scrollPane);
 
@@ -378,47 +378,59 @@ class HierarchyGutterMarkersTest {
         assertSame(Icons.BREAKPOINT, BreakpointGutterMarkers.iconFor(managed(
                 plain,
                 DebuggerSessionController.BreakpointState.UNBOUND
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT, BreakpointGutterMarkers.iconFor(managed(
                 plain,
                 DebuggerSessionController.BreakpointState.PENDING
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_VALID, BreakpointGutterMarkers.iconFor(managed(
                 plain,
                 DebuggerSessionController.BreakpointState.BOUND
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
                 plain,
                 DebuggerSessionController.BreakpointState.INVALID
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_DISABLED, BreakpointGutterMarkers.iconFor(managed(
                 plain,
                 DebuggerSessionController.BreakpointState.DISABLED
-        )));
+        ), false));
         assertEquals(14, BreakpointGutterMarkers.iconFor(managed(
                 conditional,
                 DebuggerSessionController.BreakpointState.UNBOUND
-        )).getIconWidth());
+        ), false).getIconWidth());
         assertEquals(14, BreakpointGutterMarkers.iconFor(managed(
                 conditional,
                 DebuggerSessionController.BreakpointState.BOUND
-        )).getIconWidth());
+        ), false).getIconWidth());
         assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
                 conditional,
                 DebuggerSessionController.BreakpointState.INVALID
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_METHOD, BreakpointGutterMarkers.iconFor(managed(
                 method,
                 DebuggerSessionController.BreakpointState.UNBOUND
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_METHOD_VALID, BreakpointGutterMarkers.iconFor(managed(
                 method,
                 DebuggerSessionController.BreakpointState.BOUND
-        )));
+        ), false));
         assertSame(Icons.BREAKPOINT_INVALID, BreakpointGutterMarkers.iconFor(managed(
                 method,
                 DebuggerSessionController.BreakpointState.INVALID
-        )));
+        ), false));
+        assertSame(Icons.BREAKPOINT_MUTED, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.BOUND
+        ), true));
+        assertSame(Icons.BREAKPOINT_MUTED_DISABLED, BreakpointGutterMarkers.iconFor(managed(
+                plain,
+                DebuggerSessionController.BreakpointState.DISABLED
+        ), true));
+        assertSame(Icons.BREAKPOINT_METHOD_MUTED, BreakpointGutterMarkers.iconFor(managed(
+                method,
+                DebuggerSessionController.BreakpointState.BOUND
+        ), true));
     }
 
     private static DebuggerSessionController.Breakpoint managed(

@@ -84,6 +84,16 @@ public class Icons {
     public static final FlatSVGIcon BREAKPOINT_QUESTION_BADGE = new FlatSVGIcon("icons/questionBadge.svg");
     public static final FlatSVGIcon BREAKPOINT_METHOD = new FlatSVGIcon("icons/breakpointMethod.svg");
     public static final FlatSVGIcon BREAKPOINT_METHOD_VALID = new FlatSVGIcon("icons/breakpointMethodValid.svg");
+    public static final FlatSVGIcon BREAKPOINT_MUTED = new FlatSVGIcon("icons/breakpointMuted.svg");
+    public static final FlatSVGIcon BREAKPOINT_MUTED_DISABLED =
+            new FlatSVGIcon("icons/breakpointMutedDisabled.svg");
+    public static final FlatSVGIcon BREAKPOINT_METHOD_MUTED =
+            new FlatSVGIcon("icons/breakpointMethodMuted.svg");
+    public static final FlatSVGIcon BREAKPOINT_METHOD_MUTED_DISABLED =
+            new FlatSVGIcon("icons/breakpointMethodMutedDisabled.svg");
+    public static final FlatSVGIcon VIEW_BREAKPOINTS = new FlatSVGIcon("icons/viewBreakpoints.svg");
+    public static final FlatSVGIcon MUTE_BREAKPOINTS = new FlatSVGIcon("icons/muteBreakpoints.svg");
+    public static final FlatSVGIcon ADD_TO_WATCH = new FlatSVGIcon("icons/addToWatch.svg");
 
     public static final FlatSVGIcon OVERLAY_MODE = new FlatSVGIcon("icons/overlayMode.svg");
     public static final FlatSVGIcon TARGET = new FlatSVGIcon("icons/target.svg");

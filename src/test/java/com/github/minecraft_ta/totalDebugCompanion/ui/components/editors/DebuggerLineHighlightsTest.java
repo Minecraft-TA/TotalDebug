@@ -89,7 +89,7 @@ class DebuggerLineHighlightsTest {
                 breakpoint(2, DebuggerSessionController.BreakpointState.INVALID),
                 breakpoint(3, DebuggerSessionController.BreakpointState.DISABLED),
                 breakpoint(1, DebuggerSessionController.BreakpointState.BOUND)
-        ));
+        ), false);
 
         assertEquals(1, highlights.paintedBreakpointCount());
         highlights.dispose();

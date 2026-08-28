@@ -12,8 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -53,6 +55,8 @@ public final class GlobalConfig {
     private volatile float uiFontSize = 13f;
     private volatile Rectangle debuggerWindowBounds;
     private volatile List<String> debuggerWatches = List.of();
+    private volatile Map<String, List<PersistedBreakpoint>> debuggerBreakpoints = Map.of();
+    private volatile boolean debuggerBreakpointsMuted;
     private volatile boolean breakOnCaughtExceptions;
     private volatile boolean breakOnUncaughtExceptions;
     private volatile boolean debuggerInlineValues = true;
@@ -128,6 +132,44 @@ public final class GlobalConfig {
             return;
         }
         this.debuggerWatches = replacement;
+        scheduleSave();
+    }
+
+    public List<PersistedBreakpoint> debuggerBreakpoints(String runtimeSignature) {
+        if (runtimeSignature == null || runtimeSignature.isBlank()) {
+            return List.of();
+        }
+        return this.debuggerBreakpoints.getOrDefault(runtimeSignature, List.of());
+    }
+
+    public void setDebuggerBreakpoints(String runtimeSignature, List<PersistedBreakpoint> breakpoints) {
+        if (runtimeSignature == null || runtimeSignature.isBlank()) {
+            throw new IllegalArgumentException("Runtime signature must not be blank");
+        }
+        List<PersistedBreakpoint> replacement = List.copyOf(Objects.requireNonNull(breakpoints, "breakpoints"));
+        Map<String, List<PersistedBreakpoint>> updated = new HashMap<>(this.debuggerBreakpoints);
+        if (replacement.isEmpty()) {
+            updated.remove(runtimeSignature);
+        } else {
+            updated.put(runtimeSignature, replacement);
+        }
+        Map<String, List<PersistedBreakpoint>> immutable = Map.copyOf(updated);
+        if (immutable.equals(this.debuggerBreakpoints)) {
+            return;
+        }
+        this.debuggerBreakpoints = immutable;
+        scheduleSave();
+    }
+
+    public boolean debuggerBreakpointsMuted() {
+        return this.debuggerBreakpointsMuted;
+    }
+
+    public void setDebuggerBreakpointsMuted(boolean muted) {
+        if (this.debuggerBreakpointsMuted == muted) {
+            return;
+        }
+        this.debuggerBreakpointsMuted = muted;
         scheduleSave();
     }
 
@@ -263,6 +305,18 @@ public final class GlobalConfig {
         if (persisted.debuggerWatches != null) {
             this.debuggerWatches = normalizeWatches(persisted.debuggerWatches);
         }
+        if (persisted.debuggerBreakpoints != null) {
+            Map<String, List<PersistedBreakpoint>> loaded = new HashMap<>();
+            for (Map.Entry<String, List<PersistedBreakpoint>> entry : persisted.debuggerBreakpoints.entrySet()) {
+                if (entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
+                    loaded.put(entry.getKey(), List.copyOf(entry.getValue()));
+                }
+            }
+            this.debuggerBreakpoints = Map.copyOf(loaded);
+        }
+        if (persisted.debuggerBreakpointsMuted != null) {
+            this.debuggerBreakpointsMuted = persisted.debuggerBreakpointsMuted;
+        }
         if (persisted.breakOnCaughtExceptions != null) {
             this.breakOnCaughtExceptions = persisted.breakOnCaughtExceptions;
         }
@@ -342,6 +396,8 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.width,
                 debuggerBounds == null ? null : debuggerBounds.height,
                 this.debuggerWatches,
+                this.debuggerBreakpoints,
+                this.debuggerBreakpointsMuted,
                 this.breakOnCaughtExceptions,
                 this.breakOnUncaughtExceptions,
                 this.debuggerInlineValues,
@@ -383,11 +439,39 @@ public final class GlobalConfig {
             Integer debuggerWindowWidth,
             Integer debuggerWindowHeight,
             List<String> debuggerWatches,
+            Map<String, List<PersistedBreakpoint>> debuggerBreakpoints,
+            Boolean debuggerBreakpointsMuted,
             Boolean breakOnCaughtExceptions,
             Boolean breakOnUncaughtExceptions,
             Boolean debuggerInlineValues,
             Boolean automaticDebuggerPreviews
     ) {
+    }
+
+    public record PersistedBreakpoint(
+            String sourceUri,
+            String binaryName,
+            int line,
+            int debuggerLine,
+            String methodOwner,
+            String methodName,
+            String methodDescriptor,
+            String condition,
+            String hitCondition,
+            String logMessage,
+            boolean enabled
+    ) {
+        public PersistedBreakpoint {
+            if (sourceUri == null || sourceUri.isBlank()) {
+                throw new IllegalArgumentException("Breakpoint source URI must not be blank");
+            }
+            if (binaryName == null || binaryName.isBlank()) {
+                throw new IllegalArgumentException("Breakpoint binary name must not be blank");
+            }
+            if (line < 1 || debuggerLine < 0) {
+                throw new IllegalArgumentException("Breakpoint lines are invalid");
+            }
+        }
     }
 
     // ---------------------------------------------------------------- singleton

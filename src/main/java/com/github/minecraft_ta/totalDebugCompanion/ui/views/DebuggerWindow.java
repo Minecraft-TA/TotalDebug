@@ -38,12 +38,24 @@ public final class DebuggerWindow extends JFrame {
             DebuggerActions debuggerActions,
             DebuggerShortcuts debuggerShortcuts
     ) {
+        this(owner, controller, debuggerActions, debuggerShortcuts, () -> {
+        });
+    }
+
+    DebuggerWindow(
+            Window owner,
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            DebuggerShortcuts debuggerShortcuts,
+            Runnable showBreakpoints
+    ) {
         this(
                 owner,
                 controller,
                 debuggerActions,
                 debuggerShortcuts,
-                (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor)
+                (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor),
+                showBreakpoints
         );
     }
 
@@ -54,10 +66,22 @@ public final class DebuggerWindow extends JFrame {
             DebuggerShortcuts debuggerShortcuts,
             DebuggerPanel.FrameNavigation frameNavigation
     ) {
+        this(owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, () -> {
+        });
+    }
+
+    DebuggerWindow(
+            Window owner,
+            DebuggerSessionController controller,
+            DebuggerActions debuggerActions,
+            DebuggerShortcuts debuggerShortcuts,
+            DebuggerPanel.FrameNavigation frameNavigation,
+            Runnable showBreakpoints
+    ) {
         super("Minecraft Debugger");
         this.controller = controller;
         this.debuggerShortcuts = Objects.requireNonNull(debuggerShortcuts, "debuggerShortcuts");
-        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation);
+        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation, showBreakpoints);
         this.debuggerShortcuts.install(this);
         if (owner instanceof Frame frame) {
             setIconImages(frame.getIconImages());
@@ -98,14 +122,10 @@ public final class DebuggerWindow extends JFrame {
 
     void preview(
             DebuggerSessionController.Status status,
-            DebuggerSessionController.PausedState pausedState,
-            boolean showWatches
+            DebuggerSessionController.PausedState pausedState
     ) {
         this.panel.applyStatus(status);
         this.panel.showPausedState(pausedState);
-        if (showWatches) {
-            this.panel.showWatchesForPreview();
-        }
     }
 
     private void restoreBounds(Window owner) {

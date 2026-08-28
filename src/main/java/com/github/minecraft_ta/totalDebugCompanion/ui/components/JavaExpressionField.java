@@ -54,6 +54,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         setCodeFoldingEnabled(false);
         CodeUtils.initSyntaxScheme(this);
         setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+        applyFieldColors();
         this.component.setBorder(UIManager.getBorder("TextField.border"));
         this.component.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         this.component.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
@@ -114,6 +115,22 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         }
         if (this.component != null) {
             this.component.setBorder(UIManager.getBorder("TextField.border"));
+        }
+        applyFieldColors();
+    }
+
+    private void applyFieldColors() {
+        Color background = UIManager.getColor("TextField.background");
+        Color foreground = UIManager.getColor("TextField.foreground");
+        Color caret = UIManager.getColor("TextField.caretForeground");
+        if (background != null) {
+            setBackground(background);
+        }
+        if (foreground != null) {
+            setForeground(foreground);
+        }
+        if (caret != null) {
+            setCaretColor(caret);
         }
     }
 

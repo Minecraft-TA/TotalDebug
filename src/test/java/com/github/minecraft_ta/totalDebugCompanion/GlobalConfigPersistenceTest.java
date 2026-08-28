@@ -32,6 +32,21 @@ class GlobalConfigPersistenceTest {
         config.setUiFontSize(15f);
         config.setDebuggerWindowBounds(new Rectangle(120, 80, 1100, 620));
         config.setDebuggerWatches(List.of("player", "level.gameTime", "player"));
+        GlobalConfig.PersistedBreakpoint persistedBreakpoint = new GlobalConfig.PersistedBreakpoint(
+                "decompiled:///net/minecraft/world/level/block/Block.java",
+                "net.minecraft.world.level.block.Block",
+                42,
+                44,
+                "net.minecraft.world.level.block.Block",
+                "tick",
+                "()V",
+                "state != null",
+                "3",
+                null,
+                true
+        );
+        config.setDebuggerBreakpoints("runtime-a", List.of(persistedBreakpoint));
+        config.setDebuggerBreakpointsMuted(true);
         config.setBreakOnCaughtExceptions(true);
         config.setBreakOnUncaughtExceptions(true);
         config.setDebuggerInlineValues(false);
@@ -46,6 +61,8 @@ class GlobalConfigPersistenceTest {
         config.setUiFontSize(13f);
         config.setDebuggerWindowBounds(null);
         config.setDebuggerWatches(List.of());
+        config.setDebuggerBreakpoints("runtime-a", List.of());
+        config.setDebuggerBreakpointsMuted(false);
         config.setBreakOnCaughtExceptions(false);
         config.setBreakOnUncaughtExceptions(false);
         config.setDebuggerInlineValues(true);
@@ -57,12 +74,17 @@ class GlobalConfigPersistenceTest {
         assertEquals(15f, config.uiFontSize());
         assertEquals(new Rectangle(120, 80, 1100, 620), config.debuggerWindowBounds());
         assertEquals(List.of("player", "level.gameTime"), config.debuggerWatches());
+        assertEquals(List.of(persistedBreakpoint), config.debuggerBreakpoints("runtime-a"));
+        assertTrue(config.debuggerBreakpointsMuted());
         assertTrue(config.breakOnCaughtExceptions());
         assertTrue(config.breakOnUncaughtExceptions());
         assertFalse(config.debuggerInlineValues());
         assertFalse(config.automaticDebuggerPreviews());
         config.setDebuggerInlineValues(true);
         config.setAutomaticDebuggerPreviews(true);
+        config.setDebuggerWatches(List.of());
+        config.setDebuggerBreakpoints("runtime-a", List.of());
+        config.setDebuggerBreakpointsMuted(false);
     }
 
     @Test

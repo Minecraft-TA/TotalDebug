@@ -232,6 +232,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     }
                     SwingUtilities.invokeLater(() -> updateBreakpointMarkers(debugger));
                 }
+
+                @Override
+                public void breakpointsMutedChanged(boolean muted) {
+                    SwingUtilities.invokeLater(() -> updateBreakpointMarkers(debugger));
+                }
             };
             debugger.addListener(this.debuggerListener);
         }
@@ -614,8 +619,9 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {
         List<DebuggerSessionController.Breakpoint> breakpoints = debugger.breakpoints(this.debugSource.uri());
-        this.breakpointMarkers.setBreakpoints(breakpoints);
-        this.debuggerLineHighlights.setBreakpoints(breakpoints);
+        boolean muted = debugger.breakpointsMuted();
+        this.breakpointMarkers.setBreakpoints(breakpoints, muted);
+        this.debuggerLineHighlights.setBreakpoints(breakpoints, muted);
     }
 
     private void configureContextMenuCaret() {

@@ -16,10 +16,6 @@ public final class DebuggerWindowPreview {
     }
 
     public static DebuggerWindow open(Window owner) {
-        return open(owner, false);
-    }
-
-    public static DebuggerWindow open(Window owner, boolean showWatches) {
         DebuggerSessionController controller = new DebuggerSessionController();
         DebuggerActions actions = new DebuggerActions(controller);
         DebuggerShortcuts shortcuts = new DebuggerShortcuts(actions);
@@ -69,8 +65,7 @@ public final class DebuggerWindowPreview {
                         "Paused at Block.updateOrDestroy:174",
                         null
                 ),
-                new DebuggerSessionController.PausedState(stopped, frames, variables),
-                showWatches
+                new DebuggerSessionController.PausedState(stopped, frames, variables)
         );
         window.setBounds(owner.getX() + 80, owner.getY() + 50, 1120, 620);
         window.setVisible(true);

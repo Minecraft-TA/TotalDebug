@@ -53,6 +53,7 @@ import javax.swing.ToolTipManager;
 import java.awt.Window;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.net.URI;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -133,7 +134,7 @@ public final class CompanionApp {
             configureLookAndFeel();
             runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
-            debuggerController = new DebuggerSessionController(CompanionApp::loadDebugSource);
+            debuggerController = createDebuggerController();
             debuggerController.setExceptionBreakpoints(
                     GlobalConfig.getInstance().breakOnCaughtExceptions(),
                     GlobalConfig.getInstance().breakOnUncaughtExceptions()
@@ -358,6 +359,9 @@ public final class CompanionApp {
         }
         activeIndexFile = snapshot.indexFile();
         activeRuntimeSignature = snapshot.signature();
+        getDebuggerController().replaceBreakpointDefinitions(
+                restoreBreakpoints(snapshot.signature())
+        ).join();
         if (uiStarted) {
             MainWindow.INSTANCE.navigation().runtimeChanged();
             MainWindow.INSTANCE.refreshRuntimeSources();
@@ -735,10 +739,86 @@ public final class CompanionApp {
     public static synchronized DebuggerSessionController getDebuggerController() {
         DebuggerSessionController controller = debuggerController;
         if (controller == null) {
-            controller = new DebuggerSessionController(CompanionApp::loadDebugSource);
+            controller = createDebuggerController();
             debuggerController = controller;
         }
         return controller;
+    }
+
+    private static DebuggerSessionController createDebuggerController() {
+        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource);
+        GlobalConfig config = GlobalConfig.getInstance();
+        controller.setBreakpointsMuted(config.debuggerBreakpointsMuted()).join();
+        controller.addListener(new DebuggerSessionController.Listener() {
+            @Override
+            public void breakpointsChanged(
+                    URI sourceUri,
+                    List<DebuggerSessionController.Breakpoint> breakpoints
+            ) {
+                persistBreakpoints(controller);
+            }
+
+            @Override
+            public void breakpointsMutedChanged(boolean muted) {
+                config.setDebuggerBreakpointsMuted(muted);
+            }
+        });
+        return controller;
+    }
+
+    private static List<DebuggerSessionController.BreakpointDefinition> restoreBreakpoints(String runtimeSignature) {
+        return GlobalConfig.getInstance().debuggerBreakpoints(runtimeSignature).stream()
+                .map(persisted -> {
+                    DebugEngine.MethodTarget method = persisted.methodOwner() == null
+                            ? null
+                            : new DebugEngine.MethodTarget(
+                                    persisted.methodOwner(),
+                                    persisted.methodName(),
+                                    persisted.methodDescriptor()
+                            );
+                    DebugEngine.SourceBreakpoint request = new DebugEngine.SourceBreakpoint(
+                            persisted.line(),
+                            persisted.debuggerLine(),
+                            method,
+                            persisted.condition(),
+                            persisted.hitCondition(),
+                            persisted.logMessage()
+                    );
+                    return new DebuggerSessionController.BreakpointDefinition(
+                            URI.create(persisted.sourceUri()),
+                            persisted.binaryName(),
+                            request,
+                            persisted.enabled()
+                    );
+                })
+                .toList();
+    }
+
+    private static void persistBreakpoints(DebuggerSessionController controller) {
+        String runtimeSignature = activeRuntimeSignature;
+        if (runtimeSignature == null || runtimeSignature.isBlank()) {
+            return;
+        }
+        List<GlobalConfig.PersistedBreakpoint> persisted = controller.breakpointDefinitions().stream()
+                .map(definition -> {
+                    DebugEngine.SourceBreakpoint request = definition.request();
+                    DebugEngine.MethodTarget method = request.method();
+                    return new GlobalConfig.PersistedBreakpoint(
+                            definition.sourceUri().toString(),
+                            definition.binaryName(),
+                            request.line(),
+                            request.debuggerLine(),
+                            method == null ? null : method.ownerClassName(),
+                            method == null ? null : method.name(),
+                            method == null ? null : method.descriptor(),
+                            request.condition(),
+                            request.hitCondition(),
+                            request.logMessage(),
+                            definition.enabled()
+                    );
+                })
+                .toList();
+        GlobalConfig.getInstance().setDebuggerBreakpoints(runtimeSignature, persisted);
     }
 
     public static RuntimeIndexService.Status getRuntimeIndexStatus() {

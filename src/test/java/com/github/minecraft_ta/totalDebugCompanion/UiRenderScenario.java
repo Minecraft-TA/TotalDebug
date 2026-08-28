@@ -12,7 +12,7 @@ enum UiRenderScenario {
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),
     DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
-    DEBUGGER_WATCHES("debugger-watches", "Debugger expression and watch controls"),
+    BREAKPOINTS("breakpoints", "Persisted breakpoint list and selected breakpoint details"),
     HIERARCHY_ONE("hierarchy-one", "Hierarchy preview with one implementation"),
     HIERARCHY_MANY("hierarchy-many", "Hierarchy preview with several implementations"),
     IMPLEMENTATION_CHOOSER("implementation-chooser", "Implementation chooser with results"),
