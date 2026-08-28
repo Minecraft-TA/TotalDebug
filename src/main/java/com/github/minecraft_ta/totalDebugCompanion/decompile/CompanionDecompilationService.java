@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 import java.nio.charset.StandardCharsets;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-4";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-5";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;

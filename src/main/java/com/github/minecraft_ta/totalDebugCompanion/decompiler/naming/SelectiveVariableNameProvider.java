@@ -44,13 +44,17 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             return null;
         }
 
-        Map<VarVersionPair, String> localVariableNames = readLocalVariableNames(this.method);
         Map<Integer, List<String>> localVariableNamesBySlot = readLocalVariableNamesBySlot(this.method);
-        this.nameGenerator.reserve(localVariableNames.values());
+        localVariableNamesBySlot.values().forEach(this.nameGenerator::reserve);
         this.nameGenerator.reserve(this.methodParameterNames.values());
         this.nameGenerator.reserve(this.parchmentNames.values());
 
         int parameterEnd = parameterEnd(this.method);
+        Map<VarVersionPair, String> resolvedLocalNames = LocalVariableNameResolver.resolve(
+                this.method,
+                variables,
+                parameterEnd
+        );
         List<VarVersionPair> variablesInSlotOrder = new ArrayList<>(variables.keySet());
         variablesInSlotOrder.sort(Comparator
                 .comparingInt((VarVersionPair variable) -> variable.var)
@@ -64,7 +68,7 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                 continue;
             }
 
-            String existingName = localVariableNames.get(variable);
+            String existingName = resolvedLocalNames.get(variable);
             if (existingName == null && variable.var < parameterEnd) {
                 existingName = this.methodParameterNames.get(variable.var);
             }
@@ -79,6 +83,10 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             }
 
             if (existingName == null && hasMeaningfulName(localVariableNamesBySlot.get(variable.var))) {
+                continue;
+            }
+            if (existingName != null && !isGenerated(existingName)) {
+                replacements.put(variable, existingName);
                 continue;
             }
             if (isGenerated(existingName)) {
@@ -212,11 +220,6 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             slot += parameter.stackSize;
         }
         return slot;
-    }
-
-    private static Map<VarVersionPair, String> readLocalVariableNames(StructMethod method) {
-        StructLocalVariableTableAttribute variables = method.getLocalVariableAttr();
-        return variables == null ? Map.of() : variables.getMapNames();
     }
 
     private static Map<Integer, List<String>> readLocalVariableNamesBySlot(StructMethod method) {

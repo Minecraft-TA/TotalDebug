@@ -549,45 +549,44 @@ public final class DebuggerScenarios {
             equal(0, harness.awaitExit(), "generated-name debuggee exit code");
         }
 
-        DecompilationResult disambiguated = new VineflowerDecompiler().decompile(
+        DecompilationResult slotReuse = new VineflowerDecompiler().decompile(
                 LocalNameDisambiguationFixture.class.getName(),
                 classPathSource(LocalNameDisambiguationFixture.class.getClassLoader())
         );
-        DebugEngine.Source disambiguatedSource = new DebugEngine.Source(
+        DebugEngine.Source slotReuseSource = new DebugEngine.Source(
                 URI.create("decompiled:///" + LocalNameDisambiguationFixture.class.getName()
                         .replace('.', '/') + ".java"),
                 LocalNameDisambiguationFixture.class.getName(),
-                disambiguated.source(),
-                disambiguated.lineMap(),
-                disambiguated.variableNames()
+                slotReuse.source(),
+                slotReuse.lineMap(),
+                slotReuse.variableNames()
         );
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(
                 LocalNameDisambiguationFixture.class,
-                disambiguatedSource
+                slotReuseSource
         )) {
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(
-                    lineContaining(disambiguated.source(), "if (s.equals(blockstate))")
+                    lineContaining(slotReuse.source(), "if (blockstate1.equals(blockstate))")
             ));
             harness.start();
-            DebugEngine.StoppedEvent stopped = harness.awaitStop("Vineflower-disambiguated local name");
+            DebugEngine.StoppedEvent stopped = harness.awaitStop("slot-reused local name");
             DebugEngine.StackFrame frame = harness.firstFrame(stopped.threadId());
             Map<String, DebugEngine.Variable> variables = harness.variables(frame);
 
-            check(variables.containsKey("s"), "Debugger did not expose final Vineflower local name: "
+            check(variables.containsKey("blockstate1"), "Debugger did not preserve the readable LVT local name: "
                     + variables.keySet());
-            check(!variables.containsKey("blockstate1"), "Debugger leaked runtime local name blockstate1");
             equal(
                     "false",
-                    harness.engine().evaluate("s.equals(blockstate)", frame.id())
+                    harness.engine().evaluate("blockstate1.equals(blockstate)", frame.id())
                             .thenApply(DebugEngine.EvaluationResult::value)
                             .get(TIMEOUT_SECONDS, TimeUnit.SECONDS),
                     "Vineflower-disambiguated local evaluation"
             );
 
             harness.engine().resume(stopped.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            DebugEngine.StoppedEvent secondStop = harness.awaitStop("second disambiguated local iteration");
+            DebugEngine.StoppedEvent secondStop = harness.awaitStop("second slot-reused local iteration");
             harness.engine().resume(secondStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            equal(0, harness.awaitExit(), "disambiguated-name debuggee exit code");
+            equal(0, harness.awaitExit(), "slot-reused-name debuggee exit code");
         }
     }
 

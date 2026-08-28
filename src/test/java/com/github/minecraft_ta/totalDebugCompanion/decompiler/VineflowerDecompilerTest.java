@@ -83,13 +83,13 @@ class VineflowerDecompilerTest {
     }
 
     @Test
-    void capturesVineflowerLocalNameDisambiguation() throws Exception {
+    void reusesReadableLvtNameAfterSlotReuse() throws Exception {
         DecompilationResult result = decompile(LocalNameDisambiguationFixture.class);
 
         assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
-        assertTrue(result.source().contains("String s = values[i]"), result.source());
+        assertTrue(result.source().contains("String blockstate1 = values[i]"), result.source());
         assertEquals(
-                "s",
+                "blockstate1",
                 result.variableNames().displayedName(
                         "inspect",
                         "(Ljava/lang/String;[Ljava/lang/String;)I",
