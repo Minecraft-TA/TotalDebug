@@ -54,8 +54,9 @@ final class DebuggerInlineValueHints {
         Map<String, DebuggerEditorPresentation.PresentedVariable> visible = new LinkedHashMap<>();
         for (DebuggerEditorPresentation.PresentedVariable presented : snapshot.variables()) {
             DebugEngine.Variable variable = presented.variable();
-            if (variable.kind() == DebugEngine.VariableKind.PARAMETER
-                    || variable.kind() == DebugEngine.VariableKind.LOCAL) {
+            if (presented.previewResolved()
+                    && (variable.kind() == DebugEngine.VariableKind.PARAMETER
+                            || variable.kind() == DebugEngine.VariableKind.LOCAL)) {
                 visible.put(variable.name(), presented);
             }
         }

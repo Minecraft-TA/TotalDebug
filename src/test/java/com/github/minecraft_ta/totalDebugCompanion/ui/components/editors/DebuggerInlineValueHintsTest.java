@@ -74,6 +74,54 @@ class DebuggerInlineValueHintsTest {
                 .noneMatch(value -> value.contains("this:")));
     }
 
+    @Test
+    void hidesAnObjectUntilItsPreviewHasResolved() {
+        String source = """
+                class Sample {
+                    int inspect(Object pos) {
+                        return pos.hashCode();
+                    }
+                }
+                """;
+        DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                1, "Sample.inspect", "Sample", URI.create("file:///Sample.java"), 3, 1
+        );
+        DebugEngine.Variable pos = variable(
+                "pos",
+                "net.minecraft.core.BlockPos@7",
+                "net.minecraft.core.BlockPos",
+                DebugEngine.VariableKind.PARAMETER
+        );
+        DebuggerEditorPresentation.Snapshot snapshot = new DebuggerEditorPresentation.Snapshot(
+                frame,
+                List.of(new DebuggerEditorPresentation.PresentedVariable(
+                        pos,
+                        DebugEngine.ValuePreview.NONE,
+                        false
+                ))
+        );
+
+        Map<Integer, DebuggerInlineValueHints.LineHint> hints = DebuggerInlineValueHints.create(
+                ASTCache.rawParse("Sample", source), source, snapshot
+        );
+
+        assertTrue(hints.isEmpty(), hints.toString());
+
+        DebuggerEditorPresentation.Snapshot resolved = new DebuggerEditorPresentation.Snapshot(
+                frame,
+                List.of(new DebuggerEditorPresentation.PresentedVariable(
+                        pos,
+                        new DebugEngine.ValuePreview("x=1, y=64, z=2", "x=1, y=64, z=2"),
+                        true
+                ))
+        );
+        Map<Integer, DebuggerInlineValueHints.LineHint> resolvedHints = DebuggerInlineValueHints.create(
+                ASTCache.rawParse("Sample", source), source, resolved
+        );
+        assertEquals("pos: x=1, y=64, z=2", text(resolvedHints.get(2)));
+        assertEquals("pos: x=1, y=64, z=2", text(resolvedHints.get(3)));
+    }
+
     private static String text(DebuggerInlineValueHints.LineHint hint) {
         return hint.values().stream().map(DebuggerInlineValueHints.ValueHint::text)
                 .reduce((left, right) -> left + "    " + right).orElse("");

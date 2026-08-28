@@ -10,10 +10,18 @@ import java.util.function.Consumer;
 
 /** Current selected debugger frame and its values, independent of any open editor tab. */
 public final class DebuggerEditorPresentation {
-    public record PresentedVariable(DebugEngine.Variable variable, DebugEngine.ValuePreview preview) {
+    public record PresentedVariable(
+            DebugEngine.Variable variable,
+            DebugEngine.ValuePreview preview,
+            boolean previewResolved
+    ) {
         public PresentedVariable {
             Objects.requireNonNull(variable, "variable");
             Objects.requireNonNull(preview, "preview");
+        }
+
+        public PresentedVariable(DebugEngine.Variable variable, DebugEngine.ValuePreview preview) {
+            this(variable, preview, true);
         }
     }
 
@@ -38,8 +46,20 @@ public final class DebuggerEditorPresentation {
     }
 
     public static void select(DebugEngine.StackFrame frame, List<DebugEngine.Variable> variables) {
+        select(frame, variables, false);
+    }
+
+    public static void select(
+            DebugEngine.StackFrame frame,
+            List<DebugEngine.Variable> variables,
+            boolean awaitObjectPreviews
+    ) {
         List<PresentedVariable> presented = variables.stream()
-                .map(variable -> new PresentedVariable(variable, DebugEngine.ValuePreview.NONE))
+                .map(variable -> new PresentedVariable(
+                        variable,
+                        DebugEngine.ValuePreview.NONE,
+                        !awaitObjectPreviews || variable.variablesReference() <= 0
+                ))
                 .toList();
         publish(new Snapshot(frame, presented));
     }
@@ -57,7 +77,7 @@ public final class DebuggerEditorPresentation {
         boolean changed = false;
         for (PresentedVariable value : snapshot.variables()) {
             if (value.variable().variablesReference() == variablesReference) {
-                replacement.add(new PresentedVariable(value.variable(), preview));
+                replacement.add(new PresentedVariable(value.variable(), preview, true));
                 changed = true;
             } else {
                 replacement.add(value);

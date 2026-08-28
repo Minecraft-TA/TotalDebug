@@ -447,7 +447,11 @@ public final class DebuggerPanel extends JPanel {
     private void showVariables(List<DebugEngine.Variable> values) {
         this.currentVariables = List.copyOf(values);
         if (this.currentFrame != null) {
-            DebuggerEditorPresentation.select(this.currentFrame, values);
+            DebuggerEditorPresentation.select(
+                    this.currentFrame,
+                    values,
+                    GlobalConfig.getInstance().automaticDebuggerPreviews()
+            );
         }
         this.variableRoot.removeAllChildren();
         List<DefaultMutableTreeNode> nodes = new ArrayList<>();
@@ -658,19 +662,29 @@ public final class DebuggerPanel extends JPanel {
         }
         this.controller.preview(value.variablesReference()).whenComplete((preview, failure) ->
                 SwingUtilities.invokeLater(() -> {
-                    if (failure != null || revision != this.viewRevision || node.getParent() == null
-                            || !Objects.equals(debugValue(node.getUserObject()), value) || !preview.available()) {
+                    if (revision != this.viewRevision || node.getParent() == null
+                            || !Objects.equals(debugValue(node.getUserObject()), value)) {
                         return;
                     }
-                    DebugValue replacement = value.withPreview(preview);
+                    DebugEngine.ValuePreview resolvedPreview = failure == null && preview != null
+                            ? preview
+                            : DebugEngine.ValuePreview.NONE;
+                    DebugEngine.StackFrame frame = this.currentFrame;
+                    if (frame != null) {
+                        DebuggerEditorPresentation.updatePreview(
+                                frame,
+                                value.variablesReference(),
+                                resolvedPreview
+                        );
+                    }
+                    if (!resolvedPreview.available()) {
+                        return;
+                    }
+                    DebugValue replacement = value.withPreview(resolvedPreview);
                     node.setUserObject(node.getUserObject() instanceof ExpressionValue
                             ? new ExpressionValue(replacement)
                             : replacement);
                     model.nodeChanged(node);
-                    DebugEngine.StackFrame frame = this.currentFrame;
-                    if (frame != null) {
-                        DebuggerEditorPresentation.updatePreview(frame, value.variablesReference(), preview);
-                    }
                 })
         );
     }
