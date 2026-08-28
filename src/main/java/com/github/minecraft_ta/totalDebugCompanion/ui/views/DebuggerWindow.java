@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 
 import javax.swing.JFrame;
@@ -86,6 +87,11 @@ public final class DebuggerWindow extends JFrame {
             setVisible(true);
         }
         toFront();
+    }
+
+    void showVariable(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
+        showWindow();
+        this.panel.focusVariable(frame, variable);
     }
 
     void preview(

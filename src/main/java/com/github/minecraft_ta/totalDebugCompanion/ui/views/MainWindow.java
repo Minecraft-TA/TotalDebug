@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -214,6 +215,10 @@ public class MainWindow extends JFrame implements AWTEventListener {
             );
         }
         return this.debuggerWindow;
+    }
+
+    public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
+        debuggerWindow(CompanionApp.getDebuggerController()).showVariable(frame, variable);
     }
 
     @Override

@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** Paints clickable code-vision counts without inserting text into the decompiled document. */
+/** Paints clickable editor adornments without inserting text into the decompiled document. */
 final class CodeVisionLayerUI extends LayerUI<JComponent> {
     private static final int INLINE_VALUE_GAP = 18;
 
@@ -39,6 +39,8 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         void showUsages(CodeSymbol symbol);
 
         void showHierarchy(CodeSymbol symbol, HierarchyRelation relation, int count, int anchorOffset);
+
+        void showDebuggerValue(DebuggerInlineValueHints.ValueHint value);
     }
 
     private enum Action {
@@ -48,10 +50,10 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
 
     private final RSyntaxTextArea editor;
     private final Handler handler;
-    private final List<HitTarget> hitTargets = new ArrayList<>();
+    private final List<Target> hitTargets = new ArrayList<>();
     private List<CodeVisionEntry> entries = List.of();
-    private Map<Integer, String> inlineValues = Map.of();
-    private HitTarget hovered;
+    private Map<Integer, DebuggerInlineValueHints.LineHint> inlineValues = Map.of();
+    private Target hovered;
 
     CodeVisionLayerUI(RSyntaxTextArea editor, Handler handler) {
         this.editor = Objects.requireNonNull(editor, "editor");
@@ -69,8 +71,13 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         layer.repaint();
     }
 
-    void setInlineValues(Map<Integer, String> inlineValues, JLayer<JComponent> layer) {
+    void setInlineValues(
+            Map<Integer, DebuggerInlineValueHints.LineHint> inlineValues,
+            JLayer<JComponent> layer
+    ) {
         this.inlineValues = Map.copyOf(Objects.requireNonNull(inlineValues, "inlineValues"));
+        this.hovered = null;
+        this.hitTargets.clear();
         layer.repaint();
     }
 
@@ -189,7 +196,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
             hints.setFont(this.editor.getFont().deriveFont(Font.ITALIC));
             hints.setColor(ThemeColors.mutedText());
             FontMetrics metrics = hints.getFontMetrics();
-            for (Map.Entry<Integer, String> entry : this.inlineValues.entrySet()) {
+            for (Map.Entry<Integer, DebuggerInlineValueHints.LineHint> entry : this.inlineValues.entrySet()) {
                 int line = entry.getKey();
                 if (line < 1 || line > this.editor.getLineCount()) {
                     continue;
@@ -210,14 +217,35 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                 if (point.y + endBounds.getHeight() < clip.y || point.y > clip.y + clip.height) {
                     continue;
                 }
-                int available = clip.x + clip.width - point.x - 8;
-                if (available <= metrics.charWidth('…')) {
-                    continue;
-                }
-                String text = fit(entry.getValue(), metrics, available);
                 int baseline = point.y + ((int) Math.ceil(endBounds.getHeight()) - metrics.getHeight()) / 2
                         + metrics.getAscent();
-                hints.drawString(text, point.x, baseline);
+                int x = point.x;
+                int separator = metrics.stringWidth("    ");
+                for (DebuggerInlineValueHints.ValueHint value : entry.getValue().values()) {
+                    int available = clip.x + clip.width - x - 8;
+                    if (available <= metrics.charWidth('…')) {
+                        break;
+                    }
+                    String text = fit(value.text(), metrics, available);
+                    int width = metrics.stringWidth(text);
+                    Rectangle bounds = new Rectangle(
+                            x - 2,
+                            baseline - metrics.getAscent(),
+                            width + 4,
+                            metrics.getHeight()
+                    );
+                    InlineValueTarget target = new InlineValueTarget(bounds, value);
+                    hints.setColor(target.equals(this.hovered) ? ThemeColors.accent() : ThemeColors.mutedText());
+                    hints.drawString(text, x, baseline);
+                    if (target.equals(this.hovered)) {
+                        hints.drawLine(x, baseline + 1, x + width - 1, baseline + 1);
+                    }
+                    this.hitTargets.add(target);
+                    x += width + separator;
+                    if (!text.equals(value.text())) {
+                        break;
+                    }
+                }
             }
         } catch (BadLocationException ignored) {
         } finally {
@@ -254,7 +282,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
     ) {
         int width = metrics.stringWidth(text);
         Rectangle bounds = new Rectangle(x - 2, baseline - metrics.getAscent(), width + 4, metrics.getHeight());
-        HitTarget target = new HitTarget(bounds, entry, action);
+        CodeVisionTarget target = new CodeVisionTarget(bounds, entry, action);
         Color color = target.equals(this.hovered)
                 ? ThemeColors.accent()
                 : blend(ThemeColors.mutedText(), ThemeColors.text(), 0.35f);
@@ -269,7 +297,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
 
     @Override
     protected void processMouseMotionEvent(MouseEvent event, JLayer<? extends JComponent> layer) {
-        HitTarget target = targetAt(pointInLayer(event, layer));
+        Target target = targetAt(pointInLayer(event, layer));
         if (!Objects.equals(target, this.hovered)) {
             this.hovered = target;
             layer.setCursor(target == null ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -290,21 +318,26 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         if (event.getID() != MouseEvent.MOUSE_CLICKED || !SwingUtilities.isLeftMouseButton(event)) {
             return;
         }
-        HitTarget target = targetAt(pointInLayer(event, layer));
+        Target target = targetAt(pointInLayer(event, layer));
         if (target == null) {
             return;
         }
-        switch (target.action()) {
-            case USAGES -> this.handler.showUsages(target.entry().declaration().symbol());
-            case IMPLEMENTATIONS -> {
-                HierarchyFacet facet = target.entry().insight().descendantFacet().orElseThrow();
-                this.handler.showHierarchy(
-                    target.entry().declaration().symbol(),
-                    facet.relation(),
-                    facet.count(),
-                    target.entry().declaration().anchorOffset()
-                );
+        switch (target) {
+            case CodeVisionTarget codeVision -> {
+                switch (codeVision.action()) {
+                    case USAGES -> this.handler.showUsages(codeVision.entry().declaration().symbol());
+                    case IMPLEMENTATIONS -> {
+                        HierarchyFacet facet = codeVision.entry().insight().descendantFacet().orElseThrow();
+                        this.handler.showHierarchy(
+                                codeVision.entry().declaration().symbol(),
+                                facet.relation(),
+                                facet.count(),
+                                codeVision.entry().declaration().anchorOffset()
+                        );
+                    }
+                }
             }
+            case InlineValueTarget inline -> this.handler.showDebuggerValue(inline.value());
         }
         event.consume();
     }
@@ -313,8 +346,8 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         return SwingUtilities.convertPoint(event.getComponent(), event.getPoint(), layer);
     }
 
-    private HitTarget targetAt(Point point) {
-        for (HitTarget target : this.hitTargets) {
+    private Target targetAt(Point point) {
+        for (Target target : this.hitTargets) {
             if (target.bounds().contains(point)) {
                 return target;
             }
@@ -335,8 +368,15 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         );
     }
 
-    private record HitTarget(Rectangle bounds, CodeVisionEntry entry, Action action) {
-        private String tooltip() {
+    private sealed interface Target permits CodeVisionTarget, InlineValueTarget {
+        Rectangle bounds();
+
+        String tooltip();
+    }
+
+    private record CodeVisionTarget(Rectangle bounds, CodeVisionEntry entry, Action action) implements Target {
+        @Override
+        public String tooltip() {
             return switch (this.action) {
                 case USAGES -> "Find usages of " + this.entry.declaration().symbol().displayName();
                 case IMPLEMENTATIONS -> {
@@ -345,6 +385,16 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                             + " of " + this.entry.declaration().symbol().displayName();
                 }
             };
+        }
+    }
+
+    private record InlineValueTarget(
+            Rectangle bounds,
+            DebuggerInlineValueHints.ValueHint value
+    ) implements Target {
+        @Override
+        public String tooltip() {
+            return "Show " + this.value.value().variable().name() + " in debugger";
         }
     }
 

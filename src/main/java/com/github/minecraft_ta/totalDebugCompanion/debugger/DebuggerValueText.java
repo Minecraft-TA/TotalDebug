@@ -10,7 +10,7 @@ public final class DebuggerValueText {
     }
 
     public static String visibleValue(String value, String type) {
-        if (value.isBlank() || type.isBlank()) {
+        if (value.isBlank()) {
             return value;
         }
         int separator = value.lastIndexOf('@');
@@ -23,14 +23,11 @@ public final class DebuggerValueText {
             }
         }
         String identityOwner = value.substring(0, separator);
-        String simpleType = simpleTypeName(type);
-        String arrayElementType = simpleType;
-        while (arrayElementType.endsWith("[]")) {
-            arrayElementType = arrayElementType.substring(0, arrayElementType.length() - 2);
+        int array = identityOwner.indexOf('[');
+        if (array >= 0) {
+            return simpleTypeName(identityOwner.substring(0, array)) + identityOwner.substring(array);
         }
-        return identityOwner.equals(simpleType) || identityOwner.startsWith(arrayElementType + "[")
-                ? identityOwner
-                : value;
+        return simpleTypeName(identityOwner);
     }
 
     public static String simpleTypeName(String type) {

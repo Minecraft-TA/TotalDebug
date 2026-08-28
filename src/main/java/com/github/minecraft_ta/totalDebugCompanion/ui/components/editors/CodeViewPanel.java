@@ -106,6 +106,11 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             ) {
                 CodeViewPanel.this.navigateHierarchy(symbol, relation, count, anchorOffset);
             }
+
+            @Override
+            public void showDebuggerValue(DebuggerInlineValueHints.ValueHint value) {
+                MainWindow.INSTANCE.showDebuggerValue(value.frame(), value.value().variable());
+            }
         });
         this.codeVisionLayer = new JLayer<>(this.editorLayer, this.codeVisionLayerUI);
         remove(this.editorLayer);

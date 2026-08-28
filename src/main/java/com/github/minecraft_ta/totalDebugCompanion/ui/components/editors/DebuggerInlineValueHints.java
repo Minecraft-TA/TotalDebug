@@ -18,10 +18,23 @@ import java.util.TreeMap;
 
 /** Maps the selected frame's visible values to source lines in its enclosing executable body. */
 final class DebuggerInlineValueHints {
+    record ValueHint(
+            DebugEngine.StackFrame frame,
+            DebuggerEditorPresentation.PresentedVariable value,
+            String text
+    ) {
+    }
+
+    record LineHint(java.util.List<ValueHint> values) {
+        LineHint {
+            values = java.util.List.copyOf(values);
+        }
+    }
+
     private DebuggerInlineValueHints() {
     }
 
-    static Map<Integer, String> create(
+    static Map<Integer, LineHint> create(
             CompilationUnit unit,
             String source,
             DebuggerEditorPresentation.Snapshot snapshot
@@ -59,7 +72,7 @@ final class DebuggerInlineValueHints {
                     return true;
                 }
                 int line = unit.getLineNumber(name.getStartPosition());
-                if (line > 0) {
+                if (line > 0 && line <= snapshot.frame().line()) {
                     byLine.computeIfAbsent(line, ignored -> new LinkedHashMap<>())
                             .putIfAbsent(name.getIdentifier(), presented);
                 }
@@ -67,15 +80,18 @@ final class DebuggerInlineValueHints {
             }
         });
 
-        Map<Integer, String> result = new LinkedHashMap<>();
+        Map<Integer, LineHint> result = new LinkedHashMap<>();
         for (Map.Entry<Integer, LinkedHashMap<String, DebuggerEditorPresentation.PresentedVariable>> entry
                 : byLine.entrySet()) {
-            String text = entry.getValue().values().stream()
-                    .map(value -> DebuggerValueText.inlineValue(value.variable(), value.preview()))
-                    .reduce((left, right) -> left + "    " + right)
-                    .orElse("");
-            if (!text.isBlank()) {
-                result.put(entry.getKey(), text);
+            java.util.List<ValueHint> hints = entry.getValue().values().stream()
+                    .map(value -> new ValueHint(
+                            snapshot.frame(),
+                            value,
+                            DebuggerValueText.inlineValue(value.variable(), value.preview())
+                    ))
+                    .toList();
+            if (!hints.isEmpty()) {
+                result.put(entry.getKey(), new LineHint(hints));
             }
         }
         return Map.copyOf(result);

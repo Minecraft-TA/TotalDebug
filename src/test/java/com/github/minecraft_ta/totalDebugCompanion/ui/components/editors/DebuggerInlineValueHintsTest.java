@@ -61,16 +61,22 @@ class DebuggerInlineValueHintsTest {
                 presented("this", "Sample@1", "Sample", DebugEngine.VariableKind.THIS)
         ));
 
-        Map<Integer, String> hints = DebuggerInlineValueHints.create(
+        Map<Integer, DebuggerInlineValueHints.LineHint> hints = DebuggerInlineValueHints.create(
                 ASTCache.rawParse("Sample", source), source, snapshot
         );
 
-        assertTrue(hints.get(2).contains("query: \"stone\""), hints.toString());
-        assertTrue(hints.get(2).contains("limit: 0"), hints.toString());
-        assertEquals("limit: 0", hints.get(4));
-        assertEquals("pos: x=1, y=64, z=2", hints.get(5));
+        assertTrue(text(hints.get(2)).contains("query: \"stone\""), hints.toString());
+        assertTrue(text(hints.get(2)).contains("limit: 0"), hints.toString());
+        assertEquals("limit: 0", text(hints.get(4)));
+        assertFalse(hints.containsKey(5), "Values from lines after the selected frame must stay hidden");
         assertFalse(hints.containsKey(10), hints.toString());
-        assertTrue(hints.values().stream().noneMatch(value -> value.contains("this:")));
+        assertTrue(hints.values().stream().map(DebuggerInlineValueHintsTest::text)
+                .noneMatch(value -> value.contains("this:")));
+    }
+
+    private static String text(DebuggerInlineValueHints.LineHint hint) {
+        return hint.values().stream().map(DebuggerInlineValueHints.ValueHint::text)
+                .reduce((left, right) -> left + "    " + right).orElse("");
     }
 
     private static DebuggerEditorPresentation.PresentedVariable presented(

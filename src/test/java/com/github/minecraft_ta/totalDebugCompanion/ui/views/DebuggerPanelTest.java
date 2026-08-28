@@ -105,6 +105,49 @@ class DebuggerPanelTest {
     }
 
     @Test
+    void focusesTheDebuggerVariableRequestedByAnEditorHint() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            DebuggerPanel panel = new DebuggerPanel(controller, actions, (frame, activateEditor) -> {
+            });
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    1,
+                    "performBonemeal",
+                    "net.minecraft.world.level.block.GrassBlock",
+                    URI.create("file:///GrassBlock.java"),
+                    46,
+                    1
+            );
+            DebugEngine.Variable random = new DebugEngine.Variable(
+                    "random",
+                    "random",
+                    "net.minecraft.world.level.levelgen.LegacyRandomSource@45",
+                    "net.minecraft.util.RandomSource",
+                    DebugEngine.VariableKind.PARAMETER,
+                    5,
+                    4,
+                    0
+            );
+            panel.showPausedState(new DebuggerSessionController.PausedState(
+                    new DebugEngine.StoppedEvent("breakpoint", 1, true),
+                    List.of(frame),
+                    List.of(random)
+            ));
+
+            panel.focusVariable(frame, random);
+
+            JTree variables = findVariableTreeOrNull(panel);
+            assertNotNull(variables);
+            assertNotNull(variables.getSelectionPath());
+            assertEquals(0, variables.getSelectionRows()[0]);
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
+    @Test
     void selectingAStackFrameNavigatesItsExactRuntimeClassAndLine() throws Exception {
         AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {

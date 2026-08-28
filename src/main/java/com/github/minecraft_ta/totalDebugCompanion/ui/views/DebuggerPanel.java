@@ -466,6 +466,32 @@ public final class DebuggerPanel extends JPanel {
 
     }
 
+    void focusVariable(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
+        if (!Objects.equals(frame, this.currentFrame)) {
+            return;
+        }
+        this.inspectorTabs.setSelectedIndex(0);
+        for (int index = 0; index < this.variableRoot.getChildCount(); index++) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) this.variableRoot.getChildAt(index);
+            DebugValue value = debugValue(node.getUserObject());
+            if (value == null || !sameVariable(value, variable)) {
+                continue;
+            }
+            TreePath path = new TreePath(node.getPath());
+            this.variables.setSelectionPath(path);
+            this.variables.scrollPathToVisible(path);
+            this.variables.requestFocusInWindow();
+            return;
+        }
+    }
+
+    private static boolean sameVariable(DebugValue displayed, DebugEngine.Variable requested) {
+        if (!requested.evaluateName().isBlank() && !displayed.evaluateName().isBlank()) {
+            return requested.evaluateName().equals(displayed.evaluateName());
+        }
+        return requested.name().equals(displayed.name());
+    }
+
     private void showVariableStatus(String text) {
         this.variableRoot.removeAllChildren();
         this.variableRoot.add(new DefaultMutableTreeNode(new StatusValue(text, false)));
