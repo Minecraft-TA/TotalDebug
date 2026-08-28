@@ -1,9 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
-import com.google.gson.JsonObject;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.expression.DebuggerCompletionWire;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.expression.RichJavaExpressionEngine;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
+import com.google.gson.JsonObject;
 import com.microsoft.java.debug.core.DebugSettings;
-import com.microsoft.java.debug.core.JavaBreakpointLocation;
 import com.microsoft.java.debug.core.adapter.DebugAdapter;
 import com.microsoft.java.debug.core.adapter.HotCodeReplaceEvent;
 import com.microsoft.java.debug.core.adapter.ICompletionsProvider;
@@ -14,7 +15,6 @@ import com.microsoft.java.debug.core.adapter.IProviderContext;
 import com.microsoft.java.debug.core.adapter.ISourceLookUpProvider;
 import com.microsoft.java.debug.core.adapter.IVirtualMachineManagerProvider;
 import com.microsoft.java.debug.core.adapter.ProviderContext;
-import com.microsoft.java.debug.core.adapter.SourceType;
 import com.microsoft.java.debug.core.protocol.Events;
 import com.microsoft.java.debug.core.protocol.IProtocolServer;
 import com.microsoft.java.debug.core.protocol.JsonUtils;
@@ -27,7 +27,6 @@ import com.sun.jdi.VMDisconnectedException;
 import io.reactivex.Observable;
 
 import java.net.URI;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,17 +48,13 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final Map<Integer, Map<String, VariableKind>> variableKindsByFrame = new ConcurrentHashMap<>();
     private final Map<Integer, Map<String, VariableKind>> variableKindsByScope = new ConcurrentHashMap<>();
     private final Map<Integer, VariableKind> childKindsByReference = new ConcurrentHashMap<>();
-    private final SourceRegistry sourceRegistry;
+    private final MicrosoftSourceRegistry sourceRegistry;
     private final RichJavaExpressionEngine expressionEngine;
     private final IDebugAdapter adapter;
 
-    public MicrosoftJavaDebugEngine() {
-        this(binaryName -> null);
-    }
-
     public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader) {
         configureInitialCoreSettings();
-        this.sourceRegistry = new SourceRegistry(sourceLoader);
+        this.sourceRegistry = new MicrosoftSourceRegistry(sourceLoader);
 
         IProviderContext providers = new ProviderContext();
         providers.registerProvider(
@@ -149,32 +144,24 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         requireState(State.ATTACHED, State.RUNNING, State.STOPPED);
         Objects.requireNonNull(sourceUri, "sourceUri");
         List<SourceBreakpoint> requested = List.copyOf(breakpoints);
-        this.sourceRegistry.require(sourceUri);
+        this.sourceRegistry.requireRegistered(sourceUri);
+        this.sourceRegistry.prepareBreakpoints(sourceUri, requested);
         if (requested.stream().anyMatch(breakpoint -> breakpoint.debuggerLine() < 1)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException(
                     "Debugger breakpoint line must be positive"
             ));
         }
-        if (requested.stream().anyMatch(breakpoint -> breakpoint.logMessage() != null
-                && !breakpoint.logMessage().isBlank())) {
-            return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                    "Logpoints are not implemented"
-            ));
-        }
-
         Types.Source source = new Types.Source();
         source.name = sourceName(sourceUri);
         source.path = sourceUri.toString();
 
-        Types.SourceBreakpoint[] coreBreakpoints = requested.stream().map(breakpoint -> {
-            Types.SourceBreakpoint core = new Types.SourceBreakpoint(
+        Types.SourceBreakpoint[] coreBreakpoints = requested.stream().map(breakpoint ->
+            new Types.SourceBreakpoint(
                     breakpoint.debuggerLine(),
                     breakpoint.condition(),
                     breakpoint.hitCondition()
-            );
-            core.logMessage = breakpoint.logMessage();
-            return core;
-        }).toArray(Types.SourceBreakpoint[]::new);
+            )
+        ).toArray(Types.SourceBreakpoint[]::new);
 
         Requests.SetBreakpointArguments arguments = new Requests.SetBreakpointArguments();
         arguments.source = source;
@@ -231,7 +218,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 .thenApply(body -> {
                     List<StackFrame> result = new ArrayList<>(body.stackFrames.length);
                     for (Types.StackFrame frame : body.stackFrames) {
-                        URI uri = sourceUri(frame.source);
+                        URI uri = MicrosoftSourceRegistry.sourceUri(frame.source);
                         SourceVariableNames variableNames = this.sourceRegistry.variableNames(uri);
                         RichJavaExpressionEngine.FrameVariables frameVariables =
                                 this.expressionEngine.frameVariables(frame.id);
@@ -246,7 +233,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                         result.add(new StackFrame(
                                 frame.id,
                                 frame.name,
-                                this.sourceRegistry.binaryName(frame.source),
+                                this.sourceRegistry.binaryName(frame.source, frame.line),
                                 uri,
                                 frame.line,
                                 frame.column
@@ -287,24 +274,48 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     }
 
     @Override
-    public CompletableFuture<List<Variable>> variables(int variablesReference) {
+    public CompletableFuture<List<Variable>> variables(int variablesReference, int start, int count) {
         requireState(State.STOPPED);
+        if (variablesReference <= 0) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Variable reference must be positive"
+            ));
+        }
+        if (start < 0) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Variable page start must not be negative"
+            ));
+        }
+        boolean unpaged = start == 0 && count == 0;
+        if (!unpaged && count <= 0) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Variable page count must be positive, or both start and count must be zero"
+            ));
+        }
+        Map<String, String> variableNames = this.variableNamesByScope.getOrDefault(
+                variablesReference,
+                Map.of()
+        );
+        Map<String, VariableKind> scopeKinds = this.variableKindsByScope.get(variablesReference);
+        VariableKind childKind = this.childKindsByReference.get(variablesReference);
+        if (scopeKinds == null && childKind == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "No debugger variable context exists for reference " + variablesReference
+            ));
+        }
+        if (!unpaged && childKind != VariableKind.ARRAY_ELEMENT) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Only indexed array variables support paged child requests"
+            ));
+        }
         Requests.VariablesArguments arguments = new Requests.VariablesArguments();
         arguments.variablesReference = variablesReference;
+        arguments.start = start;
+        arguments.count = count;
 
         return request(Requests.Command.VARIABLES, arguments, Responses.VariablesResponseBody.class)
                 .thenApply(body -> {
                     List<Variable> result = new ArrayList<>(body.variables.length);
-                    Map<String, String> variableNames = this.variableNamesByScope.getOrDefault(
-                            variablesReference,
-                            Map.of()
-                    );
-                    Map<String, VariableKind> scopeKinds = this.variableKindsByScope.get(variablesReference);
-                    VariableKind childKind = this.childKindsByReference.get(variablesReference);
-                    if (scopeKinds == null && childKind == null) {
-                        throw new IllegalStateException("No debugger variable context exists for reference "
-                                + variablesReference);
-                    }
                     for (Types.Variable variable : body.variables) {
                         VariableKind kind = scopeKinds == null
                                 ? childKind
@@ -700,18 +711,6 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return name;
     }
 
-    private static URI sourceUri(Types.Source source) {
-        if (source == null || source.path == null || source.path.isBlank()) {
-            return null;
-        }
-        try {
-            URI uri = URI.create(source.path);
-            return uri.isAbsolute() ? uri : Path.of(source.path).toUri();
-        } catch (IllegalArgumentException ignored) {
-            return Path.of(source.path).toUri();
-        }
-    }
-
     private static final class LocalProtocolServer implements IProtocolServer {
         private final Consumer<Events.DebugEvent> eventHandler;
 
@@ -738,167 +737,6 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
         @Override
         public void sendResponse(Messages.Response response) {
-        }
-    }
-
-    private static final class SourceRegistry implements ISourceLookUpProvider {
-        private final DebuggerSessionController.SourceLoader sourceLoader;
-        private final Map<URI, Source> sourcesByUri = new ConcurrentHashMap<>();
-        private final Map<String, Source> sourcesByBinaryName = new ConcurrentHashMap<>();
-        private final Map<String, DebuggerTypeScope> typeScopesByBinaryName = new ConcurrentHashMap<>();
-
-        private SourceRegistry(DebuggerSessionController.SourceLoader sourceLoader) {
-            this.sourceLoader = Objects.requireNonNull(sourceLoader, "sourceLoader");
-        }
-
-        private void register(Source source) {
-            URI normalizedUri = source.uri().normalize();
-            this.sourcesByUri.put(normalizedUri, source);
-            this.sourcesByBinaryName.put(source.binaryName(), source);
-            this.typeScopesByBinaryName.put(source.binaryName(), DebuggerTypeScope.parse(source));
-        }
-
-        private Source require(URI sourceUri) {
-            Source source = this.sourcesByUri.get(sourceUri.normalize());
-            if (source == null) {
-                throw new IllegalArgumentException("No debug source is registered for " + sourceUri);
-            }
-            return source;
-        }
-
-        private Source sourceForClass(String binaryName) {
-            Source source = this.sourcesByBinaryName.get(binaryName);
-            if (source != null) {
-                return source;
-            }
-            int nestedSeparator = binaryName.indexOf('$');
-            return nestedSeparator < 0 ? null : this.sourcesByBinaryName.get(binaryName.substring(0, nestedSeparator));
-        }
-
-        private DebuggerTypeScope typeScope(String binaryName) {
-            DebuggerTypeScope scope = this.typeScopesByBinaryName.get(binaryName);
-            if (scope != null) {
-                return scope;
-            }
-            int nestedSeparator = binaryName.indexOf('$');
-            return nestedSeparator < 0
-                    ? null
-                    : this.typeScopesByBinaryName.get(binaryName.substring(0, nestedSeparator));
-        }
-
-        private String binaryName(Types.Source protocolSource) {
-            URI uri = sourceUri(protocolSource);
-            if (uri == null) {
-                return "";
-            }
-            Source source = this.sourcesByUri.get(uri.normalize());
-            return source == null ? "" : source.binaryName();
-        }
-
-        @Override
-        public boolean supportsRealtimeBreakpointVerification() {
-            return false;
-        }
-
-        private SourceVariableNames variableNames(URI sourceUri) {
-            if (sourceUri == null) {
-                return SourceVariableNames.empty();
-            }
-            Source source = this.sourcesByUri.get(sourceUri.normalize());
-            return source == null ? SourceVariableNames.empty() : source.variableNames();
-        }
-
-        private String displayedVariableName(
-                String binaryName,
-                String methodName,
-                String methodDescriptor,
-                String runtimeName
-        ) {
-            Source source = sourceForClass(binaryName);
-            return source == null
-                    ? runtimeName
-                    : source.variableNames().displayedName(methodName, methodDescriptor, runtimeName);
-        }
-
-        @Override
-        @Deprecated
-        public String[] getFullyQualifiedName(String uri, int[] lines, int[] columns) {
-            Source source = require(URI.create(uri));
-            String[] result = new String[lines.length];
-            java.util.Arrays.fill(result, source.binaryName());
-            return result;
-        }
-
-        @Override
-        public JavaBreakpointLocation[] getBreakpointLocations(
-                String sourceUri,
-                Types.SourceBreakpoint[] sourceBreakpoints
-        ) {
-            Source source = require(URI.create(sourceUri));
-            JavaBreakpointLocation[] locations = new JavaBreakpointLocation[sourceBreakpoints.length];
-            for (int i = 0; i < sourceBreakpoints.length; i++) {
-                JavaBreakpointLocation location = new JavaBreakpointLocation(
-                        sourceBreakpoints[i].line,
-                        sourceBreakpoints[i].column
-                );
-                location.setClassName(source.binaryName());
-                locations[i] = location;
-            }
-            return locations;
-        }
-
-        @Override
-        @Deprecated
-        public String getSourceFileURI(String fullyQualifiedName, String sourcePath) {
-            Source source = sourceForClass(fullyQualifiedName);
-            return source == null ? null : source.uri().toString();
-        }
-
-        @Override
-        public com.microsoft.java.debug.core.adapter.Source getSource(
-                String fullyQualifiedName,
-                String sourcePath
-        ) {
-            Source source = sourceForClass(fullyQualifiedName);
-            if (source == null) {
-                try {
-                    source = this.sourceLoader.load(fullyQualifiedName);
-                } catch (Exception exception) {
-                    throw new IllegalStateException(
-                            "Unable to resolve debugger source for " + fullyQualifiedName,
-                            exception
-                    );
-                }
-                if (source != null) {
-                    register(source);
-                }
-            }
-            return source == null
-                    ? null
-                    : new com.microsoft.java.debug.core.adapter.Source(source.uri().toString(), SourceType.LOCAL);
-        }
-
-        @Override
-        public String getSourceContents(String uri) {
-            Source source = this.sourcesByUri.get(URI.create(uri).normalize());
-            return source == null ? null : source.contents();
-        }
-
-        @Override
-        public int[] getOriginalLineMappings(String uri) {
-            Source source = this.sourcesByUri.get(URI.create(uri).normalize());
-            return source == null ? null : source.lineMap().originalToDisplayed();
-        }
-
-        @Override
-        public int[] getDecompiledLineMappings(String uri) {
-            Source source = this.sourcesByUri.get(URI.create(uri).normalize());
-            return source == null ? null : source.lineMap().displayedToOriginal();
-        }
-
-        @Override
-        public List<MethodInvocation> findMethodInvocations(String uri, int line) {
-            return List.of();
         }
     }
 

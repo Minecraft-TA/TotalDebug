@@ -52,6 +52,7 @@ public final class RichExpressionDebuggeeMain {
     private static final class Child extends Base implements Defaulted {
         private final String ownSecret = "own-secret";
         private final String inheritedSecret = "child-hidden";
+        private String nullable;
         private static final int STATIC_VALUE = 9;
         private int completionCalls;
 
@@ -157,6 +158,12 @@ public final class RichExpressionDebuggeeMain {
 
         private String lifecycleProbe() {
             return "lifecycle-probe"; // DEBUG_RICH_LIFECYCLE
+        }
+
+        private String neverReturns() {
+            while (true) {
+                Thread.onSpinWait();
+            }
         }
 
         private String varargs(String... values) {

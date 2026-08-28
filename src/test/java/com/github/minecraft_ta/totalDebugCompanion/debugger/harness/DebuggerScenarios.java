@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExceptionDeb
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.FrameNavigationImplementation;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.LateAttachDebuggeeMain;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.NestedBreakpointDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.RichExpressionDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
@@ -49,6 +50,11 @@ public final class DebuggerScenarios {
                         "runtime member completion, overloads, and private calls",
                         DebuggerScenarios::richExpressions
                 ),
+                new Scenario(
+                        "evaluation-timeout",
+                        "non-returning target invocation timeout and debugger detach",
+                        DebuggerScenarios::nonReturningEvaluationTimeout
+                ),
                 new Scenario("pause-detach", "pause and detach", DebuggerScenarios::pauseAndDetach),
                 new Scenario("exceptions", "uncaught exception", DebuggerScenarios::uncaughtException),
                 new Scenario(
@@ -65,6 +71,11 @@ public final class DebuggerScenarios {
                         "frame-navigation",
                         "source resolution and line mapping for unopened caller frames",
                         DebuggerScenarios::unopenedCallerFrameNavigation
+                ),
+                new Scenario(
+                        "nested-breakpoints",
+                        "line breakpoint ownership inside a nested runtime class",
+                        DebuggerScenarios::nestedClassBreakpointOwnership
                 ),
                 new Scenario(
                         "late-attach",
@@ -97,10 +108,23 @@ public final class DebuggerScenarios {
             contains(variable(variables, "message").value(), "minecraft", "message value");
             equal("41", variable(variables, "counter").value(), "counter before step");
 
-            Map<String, DebugEngine.Variable> payload = harness.children(variable(variables, "payload"));
+            DebugEngine.Variable payloadVariable = variable(variables, "payload");
+            List<DebugEngine.Variable> unpagedPayload = harness.engine()
+                    .variables(payloadVariable.variablesReference(), 0, 0)
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(2, unpagedPayload.size(), "unpaged object field count");
+            Map<String, DebugEngine.Variable> payload = harness.children(payloadVariable);
             equal("5", variable(payload, "amount").value(), "payload amount");
             contains(variable(payload, "label").value(), "creeper", "payload label");
-            Map<String, DebugEngine.Variable> values = harness.children(variable(variables, "values"));
+            DebugEngine.Variable valuesVariable = variable(variables, "values");
+            equal(3, valuesVariable.indexedVariables(), "array child count");
+            List<DebugEngine.Variable> valuesPage = harness.engine()
+                    .variables(valuesVariable.variablesReference(), 1, 1)
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(1, valuesPage.size(), "requested array page size");
+            equal("1", valuesPage.getFirst().name(), "requested array page index");
+            equal("4", valuesPage.getFirst().value(), "requested array page value");
+            Map<String, DebugEngine.Variable> values = harness.children(valuesVariable);
             equal("3", variable(values, "0").value(), "array index 0");
             equal("4", variable(values, "1").value(), "array index 1");
             equal(
@@ -302,6 +326,30 @@ public final class DebuggerScenarios {
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             equal("true", value(harness.engine().evaluate("renamedTarget instanceof java.lang.Object", frame.id())), "instanceof");
             equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())), "completion counter before");
+            equal("false", value(harness.engine().evaluate(
+                    "true && false && renamedTarget.sideEffect() != null", frame.id()
+            )), "multi-operand conditional-and result");
+            equal("true", value(harness.engine().evaluate(
+                    "false || true || renamedTarget.sideEffect() != null", frame.id()
+            )), "multi-operand conditional-or result");
+            equal("0", value(harness.engine().evaluate("renamedTarget.completionCalls", frame.id())),
+                    "short-circuited operands invoked target code");
+            try {
+                harness.engine().evaluate("1 - \"not-a-number\"", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Subtraction with a string operand unexpectedly succeeded");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Numeric expression required"),
+                        "String operand failure was not explicit: " + expected);
+            }
+            try {
+                harness.engine().evaluate("renamedTarget.nullable.toString()", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Method invocation on a typed null value unexpectedly succeeded");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Cannot invoke toString on null"),
+                        "Typed null receiver failure was not explicit: " + expected);
+            }
 
             List<DebuggerCompletionProposal> completions = harness.engine()
                     .completions("renamedTarget.", "renamedTarget.".length(), frame.id())
@@ -632,6 +680,32 @@ public final class DebuggerScenarios {
         }
     }
 
+    public static void nonReturningEvaluationTimeout() throws Exception {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class)) {
+            int line = harness.lineContaining("DEBUG_RICH_EXPRESSION");
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(line));
+            harness.start();
+            DebugEngine.StoppedEvent stop = harness.awaitStop("non-returning evaluation breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+
+            long started = System.nanoTime();
+            try {
+                harness.engine().evaluate("target.neverReturns()", frame.id())
+                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                throw new AssertionError("Non-returning target invocation unexpectedly completed");
+            } catch (java.util.concurrent.ExecutionException expected) {
+                check(expected.toString().contains("Debugger evaluation exceeded 5 seconds")
+                                && expected.toString().contains("debug session was detached"),
+                        "Non-returning invocation did not fail with the bounded timeout: " + expected);
+            }
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+            check(elapsedMillis >= 4_000 && elapsedMillis < 9_000,
+                    "Evaluation timeout completed outside its expected bound: " + elapsedMillis + " ms");
+            harness.awaitDebuggerTermination();
+            equal(DebugEngine.State.TERMINATED, harness.engine().state(), "state after evaluation timeout");
+        }
+    }
+
     public static void unopenedCallerFrameNavigation() throws Exception {
         DebugEngine.Source targetSource = decompiledSourceFor(FrameNavigationImplementation.class);
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(
@@ -667,6 +741,28 @@ public final class DebuggerScenarios {
         }
     }
 
+    public static void nestedClassBreakpointOwnership() throws Exception {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(NestedBreakpointDebuggeeMain.class)) {
+            int breakpointLine = harness.lineContaining("DEBUG_NESTED_BREAKPOINT");
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(breakpointLine));
+            harness.start();
+
+            DebugEngine.Breakpoint verified = harness.awaitBreakpointChange("nested class preparation");
+            check(verified.verified(), "Nested-class breakpoint was not verified");
+            DebugEngine.StoppedEvent stop = harness.awaitStop("nested-class breakpoint");
+            DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
+            equal(
+                    NestedBreakpointDebuggeeMain.class.getName() + "$Worker",
+                    frame.binaryName(),
+                    "nested runtime class"
+            );
+            equal(breakpointLine, frame.line(), "nested breakpoint line");
+
+            harness.engine().resume(stop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(0, harness.awaitExit(), "nested debuggee exit code");
+        }
+    }
+
     public static void lateAttach() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launchRunningByProcessId(LateAttachDebuggeeMain.class)) {
             int breakpointLine = harness.lineContaining("DEBUG_LATE_ATTACH");
@@ -695,7 +791,7 @@ public final class DebuggerScenarios {
     ) throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(ConditionalDebuggeeMain.class)) {
             int line = harness.lineContaining("DEBUG_CONDITIONAL_BREAKPOINT");
-            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(line, condition, hitCondition, null));
+            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(line, condition, hitCondition));
             harness.start();
 
             DebugEngine.StoppedEvent stop = harness.awaitStop("conditional or hit-count breakpoint");

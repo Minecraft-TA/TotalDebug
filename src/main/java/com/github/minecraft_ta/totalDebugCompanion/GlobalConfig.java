@@ -458,7 +458,6 @@ public final class GlobalConfig {
             String methodDescriptor,
             String condition,
             String hitCondition,
-            String logMessage,
             boolean enabled
     ) {
         public PersistedBreakpoint {

@@ -42,7 +42,6 @@ class GlobalConfigPersistenceTest {
                 "()V",
                 "state != null",
                 "3",
-                null,
                 true
         );
         config.setDebuggerBreakpoints("runtime-a", List.of(persistedBreakpoint));

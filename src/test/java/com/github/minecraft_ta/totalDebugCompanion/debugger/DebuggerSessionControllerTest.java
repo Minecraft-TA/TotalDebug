@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerSessionControllerTest {
@@ -162,12 +164,13 @@ class DebuggerSessionControllerTest {
             engine.variables.put(15, List.of(child));
             assertEquals(
                     List.of(child),
-                    controller.variables(15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+                    controller.variables(frame, 15, 0, 0)
+                            .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
             );
             engine.preview = new DebugEngine.ValuePreview("minecraft:stone", "minecraft:stone");
             assertEquals(
                     engine.preview,
-                    controller.preview(15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
+                    controller.preview(frame, 15).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
             );
             engine.evaluationResult = new DebugEngine.EvaluationResult("true", "boolean", 0, 0);
             assertEquals(
@@ -218,7 +221,7 @@ class DebuggerSessionControllerTest {
             controller.configureBreakpoint(source, 19, "state != null", "3")
                     .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertEquals(
-                    new DebugEngine.SourceBreakpoint(19, "state != null", "3", null),
+                    new DebugEngine.SourceBreakpoint(19, "state != null", "3"),
                     controller.breakpoint(source.uri(), 19).request()
             );
 
@@ -226,7 +229,7 @@ class DebuggerSessionControllerTest {
             awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
             controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertEquals(
-                    List.of(new DebugEngine.SourceBreakpoint(19, "state != null", "3", null)),
+                    List.of(new DebugEngine.SourceBreakpoint(19, "state != null", "3")),
                     engines.getFirst().breakpoints.get(source.uri())
             );
         } finally {
@@ -270,7 +273,7 @@ class DebuggerSessionControllerTest {
             DebuggerSessionController.Breakpoint disabled = controller.breakpoint(source.uri(), 19);
             assertEquals(DebuggerSessionController.BreakpointState.DISABLED, disabled.state());
             assertEquals(
-                    new DebugEngine.SourceBreakpoint(19, "state.isAir()", "5", null),
+                    new DebugEngine.SourceBreakpoint(19, "state.isAir()", "5"),
                     disabled.request()
             );
             assertTrue(engines.getFirst().breakpoints.get(source.uri()).isEmpty());
@@ -339,6 +342,114 @@ class DebuggerSessionControllerTest {
                     controller.breakpoint(source.uri(), 12).state());
             assertEquals(DebuggerSessionController.BreakpointState.DISABLED,
                     controller.breakpoint(source.uri(), 19).state());
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void sourceRegistrationIsIdempotentAndBreakpointMutationsWriteOnce() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        URI sourceUri = URI.create("decompiled:///sample/Target.java");
+        DebugEngine.Source source = new DebugEngine.Source(sourceUri, "sample.Target", "class Target {}");
+        try {
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            controller.registerSource(source);
+            controller.registerSource(source);
+            controller.setExceptionBreakpoints(false, false)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(List.of(source), engine.sources);
+            assertEquals(0, engine.breakpointWrites.getOrDefault(sourceUri, 0));
+
+            controller.toggleBreakpoint(source, 12).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(1, engine.breakpointWrites.get(sourceUri));
+
+            controller.configureBreakpoint(source, 12, "value > 0", "2")
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(2, engine.breakpointWrites.get(sourceUri));
+
+            controller.toggleBreakpointEnabled(source, 12)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(3, engine.breakpointWrites.get(sourceUri));
+
+            controller.setBreakpointEnabled(sourceUri, 12, true)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(4, engine.breakpointWrites.get(sourceUri));
+
+            controller.toggleBreakpoint(source, 12).get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(5, engine.breakpointWrites.get(sourceUri));
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void controlInvalidatesQueuedAdvisoryWorkBeforeItReachesTheEngine() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                7, "Target.run", "sample.Target", URI.create("decompiled:///sample/Target.java"), 12, 1);
+        try {
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            engine.frames = List.of(frame);
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 73, true));
+            awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+
+            engine.pendingEvaluation = new CompletableFuture<>();
+            CompletableFuture<DebugEngine.EvaluationResult> evaluation = controller.evaluate("slow()", frame);
+            engine.evaluationStarted.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            CompletableFuture<List<DebuggerCompletionProposal>> completion =
+                    controller.completions("val", 3, frame);
+            CompletableFuture<Void> resume = controller.resume();
+
+            engine.pendingEvaluation.complete(engine.evaluationResult);
+            evaluation.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            resume.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertThrows(CancellationException.class, completion::join);
+            assertEquals(0, engine.completionCalls);
+            assertEquals(73, engine.resumedThread);
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void childInspectionIsBoundToTheRequestedFrame() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        DebugEngine.StackFrame current = new DebugEngine.StackFrame(
+                7, "Target.run", "sample.Target", URI.create("decompiled:///sample/Target.java"), 12, 1);
+        DebugEngine.StackFrame stale = new DebugEngine.StackFrame(
+                8, "Other.run", "sample.Other", URI.create("decompiled:///sample/Other.java"), 3, 1);
+        try {
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            engine.frames = List.of(current);
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 73, true));
+            awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+
+            CompletableFuture<List<DebugEngine.Variable>> inspection =
+                    controller.variables(stale, 15, 0, 100);
+            assertTrue(assertThrows(Exception.class, () ->
+                    inspection.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).getCause()
+                    instanceof IllegalArgumentException);
+            assertEquals(0, engine.variableCalls, "A stale frame must not reach the adapter");
         } finally {
             controller.close();
         }
@@ -658,6 +769,7 @@ class DebuggerSessionControllerTest {
         private final List<DebugEngine.Source> sources = new ArrayList<>();
         private final List<DebugEngine.Listener> listeners = new ArrayList<>();
         private final Map<URI, List<DebugEngine.SourceBreakpoint>> breakpoints = new HashMap<>();
+        private final Map<URI, Integer> breakpointWrites = new HashMap<>();
         private final Map<Integer, List<DebugEngine.Variable>> variables = new HashMap<>();
         private DebugEngine.State state = DebugEngine.State.NEW;
         private List<DebugEngine.StackFrame> frames = List.of();
@@ -676,6 +788,10 @@ class DebuggerSessionControllerTest {
         private int assignedReference;
         private String assignedName = "";
         private String assignedValue = "";
+        private int completionCalls;
+        private int variableCalls;
+        private CompletableFuture<DebugEngine.EvaluationResult> pendingEvaluation;
+        private final CompletableFuture<Void> evaluationStarted = new CompletableFuture<>();
 
         static DebugEngine newProxy() {
             return new RecordingEngine().proxy();
@@ -709,6 +825,7 @@ class DebuggerSessionControllerTest {
                             List<DebugEngine.SourceBreakpoint> requested =
                                     (List<DebugEngine.SourceBreakpoint>) arguments[1];
                             this.breakpoints.put(sourceUri, List.copyOf(requested));
+                            this.breakpointWrites.merge(sourceUri, 1, Integer::sum);
                             yield completed(requested.stream()
                                     .map(breakpoint -> new DebugEngine.Breakpoint(
                                             breakpoint.line(),
@@ -725,7 +842,18 @@ class DebuggerSessionControllerTest {
                         }
                         case "stackTrace" -> completed(this.frames);
                         case "scopes" -> completed(this.scopes);
-                        case "variables" -> completed(this.variables.getOrDefault((Integer) arguments[0], List.of()));
+                        case "variables" -> {
+                            this.variableCalls++;
+                            List<DebugEngine.Variable> values = this.variables.getOrDefault(
+                                    (Integer) arguments[0], List.of());
+                            int start = (Integer) arguments[1];
+                            int count = (Integer) arguments[2];
+                            if (start == 0 && count == 0) {
+                                yield completed(List.copyOf(values));
+                            }
+                            int end = Math.min(values.size(), start + count);
+                            yield completed(start >= end ? List.of() : List.copyOf(values.subList(start, end)));
+                        }
                         case "setVariable" -> {
                             this.assignedReference = (Integer) arguments[0];
                             this.assignedName = (String) arguments[1];
@@ -734,7 +862,17 @@ class DebuggerSessionControllerTest {
                         }
                         case "preview" -> completed(this.preview);
                         case "threads" -> completed(List.of());
-                        case "evaluate" -> completed(this.evaluationResult);
+                        case "evaluate" -> {
+                            this.evaluationStarted.complete(null);
+                            yield this.pendingEvaluation == null
+                                    ? completed(this.evaluationResult)
+                                    : this.pendingEvaluation;
+                        }
+                        case "completions" -> {
+                            this.completionCalls++;
+                            yield completed(List.of());
+                        }
+                        case "expressionTokens" -> completed(List.of());
                         case "exceptionInfo" -> completed(new DebugEngine.ExceptionInfo("", "", ""));
                         case "setExceptionBreakpoints" -> {
                             this.caughtExceptions = (Boolean) arguments[0];

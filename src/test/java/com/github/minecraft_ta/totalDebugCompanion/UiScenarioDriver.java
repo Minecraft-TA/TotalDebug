@@ -16,10 +16,10 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChoose
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SettingsWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.DebuggerWindowPreview;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.BreakpointsWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.BreakpointsWindowPreview;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindowPreview;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.BreakpointsWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.BreakpointsWindowPreview;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
 import org.fife.ui.rtextarea.LineNumberList;

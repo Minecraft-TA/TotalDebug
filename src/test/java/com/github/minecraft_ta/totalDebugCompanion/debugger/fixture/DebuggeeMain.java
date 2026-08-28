@@ -8,7 +8,7 @@ public final class DebuggeeMain {
         String message = "minecraft";
         int counter = 41;
         Payload payload = new Payload(5, "creeper");
-        int[] values = {3, 4};
+        int[] values = {3, 4, 5};
         counter = increment(counter); // DEBUG_BREAKPOINT
         System.out.println(message + ":" + counter + ":" + payload.label + ":" + values[1]); // DEBUG_AFTER_STEP
     }

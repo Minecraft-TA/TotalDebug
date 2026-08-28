@@ -231,14 +231,17 @@ public final class DebuggerTestHarness implements AutoCloseable {
                 .orElseThrow(() -> new AssertionError(
                         "Debugger returned no local scope for frame " + frame.name()
                 ));
-        return variables(localScope.variablesReference());
+        return unpagedVariables(localScope.variablesReference());
     }
 
     public Map<String, DebugEngine.Variable> children(DebugEngine.Variable variable) throws Exception {
         if (variable.variablesReference() == 0) {
             throw new AssertionError("Variable " + variable.name() + " has no expandable children");
         }
-        return variables(variable.variablesReference());
+        if (variable.type().endsWith("[]")) {
+            return indexedVariables(variable.variablesReference(), variable.indexedVariables());
+        }
+        return unpagedVariables(variable.variablesReference());
     }
 
     public DebugEngine.DebugThread mainThread() throws Exception {
@@ -316,10 +319,35 @@ public final class DebuggerTestHarness implements AutoCloseable {
         }
     }
 
-    private Map<String, DebugEngine.Variable> variables(int variablesReference) throws Exception {
+    private Map<String, DebugEngine.Variable> unpagedVariables(int variablesReference) throws Exception {
+        return uniqueVariables(this.engine.variables(variablesReference, 0, 0)
+                .get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS));
+    }
+
+    private Map<String, DebugEngine.Variable> indexedVariables(int variablesReference, int total) throws Exception {
+        final int pageSize = 256;
         Map<String, DebugEngine.Variable> result = new LinkedHashMap<>();
-        for (DebugEngine.Variable variable : this.engine.variables(variablesReference)
-                .get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
+        for (int start = 0; start < total; start += pageSize) {
+            int count = Math.min(pageSize, total - start);
+            List<DebugEngine.Variable> page = this.engine.variables(variablesReference, start, count)
+                    .get(OPERATION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+            if (page.size() != count) {
+                throw new AssertionError("Debugger returned " + page.size() + " of " + count
+                        + " requested indexed variables at " + start);
+            }
+            for (DebugEngine.Variable variable : page) {
+                DebugEngine.Variable duplicate = result.put(variable.name(), variable);
+                if (duplicate != null) {
+                    throw new AssertionError("Debugger returned duplicate variable " + variable.name());
+                }
+            }
+        }
+        return result;
+    }
+
+    private static Map<String, DebugEngine.Variable> uniqueVariables(List<DebugEngine.Variable> variables) {
+        Map<String, DebugEngine.Variable> result = new LinkedHashMap<>();
+        for (DebugEngine.Variable variable : variables) {
             DebugEngine.Variable duplicate = result.put(variable.name(), variable);
             if (duplicate != null) {
                 throw new AssertionError("Debugger returned duplicate variable " + variable.name());

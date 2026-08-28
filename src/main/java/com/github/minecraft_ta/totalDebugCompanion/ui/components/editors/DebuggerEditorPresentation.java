@@ -2,8 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -46,46 +46,25 @@ public final class DebuggerEditorPresentation {
     }
 
     public static void select(DebugEngine.StackFrame frame, List<DebugEngine.Variable> variables) {
-        select(frame, variables, false);
+        select(frame, variables, Map.of());
     }
 
     public static void select(
             DebugEngine.StackFrame frame,
             List<DebugEngine.Variable> variables,
-            boolean awaitObjectPreviews
+            Map<Integer, DebugEngine.ValuePreview> previews
     ) {
         List<PresentedVariable> presented = variables.stream()
                 .map(variable -> new PresentedVariable(
                         variable,
-                        DebugEngine.ValuePreview.NONE,
-                        !awaitObjectPreviews || variable.variablesReference() <= 0
+                        previews.getOrDefault(
+                                variable.variablesReference(),
+                                DebugEngine.ValuePreview.NONE
+                        ),
+                        true
                 ))
                 .toList();
         publish(new Snapshot(frame, presented));
-    }
-
-    public static void updatePreview(
-            DebugEngine.StackFrame frame,
-            int variablesReference,
-            DebugEngine.ValuePreview preview
-    ) {
-        Snapshot snapshot = current;
-        if (snapshot == null || !snapshot.frame().equals(frame)) {
-            return;
-        }
-        List<PresentedVariable> replacement = new ArrayList<>(snapshot.variables().size());
-        boolean changed = false;
-        for (PresentedVariable value : snapshot.variables()) {
-            if (value.variable().variablesReference() == variablesReference) {
-                replacement.add(new PresentedVariable(value.variable(), preview, true));
-                changed = true;
-            } else {
-                replacement.add(value);
-            }
-        }
-        if (changed) {
-            publish(new Snapshot(frame, replacement));
-        }
     }
 
     public static void clear() {

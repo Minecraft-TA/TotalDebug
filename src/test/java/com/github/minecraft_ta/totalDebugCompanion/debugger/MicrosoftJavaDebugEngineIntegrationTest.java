@@ -30,6 +30,12 @@ class MicrosoftJavaDebugEngineIntegrationTest {
     }
 
     @Test
+    @Timeout(20)
+    void detachesWhenTargetEvaluationDoesNotReturn() throws Exception {
+        DebuggerScenarios.nonReturningEvaluationTimeout();
+    }
+
+    @Test
     @Timeout(30)
     void pausesARunningThreadAndInspectsItsFrame() throws Exception {
         DebuggerScenarios.pauseAndDetach();
@@ -51,6 +57,12 @@ class MicrosoftJavaDebugEngineIntegrationTest {
     @Timeout(30)
     void resolvesSourceForAStackFrameWhoseClassWasNotPreviouslyOpened() throws Exception {
         DebuggerScenarios.unopenedCallerFrameNavigation();
+    }
+
+    @Test
+    @Timeout(30)
+    void bindsLineBreakpointsToTheEnclosingNestedRuntimeClass() throws Exception {
+        DebuggerScenarios.nestedClassBreakpointOwnership();
     }
 
     @Test

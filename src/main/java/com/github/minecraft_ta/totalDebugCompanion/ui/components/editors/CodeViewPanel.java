@@ -583,10 +583,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     && !this.debugSource.lineMap().containsDisplayedLine(displayedLine)) {
                 return Optional.empty();
             }
-            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null));
+            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount));
         }
         if (this.debugSource.lineMap().isEmpty()) {
-            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount, null));
+            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount));
         }
 
         CodeSymbol.MethodSymbol method = (CodeSymbol.MethodSymbol) methodDeclaration.symbol();

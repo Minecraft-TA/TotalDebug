@@ -781,8 +781,7 @@ public final class CompanionApp {
                             persisted.debuggerLine(),
                             method,
                             persisted.condition(),
-                            persisted.hitCondition(),
-                            persisted.logMessage()
+                            persisted.hitCondition()
                     );
                     return new DebuggerSessionController.BreakpointDefinition(
                             URI.create(persisted.sourceUri()),
@@ -813,7 +812,6 @@ public final class CompanionApp {
                             method == null ? null : method.descriptor(),
                             request.condition(),
                             request.hitCondition(),
-                            request.logMessage(),
                             definition.enabled()
                     );
                 })

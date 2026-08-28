@@ -366,7 +366,7 @@ class HierarchyGutterMarkersTest {
     @Test
     void selectsBreakpointIconsFromBindingStateAndCondition() {
         var plain = new DebugEngine.SourceBreakpoint(7);
-        var conditional = new DebugEngine.SourceBreakpoint(8, "value > 2", null, null);
+        var conditional = new DebugEngine.SourceBreakpoint(8, "value > 2", null);
         var method = DebugEngine.SourceBreakpoint.methodEntry(
                 9,
                 10,

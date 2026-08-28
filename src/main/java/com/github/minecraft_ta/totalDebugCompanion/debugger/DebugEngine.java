@@ -30,29 +30,21 @@ public interface DebugEngine extends AutoCloseable {
 
     CompletableFuture<List<Scope>> scopes(int frameId);
 
-    CompletableFuture<List<Variable>> variables(int variablesReference);
+    CompletableFuture<List<Variable>> variables(int variablesReference, int start, int count);
 
     CompletableFuture<Void> setVariable(int variablesReference, String name, String value);
 
-    default CompletableFuture<ValuePreview> preview(int variablesReference) {
-        return CompletableFuture.completedFuture(ValuePreview.NONE);
-    }
+    CompletableFuture<ValuePreview> preview(int variablesReference);
 
     CompletableFuture<EvaluationResult> evaluate(String expression, int frameId);
 
-    default CompletableFuture<List<DebuggerCompletionProposal>> completions(
+    CompletableFuture<List<DebuggerCompletionProposal>> completions(
             String expression,
             int caret,
             int frameId
-    ) {
-        return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                "Debugger expression completion is unavailable"
-        ));
-    }
+    );
 
-    default CompletableFuture<List<ExpressionToken>> expressionTokens(String expression, int frameId) {
-        return CompletableFuture.completedFuture(List.of());
-    }
+    CompletableFuture<List<ExpressionToken>> expressionTokens(String expression, int frameId);
 
     CompletableFuture<Void> setExceptionBreakpoints(boolean caught, boolean uncaught);
 
@@ -152,8 +144,7 @@ public interface DebugEngine extends AutoCloseable {
             int debuggerLine,
             MethodTarget method,
             String condition,
-            String hitCondition,
-            String logMessage
+            String hitCondition
     ) {
         public SourceBreakpoint {
             if (line < 1) {
@@ -167,12 +158,12 @@ public interface DebugEngine extends AutoCloseable {
             }
         }
 
-        public SourceBreakpoint(int line, String condition, String hitCondition, String logMessage) {
-            this(line, line, null, condition, hitCondition, logMessage);
+        public SourceBreakpoint(int line, String condition, String hitCondition) {
+            this(line, line, null, condition, hitCondition);
         }
 
         public SourceBreakpoint(int line) {
-            this(line, null, null, null);
+            this(line, null, null);
         }
 
         public static SourceBreakpoint methodEntry(
@@ -187,8 +178,7 @@ public interface DebugEngine extends AutoCloseable {
                     debuggerLine,
                     Objects.requireNonNull(method, "method"),
                     condition,
-                    hitCondition,
-                    null
+                    hitCondition
             );
         }
 
@@ -202,8 +192,7 @@ public interface DebugEngine extends AutoCloseable {
                     this.debuggerLine,
                     this.method,
                     condition,
-                    hitCondition,
-                    this.logMessage
+                    hitCondition
             );
         }
     }
