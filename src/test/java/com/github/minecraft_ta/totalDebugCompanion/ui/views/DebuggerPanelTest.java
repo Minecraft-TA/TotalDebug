@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JLabel;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerPanelTest {
@@ -269,6 +271,44 @@ class DebuggerPanelTest {
                     null
             ));
             assertEquals(0, frames.getModel().getSize());
+            panel.dispose();
+            actions.close();
+            controller.close();
+        });
+    }
+
+    @Test
+    void clearsEditorValuesWhileRetainingTheDebuggerSnapshotOnResume() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DebuggerSessionController controller = new DebuggerSessionController();
+            DebuggerActions actions = new DebuggerActions(controller);
+            DebuggerPanel panel = new DebuggerPanel(controller, actions, (frame, activateEditor) -> {
+            });
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    1,
+                    "Target.run",
+                    "example.Target",
+                    URI.create("decompiled:///example/Target.java"),
+                    20,
+                    1
+            );
+            AtomicReference<DebuggerEditorPresentation.Snapshot> editorSnapshot = new AtomicReference<>();
+            Runnable removeListener = DebuggerEditorPresentation.addListener(editorSnapshot::set);
+            panel.showPausedState(paused(frame));
+            assertNotNull(editorSnapshot.get());
+
+            panel.applyStatus(new DebuggerSessionController.Status(
+                    DebuggerSessionController.Phase.RUNNING,
+                    null,
+                    "Running",
+                    null
+            ));
+
+            assertNull(editorSnapshot.get(), "Editor values remained visible after execution resumed");
+            @SuppressWarnings("rawtypes")
+            JList frames = find(panel, JList.class);
+            assertEquals(1, frames.getModel().getSize(), "Debugger snapshot should remain stable while stepping");
+            removeListener.run();
             panel.dispose();
             actions.close();
             controller.close();

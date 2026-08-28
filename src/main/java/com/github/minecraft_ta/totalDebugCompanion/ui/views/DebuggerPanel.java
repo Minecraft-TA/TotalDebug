@@ -348,8 +348,8 @@ public final class DebuggerPanel extends JPanel {
         if (!paused) {
             this.expressionCompletion.setCompletionProvider(null);
             this.viewRevision++;
+            DebuggerEditorPresentation.clear();
             if (clearsPausedSnapshot(status.phase())) {
-                DebuggerEditorPresentation.clear();
                 clearPausedSnapshot();
             }
         }
