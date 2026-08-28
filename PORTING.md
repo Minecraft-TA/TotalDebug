@@ -13,6 +13,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 - Do not recreate the legacy sided-proxy hierarchy.
 - Do not carry runtime MCP/SRG remapping into the Mojmap runtime.
 - Do not probe unrelated fallback mechanisms to hide unknown behavior. Establish the authoritative mechanism, verify it, and fail explicitly when it is unavailable.
+- Keep debugger evaluation to one Java expression. Fields, private/inherited/static access, method calls, overloads, boxing, varargs, completion, semantic tokens, watches, conditions, and assignment are supported; statement blocks, declarations, loops, and lambdas are not a hidden second compiler.
 - Defer exact post-transform byte capture and process-wide loaded-class enumeration. ModLauncher's public loaded-class method only answers one known name, while its internal bytecode method reruns transformation instead of returning the bytes already defined by the JVM. Revisit this only for an explicit runtime-transformed-source feature with authoritative launch-time capture.
 
 ## Progress matrix
@@ -59,6 +60,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | M9 | Modernized live acceptance | Complete | Cold launch, warm reuse, block/entity/hovered block item/spawn egg F6, one-request-per-press, reverse Ctrl-click navigation, graceful close, and fresh-session relaunch passed live |
 | M10 | Launch and dependency policy ownership | Complete | SCNet requires explicit factories for received messages and uses Java 21 throughout build and CI; mirrored launch constants and injectable timing policies replace scattered literals; immutable Companion release metadata and checksum are generated from Gradle properties |
 | M11 | Companion semantic navigation and debugger UX | Complete | Typed navigation and bounded history cover runtime/local/archive/search targets; runtime browsing includes Minecraft, NeoForge, mods, nested libraries, development directories, and JDK modules; breadcrumbs, debugger completion/preferences, and popup placement share current runtime and theme truth |
+| M12 | Live debugger runtime | Complete | Companion owns JDWP attach/control, exact line and method breakpoints, conditional/hit-count evaluation, persisted and muted breakpoint state, frames, watches, assignment, inline values, Minecraft-aware previews, nested-class source ownership, bounded array paging, and one-expression Java evaluation with a five-second detach-on-hang boundary |
 
 ## Auditable slices
 
@@ -96,6 +98,7 @@ Small commits use focused unit tests and `gradlew build`. Expensive client/serve
 | S29 | Debugger expression completion | Complete Evaluate from the selected frame and breakpoint conditions from exact lexical source scope without suggesting evaluator-unsupported method calls or guessed member access | Complete; Companion commit `eccc701` |
 | S30 | Debugger preferences | Persist and live-apply caught/uncaught exception pause policies; leave watches as workspace data and window geometry as layout state | Complete; Companion commit `01ea178` |
 | S31 | Popup and final theme polish | Preserve each popup's correct Swing family; share paint-time borders, padding, screen clamping, and source-line-relative placement; fix multi-monitor centering and configured-relative editor-adjacent fonts | Complete; Companion commit `6aab645`; full tests and dark/light popup harness gates passed |
+| S32 | Debugger architecture and correctness audit | Split the expression engine and debugger workspace by responsibility; serialize session work; discard stale inspection; evaluate watches once per frame; batch inline previews; bind nested-class breakpoints to their real owner; page arrays without paging object fields; bound target method invocation; run IntelliJ inspections and real-JDWP gates | Complete; Companion commit `5850c98` |
 
 ## Core-flow milestone
 
@@ -149,12 +152,11 @@ Exact transformed-byte capture and process-wide loaded-class enumeration remain 
 | 2026-08-25 | S24 UI | Code-vision counts now become accented, underlined links on hover and open usages or the hierarchy chooser on click. Gutter markers resolve the actual icons on the clicked RSyntax line, show a compact asynchronous implementation preview on hover, and open the full chooser on click. Off-screen synthetic interaction gates passed for inline click, gutter click, and gutter hover without controlling the user's mouse; the Companion clean build passed all 124 tests. `localBundle` assembled TotalDebug and Companion SHA-256 `a06c3eaf1a8eecf2952317e1874a2f51ec9772c40b08c2d4145cd18b93753ccc`. Live feel verification remains. |
 | 2026-08-25 | S24 semantics | Split hierarchy results into subtypes, implementations, overrides, implemented bases, and overridden bases without changing JIndex persistence. Code vision, gutter previews, direct single-target navigation, multi-target choosers, and Ctrl+T/U now share that model and use the matching official JetBrains hierarchy icons. Companion commit `d6f95db` passed a clean 127-test build plus off-screen inline, gutter, hover, and direct-navigation interaction gates. Live feel verification remains. |
 | 2026-08-27 | S25-S31 | Companion commits `e8d8879`, `42296a7`, `31d2ae6`, `3fb5d2e`, `eccc701`, `01ea178`, and `6aab645` completed typed navigation, bounded history, authoritative runtime browsing, metadata-cache hygiene, clickable AST breadcrumbs, debugger completion/preferences, and popup/theme cleanup. The full Companion suite passed; dark/light hierarchy chooser, hierarchy summary/layout, and module-filter harness gates rendered successfully. |
+| 2026-08-28 | S32 | Three independent audits covered debugger standards, correctness, and performance. Companion commit `5850c98` fixed Java short-circuit and typed-null semantics, exact nested-class breakpoint ownership, duplicate breakpoint synchronization, stale inspection work, repeated watch execution, preview batching, array paging, and non-returning target calls. The full test/build passed; forced real-JDWP rich-expression, nested-breakpoint, paging, and timeout/detach scenarios passed; IntelliJ's project build completed with zero problems in the changed slice. |
 
 ## Deferred Companion polish
 
-- Add member completion after `.` only when the evaluator and runtime type model can provide exact fields; do not guess from source text.
-- Add deliberate value renderers for common Minecraft objects such as `ItemStack` and `BlockPos`; arbitrary `toString()` output is not the presentation contract.
-- Keep method-call evaluation deferred until the debugger evaluator supports it safely and explicitly.
+- Add renderers for additional mod-specific value types only when their contracts are stable and useful; Mekanism-specific presentation is deliberately not part of the current baseline.
 - Keep native popup shadows and rounded corners deferred until a clean platform-supported implementation exists.
 - Keep multi-instance/project workspace UI deferred; Companion currently owns one workspace and one window at a time.
 
