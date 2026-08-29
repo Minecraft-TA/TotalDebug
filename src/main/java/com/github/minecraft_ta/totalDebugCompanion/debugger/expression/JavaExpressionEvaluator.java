@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.sun.jdi.ArrayReference;
 import com.sun.jdi.ArrayType;
 import com.sun.jdi.BooleanValue;
@@ -24,7 +25,6 @@ import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Type;
 import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ArrayAccess;
@@ -622,7 +622,7 @@ final class JavaExpressionEvaluator {
         if (source == null || source.isBlank()) {
             throw new IllegalArgumentException("Expression must not be blank");
         }
-        ASTParser parser = ASTParser.newParser(AST.JLS21);
+        ASTParser parser = JdtConfiguration.createParser();
         parser.setKind(ASTParser.K_EXPRESSION);
         parser.setSource(source.toCharArray());
         ASTNode node = parser.createAST(null);

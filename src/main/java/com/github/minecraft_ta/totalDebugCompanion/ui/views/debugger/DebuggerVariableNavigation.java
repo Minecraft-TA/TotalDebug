@@ -1,9 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -161,7 +161,7 @@ final class DebuggerVariableNavigation {
     }
 
     private static CompilationUnit parse(String source) {
-        ASTParser parser = ASTParser.newParser(AST.JLS21);
+        ASTParser parser = JdtConfiguration.createParser();
         parser.setKind(ASTParser.K_COMPILATION_UNIT);
         parser.setSource(source.toCharArray());
         parser.setStatementsRecovery(true);

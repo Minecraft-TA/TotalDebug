@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.expression.DebuggerTypeScope;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.microsoft.java.debug.core.JavaBreakpointLocation;
 import com.microsoft.java.debug.core.adapter.ISourceLookUpProvider;
 import com.microsoft.java.debug.core.adapter.SourceType;
 import com.microsoft.java.debug.core.protocol.Types;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
@@ -261,7 +261,7 @@ final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
             List<TypeRegion> typeRegions
     ) {
         static RegisteredSource parse(DebugEngine.Source source) {
-            ASTParser parser = ASTParser.newParser(AST.JLS21);
+            ASTParser parser = JdtConfiguration.createParser();
             parser.setKind(ASTParser.K_COMPILATION_UNIT);
             parser.setSource(source.contents().toCharArray());
             parser.setStatementsRecovery(true);

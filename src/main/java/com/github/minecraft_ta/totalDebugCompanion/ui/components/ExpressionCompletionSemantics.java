@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
-import org.eclipse.jdt.core.dom.AST;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Expression;
@@ -22,7 +22,7 @@ public final class ExpressionCompletionSemantics {
             String expression,
             ExpressionCompletionSupport.CompletionProvider completionProvider
     ) {
-        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        ASTParser parser = JdtConfiguration.createParser();
         parser.setKind(ASTParser.K_EXPRESSION);
         parser.setSource(expression.toCharArray());
         parser.setStatementsRecovery(true);

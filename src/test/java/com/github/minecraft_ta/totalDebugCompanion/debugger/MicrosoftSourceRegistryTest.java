@@ -8,6 +8,7 @@ import java.net.URI;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class MicrosoftSourceRegistryTest {
@@ -70,6 +71,29 @@ class MicrosoftSourceRegistryTest {
         assertEquals("sample.GeneratedOwner", locations[0].className());
         assertEquals("nested", locations[0].methodName());
         assertEquals("()V", locations[0].methodSignature());
+    }
+
+    @Test
+    void registersDecompiledSourceContainingJavaTypePatterns() {
+        String source = """
+                package sample;
+
+                class PatternSource {
+                    int length(Object value) {
+                        return value instanceof String text ? text.length() : 0;
+                    }
+                }
+                """;
+        URI sourceUri = URI.create("decompiled:///sample/PatternSource.java");
+        MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(binaryName -> null);
+
+        assertDoesNotThrow(() -> registry.register(
+                new DebugEngine.Source(sourceUri, "sample.PatternSource", source)
+        ));
+        assertArrayEquals(
+                new String[]{"sample.PatternSource"},
+                registry.getFullyQualifiedName(sourceUri.toString(), new int[]{5}, new int[]{1})
+        );
     }
 
     private static MicrosoftSourceRegistry registry() {

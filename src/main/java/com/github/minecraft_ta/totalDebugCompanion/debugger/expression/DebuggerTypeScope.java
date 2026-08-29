@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.VirtualMachine;
-import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
@@ -36,7 +36,7 @@ public final class DebuggerTypeScope {
 
     public static DebuggerTypeScope parse(DebugEngine.Source source) {
         Objects.requireNonNull(source, "source");
-        ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
+        ASTParser parser = JdtConfiguration.createParser();
         parser.setKind(ASTParser.K_COMPILATION_UNIT);
         parser.setSource(source.contents().toCharArray());
         parser.setStatementsRecovery(true);

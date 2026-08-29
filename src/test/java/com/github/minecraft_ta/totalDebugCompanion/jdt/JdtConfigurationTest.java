@@ -5,6 +5,8 @@ import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -78,6 +80,28 @@ class JdtConfigurationTest {
                 .toList();
 
         assertTrue(syntaxErrors.isEmpty(), () -> "Java 21 source produced parser errors: " + syntaxErrors);
+    }
+
+    @Test
+    void standaloneParserUsesJava21LanguageLevel() {
+        var source = """
+                final class PatternSource {
+                    int length(Object value) {
+                        return value instanceof String text ? text.length() : 0;
+                    }
+                }
+                """;
+        ASTParser parser = JdtConfiguration.createParser();
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.setSource(source.toCharArray());
+
+        CompilationUnit unit = (CompilationUnit) parser.createAST(null);
+        var syntaxErrors = Arrays.stream(unit.getProblems())
+                .filter(problem -> problem.isError() && (problem.getID() & IProblem.Syntax) != 0)
+                .map(IProblem::getMessage)
+                .toList();
+
+        assertTrue(syntaxErrors.isEmpty(), () -> "Standalone parser rejected Java 21 source: " + syntaxErrors);
     }
 
     @Test
