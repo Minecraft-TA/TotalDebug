@@ -680,6 +680,24 @@ public final class DebuggerScenarios {
         }
     }
 
+    public static void resumeConvergesWithoutContinuedEvent() throws Exception {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(PauseDebuggeeMain.class)) {
+            harness.start();
+            equal("ready", harness.readOutputLine("debuggee readiness"), "readiness output");
+
+            DebugEngine.DebugThread mainThread = harness.mainThread();
+            harness.engine().pause(mainThread.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            DebugEngine.StoppedEvent pauseStop = harness.awaitStop("pause before resume");
+
+            harness.engine().resume(pauseStop.threadId()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            equal(DebugEngine.State.RUNNING, harness.engine().state(), "state after resume response");
+
+            harness.closeInput();
+            equal(0, harness.awaitExit(), "debuggee exit code after resume");
+            harness.awaitDebuggerTermination();
+        }
+    }
+
     public static void nonReturningEvaluationTimeout() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(RichExpressionDebuggeeMain.class)) {
             int line = harness.lineContaining("DEBUG_RICH_EXPRESSION");

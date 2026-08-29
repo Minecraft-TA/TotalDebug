@@ -43,6 +43,12 @@ class MicrosoftJavaDebugEngineIntegrationTest {
 
     @Test
     @Timeout(30)
+    void resumesToRunningWithoutAnAdapterContinuedEvent() throws Exception {
+        DebuggerScenarios.resumeConvergesWithoutContinuedEvent();
+    }
+
+    @Test
+    @Timeout(30)
     void stopsOnAndDescribesAnUncaughtException() throws Exception {
         DebuggerScenarios.uncaughtException();
     }

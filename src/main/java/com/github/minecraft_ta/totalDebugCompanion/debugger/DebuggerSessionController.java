@@ -789,6 +789,17 @@ public final class DebuggerSessionController implements AutoCloseable {
             updateStatus(Phase.RUNNING, detail, null);
             try {
                 control.apply(current, pause.event().threadId()).join();
+                if (this.engine == current && this.pausedState == null
+                        && this.status.phase() == Phase.RUNNING) {
+                    DebugTargetDescriptor currentTarget = this.target;
+                    updateStatus(
+                            Phase.RUNNING,
+                            currentTarget == null
+                                    ? "Debugger running"
+                                    : "Attached to " + currentTarget.displayName(),
+                            null
+                    );
+                }
             } catch (Throwable failure) {
                 Throwable cause = unwrap(failure);
                 this.pausedState = pause;

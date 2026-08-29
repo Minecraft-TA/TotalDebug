@@ -238,6 +238,39 @@ class DebuggerSessionControllerTest {
     }
 
     @Test
+    void completedResumeDoesNotLeaveTheDebuggerShowingResumingWhenNoContinuedEventArrives() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebuggerSessionController controller = new DebuggerSessionController(
+                engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50_321, timeout)
+        );
+        try {
+            controller.acceptTarget(new DebugTargetDescriptor("minecraft", "Minecraft Client", 42));
+            awaitPhase(controller, DebuggerSessionController.Phase.DETACHED);
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
+                    7,
+                    "Target.run",
+                    "sample.Target",
+                    URI.create("decompiled:///sample/Target.java"),
+                    12,
+                    1
+            );
+            engine.frames = List.of(frame);
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 73, true));
+            awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+
+            controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+
+            assertEquals(DebuggerSessionController.Phase.RUNNING, controller.status().phase());
+            assertEquals("Attached to Minecraft Client", controller.status().detail());
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
     void disabledBreakpointKeepsItsConfigurationAndStaysDisabledAcrossReconnects() throws Exception {
         List<RecordingEngine> engines = new ArrayList<>();
         DebuggerSessionController controller = new DebuggerSessionController(
@@ -883,6 +916,7 @@ class DebuggerSessionControllerTest {
                         case "pause", "stepOver", "stepInto", "stepOut" -> completed(null);
                         case "resume" -> {
                             this.resumedThread = (Long) arguments[0];
+                            this.state = DebugEngine.State.RUNNING;
                             yield completed(null);
                         }
                         case "disconnect" -> {

@@ -515,8 +515,24 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     }
 
     private CompletableFuture<Void> resumeWith(Requests.Command command, Requests.Arguments arguments) {
-        requireState(State.STOPPED);
-        return request(command, arguments, Object.class).thenApply(ignored -> null);
+        if (!this.state.compareAndSet(State.STOPPED, State.RUNNING)) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "Debugger operation is unavailable in state " + this.state.get()
+            ));
+        }
+        clearVariableNameContexts();
+        CompletableFuture<Void> request;
+        try {
+            request = request(command, arguments, Object.class).thenApply(ignored -> null);
+        } catch (Throwable failure) {
+            this.state.compareAndSet(State.RUNNING, State.STOPPED);
+            throw failure;
+        }
+        return request.whenComplete((ignored, failure) -> {
+            if (failure != null) {
+                this.state.compareAndSet(State.RUNNING, State.STOPPED);
+            }
+        });
     }
 
     @Override
