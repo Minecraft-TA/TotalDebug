@@ -139,17 +139,15 @@ final class CompanionMcpToolCatalog {
 
     static McpSchema.CallToolResult companionUnavailable(
             String tool,
-            Throwable failure
+            ConnectionFailure failure
     ) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("companion_available", false);
-        value.put("minecraft_connected", false);
-        value.put("error", safeMessage(failure));
         if ("status".equals(tool)) {
-            return result(value, false);
+            return result(Map.of(
+                    "companion_available", false,
+                    "minecraft_connected", false
+            ), false);
         }
-        value.put("hint", "Start TotalDebug Companion, then call the tool again in this Codex task.");
-        return result(value, true);
+        return result(Map.of("error", failure.asMap()), true);
     }
 
     private static McpSchema.Tool tool(String name, String description, Map<String, Object> inputSchema) {
@@ -191,8 +189,25 @@ final class CompanionMcpToolCatalog {
         );
     }
 
-    private static String safeMessage(Throwable failure) {
-        String message = failure.getMessage();
-        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    record ConnectionFailure(
+            String code,
+            String stage,
+            String endpointHealth,
+            boolean retryable
+    ) {
+        ConnectionFailure {
+            Objects.requireNonNull(code, "code");
+            Objects.requireNonNull(stage, "stage");
+            Objects.requireNonNull(endpointHealth, "endpointHealth");
+        }
+
+        Map<String, Object> asMap() {
+            return Map.of(
+                    "code", this.code,
+                    "stage", this.stage,
+                    "endpoint_health", this.endpointHealth,
+                    "retryable", this.retryable
+            );
+        }
     }
 }

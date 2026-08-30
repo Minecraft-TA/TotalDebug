@@ -13,8 +13,12 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -105,9 +109,15 @@ public final class CompanionMcpSidecar {
                     connect();
                 }
                 return this.client.callTool(request);
+            } catch (ConnectionFailureException exception) {
+                disconnect();
+                return CompanionMcpToolCatalog.companionUnavailable(request.name(), exception.failure());
             } catch (RuntimeException exception) {
                 disconnect();
-                return CompanionMcpToolCatalog.companionUnavailable(request.name(), exception);
+                return CompanionMcpToolCatalog.companionUnavailable(
+                        request.name(),
+                        forwardingFailure(this.endpoint, exception)
+                );
             }
         }
 
@@ -150,8 +160,63 @@ public final class CompanionMcpSidecar {
                 this.client = candidate;
             } catch (RuntimeException exception) {
                 candidate.closeGracefully();
-                throw exception;
+                throw new ConnectionFailureException(connectionFailure(this.endpoint, exception), exception);
             }
+        }
+
+        private static CompanionMcpToolCatalog.ConnectionFailure connectionFailure(
+                URI endpoint,
+                RuntimeException exception
+        ) {
+            String health = endpointHealth(endpoint);
+            if ("unreachable".equals(health)) {
+                return new CompanionMcpToolCatalog.ConnectionFailure(
+                        isTimeout(exception) ? "connection_timeout" : "companion_unreachable",
+                        "tcp_connect",
+                        health,
+                        true
+                );
+            }
+            return new CompanionMcpToolCatalog.ConnectionFailure(
+                    "mcp_initialization_failed",
+                    "mcp_initialize",
+                    health,
+                    true
+            );
+        }
+
+        private static CompanionMcpToolCatalog.ConnectionFailure forwardingFailure(
+                URI endpoint,
+                RuntimeException exception
+        ) {
+            String health = endpointHealth(endpoint);
+            return new CompanionMcpToolCatalog.ConnectionFailure(
+                    isTimeout(exception) ? "request_timeout" : "forwarding_failed",
+                    "tool_call",
+                    health,
+                    true
+            );
+        }
+
+        private static String endpointHealth(URI endpoint) {
+            try (Socket socket = new Socket()) {
+                socket.connect(
+                        new InetSocketAddress(endpoint.getHost(), endpoint.getPort()),
+                        Math.toIntExact(CONNECT_TIMEOUT.toMillis())
+                );
+                return "reachable";
+            } catch (IOException exception) {
+                return "unreachable";
+            }
+        }
+
+        private static boolean isTimeout(Throwable throwable) {
+            for (Throwable current = throwable; current != null; current = current.getCause()) {
+                if (current instanceof HttpTimeoutException || current instanceof SocketTimeoutException) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static URI validateEndpoint(URI endpoint) {
@@ -182,6 +247,22 @@ public final class CompanionMcpSidecar {
         @Override
         public synchronized void close() {
             disconnect();
+        }
+    }
+
+    private static final class ConnectionFailureException extends RuntimeException {
+        private final CompanionMcpToolCatalog.ConnectionFailure failure;
+
+        private ConnectionFailureException(
+                CompanionMcpToolCatalog.ConnectionFailure failure,
+                Throwable cause
+        ) {
+            super(cause);
+            this.failure = Objects.requireNonNull(failure, "failure");
+        }
+
+        private CompanionMcpToolCatalog.ConnectionFailure failure() {
+            return this.failure;
         }
     }
 

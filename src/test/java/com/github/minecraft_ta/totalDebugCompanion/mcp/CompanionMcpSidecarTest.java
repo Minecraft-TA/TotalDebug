@@ -66,6 +66,11 @@ class CompanionMcpSidecarTest {
             assertTrue(offlineStatus.toString().contains("false"));
             assertFalse(offlineStatus.toString().contains("sidecar_process_id"));
             assertFalse(offlineStatus.toString().contains("mcp_url"));
+            assertFalse(offlineStatus.toString().contains("error"));
+
+            send(writer, "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"tools/call\",\"params\":{" +
+                    "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}");
+            assertUnreachableFailure(response(reader, executor, 30));
 
             try (CompanionMcpServer companion = companion(port, "first")) {
                 companion.start();
@@ -81,8 +86,7 @@ class CompanionMcpSidecarTest {
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
                     "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}");
             JsonObject stoppedExecution = response(reader, executor, 5);
-            assertTrue(stoppedExecution.toString().contains("companion_available"));
-            assertTrue(stoppedExecution.getAsJsonObject("result").get("isError").getAsBoolean());
+            assertUnreachableFailure(stoppedExecution);
 
             try (CompanionMcpServer companion = companion(port, "second")) {
                 companion.start();
@@ -97,6 +101,17 @@ class CompanionMcpSidecarTest {
             clientOutput.close();
             assertEquals(0, sidecar.get(5, TimeUnit.SECONDS));
         }
+    }
+
+    private static void assertUnreachableFailure(JsonObject response) {
+        assertTrue(response.toString().contains("companion_unreachable"));
+        assertTrue(response.toString().contains("tcp_connect"));
+        assertTrue(response.toString().contains("endpoint_health"));
+        assertTrue(response.toString().contains("unreachable"));
+        assertTrue(response.toString().contains("retryable"));
+        assertFalse(response.toString().contains("hint"));
+        assertFalse(response.toString().contains("companion_available"));
+        assertTrue(response.getAsJsonObject("result").get("isError").getAsBoolean());
     }
 
     private CompanionMcpServer companion(int port, String instance) {
