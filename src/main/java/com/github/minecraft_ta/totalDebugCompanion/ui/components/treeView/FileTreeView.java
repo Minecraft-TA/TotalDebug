@@ -43,44 +43,17 @@ public class FileTreeView extends JScrollPane {
             }
         };
 
-        this.tree.addMouseDoubleClickListener((node, item) -> {
-            if (item.isDirectory())
-                return;
-
-            if (item instanceof FileSystemFileItem fileItem) {
-                String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
-                boolean javaFile = lowerName.endsWith(".java");
-                if (javaFile
-                        && node.getParent().getUserObject().getName().equals("scripts")
-                        && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-                    var name = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
-
-                    navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-                } else if (javaFile && fileItem.getPath().getParent().equals(
-                        CompanionApp.getRootPath().resolve("decompiled-files")
-                )) {
-                    String binaryName = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
-                    navigator.accept(new NavigationTarget.RuntimeClass(binaryName));
-                } else {
-                    navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
+        this.tree.addMouseDoubleClickListener((node, item) -> openItem(node, item, navigator));
+        this.tree.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "openSelectedFile");
+        this.tree.getActionMap().put("openSelectedFile", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                if (tree.getSelectionPath() == null
+                        || !(tree.getSelectionPath().getLastPathComponent() instanceof LazyTreeNode node)) {
+                    return;
                 }
-            } else if (item instanceof ZipFileRootItem.Entry entry) {
-                String entryPath = entry.getEntryPath();
-                if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {
-                    navigator.accept(new NavigationTarget.RuntimeClass(
-                            entryPath.substring(0, entryPath.length() - 6).replace('/', '.')
-                    ));
-                } else {
-                    navigator.accept(new NavigationTarget.ArchiveEntry(
-                            entry.getArchivePath(),
-                            entry.getEntryPath()
-                    ));
-                }
-            } else if (item instanceof RuntimeSourceTreeItem.RuntimeFileEntry runtimeFile) {
-                String binaryName = runtimeFile.binaryName();
-                navigator.accept(binaryName == null
-                        ? new NavigationTarget.LocalFile(runtimeFile.path())
-                        : new NavigationTarget.RuntimeClass(binaryName));
+                openItem(node, node.getUserObject(), navigator);
             }
         });
 
@@ -107,6 +80,50 @@ public class FileTreeView extends JScrollPane {
 
         setViewportView(this.tree);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
+    }
+
+    private static void openItem(
+            LazyTreeNode node,
+            TreeItem item,
+            Consumer<NavigationTarget> navigator
+    ) {
+        if (item.isDirectory()) {
+            return;
+        }
+
+        if (item instanceof FileSystemFileItem fileItem) {
+            String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
+            boolean javaFile = lowerName.endsWith(".java");
+            if (javaFile
+                    && node.getParent().getUserObject().getName().equals("scripts")
+                    && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
+            } else if (javaFile && fileItem.getPath().getParent().equals(
+                    CompanionApp.getRootPath().resolve("decompiled-files")
+            )) {
+                String binaryName = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
+                navigator.accept(new NavigationTarget.RuntimeClass(binaryName));
+            } else {
+                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
+            }
+        } else if (item instanceof ZipFileRootItem.Entry entry) {
+            String entryPath = entry.getEntryPath();
+            if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {
+                navigator.accept(new NavigationTarget.RuntimeClass(
+                        entryPath.substring(0, entryPath.length() - 6).replace('/', '.')
+                ));
+            } else {
+                navigator.accept(new NavigationTarget.ArchiveEntry(
+                        entry.getArchivePath(),
+                        entry.getEntryPath()
+                ));
+            }
+        } else if (item instanceof RuntimeSourceTreeItem.RuntimeFileEntry runtimeFile) {
+            String binaryName = runtimeFile.binaryName();
+            navigator.accept(binaryName == null
+                    ? new NavigationTarget.LocalFile(runtimeFile.path())
+                    : new NavigationTarget.RuntimeClass(binaryName));
+        }
     }
 
     public void reloadProfile() {

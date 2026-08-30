@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
@@ -65,12 +66,13 @@ public final class ImplementationChooserPopup extends BasePopup {
     private HierarchyRelation relation;
     private JTextComponent invoker;
     private Rectangle sourceLine;
+    private SpeedSearch speedSearch;
     private long generation;
     private boolean updatingOptions;
     private final KeyAdapter invokerKeys = new KeyAdapter() {
         @Override
         public void keyPressed(KeyEvent event) {
-            if (!isVisible()) {
+            if (!isVisible() || event.isConsumed()) {
                 return;
             }
             switch (event.getKeyCode()) {
@@ -173,6 +175,14 @@ public final class ImplementationChooserPopup extends BasePopup {
     ) {
         Objects.requireNonNull(editor, "editor");
         this.invoker = editor;
+        if (this.speedSearch != null) {
+            this.speedSearch.close();
+        }
+        this.speedSearch = SpeedSearch.install(this.list, editor, result -> {
+            PrimarySecondaryText presentation = resultPresentation(result.symbol());
+            return presentation.primary() + ' ' + presentation.secondary() + ' '
+                    + result.symbol().ownerClassName();
+        });
         this.query = nextQuery;
         this.relation = nextRelation;
         this.updatingOptions = true;
@@ -352,6 +362,10 @@ public final class ImplementationChooserPopup extends BasePopup {
         if (!visible && this.invoker != null) {
             this.invoker.removeKeyListener(this.invokerKeys);
         }
+        if (!visible && this.speedSearch != null) {
+            this.speedSearch.close();
+            this.speedSearch = null;
+        }
     }
 
     @Override
@@ -475,7 +489,9 @@ public final class ImplementationChooserPopup extends BasePopup {
                     symbolIcon(result.symbol()),
                     owner.getFont(),
                     selected,
-                    foreground
+                    foreground,
+                    null,
+                    owner
             );
             row.add(declaration, BorderLayout.CENTER);
 
@@ -488,7 +504,9 @@ public final class ImplementationChooserPopup extends BasePopup {
                     null,
                     owner.getFont().deriveFont(Font.PLAIN, Math.max(10f, owner.getFont().getSize2D() - 1f)),
                     selected,
-                    foreground
+                    foreground,
+                    null,
+                    owner
             );
             moduleLabel.setToolTipText(module.tooltip());
             row.add(moduleLabel, BorderLayout.EAST);

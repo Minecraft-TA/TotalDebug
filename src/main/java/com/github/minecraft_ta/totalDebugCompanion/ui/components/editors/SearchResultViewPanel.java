@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.model.SearchResultView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.*;
@@ -74,6 +75,24 @@ public class SearchResultViewPanel extends JPanel {
 
         this.resultTable.getColumnModel().getColumn(0).setPreferredWidth(500);
         this.resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        SpeedSearch.install(this.resultTable, row -> {
+            StringBuilder text = new StringBuilder();
+            for (int column = 0; column < this.resultTable.getColumnCount(); column++) {
+                if (!text.isEmpty()) {
+                    text.append(' ');
+                }
+                text.append(this.resultTable.getValueAt(row, column));
+            }
+            return text.toString();
+        });
+        this.resultTable.getInputMap(WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openSearchResult");
+        this.resultTable.getActionMap().put("openSearchResult", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                openSelectedResult();
+            }
+        });
         updateEditorFont();
         GlobalConfig.getInstance().addEditorFontSizeListener(this.editorFontListener);
         addHierarchyListener(event -> {
@@ -84,6 +103,15 @@ public class SearchResultViewPanel extends JPanel {
 
         add(constructHeader(searchResultView), BorderLayout.NORTH);
         add(new JScrollPane(this.resultTable), BorderLayout.CENTER);
+    }
+
+    private void openSelectedResult() {
+        int row = this.resultTable.getSelectedRow();
+        if (row < 0) {
+            return;
+        }
+        String className = ((String) this.resultTable.getValueAt(row, 0)).replace('/', '.');
+        CompanionApp.openClass(className);
     }
 
     private Component constructHeader(SearchResultView view) {

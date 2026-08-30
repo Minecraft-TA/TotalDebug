@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.objectweb.asm.Type;
@@ -198,6 +199,12 @@ public final class UsagesViewPanel extends JPanel {
         this.resultsTree.setRootVisible(false);
         this.resultsTree.setShowsRootHandles(true);
         this.resultsTree.setCellRenderer(new UsageTreeCellRenderer());
+        SpeedSearch.install(this.resultsTree, path -> {
+            Object node = path.getLastPathComponent();
+            return node instanceof DefaultMutableTreeNode mutable
+                    ? String.valueOf(mutable.getUserObject())
+                    : String.valueOf(node);
+        });
         this.resultsTree.getSelectionModel().setSelectionMode(
                 javax.swing.tree.TreeSelectionModel.SINGLE_TREE_SELECTION
         );

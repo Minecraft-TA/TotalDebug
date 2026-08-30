@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.PacketView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
@@ -46,12 +47,19 @@ public class PacketViewPanel extends JPanel {
                             getFont(),
                             sel,
                             getTextSelectionColor(),
-                            getBackgroundSelectionColor()
+                            getBackgroundSelectionColor(),
+                            tree
                     );
                     return this.presentation;
                 }
                 return this;
             }
+        });
+        SpeedSearch.install(tree, path -> {
+            Object node = path.getLastPathComponent();
+            return node instanceof DefaultMutableTreeNode mutable
+                    ? String.valueOf(mutable.getUserObject())
+                    : String.valueOf(node);
         });
         BasicTreeUI treeUI = (BasicTreeUI) tree.getUI();
         treeUI.setCollapsedIcon(Icons.RIGHT_ARROW);

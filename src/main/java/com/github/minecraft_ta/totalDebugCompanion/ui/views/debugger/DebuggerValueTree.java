@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
 import javax.swing.Icon;
 import javax.swing.JTree;
@@ -26,7 +27,26 @@ final class DebuggerValueTree {
         tree.setRowHeight(UiMetrics.TREE_ROW_HEIGHT);
         tree.putClientProperty("JTree.wideSelection", true);
         tree.setCellRenderer(new Renderer());
+        SpeedSearch.install(tree, path -> searchText(
+                ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject()
+        ));
         return tree;
+    }
+
+    private static String searchText(Object value) {
+        DebugValue debugValue = debugValue(value);
+        if (debugValue != null) {
+            return debugValue.name() + ' ' + debugValue.evaluateName() + ' '
+                    + debugValue.value() + ' ' + debugValue.type() + ' '
+                    + (debugValue.preview().available() ? debugValue.preview().summary() : "");
+        }
+        return switch (value) {
+            case ExpressionStatus status -> status.expression() + ' ' + status.text();
+            case StatusValue status -> status.text();
+            case MoreChildren more -> more.owner().name() + " load more";
+            case Placeholder ignored -> "Loading";
+            default -> String.valueOf(value);
+        };
     }
 
     static DefaultMutableTreeNode valueNode(DebugValue value) {
@@ -179,7 +199,8 @@ final class DebuggerValueTree {
                         tree.getFont(),
                         selected,
                         getTextSelectionColor(),
-                        getBackgroundSelectionColor()
+                        getBackgroundSelectionColor(),
+                        tree
                 );
                 String detail = debugValue.preview().available()
                         ? debugValue.preview().detail()

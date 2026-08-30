@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 
 import javax.swing.AbstractListModel;
@@ -16,10 +17,12 @@ import javax.swing.JScrollPane;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.KeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyEvent;
 import java.net.URI;
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +50,7 @@ final class DebuggerFramesPane extends JPanel {
         this.frames.setFixedCellHeight(UiMetrics.TREE_ROW_HEIGHT);
         this.frames.setCellRenderer(new FrameRenderer());
         this.frames.putClientProperty("List.isFileList", false);
+        SpeedSearch.install(this.frames, DebuggerFramesPane::searchText);
         this.frames.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 selection.accept(this.frames.getSelectedIndex());
@@ -60,6 +64,17 @@ final class DebuggerFramesPane extends JPanel {
                     if (frame != null) {
                         navigation.open(frame, true);
                     }
+                }
+            }
+        });
+        this.frames.getInputMap(WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openFrame");
+        this.frames.getActionMap().put("openFrame", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                DebugEngine.StackFrame frame = frames.getSelectedValue();
+                if (frame != null) {
+                    navigation.open(frame, true);
                 }
             }
         });
@@ -79,6 +94,20 @@ final class DebuggerFramesPane extends JPanel {
 
     void selectFirst() {
         this.frames.setSelectedIndex(0);
+    }
+
+    private static String searchText(DebugEngine.StackFrame frame) {
+        return frame.name() + ' ' + frame.binaryName() + ' '
+                + sourceName(frame.sourceUri()) + ' ' + frame.line();
+    }
+
+    private static String sourceName(URI uri) {
+        if (uri == null || uri.getPath() == null) {
+            return "Unknown source";
+        }
+        String path = uri.getPath();
+        int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return path.substring(separator + 1);
     }
 
     private static final class FrameListModel extends AbstractListModel<DebugEngine.StackFrame> {
@@ -137,20 +166,13 @@ final class DebuggerFramesPane extends JPanel {
                     list.getFont(),
                     selected,
                     list.getSelectionForeground(),
-                    list.getSelectionBackground()
+                    list.getSelectionBackground(),
+                    list
             );
             this.label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
             this.label.setToolTipText(source);
             return this.label;
         }
 
-        private static String sourceName(URI uri) {
-            if (uri == null || uri.getPath() == null) {
-                return "Unknown source";
-            }
-            String path = uri.getPath();
-            int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-            return path.substring(separator + 1);
-        }
     }
 }

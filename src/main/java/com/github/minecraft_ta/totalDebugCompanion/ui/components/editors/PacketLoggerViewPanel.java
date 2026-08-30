@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.*;
 import com.github.minecraft_ta.totalDebugCompanion.model.PacketView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.Pair;
 
@@ -136,6 +137,24 @@ public class PacketLoggerViewPanel extends JPanel {
         table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         table.setGridColor(getBackground());
         table.getColumnModel().getColumn(0).setPreferredWidth(280);
+        SpeedSearch.install(table, row -> {
+            StringBuilder text = new StringBuilder();
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                if (!text.isEmpty()) {
+                    text.append(' ');
+                }
+                text.append(table.getValueAt(row, column));
+            }
+            return text.toString();
+        });
+        table.getInputMap(WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openPacket");
+        table.getActionMap().put("openPacket", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                openSelectedPacket(table);
+            }
+        });
         table.setLayout(new GridBagLayout());
         table.add(placeholder);
         table.getModel().addTableModelListener(e -> {
@@ -266,15 +285,23 @@ public class PacketLoggerViewPanel extends JPanel {
                     table.setRowSelectionInterval(row, row);
                     popup.show(table, e.getX(), e.getY());
                 } else if (e.getClickCount() == 2 && row != -1) {
-                    String packet = (String) table.getValueAt(row, 0);
-                    MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
-                            PacketView.class,
-                            view -> view.getPacket().equals(packet),
-                            () -> new PacketView(packet)
-                    );
+                    openSelectedPacket(table);
                 }
             }
         });
+    }
+
+    private static void openSelectedPacket(JTable table) {
+        int row = table.getSelectedRow();
+        if (row < 0) {
+            return;
+        }
+        String packet = (String) table.getValueAt(row, 0);
+        MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
+                PacketView.class,
+                view -> view.getPacket().equals(packet),
+                () -> new PacketView(packet)
+        );
     }
 
     /**

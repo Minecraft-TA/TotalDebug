@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,6 +23,17 @@ public class EditorTabs extends JTabbedPane {
         super();
         setTabLayoutPolicy(SCROLL_TAB_LAYOUT);
         setBorder(BorderFactory.createEmptyBorder());
+        SpeedSearch.install(this, this::getTitleAt);
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "focusEditor");
+        getActionMap().put("focusEditor", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                Component selected = getSelectedComponent();
+                if (selected != null) {
+                    selected.requestFocusInWindow();
+                }
+            }
+        });
         addChangeListener(event -> {
             refreshTabHeaders();
             notifySelectedEditorChanged();

@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionF
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.BreakpointGutterMarkers;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 
 import javax.swing.BorderFactory;
@@ -28,6 +29,7 @@ import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.KeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -41,6 +43,7 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.KeyEvent;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
@@ -93,6 +96,9 @@ public final class BreakpointsWindow extends JDialog {
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(UiMetrics.TREE_ROW_HEIGHT);
         this.list.setCellRenderer(new BreakpointRenderer());
+        SpeedSearch.install(this.list, entry -> entry.binaryName() + ' '
+                + simpleName(entry.binaryName()) + ' ' + entry.breakpoint().line() + ' '
+                + entry.breakpoint().request().condition());
         this.list.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting() && !this.loading) {
                 saveEditingBreakpoint();
@@ -112,6 +118,14 @@ public final class BreakpointsWindow extends JDialog {
                 } else if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
                     navigateSelected();
                 }
+            }
+        });
+        this.list.getInputMap(javax.swing.JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "navigateBreakpoint");
+        this.list.getActionMap().put("navigateBreakpoint", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                navigateSelected();
             }
         });
 
@@ -436,7 +450,8 @@ public final class BreakpointsWindow extends JDialog {
                     list.getFont(),
                     selected,
                     list.getSelectionForeground(),
-                    null
+                    null,
+                    list
             );
             this.row.setOpaque(selected);
             if (selected) {

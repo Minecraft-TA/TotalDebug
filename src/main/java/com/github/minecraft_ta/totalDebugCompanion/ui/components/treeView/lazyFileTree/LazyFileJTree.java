@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
 import javax.swing.*;
 import javax.swing.event.TreeExpansionEvent;
@@ -37,6 +38,15 @@ public class LazyFileJTree extends JTree {
         ToolTipManager.sharedInstance().registerComponent(this);
 
         setModel(new DefaultTreeModel(new LazyTreeNode(this.itemFactory.createHiddenRoot())));
+        SpeedSearch.install(this, path -> {
+            if (!(path.getLastPathComponent() instanceof LazyTreeNode node)) {
+                return "";
+            }
+            var presentation = node.getUserObject().getPresentation();
+            return presentation.secondary().isBlank()
+                    ? presentation.primary()
+                    : presentation.primary() + ' ' + presentation.secondary();
+        });
         addTreeWillExpandListener(new TreeWillExpandListener() {
             @Override
             public void treeWillExpand(TreeExpansionEvent event) {
@@ -112,7 +122,8 @@ public class LazyFileJTree extends JTree {
                         getFont(),
                         sel,
                         getTextSelectionColor(),
-                        getBackgroundSelectionColor()
+                        getBackgroundSelectionColor(),
+                        tree
                 );
                 this.presentation.setToolTipText(item.getTooltip());
                 return this.presentation;
