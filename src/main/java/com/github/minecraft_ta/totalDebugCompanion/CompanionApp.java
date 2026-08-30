@@ -76,6 +76,7 @@ import java.util.function.Consumer;
 public final class CompanionApp {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
     private static final CountDownLatch EXIT = new CountDownLatch(1);
+    private static final Object DEBUGGER_CONTROLLER_LOCK = new Object();
 
     public static Server SERVER;
     private static CompanionSession session;
@@ -90,7 +91,7 @@ public final class CompanionApp {
     private static volatile String activeRuntimeSignature;
     private static final List<PendingNavigation> pendingNavigations = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
-    private static DebuggerSessionController debuggerController;
+    private static volatile DebuggerSessionController debuggerController;
     private static volatile boolean uiStarted;
 
     private record PendingNavigation(NavigationTarget target, NavigationService.Activation activation) {
@@ -736,13 +737,19 @@ public final class CompanionApp {
         return service;
     }
 
-    public static synchronized DebuggerSessionController getDebuggerController() {
+    public static DebuggerSessionController getDebuggerController() {
         DebuggerSessionController controller = debuggerController;
-        if (controller == null) {
-            controller = createDebuggerController();
-            debuggerController = controller;
+        if (controller != null) {
+            return controller;
         }
-        return controller;
+        synchronized (DEBUGGER_CONTROLLER_LOCK) {
+            controller = debuggerController;
+            if (controller == null) {
+                controller = createDebuggerController();
+                debuggerController = controller;
+            }
+            return controller;
+        }
     }
 
     private static DebuggerSessionController createDebuggerController() {
