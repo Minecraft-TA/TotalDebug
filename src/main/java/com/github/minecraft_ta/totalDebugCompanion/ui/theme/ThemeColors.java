@@ -60,6 +60,12 @@ public final class ThemeColors {
         return first(new Color(0xD9A343), "Actions.Yellow");
     }
 
+    /** Opaque marker behind text matched by Speed Search. */
+    public static Color searchMatch() {
+        Color fallback = ThemeManager.current().dark() ? new Color(0xBA9752) : new Color(0xFEE6B1);
+        return first(fallback, "SearchMatch.startBackground");
+    }
+
     /** Background of a secondary surface such as a header strip. */
     public static Color headerBackground() {
         return first(new Color(0x2B2D30), "ToolBar.background", "Panel.background");

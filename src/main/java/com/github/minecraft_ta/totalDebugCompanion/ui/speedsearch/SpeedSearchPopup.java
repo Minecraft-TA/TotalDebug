@@ -61,9 +61,9 @@ final class SpeedSearchPopup extends JPanel {
                 anchor.x + EDGE_GAP,
                 this.layeredPane.getWidth() - size.width - EDGE_GAP
         ));
-        int y = Math.max(EDGE_GAP, Math.min(
-                anchor.y + EDGE_GAP,
-                this.layeredPane.getHeight() - size.height - EDGE_GAP
+        int y = Math.max(0, Math.min(
+                anchor.y - size.height,
+                this.layeredPane.getHeight() - size.height
         ));
         setBounds(x, y, size.width, size.height);
         setVisible(true);

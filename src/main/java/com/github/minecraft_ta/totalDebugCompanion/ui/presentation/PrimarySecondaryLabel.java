@@ -10,7 +10,6 @@ import javax.swing.JLabel;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
@@ -156,15 +155,8 @@ public final class PrimarySecondaryLabel extends JPanel {
                     getIconTextGap()
             );
 
-            Color base = UIManager.getColor("SearchMatch.startBackground");
-            if (base == null) {
-                base = UIManager.getColor("TextField.selectionBackground");
-            }
-            if (base == null) {
-                base = ThemeColors.accent();
-            }
             Graphics2D copy = (Graphics2D) graphics.create();
-            copy.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), 150));
+            copy.setColor(ThemeColors.searchMatch());
             for (SpeedSearch.MatchRange range : ranges) {
                 int start = Math.min(range.start(), text.length());
                 int end = Math.min(range.end(), text.length());

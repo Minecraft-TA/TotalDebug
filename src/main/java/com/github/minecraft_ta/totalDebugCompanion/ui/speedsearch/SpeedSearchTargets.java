@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch;
 
+import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
@@ -107,7 +108,7 @@ final class SpeedSearchTargets {
         @Override
         public void select(int index) {
             this.list.setSelectedIndex(index);
-            this.list.ensureIndexIsVisible(index);
+            scrollCenteredVertically(this.list, this.list.getCellBounds(index, index));
         }
 
         @Override
@@ -198,17 +199,7 @@ final class SpeedSearchTargets {
         @Override
         public void select(int index) {
             this.tree.setSelectionRow(index);
-            Rectangle rowBounds = this.tree.getRowBounds(index);
-            if (rowBounds == null) {
-                return;
-            }
-            Rectangle visible = this.tree.getVisibleRect();
-            this.tree.scrollRectToVisible(new Rectangle(
-                    visible.x,
-                    rowBounds.y,
-                    Math.max(1, visible.width),
-                    Math.max(1, rowBounds.height)
-            ));
+            scrollCenteredVertically(this.tree, this.tree.getRowBounds(index));
         }
 
         @Override
@@ -287,8 +278,7 @@ final class SpeedSearchTargets {
         @Override
         public void select(int index) {
             this.table.setRowSelectionInterval(index, index);
-            Rectangle bounds = this.table.getCellRect(index, 0, true);
-            this.table.scrollRectToVisible(bounds);
+            scrollCenteredVertically(this.table, this.table.getCellRect(index, 0, true));
         }
 
         @Override
@@ -371,5 +361,21 @@ final class SpeedSearchTargets {
             this.tabs.removeContainerListener(this.containerListener);
             this.tabs.removeChangeListener(this.changeListener);
         }
+    }
+
+    private static void scrollCenteredVertically(JComponent component, Rectangle itemBounds) {
+        if (itemBounds == null) {
+            return;
+        }
+        Rectangle visible = component.getVisibleRect();
+        int scrollHeight = Math.max(itemBounds.height, visible.height);
+        int centeredY = itemBounds.y - Math.max(0, (visible.height - itemBounds.height) / 2);
+        int maximumY = Math.max(0, component.getHeight() - scrollHeight);
+        component.scrollRectToVisible(new Rectangle(
+                visible.x,
+                Math.max(0, Math.min(centeredY, maximumY)),
+                Math.max(1, visible.width),
+                scrollHeight
+        ));
     }
 }

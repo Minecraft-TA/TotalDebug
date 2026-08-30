@@ -28,7 +28,7 @@ class SpeedSearchPopupTest {
             root.setSize(500, 300);
             root.getLayeredPane().setSize(root.getSize());
             ShowingList target = new ShowingList();
-            target.setBounds(20, 30, 460, 250);
+            target.setBounds(20, 60, 460, 220);
             root.getContentPane().setLayout(null);
             root.getContentPane().add(target);
 
@@ -38,6 +38,10 @@ class SpeedSearchPopupTest {
             assertSame(root.getLayeredPane(), popup.getParent());
             assertTrue(root.getLayeredPane().getBounds().contains(popup.getBounds()));
             assertEquals(26, popup.getX(), "Speed search belongs at the target's top-left edge");
+            assertTrue(
+                    popup.getY() + popup.getHeight() <= target.getY(),
+                    "Speed search must not cover the target's first visible row"
+            );
             FlatIconTextField field = (FlatIconTextField) popup.getComponent(0);
             assertEquals("needle", field.getText());
             assertEquals(ThemeColors.error(), field.getForeground());
@@ -75,7 +79,7 @@ class SpeedSearchPopupTest {
         root.setSize(500, 300);
         root.getLayeredPane().setSize(root.getSize());
         ShowingList target = new ShowingList();
-        target.setBounds(20, 30, 460, 250);
+        target.setBounds(20, 60, 460, 220);
         root.getContentPane().setLayout(null);
         root.getContentPane().add(target);
         return target;

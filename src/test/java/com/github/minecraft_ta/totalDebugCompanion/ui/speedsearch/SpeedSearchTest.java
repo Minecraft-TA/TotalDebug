@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.DefaultListModel;
+import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
@@ -15,6 +16,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.Dimension;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.lang.reflect.InvocationTargetException;
@@ -246,6 +248,79 @@ class SpeedSearchTest {
             assertEquals(0, viewport.getViewPosition().x);
             assertTrue(viewport.getViewPosition().y > 0);
         });
+    }
+
+    @Test
+    void treeSelectionCentersAnOrdinaryMatchVertically() throws Exception {
+        onEventThread(() -> {
+            DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
+            for (int index = 0; index < 30; index++) {
+                root.add(new DefaultMutableTreeNode("Row " + index));
+            }
+            JTree tree = new JTree(new DefaultTreeModel(root));
+            tree.setRootVisible(false);
+            tree.setRowHeight(20);
+            tree.setSize(300, 600);
+            JViewport viewport = new JViewport();
+            viewport.setExtentSize(new Dimension(200, 100));
+            viewport.setView(tree);
+            viewport.setViewPosition(new Point(0, 0));
+
+            SpeedSearchTarget target = SpeedSearchTargets.tree(
+                    tree,
+                    path -> path.getLastPathComponent().toString()
+            );
+            target.select(15);
+
+            Rectangle row = tree.getRowBounds(15);
+            int rowCenterInViewport = row.y + row.height / 2 - viewport.getViewPosition().y;
+            assertTrue(
+                    Math.abs(rowCenterInViewport - viewport.getExtentSize().height / 2) <= tree.getRowHeight(),
+                    "Selected search matches should stay near the viewport center"
+            );
+        });
+    }
+
+    @Test
+    void listAndTableSelectionsAlsoCenterVertically() throws Exception {
+        onEventThread(() -> {
+            DefaultListModel<String> listModel = new DefaultListModel<>();
+            DefaultTableModel tableModel = new DefaultTableModel(new Object[]{"Name"}, 0);
+            for (int index = 0; index < 30; index++) {
+                listModel.addElement("Row " + index);
+                tableModel.addRow(new Object[]{"Row " + index});
+            }
+
+            JList<String> list = new JList<>(listModel);
+            list.setFixedCellHeight(20);
+            list.setSize(300, 600);
+            JViewport listViewport = viewportFor(list);
+            SpeedSearchTargets.list(list, value -> value).select(15);
+            assertVerticallyCentered(listViewport, list.getCellBounds(15, 15), 20);
+
+            JTable table = new JTable(tableModel);
+            table.setRowHeight(20);
+            table.setSize(300, 600);
+            JViewport tableViewport = viewportFor(table);
+            SpeedSearchTargets.table(table, row -> table.getValueAt(row, 0).toString()).select(15);
+            assertVerticallyCentered(tableViewport, table.getCellRect(15, 0, true), 20);
+        });
+    }
+
+    private static JViewport viewportFor(JComponent component) {
+        JViewport viewport = new JViewport();
+        viewport.setExtentSize(new Dimension(200, 100));
+        viewport.setView(component);
+        viewport.setViewPosition(new Point(0, 0));
+        return viewport;
+    }
+
+    private static void assertVerticallyCentered(JViewport viewport, Rectangle item, int tolerance) {
+        int itemCenter = item.y + item.height / 2 - viewport.getViewPosition().y;
+        assertTrue(
+                Math.abs(itemCenter - viewport.getExtentSize().height / 2) <= tolerance,
+                "Selected search matches should stay near the viewport center"
+        );
     }
 
     private static DefaultListModel<String> model(String... values) {
