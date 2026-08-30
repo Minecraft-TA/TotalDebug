@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
-import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +22,7 @@ final class CompanionMcpToolCatalog {
     private static final List<McpSchema.Tool> TOOLS = List.of(
             tool(
                     "status",
-                    "Report the Companion, transport, and connected runtime state.",
+                    "Report whether Companion and Minecraft are connected.",
                     objectSchema(Map.of(), List.of())
             ),
             tool(
@@ -49,7 +48,7 @@ final class CompanionMcpToolCatalog {
             ),
             tool(
                     "jobs_get",
-                    "Get one code job, including its terminal output or error and source provenance.",
+                    "Get one code job and its terminal output or error.",
                     objectSchema(
                             Map.of("job_id", stringSchema("UUID returned by code_execute.")),
                             List.of("job_id")
@@ -118,13 +117,13 @@ final class CompanionMcpToolCatalog {
                 .build();
     }
 
-    static McpSchema.CallToolResult companionUnavailable(String tool, URI endpoint, Throwable failure) {
+    static McpSchema.CallToolResult companionUnavailable(
+            String tool,
+            Throwable failure
+    ) {
         Map<String, Object> value = new LinkedHashMap<>();
-        value.put("sidecar_process_id", ProcessHandle.current().pid());
-        value.put("sidecar_transport", "stdio");
         value.put("companion_available", false);
         value.put("minecraft_connected", false);
-        value.put("mcp_url", endpoint.toString());
         value.put("error", safeMessage(failure));
         if ("status".equals(tool)) {
             return result(value, false);

@@ -428,6 +428,19 @@ public final class CodeModeJobService implements AutoCloseable {
             Map<String, Object> artifacts,
             Map<String, Object> runtime
     ) {
+        public Map<String, Object> responseMap() {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("job_id", this.jobId);
+            result.put("state", this.state.name().toLowerCase());
+            if (this.output != null) {
+                result.put("output", this.output);
+            }
+            if (this.error != null) {
+                result.put("error", this.error);
+            }
+            return result;
+        }
+
         public Map<String, Object> asMap() {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("job_id", this.jobId);

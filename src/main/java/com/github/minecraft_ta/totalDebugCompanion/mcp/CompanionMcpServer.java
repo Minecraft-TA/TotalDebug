@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.SearchOptions;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -158,12 +157,12 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "status" -> status();
                 case "code_execute" -> execute(request.arguments());
                 case "jobs_get" -> this.jobs.get(requiredString(request.arguments(), "job_id"))
-                        .map(CodeModeJobService.JobSnapshot::asMap)
+                        .map(CodeModeJobService.JobSnapshot::responseMap)
                         .orElseThrow(() -> new IllegalArgumentException("Unknown job"));
                 case "jobs_list" -> Map.of(
                         "jobs",
                         this.jobs.list(optionalInteger(request.arguments(), "limit", 20)).stream()
-                                .map(CodeModeJobService.JobSnapshot::asMap)
+                                .map(CodeModeJobService.JobSnapshot::responseMap)
                                 .toList()
                 );
                 case "jobs_cancel" -> Map.of(
@@ -189,25 +188,10 @@ public final class CompanionMcpServer implements AutoCloseable {
     }
 
     private Map<String, Object> status() {
-        Map<String, Object> status = new LinkedHashMap<>();
-        status.put("companion_process_id", ProcessHandle.current().pid());
-        status.put("mcp_transport", "streamable-http");
-        status.put("mcp_url", this.endpointUrl);
-        status.put("minecraft_connected", this.jobs.isAvailable());
-        status.put("companion_protocol_version", CompanionProtocol.VERSION);
-        status.put("runtime_boundary", "Minecraft JVM through authenticated SCNet");
-        status.put("execution_security", "unrestricted Java with full game-process access");
-        Path workspace = this.workspaceDirectory.get();
-        Path index = this.indexFile.get();
-        if (workspace != null) {
-            status.put("workspace_directory", normalize(workspace).toString());
-        }
-        if (index != null) {
-            status.put("class_index", normalize(index).toString());
-        }
-        status.put("retained_jobs", this.jobs.list(CodeModeJobService.MAX_RETAINED_JOBS).size());
-        status.put("runtime", this.jobs.currentRuntimeContext());
-        return status;
+        return Map.of(
+                "companion_available", true,
+                "minecraft_connected", this.jobs.isAvailable()
+        );
     }
 
     private Map<String, Object> execute(Map<String, Object> arguments) {
@@ -221,7 +205,8 @@ public final class CompanionMcpServer implements AutoCloseable {
                 CodeModeJobService.ExecutionEnvironment.class,
                 optionalString(arguments, "environment", "thread")
         );
-        return this.jobs.submit(code, imports, side, environment).asMap();
+        return this.jobs.submit(code, imports, side, environment)
+                .responseMap();
     }
 
     private Map<String, Object> searchClasses(String query, int limit) {

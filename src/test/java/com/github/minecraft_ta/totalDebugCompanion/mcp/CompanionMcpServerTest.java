@@ -10,7 +10,10 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,7 +88,11 @@ class CompanionMcpServerTest {
             );
             assertEquals(200, status.statusCode());
             assertTrue(status.body().contains("minecraft_connected"));
-            assertTrue(status.body().contains("streamable-http"));
+            assertTrue(status.body().contains("companion_available"));
+            assertFalse(status.body().contains("workspace_directory"));
+            assertFalse(status.body().contains("class_index"));
+            assertFalse(status.body().contains("mcp_url"));
+            assertFalse(status.body().contains("retained_jobs"));
 
             HttpResponse<String> unavailableExecution = post(
                     client,
@@ -99,6 +106,89 @@ class CompanionMcpServerTest {
             assertTrue(unavailableExecution.body().contains("\"isError\":true"));
         }
         assertFalse(Files.exists(server.endpointDescriptor()));
+    }
+
+    @Test
+    void keepsJobResponsesLimitedToExecutionOutcome() throws Exception {
+        CodeModeJobService jobs = new CodeModeJobService(
+                () -> true,
+                new NoOpTransport(),
+                source -> source,
+                () -> Map.of(
+                        "workspace_directory", this.temporaryDirectory.resolve("workspace").toString(),
+                        "runtime_signature", "sha256:runtime",
+                        "profile_id", "profile-a"
+                ),
+                this.temporaryDirectory.resolve("artifacts"),
+                Clock.fixed(Instant.parse("2026-08-30T12:00:00Z"), ZoneOffset.UTC)
+        );
+        CompanionMcpServer server = new CompanionMcpServer(
+                this.temporaryDirectory.resolve("data"),
+                () -> this.temporaryDirectory.resolve("workspace"),
+                () -> this.temporaryDirectory.resolve("index.bin"),
+                jobs,
+                0
+        );
+        try (server; HttpClient client = HttpClient.newHttpClient()) {
+            server.start();
+            String sessionId = initialize(client, server.endpointUrl());
+
+            HttpResponse<String> submitted = post(
+                    client,
+                    server.endpointUrl(),
+                    sessionId,
+                    "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}"
+            );
+            assertEquals(200, submitted.statusCode());
+            assertConciseJobResponse(submitted.body());
+
+            String jobId = jobs.list(1).getFirst().jobId();
+            HttpResponse<String> job = post(
+                    client,
+                    server.endpointUrl(),
+                    sessionId,
+                    "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"jobs_get\",\"arguments\":{\"job_id\":\"" + jobId + "\"}}}"
+            );
+            assertEquals(200, job.statusCode());
+            assertConciseJobResponse(job.body());
+
+            HttpResponse<String> jobsList = post(
+                    client,
+                    server.endpointUrl(),
+                    sessionId,
+                    "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"jobs_list\",\"arguments\":{}}}"
+            );
+            assertEquals(200, jobsList.statusCode());
+            assertConciseJobResponse(jobsList.body());
+
+        }
+    }
+
+    private static void assertConciseJobResponse(String body) {
+        assertTrue(body.contains("job_id"));
+        assertTrue(body.contains("state"));
+        assertFalse(body.contains("source_sha256"));
+        assertFalse(body.contains("artifacts"));
+        assertFalse(body.contains("runtime_signature"));
+        assertFalse(body.contains("workspace_directory"));
+        assertFalse(body.contains("profile_id"));
+    }
+
+    private static String initialize(HttpClient client, String url) throws Exception {
+        HttpResponse<String> initialized = post(client, url, null, initializeRequest());
+        assertEquals(200, initialized.statusCode());
+        String sessionId = initialized.headers().firstValue("mcp-session-id").orElseThrow();
+        HttpResponse<String> notification = post(
+                client,
+                url,
+                sessionId,
+                "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+        );
+        assertTrue(notification.statusCode() == 200 || notification.statusCode() == 202);
+        return sessionId;
     }
 
     private static HttpResponse<String> post(

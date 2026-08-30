@@ -107,7 +107,7 @@ public final class CompanionMcpSidecar {
                 return this.client.callTool(request);
             } catch (RuntimeException exception) {
                 disconnect();
-                return CompanionMcpToolCatalog.companionUnavailable(request.name(), this.endpoint, exception);
+                return CompanionMcpToolCatalog.companionUnavailable(request.name(), exception);
             }
         }
 

@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CompanionMcpSidecarTest {
@@ -63,14 +64,18 @@ class CompanionMcpSidecarTest {
             JsonObject offlineStatus = response(reader, executor, 3);
             assertTrue(offlineStatus.toString().contains("companion_available"));
             assertTrue(offlineStatus.toString().contains("false"));
+            assertFalse(offlineStatus.toString().contains("sidecar_process_id"));
+            assertFalse(offlineStatus.toString().contains("mcp_url"));
 
             try (CompanionMcpServer companion = companion(port, "first")) {
                 companion.start();
                 send(writer, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
                         "\"name\":\"status\",\"arguments\":{}}}");
                 JsonObject onlineStatus = response(reader, executor, 4);
-                assertTrue(onlineStatus.toString().contains("companion_process_id"));
+                assertTrue(onlineStatus.toString().contains("companion_available"));
                 assertTrue(onlineStatus.toString().contains("minecraft_connected"));
+                assertFalse(onlineStatus.toString().contains("companion_process_id"));
+
             }
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
@@ -84,8 +89,9 @@ class CompanionMcpSidecarTest {
                 send(writer, "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{" +
                         "\"name\":\"status\",\"arguments\":{}}}");
                 JsonObject restartedStatus = response(reader, executor, 6);
-                assertTrue(restartedStatus.toString().contains("companion_process_id"));
+                assertTrue(restartedStatus.toString().contains("companion_available"));
                 assertTrue(restartedStatus.toString().contains("minecraft_connected"));
+                assertFalse(restartedStatus.toString().contains("companion_process_id"));
             }
 
             clientOutput.close();
