@@ -8,13 +8,12 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
 public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopup {
 
-    private final List<Consumer<ITEM>> enterKeyListeners = new ArrayList<>();
+    private Consumer<ITEM> enterKeyListener;
     private final Listener listener = new Listener();
     private final JScrollPane scrollPane = new JScrollPane();
     {
@@ -67,6 +66,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         if (!b) {
             removeKeyListener();
             this.boundXPos = -1;
+            this.enterKeyListener = null;
         }
     }
 
@@ -85,7 +85,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     setVisible(false);
                 } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                    runEnterKeyListeners();
+                    runEnterKeyListener();
                 }
             }
         });
@@ -95,7 +95,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
                 if (e.getClickCount() != 2)
                     return;
 
-                runEnterKeyListeners();
+                runEnterKeyListener();
             }
         });
 
@@ -138,20 +138,24 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         this.minimumListWidth = minimumListWidth;
     }
 
-    public void addKeyEnterListener(Consumer<ITEM> r) {
-        this.enterKeyListeners.add(r);
+    public void setKeyEnterListener(Consumer<ITEM> listener) {
+        this.enterKeyListener = listener;
+    }
+
+    public boolean isInvokedBy(Component component) {
+        return this.invoker == component;
     }
 
     public void setShowWhenEmpty(boolean showWhenEmpty) {
         this.showWhenEmpty = showWhenEmpty;
     }
 
-    private void runEnterKeyListeners() {
-        if (this.list.getSelectedIndex() == -1)
+    private void runEnterKeyListener() {
+        if (this.list.getSelectedIndex() == -1 || this.enterKeyListener == null)
             return;
 
         var val = this.list.getSelectedValue();
-        this.enterKeyListeners.forEach(r -> r.accept(val));
+        this.enterKeyListener.accept(val);
     }
 
     public interface ListItem {
@@ -164,7 +168,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         @Override
         public void keyPressed(KeyEvent e) {
             if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                runEnterKeyListeners();
+                runEnterKeyListener();
                 e.consume();
             } else if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {
                 var selectedIndex = list.getSelectedIndex() + (e.getKeyCode() == KeyEvent.VK_UP ? -1 : 1);

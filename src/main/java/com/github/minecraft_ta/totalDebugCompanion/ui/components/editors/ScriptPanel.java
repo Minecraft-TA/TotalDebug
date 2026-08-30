@@ -268,13 +268,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 this.completionRequestor.setCanceled(true);
 
             if (!this.didTypeBeforeCaretMove)
-                codeCompletionPopup.setVisible(false);
+                hideCompletionPopup();
 
             this.didTypeBeforeCaretMove = false;
             signatureHelpPopup.setVisible(false);
         });
 
-        this.editorPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl SPACE"), "autoComplete");
+        this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl SPACE"), "autoComplete");
         this.editorPane.getActionMap().put("autoComplete", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -298,14 +298,21 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 //Trigger auto-completion
                 var c = text.charAt(text.length() - 1);
                 if ((!Character.isLetterOrDigit(c) && c != '.') || text.contains("\n") || text.length() > 1) {
-                    codeCompletionPopup.setVisible(false);
+                    hideCompletionPopup();
                     return;
                 }
                 requestCompletionProposals();
             }
         });
 
-        codeCompletionPopup.addKeyEnterListener(this::doAutoCompletion);
+        this.editorPane.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent event) {
+                if (completionRequestor != null)
+                    completionRequestor.setCanceled(true);
+                hideCompletionPopup();
+            }
+        });
     }
 
     private void setupFormatting() {
@@ -357,13 +364,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         if (this.completionRequestor != null)
             this.completionRequestor.setCanceled(true);
 
+        int completionOffset = this.editorPane.getCaretPosition();
         var unit = new CompilationUnitImpl("SomeName", UIUtils.getText(this.editorPane));
-        var newRequestor = new CustomCompletionRequestor(unit, this.editorPane.getCaretPosition(), this::acceptCompletionList);
+        var newRequestor = new CustomCompletionRequestor(unit, completionOffset, this::acceptCompletionList);
         this.completionRequestor = newRequestor;
 
         CompletableFuture.runAsync(() -> {
             try {
-                unit.codeComplete(this.editorPane.getCaretPosition(), newRequestor, newRequestor);
+                unit.codeComplete(completionOffset, newRequestor, newRequestor);
             } catch (OperationCanceledException ignored) {} catch (RuntimeException e) {
                 if (e.getCause() instanceof OperationCanceledException)
                     return;
@@ -377,7 +385,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     private void doAutoCompletion(CompletionItem item) {
         //The item is outdated
-        if (item.getRequestor().isCanceled())
+        if (item.getRequestor() != this.completionRequestor || item.getRequestor().isCanceled())
             return;
 
         this.editorPane.beginAtomicEdit();
@@ -387,23 +395,46 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         item.getTextEdits().stream().filter(e -> !e.isSnippet()).forEach(this::applyTextEdit);
         this.editorPane.endAtomicEdit();
 
-        codeCompletionPopup.setVisible(false);
+        hideCompletionPopup();
     }
 
-    private void acceptCompletionList(List<CompletionItem> completions) {
-        if (completions.isEmpty()) {
-            ScriptPanel.codeCompletionPopup.setVisible(false);
-            return;
-        }
-
+    private void acceptCompletionList(CustomCompletionRequestor requestor, List<CompletionItem> completions) {
         SwingUtilities.invokeLater(() -> {
+            if (requestor != this.completionRequestor || requestor.isCanceled())
+                return;
+
+            if (!this.editorPane.isFocusOwner()) {
+                requestor.setCanceled(true);
+                hideCompletionPopup();
+                return;
+            }
+
+            if (completions.isEmpty()) {
+                hideCompletionPopup();
+                return;
+            }
+
             try {
+                codeCompletionPopup.setKeyEnterListener(this::doAutoCompletion);
                 codeCompletionPopup.setItems(completions);
                 codeCompletionPopup.show(this.editorPane);
             } catch (Throwable t) {
                 throw new RuntimeException(t);
             }
         });
+    }
+
+    private void hideCompletionPopup() {
+        if (codeCompletionPopup.isInvokedBy(this.editorPane))
+            codeCompletionPopup.setVisible(false);
+    }
+
+    @Override
+    public void dispose() {
+        if (this.completionRequestor != null)
+            this.completionRequestor.setCanceled(true);
+        hideCompletionPopup();
+        super.dispose();
     }
 
     public boolean canSave() {

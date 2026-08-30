@@ -17,14 +17,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 public class CustomCompletionRequestor extends CompletionRequestor implements IProgressMonitor {
 
 
     private final List<CompletionProposal> proposals = new ArrayList<>();
-    private final Consumer<List<CompletionItem>> completionCallback;
+    private final BiConsumer<CustomCompletionRequestor, List<CompletionItem>> completionCallback;
     private final int offset;
     private final ICompilationUnit unit;
 
@@ -32,10 +32,14 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     private CompletionProposalDescriptionProvider descriptionProvider;
     private CompletionProposalReplacementProvider proposalProvider;
 
-    private boolean cancelled;
+    private volatile boolean cancelled;
     private long startTime;
 
-    public CustomCompletionRequestor(ICompilationUnit unit, int offset, Consumer<List<CompletionItem>> completionCallback) {
+    public CustomCompletionRequestor(
+            ICompilationUnit unit,
+            int offset,
+            BiConsumer<CustomCompletionRequestor, List<CompletionItem>> completionCallback
+    ) {
         this.unit = unit;
         this.offset = offset;
         this.completionCallback = completionCallback;
@@ -339,7 +343,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         if (this.cancelled)
             return;
 
-        this.completionCallback.accept(convertProposals());
+        this.completionCallback.accept(this, convertProposals());
     }
 
     @Override
