@@ -78,6 +78,10 @@ class CompanionMcpServerTest {
             assertEquals(200, tools.statusCode());
             assertTrue(tools.body().contains("code_execute"));
             assertTrue(tools.body().contains("jobs_wait"));
+            assertTrue(tools.body().contains("class_source"));
+            assertTrue(tools.body().contains("class_bytecode"));
+            assertTrue(tools.body().contains("class_origin"));
+            assertTrue(tools.body().contains("class_members"));
             assertTrue(tools.body().contains("artifacts_read"));
 
             HttpResponse<String> status = post(

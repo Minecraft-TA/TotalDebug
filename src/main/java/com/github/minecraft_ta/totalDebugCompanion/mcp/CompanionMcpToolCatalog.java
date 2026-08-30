@@ -101,6 +101,10 @@ final class CompanionMcpToolCatalog {
                             List.of("query")
                     )
             ),
+            classTool("class_source", "Return decompiled Java source for one runtime class."),
+            classTool("class_bytecode", "Return readable JVM bytecode for one runtime class."),
+            classTool("class_origin", "Return the runtime source and module that define one class."),
+            classTool("class_members", "Return declared fields and methods with descriptors and modifiers."),
             tool(
                     "artifacts_read",
                     "Read the exact generated Java source or current job record retained by Companion.",
@@ -209,5 +213,16 @@ final class CompanionMcpToolCatalog {
                     "retryable", this.retryable
             );
         }
+    }
+
+    private static McpSchema.Tool classTool(String name, String description) {
+        return tool(
+                name,
+                description,
+                objectSchema(
+                        Map.of("binary_name", stringSchema("Exact Java binary name.")),
+                        List.of("binary_name")
+                )
+        );
     }
 }

@@ -101,6 +101,14 @@ public final class CompanionDecompilationService implements AutoCloseable {
         }
     }
 
+    public byte[] loadClassBytes(String binaryName) throws IOException {
+        return this.bytecodeSource.findClassBytes(requireBinaryName(binaryName));
+    }
+
+    public RuntimeSnapshotBytecodeSource.ClassOrigin findClassOrigin(String binaryName) {
+        return this.bytecodeSource.findClassOrigin(requireBinaryName(binaryName));
+    }
+
     public DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
         String normalizedName = requireBinaryName(binaryName);
         if (!this.bytecodeSource.hasClass(normalizedName)) {

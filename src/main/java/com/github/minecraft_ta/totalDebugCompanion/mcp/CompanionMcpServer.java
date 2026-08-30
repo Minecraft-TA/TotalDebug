@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
@@ -39,6 +40,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private final Supplier<Path> indexFile;
     private final Path endpointDescriptor;
     private final CodeModeJobService jobs;
+    private final CompanionMcpClassInspector classInspector;
     private final int port;
     private HttpServletStreamableServerTransportProvider transportProvider;
     private McpSyncServer mcpServer;
@@ -67,6 +69,10 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.indexFile = Objects.requireNonNull(indexFile, "indexFile");
         this.endpointDescriptor = this.dataDirectory.resolve(McpEndpointDescriptor.FILE_NAME);
         this.jobs = Objects.requireNonNull(jobs, "jobs");
+        this.classInspector = new CompanionMcpClassInspector(
+                CompanionApp::getDecompilationService,
+                CompanionClassIndex::get
+        );
         if (port < 0 || port > 65_535) {
             throw new IllegalArgumentException("port is out of range");
         }
@@ -180,6 +186,18 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "search_classes" -> searchClasses(
                         requiredString(request.arguments(), "query"),
                         optionalInteger(request.arguments(), "limit", 50)
+                );
+                case "class_source" -> this.classInspector.source(
+                        requiredString(request.arguments(), "binary_name")
+                );
+                case "class_bytecode" -> this.classInspector.bytecode(
+                        requiredString(request.arguments(), "binary_name")
+                );
+                case "class_origin" -> this.classInspector.origin(
+                        requiredString(request.arguments(), "binary_name")
+                );
+                case "class_members" -> this.classInspector.members(
+                        requiredString(request.arguments(), "binary_name")
                 );
                 case "artifacts_read" -> readArtifact(request.arguments());
                 default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
