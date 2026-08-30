@@ -31,6 +31,23 @@ final class SourceDeclarationAnalyzerTest {
                 }
             }
             """;
+    private static final String CONSTRUCTOR_SOURCE = """
+            package sample;
+
+            final class Outer {
+                enum Mode {
+                    ENABLED(1);
+
+                    Mode(int code) {
+                    }
+                }
+
+                final class Inner {
+                    Inner(int value) {
+                    }
+                }
+            }
+            """;
 
     @BeforeAll
     static void initializeClassIndex() throws Exception {
@@ -72,5 +89,24 @@ final class SourceDeclarationAnalyzerTest {
                 ).contains("run()")
         ));
         assertEquals(5, declarations.size());
+    }
+
+    @Test
+    void includesCompilerParametersInNestedConstructorDescriptors() {
+        var unit = ASTCache.rawParse("Outer", CONSTRUCTOR_SOURCE);
+        List<CodeSymbol> symbols = SourceDeclarationAnalyzer.analyze(unit, CONSTRUCTOR_SOURCE).stream()
+                .map(SourceDeclaration::symbol)
+                .toList();
+
+        assertTrue(symbols.contains(new CodeSymbol.MethodSymbol(
+                "sample.Outer$Mode",
+                "<init>",
+                "(Ljava/lang/String;II)V"
+        )));
+        assertTrue(symbols.contains(new CodeSymbol.MethodSymbol(
+                "sample.Outer$Inner",
+                "<init>",
+                "(Lsample/Outer;I)V"
+        )));
     }
 }

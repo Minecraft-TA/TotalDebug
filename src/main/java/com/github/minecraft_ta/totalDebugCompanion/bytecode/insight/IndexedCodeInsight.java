@@ -41,6 +41,9 @@ public final class IndexedCodeInsight {
                     symbol.ownerClassName(),
                     ignored -> new ClassDetails(indexedClass)
             );
+            if (!hasRuntimeTarget(indexedClass, classDetails, symbol)) {
+                continue;
+            }
             ReferenceSummary references = this.index.summarizeReferences(toTarget(symbol.referenceQuery()));
             List<HierarchyFacet> hierarchy = new ArrayList<>();
             switch (symbol) {
@@ -88,6 +91,28 @@ public final class IndexedCodeInsight {
             result.put(symbol, new SymbolInsight(references.occurrenceCount(), hierarchy));
         }
         return Map.copyOf(result);
+    }
+
+    private static boolean hasRuntimeTarget(
+            IndexedClass indexedClass,
+            ClassDetails details,
+            CodeSymbol symbol
+    ) {
+        return switch (symbol) {
+            case CodeSymbol.ClassSymbol ignored -> true;
+            case CodeSymbol.MethodSymbol method -> details.methodIndex(method) >= 0;
+            case CodeSymbol.FieldSymbol field -> {
+                boolean found = false;
+                for (var indexedField : indexedClass.getFields()) {
+                    if (indexedField.getName().equals(field.name())
+                            && indexedField.getDescriptorString().equals(field.descriptor())) {
+                        found = true;
+                        break;
+                    }
+                }
+                yield found;
+            }
+        };
     }
 
     public HierarchyPage search(HierarchyQuery query, int limit) {

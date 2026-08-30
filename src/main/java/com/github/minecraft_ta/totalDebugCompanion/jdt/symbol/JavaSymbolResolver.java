@@ -21,6 +21,7 @@ import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.MethodReference;
+import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.SuperConstructorInvocation;
@@ -199,15 +200,32 @@ public final class JavaSymbolResolver {
 
     private static CodeSymbol.MethodSymbol methodSymbol(IMethodBinding selectedMethod) {
         IMethodBinding method = selectedMethod.getMethodDeclaration();
-        String owner = binaryName(method.getDeclaringClass());
+        ITypeBinding declaringClass = method.getDeclaringClass();
+        String owner = binaryName(declaringClass);
         String name = method.isConstructor() ? "<init>" : method.getName();
         StringBuilder descriptor = new StringBuilder("(");
+        if (method.isConstructor()) {
+            appendImplicitConstructorParameters(descriptor, declaringClass);
+        }
         for (ITypeBinding parameter : method.getParameterTypes()) {
             descriptor.append(descriptor(parameter));
         }
         descriptor.append(')');
         descriptor.append(method.isConstructor() ? 'V' : descriptor(method.getReturnType()));
         return new CodeSymbol.MethodSymbol(owner, name, descriptor.toString());
+    }
+
+    private static void appendImplicitConstructorParameters(
+            StringBuilder descriptor,
+            ITypeBinding declaringClass
+    ) {
+        if (declaringClass.isEnum()) {
+            descriptor.append("Ljava/lang/String;I");
+            return;
+        }
+        if (declaringClass.isMember() && !Modifier.isStatic(declaringClass.getModifiers())) {
+            descriptor.append(descriptor(declaringClass.getDeclaringClass()));
+        }
     }
 
     private static CodeSymbol.FieldSymbol fieldSymbol(IVariableBinding selectedField) {

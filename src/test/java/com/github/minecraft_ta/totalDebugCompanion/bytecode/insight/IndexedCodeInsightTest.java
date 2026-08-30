@@ -72,6 +72,27 @@ final class IndexedCodeInsightTest {
     }
 
     @Test
+    void skipsMissingRuntimeMembersWithoutDiscardingValidInsights() {
+        CodeSymbol.MethodSymbol missing = new CodeSymbol.MethodSymbol(
+                "fixture.Action",
+                "missing",
+                "()V"
+        );
+        try (ClassIndex index = fixtureIndex()) {
+            Map<CodeSymbol, SymbolInsight> summaries = new IndexedCodeInsight(index).summarize(List.of(
+                    ACTION_RUN,
+                    missing
+            ));
+
+            assertEquals(
+                    new SymbolInsight(2, List.of(new HierarchyFacet(HierarchyRelation.IMPLEMENTED_BY, 2))),
+                    summaries.get(ACTION_RUN)
+            );
+            assertFalse(summaries.containsKey(missing));
+        }
+    }
+
+    @Test
     void returnsBoundedDeterministicHierarchyPages() {
         try (ClassIndex index = fixtureIndex()) {
             IndexedCodeInsight insight = new IndexedCodeInsight(index);
