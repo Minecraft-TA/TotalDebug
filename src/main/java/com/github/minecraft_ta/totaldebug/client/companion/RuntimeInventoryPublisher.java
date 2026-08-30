@@ -28,6 +28,22 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 final class RuntimeInventoryPublisher {
+    private static final RuntimeInventory.RuntimeModule MINECRAFT_MODULE = new RuntimeInventory.RuntimeModule(
+            "minecraft",
+            "Minecraft",
+            RuntimeInventory.ModuleKind.PLATFORM
+    );
+    private static final RuntimeInventory.RuntimeModule NEOFORGE_MODULE = new RuntimeInventory.RuntimeModule(
+            "neoforge",
+            "NeoForge",
+            RuntimeInventory.ModuleKind.PLATFORM
+    );
+    private static final RuntimeInventory.RuntimeModule MERGED_PLATFORM_MODULE = new RuntimeInventory.RuntimeModule(
+            "minecraft+neoforge",
+            "Minecraft + NeoForge",
+            RuntimeInventory.ModuleKind.PLATFORM
+    );
+
     record PublishedInventory(String id, Path file) {
     }
 
@@ -43,11 +59,8 @@ final class RuntimeInventoryPublisher {
         String id = calculateInventoryId(discovered, runtimeModules);
         Path publishedDirectory = this.dataDirectory.resolve("runtime-inventory");
         Path publishedFile = publishedDirectory.resolve(RuntimeInventory.FILE_NAME);
-        if (Files.isRegularFile(publishedFile)) {
-            RuntimeInventory existing = RuntimeInventory.read(publishedFile);
-            if (id.equals(existing.id())) {
-                return new PublishedInventory(id, publishedFile);
-            }
+        if (matchesPublishedInventory(publishedFile, id)) {
+            return new PublishedInventory(id, publishedFile);
         }
 
         Files.createDirectories(this.dataDirectory);
@@ -123,7 +136,7 @@ final class RuntimeInventoryPublisher {
         return List.copyOf(sources);
     }
 
-    static Map<Path, RuntimeInventory.RuntimeModule> describeRuntimeModules(List<Path> sources) {
+    static Map<Path, RuntimeInventory.RuntimeModule> describeRuntimeModules(List<Path> sources) throws IOException {
         Map<Path, RuntimeInventory.RuntimeModule> modules = new LinkedHashMap<>();
         ModList.get().forEachModFile(modFile -> {
             List<String> ids = modFile.getModInfos().stream()
@@ -136,18 +149,55 @@ final class RuntimeInventoryPublisher {
                     .distinct()
                     .sorted(String.CASE_INSENSITIVE_ORDER)
                     .toList();
-            String id = ids.isEmpty() ? modFile.getModFileInfo().moduleName() : String.join("+", ids);
-            String name = names.isEmpty() ? id : String.join(" + ", names);
             modules.put(
                     modFile.getFilePath().toAbsolutePath().normalize(),
-                    new RuntimeInventory.RuntimeModule(id, name)
+                    describeModule(ids, names, modFile.getModFileInfo().moduleName())
             );
         });
+        Map<Class<?>, Path> anchorSources = RuntimeSourceInventory.sourcesContaining(
+                sources,
+                TotalDebug.class,
+                Block.class,
+                FMLLoader.class
+        );
+        Path totalDebugSource = anchorSources.get(TotalDebug.class);
+        if (totalDebugSource != null) {
+            modules.put(
+                    totalDebugSource,
+                    new RuntimeInventory.RuntimeModule("total_debug", "TotalDebug", RuntimeInventory.ModuleKind.MOD)
+            );
+        }
+        Path minecraftSource = anchorSources.get(Block.class);
+        Path neoforgeSource = anchorSources.get(FMLLoader.class);
+        assignPlatformModules(modules, minecraftSource, neoforgeSource);
         for (Path source : sources) {
             Path normalized = source.toAbsolutePath().normalize();
             modules.computeIfAbsent(normalized, ignored -> fallbackModule(source));
         }
         return Map.copyOf(modules);
+    }
+
+    static RuntimeInventory.RuntimeModule describeModule(
+            List<String> ids,
+            List<String> names,
+            String moduleName
+    ) {
+        List<String> moduleIds = List.copyOf(ids);
+        String id = moduleIds.isEmpty() ? moduleName : String.join("+", moduleIds);
+        String name = names.isEmpty() ? id : String.join(" + ", names);
+        RuntimeInventory.ModuleKind kind;
+        if (moduleIds.contains("minecraft") && moduleIds.contains("neoforge")) {
+            return MERGED_PLATFORM_MODULE;
+        } else if (moduleIds.contains("minecraft")) {
+            return MINECRAFT_MODULE;
+        } else if (moduleIds.contains("neoforge")) {
+            return NEOFORGE_MODULE;
+        } else if (moduleIds.isEmpty()) {
+            kind = RuntimeInventory.ModuleKind.LIBRARY;
+        } else {
+            kind = RuntimeInventory.ModuleKind.MOD;
+        }
+        return new RuntimeInventory.RuntimeModule(id, name, kind);
     }
 
     static RuntimeInventory.RuntimeModule fallbackModule(Path source) {
@@ -158,14 +208,56 @@ final class RuntimeInventoryPublisher {
                     && cursor.getParent() != null
                     && cursor.getParent().getFileName() != null) {
                 String projectName = cursor.getParent().getFileName().toString();
-                return new RuntimeInventory.RuntimeModule(projectName, projectName);
+                return new RuntimeInventory.RuntimeModule(
+                        projectName,
+                        projectName,
+                        RuntimeInventory.ModuleKind.LIBRARY
+                );
             }
         }
         String fileName = normalized.getFileName().toString();
         String moduleName = fileName.endsWith(".jar") || fileName.endsWith(".zip")
                 ? fileName.substring(0, fileName.length() - 4)
                 : fileName;
-        return new RuntimeInventory.RuntimeModule(moduleName, moduleName);
+        return new RuntimeInventory.RuntimeModule(
+                moduleName,
+                moduleName,
+                RuntimeInventory.ModuleKind.LIBRARY
+        );
+    }
+
+    static boolean matchesPublishedInventory(Path publishedFile, String expectedId) {
+        if (!Files.isRegularFile(publishedFile)) {
+            return false;
+        }
+        try {
+            return expectedId.equals(RuntimeInventory.read(publishedFile).id());
+        } catch (IOException invalidGeneratedInventory) {
+            return false;
+        }
+    }
+
+    static void assignPlatformModules(
+            Map<Path, RuntimeInventory.RuntimeModule> modules,
+            Path minecraftSource,
+            Path neoforgeSource
+    ) {
+        Path normalizedMinecraft = normalize(minecraftSource);
+        Path normalizedNeoForge = normalize(neoforgeSource);
+        boolean merged = normalizedMinecraft != null
+                && (normalizedMinecraft.equals(normalizedNeoForge)
+                || NEOFORGE_MODULE.equals(modules.get(normalizedMinecraft))
+                || MERGED_PLATFORM_MODULE.equals(modules.get(normalizedMinecraft)));
+        if (normalizedMinecraft != null) {
+            modules.put(normalizedMinecraft, merged ? MERGED_PLATFORM_MODULE : MINECRAFT_MODULE);
+        }
+        if (normalizedNeoForge != null) {
+            modules.put(normalizedNeoForge, merged ? MERGED_PLATFORM_MODULE : NEOFORGE_MODULE);
+        }
+    }
+
+    private static Path normalize(Path source) {
+        return source == null ? null : source.toAbsolutePath().normalize();
     }
 
     private static void copyClassDirectory(Path source, Path target) throws IOException {
@@ -205,6 +297,7 @@ final class RuntimeInventoryPublisher {
             );
             update(digest, runtimeModule.id());
             update(digest, runtimeModule.displayName());
+            update(digest, runtimeModule.kind().name());
             update(digest, source.getFileSystem().provider().getScheme());
             update(digest, source.toUri().toASCIIString());
             if (Files.isDirectory(source)) {

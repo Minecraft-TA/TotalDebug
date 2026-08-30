@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.Properties;
 
 final class RuntimeInventory {
-    static final int FORMAT_VERSION = 2;
+    static final int FORMAT_VERSION = 3;
     static final String FILE_NAME = "runtime-inventory.properties";
 
     enum SourceKind {
@@ -21,10 +21,18 @@ final class RuntimeInventory {
         DIRECTORY
     }
 
-    record RuntimeModule(String id, String displayName) {
+    enum ModuleKind {
+        PLATFORM,
+        MOD,
+        LIBRARY,
+        JAVA_RUNTIME
+    }
+
+    record RuntimeModule(String id, String displayName, ModuleKind kind) {
         RuntimeModule {
             id = requireText(id, "module id");
             displayName = requireText(displayName, "module display name");
+            Objects.requireNonNull(kind, "module kind");
         }
     }
 
@@ -89,6 +97,7 @@ final class RuntimeInventory {
             properties.setProperty(prefix + "logical", source.logicalUri());
             properties.setProperty(prefix + "module.id", source.module().id());
             properties.setProperty(prefix + "module.name", source.module().displayName());
+            properties.setProperty(prefix + "module.kind", source.module().kind().name());
         }
         Path parent = Objects.requireNonNull(file.toAbsolutePath().normalize().getParent(), "Inventory has no parent");
         Files.createDirectories(parent);
@@ -126,7 +135,8 @@ final class RuntimeInventory {
                         required(properties, prefix + "logical"),
                         new RuntimeModule(
                                 required(properties, prefix + "module.id"),
-                                required(properties, prefix + "module.name")
+                                required(properties, prefix + "module.name"),
+                                ModuleKind.valueOf(required(properties, prefix + "module.kind"))
                         )
                 ));
             }

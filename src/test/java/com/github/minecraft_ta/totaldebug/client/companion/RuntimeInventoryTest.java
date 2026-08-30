@@ -28,13 +28,21 @@ class RuntimeInventoryTest {
                                 RuntimeInventory.SourceKind.DIRECTORY,
                                 classes,
                                 "logical:classes",
-                                new RuntimeInventory.RuntimeModule("total_debug", "TotalDebug")
+                                new RuntimeInventory.RuntimeModule(
+                                        "total_debug",
+                                        "TotalDebug",
+                                        RuntimeInventory.ModuleKind.MOD
+                                )
                         ),
                         new RuntimeInventory.Source(
                                 RuntimeInventory.SourceKind.ARCHIVE,
                                 archive,
                                 "logical:archive",
-                                new RuntimeInventory.RuntimeModule("minecraft", "Minecraft")
+                                new RuntimeInventory.RuntimeModule(
+                                        "minecraft",
+                                        "Minecraft",
+                                        RuntimeInventory.ModuleKind.PLATFORM
+                                )
                         )
                 )
         );
@@ -51,7 +59,7 @@ class RuntimeInventoryTest {
     void rejectsAnUnavailablePublishedSource() throws Exception {
         Path file = this.temporaryDirectory.resolve(RuntimeInventory.FILE_NAME);
         Files.writeString(file, """
-                format=2
+                format=3
                 inventory.id=id
                 java.runtime.version=21
                 java.home=jdk
@@ -62,6 +70,7 @@ class RuntimeInventoryTest {
                 source.0.logical=logical:missing
                 source.0.module.id=missing
                 source.0.module.name=Missing
+                source.0.module.kind=LIBRARY
                 """);
 
         assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));

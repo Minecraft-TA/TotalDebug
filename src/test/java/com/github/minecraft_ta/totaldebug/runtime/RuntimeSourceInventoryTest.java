@@ -38,6 +38,25 @@ class RuntimeSourceInventoryTest {
         assertEquals(List.of(authoritative, unique), List.copyOf(sources));
     }
 
+    @Test
+    void findsTheDiscoveredSourcesThatOwnAnchorClasses() throws Exception {
+        Path unrelated = jar("unrelated.jar", "example/Unrelated.class");
+        Path stringOwner = jar("string-owner.jar", "java/lang/String.class");
+        Path inventoryOwner = jar(
+                "inventory-owner.jar",
+                "com/github/minecraft_ta/totaldebug/runtime/RuntimeSourceInventory.class"
+        );
+
+        var owners = RuntimeSourceInventory.sourcesContaining(
+                List.of(unrelated, stringOwner, inventoryOwner),
+                String.class,
+                RuntimeSourceInventory.class
+        );
+
+        assertEquals(stringOwner, owners.get(String.class));
+        assertEquals(inventoryOwner, owners.get(RuntimeSourceInventory.class));
+    }
+
     private Path jar(String fileName, String entryName) throws Exception {
         Path jar = this.temporaryDirectory.resolve(fileName);
         try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(jar))) {

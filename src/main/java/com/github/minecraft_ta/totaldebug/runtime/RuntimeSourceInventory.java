@@ -13,9 +13,11 @@ import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
@@ -57,6 +59,26 @@ public final class RuntimeSourceInventory {
             }
         }
         return List.copyOf(existingSources);
+    }
+
+    public static Map<Class<?>, Path> sourcesContaining(List<Path> sources, Class<?>... anchors) throws IOException {
+        Map<String, Class<?>> anchorsByEntry = new LinkedHashMap<>();
+        for (Class<?> anchor : anchors) {
+            anchorsByEntry.put(anchor.getName().replace('.', '/') + ".class", anchor);
+        }
+        Set<String> remainingEntries = new LinkedHashSet<>(anchorsByEntry.keySet());
+        Map<Class<?>, Path> owners = new LinkedHashMap<>();
+        for (Path source : List.copyOf(sources)) {
+            Set<String> ownedEntries = containedEntries(source, remainingEntries);
+            for (String classEntry : ownedEntries) {
+                owners.put(anchorsByEntry.get(classEntry), source.toAbsolutePath().normalize());
+            }
+            remainingEntries.removeAll(ownedEntries);
+            if (remainingEntries.isEmpty()) {
+                break;
+            }
+        }
+        return Map.copyOf(owners);
     }
 
     private static void addModuleLayerSources(
