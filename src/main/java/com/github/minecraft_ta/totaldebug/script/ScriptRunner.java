@@ -464,8 +464,6 @@ public final class ScriptRunner implements AutoCloseable {
             Class<?> scriptClass,
             Method runMethod,
             Field logWriterField,
-            Field resultField,
-            Field resultSetField,
             String className
     ) {
         private static CompiledScript load(ClassLoader classLoader, String className) throws ReflectiveOperationException {
@@ -475,18 +473,15 @@ public final class ScriptRunner implements AutoCloseable {
                 throw new IllegalArgumentException(className + " does not directly extend BaseScript");
             }
             Method runMethod = scriptClass.getMethod("run");
+            if (runMethod.getReturnType() != Object.class) {
+                throw new IllegalArgumentException(className + ".run() must return Object");
+            }
             Field logWriterField = findField(scriptClass, "logWriter");
-            Field resultField = findField(scriptClass, "resultValue");
-            Field resultSetField = findField(scriptClass, "resultSet");
             logWriterField.setAccessible(true);
-            resultField.setAccessible(true);
-            resultSetField.setAccessible(true);
             return new CompiledScript(
                     scriptClass,
                     runMethod,
                     logWriterField,
-                    resultField,
-                    resultSetField,
                     className
             );
         }
@@ -506,16 +501,17 @@ public final class ScriptRunner implements AutoCloseable {
         private ScriptExecutionOutcome execute() throws Throwable {
             Object instance = this.scriptClass.getDeclaredConstructor().newInstance();
             Throwable failure = null;
+            Object result = null;
             try {
-                this.runMethod.invoke(instance);
+                result = this.runMethod.invoke(instance);
             } catch (InvocationTargetException exception) {
                 failure = exception.getCause();
             }
             String output = this.logWriterField.get(instance).toString();
             String resultJson = null;
-            if (this.resultSetField.getBoolean(instance)) {
+            if (failure == null) {
                 try {
-                    resultJson = RESULT_GSON.toJson(this.resultField.get(instance));
+                    resultJson = RESULT_GSON.toJson(result);
                     if (resultJson.length() > MAX_RESULT_CHARACTERS) {
                         throw new IllegalArgumentException(
                                 "Structured script result exceeds " + MAX_RESULT_CHARACTERS + " characters"

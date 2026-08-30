@@ -28,6 +28,7 @@ class ScriptRunnerTest {
 
             assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
             assertEquals("hello" + System.lineSeparator(), terminal.output());
+            assertEquals("null", terminal.resultJson());
             assertEquals(
                     List.of(ScriptStatusType.COMPILATION_COMPLETED, ScriptStatusType.RUN_COMPLETED),
                     statuses.types()
@@ -41,12 +42,23 @@ class ScriptRunnerTest {
         try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
             runner.runScript(
                     5,
-                    script(
-                            "ResultFixture",
-                            "log(\"observed\"); result(java.util.Map.of(\"answer\", 42));"
-                    ),
+                    normalEditorValueScript(),
                     ScriptExecutionEnvironment.THREAD
             );
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals("observed", terminal.output());
+            assertEquals("{\"answer\":42}", terminal.resultJson());
+        }
+    }
+
+    @Test
+    void threadRunReturnsValueFromGeneratedMcpWrapper() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(7, valueReturningScript(), ScriptExecutionEnvironment.THREAD);
 
             Status terminal = statuses.awaitTerminal();
 
@@ -180,21 +192,58 @@ class ScriptRunnerTest {
         return """
                 import java.io.StringWriter;
                 public class %s extends BaseScript {
-                    @Override
-                    public void run() throws Throwable {
+                    private void execute() throws Throwable {
                         %s
+                    }
+                    @Override
+                    public Object run() throws Throwable {
+                        execute();
+                        return null;
                     }
                 }
                 abstract class BaseScript {
                     private final StringWriter logWriter = new StringWriter();
-                    private Object resultValue;
-                    private boolean resultSet;
                     public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
                     public void logln(Object value) { log(String.format("%%s%%n", value)); }
-                    public void result(Object value) { this.resultValue = value; this.resultSet = true; }
-                    public abstract void run() throws Throwable;
+                    public abstract Object run() throws Throwable;
                 }
                 """.formatted(className, body);
+    }
+
+    private static String normalEditorValueScript() {
+        return """
+                import java.io.StringWriter;
+                public class ResultFixture extends BaseScript {
+                    @Override
+                    public Object run() throws Throwable {
+                        log("observed");
+                        return java.util.Map.of("answer", 42);
+                    }
+                }
+                abstract class BaseScript {
+                    private final StringWriter logWriter = new StringWriter();
+                    public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
+                    public abstract Object run() throws Throwable;
+                }
+                """;
+    }
+
+    private static String valueReturningScript() {
+        return """
+                import java.io.StringWriter;
+                public class McpValueFixture extends BaseScript {
+                    @Override
+                    public Object run() throws Throwable {
+                        log("observed");
+                        return java.util.Map.of("answer", 42);
+                    }
+                }
+                abstract class BaseScript {
+                    private final StringWriter logWriter = new StringWriter();
+                    public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
+                    public abstract Object run() throws Throwable;
+                }
+                """;
     }
 
     private record Status(int scriptId, ScriptStatus status) {
