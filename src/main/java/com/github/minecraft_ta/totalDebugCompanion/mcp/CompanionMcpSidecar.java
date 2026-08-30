@@ -138,7 +138,10 @@ public final class CompanionMcpSidecar {
                     .connectTimeout(CONNECT_TIMEOUT)
                     .build();
             McpSyncClient candidate = McpClient.sync(transport)
-                    .clientInfo(new McpSchema.Implementation("totaldebug-companion-sidecar", CompanionMcpToolCatalog.SERVER_VERSION))
+                    .clientInfo(McpSchema.Implementation.builder(
+                            "totaldebug-companion-sidecar",
+                            CompanionMcpToolCatalog.SERVER_VERSION
+                    ).build())
                     .initializationTimeout(CONNECT_TIMEOUT)
                     .requestTimeout(REQUEST_TIMEOUT)
                     .build();

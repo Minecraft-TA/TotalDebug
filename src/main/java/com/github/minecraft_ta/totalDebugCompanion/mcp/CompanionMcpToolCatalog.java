@@ -102,10 +102,10 @@ final class CompanionMcpToolCatalog {
     ) {
         Objects.requireNonNull(handler, "handler");
         return TOOLS.stream()
-                .map(tool -> new McpServerFeatures.SyncToolSpecification(
-                        tool,
-                        (exchange, request) -> handler.apply(request)
-                ))
+                .map(tool -> McpServerFeatures.SyncToolSpecification.builder()
+                        .tool(tool)
+                        .callHandler((exchange, request) -> handler.apply(request))
+                        .build())
                 .toList();
     }
 
@@ -133,9 +133,8 @@ final class CompanionMcpToolCatalog {
     }
 
     private static McpSchema.Tool tool(String name, String description, Map<String, Object> inputSchema) {
-        return McpSchema.Tool.builder(name)
+        return McpSchema.Tool.builder(name, inputSchema)
                 .description(description)
-                .inputSchema(inputSchema)
                 .build();
     }
 
