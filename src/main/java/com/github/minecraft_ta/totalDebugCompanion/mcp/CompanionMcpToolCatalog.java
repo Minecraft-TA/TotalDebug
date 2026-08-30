@@ -72,10 +72,10 @@ final class CompanionMcpToolCatalog {
             ),
             tool(
                     "search_classes",
-                    "Search the exact class index generated from the connected Minecraft runtime.",
+                    "Resolve an exact binary name or search class names in the connected Minecraft runtime.",
                     objectSchema(
                             Map.of(
-                                    "query", stringSchema("Class name fragment."),
+                                    "query", stringSchema("Binary name or class-name fragment; package-qualified queries are supported."),
                                     "limit", integerSchema("Maximum matches to return, from 1 to 200.", 1, 200)
                             ),
                             List.of("query")

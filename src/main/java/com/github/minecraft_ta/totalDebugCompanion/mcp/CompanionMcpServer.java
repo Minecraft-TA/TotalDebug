@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.SearchOptions;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -13,6 +14,7 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.startup.Tomcat;
+import org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -209,7 +211,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 .responseMap();
     }
 
-    private Map<String, Object> searchClasses(String query, int limit) {
+    static Map<String, Object> searchClasses(String query, int limit) {
         if (!CompanionClassIndex.isOpen()) {
             throw new IllegalStateException("The runtime class index is still being built");
         }
@@ -219,22 +221,72 @@ public final class CompanionMcpServer implements AutoCloseable {
         if (limit < 1 || limit > 200) {
             throw new IllegalArgumentException("limit must be between 1 and 200");
         }
-        IndexedClass[] matches = CompanionClassIndex.get().findClasses(
-                query,
-                SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.IGNORE_CASE, limit)
-        );
+        ClassIndex index = CompanionClassIndex.get();
+        IndexedClass exactMatch = index.findClass(query);
+        IndexedClass[] matches = exactMatch == null
+                ? index.findClasses(
+                        query,
+                        SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.IGNORE_CASE, limit)
+                )
+                : new IndexedClass[]{exactMatch};
         List<Map<String, Object>> classes = new ArrayList<>(matches.length);
         for (IndexedClass match : matches) {
-            Map<String, Object> value = new LinkedHashMap<>();
-            value.put("binary_name", match.getNameWithPackageDot());
-            value.put("source_name", match.getSourceName());
-            value.put("access_flags", match.getAccessFlags());
-            if (match.getInnerClassType() != null) {
-                value.put("inner_class_type", match.getInnerClassType().name().toLowerCase(Locale.ROOT));
-            }
-            classes.add(value);
+            classes.add(describeClass(match));
         }
-        return Map.of("query", query, "count", classes.size(), "classes", classes);
+        return Map.of("classes", classes);
+    }
+
+    static Map<String, Object> describeClass(IndexedClass indexedClass) {
+        int flags = indexedClass.getAccessFlags();
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("binary_name", indexedClass.getNameWithPackageDot());
+        value.put("kind", classKind(flags));
+        List<String> modifiers = classModifiers(flags);
+        if (!modifiers.isEmpty()) {
+            value.put("modifiers", modifiers);
+        }
+        if (indexedClass.getInnerClassType() != null) {
+            value.put("inner_class_type", indexedClass.getInnerClassType().name().toLowerCase(Locale.ROOT));
+        }
+        return value;
+    }
+
+    static String classKind(int flags) {
+        if ((flags & Opcodes.ACC_ANNOTATION) != 0) {
+            return "annotation";
+        }
+        if ((flags & Opcodes.ACC_ENUM) != 0) {
+            return "enum";
+        }
+        if ((flags & Opcodes.ACC_RECORD) != 0) {
+            return "record";
+        }
+        if ((flags & Opcodes.ACC_INTERFACE) != 0) {
+            return "interface";
+        }
+        if ((flags & Opcodes.ACC_MODULE) != 0) {
+            return "module";
+        }
+        return "class";
+    }
+
+    static List<String> classModifiers(int flags) {
+        List<String> modifiers = new ArrayList<>(7);
+        addModifier(modifiers, flags, Opcodes.ACC_PUBLIC, "public");
+        addModifier(modifiers, flags, Opcodes.ACC_PROTECTED, "protected");
+        addModifier(modifiers, flags, Opcodes.ACC_PRIVATE, "private");
+        addModifier(modifiers, flags, Opcodes.ACC_ABSTRACT, "abstract");
+        addModifier(modifiers, flags, Opcodes.ACC_STATIC, "static");
+        addModifier(modifiers, flags, Opcodes.ACC_FINAL, "final");
+        addModifier(modifiers, flags, Opcodes.ACC_SYNTHETIC, "synthetic");
+        addModifier(modifiers, flags, Opcodes.ACC_DEPRECATED, "deprecated");
+        return List.copyOf(modifiers);
+    }
+
+    private static void addModifier(List<String> modifiers, int flags, int mask, String name) {
+        if ((flags & mask) != 0) {
+            modifiers.add(name);
+        }
     }
 
     private Map<String, Object> readArtifact(Map<String, Object> arguments) throws IOException {
