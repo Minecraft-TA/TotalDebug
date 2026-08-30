@@ -40,7 +40,7 @@ class RuntimeIndexServiceTest {
                 0,
                 classes,
                 classes.toUri().toASCIIString(),
-                new RuntimeInventory.RuntimeModule("test", "Test")
+                new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD)
         )));
         writeIndexMetadata(cacheDirectory.resolve("index.properties"), inventoryId);
 

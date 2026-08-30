@@ -219,7 +219,11 @@ public final class RuntimeIndexService implements AutoCloseable {
                     jdkSourceId,
                     Path.of(inventory.javaHome()),
                     "jrt:/",
-                    new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime")
+                    new RuntimeInventory.RuntimeModule(
+                            "java-runtime",
+                            "Java Runtime",
+                            RuntimeInventory.ModuleKind.JAVA_RUNTIME
+                    )
             ));
             if (indexSources.isEmpty()) {
                 throw new IOException("Runtime inventory contains no indexable classes");

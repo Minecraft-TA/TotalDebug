@@ -41,7 +41,7 @@ public final class RuntimeSourceCatalog {
             );
             if (previousModule != null && !previousModule.equals(source.module())) {
                 throw new IllegalArgumentException(
-                        "Runtime module " + source.module().id() + " has conflicting display names"
+                        "Runtime module " + source.module().id() + " has conflicting metadata"
                 );
             }
             sourceIdsByModuleId.computeIfAbsent(source.module().id(), ignored -> new ArrayList<>())
@@ -50,7 +50,8 @@ public final class RuntimeSourceCatalog {
         this.sourcesById = Map.copyOf(indexedSources);
         this.modulesBySourceId = Map.copyOf(modules);
         this.modules = modulesById.values().stream()
-                .sorted(Comparator.comparing(RuntimeInventory.RuntimeModule::displayName, String.CASE_INSENSITIVE_ORDER)
+                .sorted(Comparator.comparingInt(RuntimeSourceCatalog::presentationPriority)
+                        .thenComparing(RuntimeInventory.RuntimeModule::displayName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(RuntimeInventory.RuntimeModule::id))
                 .toList();
         Map<String, int[]> frozenSourceIds = new LinkedHashMap<>();
@@ -92,6 +93,11 @@ public final class RuntimeSourceCatalog {
         return this.modules;
     }
 
+    public List<RuntimeInventory.RuntimeModule> modules(RuntimeInventory.ModuleKind kind) {
+        RuntimeInventory.ModuleKind requestedKind = Objects.requireNonNull(kind, "kind");
+        return this.modules.stream().filter(module -> module.kind() == requestedKind).toList();
+    }
+
     public List<RuntimeSnapshotBytecodeSource.Source> sourcesForModule(String moduleId) {
         List<RuntimeSnapshotBytecodeSource.Source> sources = this.sourcesByModuleId.get(
                 Objects.requireNonNull(moduleId, "moduleId")
@@ -120,5 +126,14 @@ public final class RuntimeSourceCatalog {
 
     public static RuntimeSourceCatalog empty() {
         return new RuntimeSourceCatalog(List.of());
+    }
+
+    private static int presentationPriority(RuntimeInventory.RuntimeModule module) {
+        return switch (module.kind()) {
+            case PLATFORM -> 0;
+            case MOD -> 1;
+            case LIBRARY -> 2;
+            case JAVA_RUNTIME -> 3;
+        };
     }
 }

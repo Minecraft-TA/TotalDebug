@@ -23,6 +23,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTargets;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
@@ -395,7 +396,17 @@ public final class CompanionApp {
             ClassIndex index = ClassIndex.fromFile(indexFile.toString());
             List<RuntimeSnapshotBytecodeSource.Source> sources = new ArrayList<>();
             for (int sourceId = 0; sourceId < runtimeSources.size(); sourceId++) {
-                sources.add(new RuntimeSnapshotBytecodeSource.Source(sourceId, runtimeSources.get(sourceId)));
+                Path source = runtimeSources.get(sourceId);
+                sources.add(new RuntimeSnapshotBytecodeSource.Source(
+                        sourceId,
+                        source,
+                        source.toUri().toASCIIString(),
+                        new RuntimeInventory.RuntimeModule(
+                                "ui-development",
+                                "UI development classes",
+                                RuntimeInventory.ModuleKind.LIBRARY
+                        )
+                ));
             }
             installRuntimeSnapshot(new RuntimeIndexService.ReadySnapshot(
                     "ui-development",

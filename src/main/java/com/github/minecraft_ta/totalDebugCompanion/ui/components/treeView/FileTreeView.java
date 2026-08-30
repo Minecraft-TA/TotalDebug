@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -157,18 +158,36 @@ public class FileTreeView extends JScrollPane {
 
                 @Override
                 public List<TreeItem> loadChildren() {
-                    return catalog.modules().stream()
-                            .<TreeItem>map(module -> new RuntimeModuleTreeItem(
-                                    module,
-                                    catalog.sourcesForModule(module.id())
-                            ))
-                            .toList();
+                    return runtimeItems(catalog);
                 }
             };
             runtime.setIcon(Icons.LIBRARY);
             rootItems.add(runtime);
         }
         this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
+    }
+
+    static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {
+        List<TreeItem> modules = new ArrayList<>();
+        catalog.modules().stream()
+                .filter(module -> module.kind() == RuntimeInventory.ModuleKind.PLATFORM
+                        || module.kind() == RuntimeInventory.ModuleKind.MOD)
+                .map(module -> new RuntimeModuleTreeItem(
+                        module,
+                        catalog.sourcesForModule(module.id())
+                ))
+                .forEach(modules::add);
+        List<RuntimeInventory.RuntimeModule> libraries = catalog.modules(RuntimeInventory.ModuleKind.LIBRARY);
+        if (!libraries.isEmpty()) {
+            modules.add(new RuntimeLibrariesTreeItem(catalog, libraries));
+        }
+        catalog.modules(RuntimeInventory.ModuleKind.JAVA_RUNTIME).stream()
+                .map(module -> new RuntimeModuleTreeItem(
+                        module,
+                        catalog.sourcesForModule(module.id())
+                ))
+                .forEach(modules::add);
+        return List.copyOf(modules);
     }
 
     public CompletableFuture<Boolean> revealPackage(
@@ -194,11 +213,7 @@ public class FileTreeView extends JScrollPane {
             path.add(module);
         }
         path.addAll(List.of(packageName.split("\\.")));
-        return this.tree.revealDirectoryPath(
-                "runtime",
-                RuntimeModuleTreeItem.nodeName(source.module()),
-                path
-        );
+        return revealRuntimeDirectory(source.module(), path);
     }
 
     public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
@@ -235,14 +250,30 @@ public class FileTreeView extends JScrollPane {
                 if (!entryName.isBlank()) {
                     path.addAll(List.of(entryName.split("/")));
                 }
-                return this.tree.revealDirectoryPath(
-                        "runtime",
-                        RuntimeModuleTreeItem.nodeName(module),
-                        path
-                );
+                return revealRuntimeDirectory(module, path);
             }
         }
         return CompletableFuture.completedFuture(false);
+    }
+
+    private CompletableFuture<Boolean> revealRuntimeDirectory(
+            RuntimeInventory.RuntimeModule module,
+            List<String> directorySegments
+    ) {
+        return this.tree.revealDirectoryPath("runtime", runtimeDirectoryPath(module, directorySegments));
+    }
+
+    static List<String> runtimeDirectoryPath(
+            RuntimeInventory.RuntimeModule module,
+            List<String> directorySegments
+    ) {
+        List<String> path = new ArrayList<>();
+        if (module.kind() == RuntimeInventory.ModuleKind.LIBRARY) {
+            path.add(RuntimeLibrariesTreeItem.NODE_NAME);
+        }
+        path.add(RuntimeModuleTreeItem.nodeName(module));
+        path.addAll(directorySegments);
+        return List.copyOf(path);
     }
 
     private static String findJrtModule(String ownerClassName) {

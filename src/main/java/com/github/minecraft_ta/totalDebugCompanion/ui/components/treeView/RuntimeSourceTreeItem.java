@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
@@ -18,6 +19,11 @@ import java.util.List;
 import java.util.Locale;
 
 final class RuntimeModuleTreeItem extends DirectoryTreeItem {
+    static final int PLATFORM_PRIORITY = 0;
+    static final int MOD_PRIORITY = 10;
+    static final int LIBRARIES_PRIORITY = 20;
+    static final int JAVA_RUNTIME_PRIORITY = 30;
+
     private final RuntimeInventory.RuntimeModule module;
     private final List<RuntimeSnapshotBytecodeSource.Source> sources;
 
@@ -31,6 +37,12 @@ final class RuntimeModuleTreeItem extends DirectoryTreeItem {
         RuntimeModulePresentation presentation = RuntimeModulePresentation.of(module);
         setPresentation(presentation.text());
         setIcon(Icons.MODULE);
+        setSortPriority(switch (module.kind()) {
+            case PLATFORM -> PLATFORM_PRIORITY;
+            case MOD -> MOD_PRIORITY;
+            case LIBRARY -> LIBRARIES_PRIORITY;
+            case JAVA_RUNTIME -> JAVA_RUNTIME_PRIORITY;
+        });
     }
 
     static String nodeName(RuntimeInventory.RuntimeModule module) {
@@ -48,6 +60,38 @@ final class RuntimeModuleTreeItem extends DirectoryTreeItem {
     @Override
     public String getTooltip() {
         return RuntimeModulePresentation.of(this.module).tooltip();
+    }
+}
+
+final class RuntimeLibrariesTreeItem extends DirectoryTreeItem {
+    static final String NODE_NAME = "runtime-libraries";
+
+    private final RuntimeSourceCatalog catalog;
+    private final List<RuntimeInventory.RuntimeModule> modules;
+
+    RuntimeLibrariesTreeItem(
+            RuntimeSourceCatalog catalog,
+            List<RuntimeInventory.RuntimeModule> modules
+    ) {
+        super(NODE_NAME);
+        this.catalog = catalog;
+        this.modules = List.copyOf(modules);
+        String moduleCount = this.modules.size() == 1
+                ? "1 module"
+                : this.modules.size() + " modules";
+        setPresentation(new PrimarySecondaryText("Libraries", moduleCount));
+        setIcon(Icons.LIBRARY);
+        setSortPriority(RuntimeModuleTreeItem.LIBRARIES_PRIORITY);
+    }
+
+    @Override
+    public List<TreeItem> loadChildren() {
+        return this.modules.stream()
+                .<TreeItem>map(module -> new RuntimeModuleTreeItem(
+                        module,
+                        this.catalog.sourcesForModule(module.id())
+                ))
+                .toList();
     }
 }
 

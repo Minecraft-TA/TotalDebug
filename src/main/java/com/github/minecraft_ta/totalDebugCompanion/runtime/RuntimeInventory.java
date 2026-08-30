@@ -17,14 +17,21 @@ public record RuntimeInventory(
         boolean production,
         List<Source> sources
 ) {
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     public enum SourceKind {
         ARCHIVE,
         DIRECTORY
     }
 
-    public record RuntimeModule(String id, String displayName) {
+    public enum ModuleKind {
+        PLATFORM,
+        MOD,
+        LIBRARY,
+        JAVA_RUNTIME
+    }
+
+    public record RuntimeModule(String id, String displayName, ModuleKind kind) {
         public RuntimeModule {
             if (Objects.requireNonNull(id, "id").isBlank()) {
                 throw new IllegalArgumentException("Runtime module id is blank");
@@ -32,6 +39,7 @@ public record RuntimeInventory(
             if (Objects.requireNonNull(displayName, "displayName").isBlank()) {
                 throw new IllegalArgumentException("Runtime module display name is blank");
             }
+            Objects.requireNonNull(kind, "kind");
         }
     }
 
@@ -72,7 +80,11 @@ public record RuntimeInventory(
         try {
             int format = Integer.parseInt(required(properties, "format"));
             if (format != FORMAT_VERSION) {
-                throw new IllegalArgumentException("Unsupported runtime inventory format " + format);
+                throw new IOException(
+                        "Runtime inventory format " + format
+                                + " does not match Companion format " + FORMAT_VERSION
+                                + ". Restart Minecraft with the matching TotalDebug build."
+                );
             }
             int sourceCount = Integer.parseInt(required(properties, "source.count"));
             List<Source> sources = new ArrayList<>(sourceCount);
@@ -93,7 +105,8 @@ public record RuntimeInventory(
                         required(properties, prefix + "logical"),
                         new RuntimeModule(
                                 required(properties, prefix + "module.id"),
-                                required(properties, prefix + "module.name")
+                                required(properties, prefix + "module.name"),
+                                ModuleKind.valueOf(required(properties, prefix + "module.kind"))
                         )
                 ));
             }

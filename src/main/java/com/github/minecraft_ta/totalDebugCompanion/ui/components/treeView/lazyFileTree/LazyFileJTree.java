@@ -373,6 +373,10 @@ public class LazyFileJTree extends JTree {
         if (directoryOrder != 0) {
             return directoryOrder;
         }
+        int priorityOrder = Integer.compare(first.getSortPriority(), second.getSortPriority());
+        if (priorityOrder != 0) {
+            return priorityOrder;
+        }
         int nameOrder = String.CASE_INSENSITIVE_ORDER.compare(first.getName(), second.getName());
         return nameOrder != 0 ? nameOrder : first.getName().compareTo(second.getName());
     }

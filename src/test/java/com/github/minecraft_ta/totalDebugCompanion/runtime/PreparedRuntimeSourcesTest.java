@@ -26,7 +26,11 @@ class PreparedRuntimeSourcesTest {
                         7,
                         archive,
                         logical,
-                        new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                        new RuntimeInventory.RuntimeModule(
+                                "example",
+                                "Example Mod",
+                                RuntimeInventory.ModuleKind.MOD
+                        )
                 ))
         );
 
@@ -34,5 +38,6 @@ class PreparedRuntimeSourcesTest {
         assertEquals(logical, restored.logicalUri());
         assertEquals("example", restored.module().id());
         assertEquals("Example Mod", restored.module().displayName());
+        assertEquals(RuntimeInventory.ModuleKind.MOD, restored.module().kind());
     }
 }

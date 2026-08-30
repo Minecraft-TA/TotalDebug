@@ -14,7 +14,7 @@ import java.util.Properties;
 
 final class PreparedRuntimeSources {
     static final String FILE_NAME = "runtime-sources.properties";
-    private static final String FORMAT = "3";
+    private static final String FORMAT = "4";
 
     private PreparedRuntimeSources() {
     }
@@ -30,6 +30,7 @@ final class PreparedRuntimeSources {
             properties.setProperty("source." + index + ".logical", source.logicalUri());
             properties.setProperty("source." + index + ".module.id", source.module().id());
             properties.setProperty("source." + index + ".module.name", source.module().displayName());
+            properties.setProperty("source." + index + ".module.kind", source.module().kind().name());
         }
         try (OutputStream output = Files.newOutputStream(file)) {
             properties.store(output, "TotalDebug Companion prepared runtime sources");
@@ -60,7 +61,11 @@ final class PreparedRuntimeSources {
                         required(properties, "source." + index + ".logical"),
                         new RuntimeInventory.RuntimeModule(
                                 required(properties, "source." + index + ".module.id"),
-                                required(properties, "source." + index + ".module.name")
+                                required(properties, "source." + index + ".module.name"),
+                                RuntimeInventory.ModuleKind.valueOf(required(
+                                        properties,
+                                        "source." + index + ".module.kind"
+                                ))
                         )
                 ));
             }

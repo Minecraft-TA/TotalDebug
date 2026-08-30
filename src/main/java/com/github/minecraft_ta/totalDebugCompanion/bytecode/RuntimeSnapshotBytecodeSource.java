@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,18 +30,6 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
             Objects.requireNonNull(module, "module");
         }
 
-        public Source(int sourceId, Path path, String logicalUri) {
-            this(sourceId, path, logicalUri, unclassifiedModule(path));
-        }
-
-        public Source(int sourceId, Path path) {
-            this(sourceId, path, Objects.requireNonNull(path, "path").toUri().toASCIIString());
-        }
-
-        private static RuntimeModule unclassifiedModule(Path path) {
-            String fileName = Objects.requireNonNull(path, "path").getFileName().toString();
-            return new RuntimeModule(fileName, fileName);
-        }
     }
 
     public record ClassOrigin(String logicalSource, String resourceName, RuntimeModule module) {
@@ -60,15 +47,11 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
     private final ClassIndex classIndex;
     private final Map<Integer, Source> sourcesById;
 
-    public RuntimeSnapshotBytecodeSource(List<Path> sources, ClassIndex classIndex) {
-        this(toIndexedSources(sources), classIndex, true);
-    }
-
     public static RuntimeSnapshotBytecodeSource fromIndexedSources(List<Source> sources, ClassIndex classIndex) {
-        return new RuntimeSnapshotBytecodeSource(sources, classIndex, true);
+        return new RuntimeSnapshotBytecodeSource(sources, classIndex);
     }
 
-    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex, boolean ignored) {
+    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex) {
         List<Source> requestedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
         if (requestedSources.isEmpty()) {
             throw new IllegalArgumentException("sources must not be empty");
@@ -129,15 +112,6 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         }
         Source source = requireIndexedSource(internalName, indexedClass);
         return new ClassOrigin(source.logicalUri(), resourceName, source.module());
-    }
-
-    private static List<Source> toIndexedSources(List<Path> sources) {
-        List<Path> requested = List.copyOf(Objects.requireNonNull(sources, "sources"));
-        List<Source> indexed = new ArrayList<>(requested.size());
-        for (int index = 0; index < requested.size(); index++) {
-            indexed.add(new Source(index, requested.get(index)));
-        }
-        return indexed;
     }
 
     private IndexedClass findIndexedClass(String internalName) {

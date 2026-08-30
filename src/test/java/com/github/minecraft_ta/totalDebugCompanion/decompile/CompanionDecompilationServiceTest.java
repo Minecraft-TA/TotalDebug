@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources.bytecodeSource;
 
 class CompanionDecompilationServiceTest {
     @TempDir
@@ -31,10 +32,7 @@ class CompanionDecompilationServiceTest {
         byte[] bytes = classBytes(CacheFixture.class);
         Path classes = writeClass(CacheFixture.class, bytes);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
-            RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(
-                    List.of(classes),
-                    index
-            );
+            RuntimeSnapshotBytecodeSource bytecodeSource = bytecodeSource(List.of(classes), index);
             AtomicInteger firstRuns = new AtomicInteger();
             Path firstOutput;
             try (CompanionDecompilationService service = service(bytecodeSource, firstRuns, "first")) {
@@ -62,7 +60,7 @@ class CompanionDecompilationServiceTest {
         byte[] bytes = classBytes(CacheFixture.class);
         Path classes = writeClass(CacheFixture.class, bytes);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
-            RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
+            RuntimeSnapshotBytecodeSource bytecodeSource = bytecodeSource(List.of(classes), index);
             Path output;
             try (CompanionDecompilationService service = service(
                     "first-runtime",
@@ -95,7 +93,7 @@ class CompanionDecompilationServiceTest {
                 IndexSource.classFile(0, cachedBytes),
                 IndexSource.classFile(0, coldBytes)
         ))) {
-            RuntimeSnapshotBytecodeSource bytecodeSource = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
+            RuntimeSnapshotBytecodeSource bytecodeSource = bytecodeSource(List.of(classes), index);
             try (CompanionDecompilationService service = service(
                     bytecodeSource,
                     new AtomicInteger(),

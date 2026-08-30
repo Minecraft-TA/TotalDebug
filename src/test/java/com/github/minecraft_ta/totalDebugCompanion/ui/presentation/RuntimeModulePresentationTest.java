@@ -14,7 +14,11 @@ class RuntimeModulePresentationTest {
     @Test
     void separatesTheDisplayNameFromItsDisambiguatingId() {
         var presentation = RuntimeModulePresentation.of(
-                new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                new RuntimeInventory.RuntimeModule(
+                        "example",
+                        "Example Mod",
+                        RuntimeInventory.ModuleKind.MOD
+                )
         );
 
         assertEquals(new PrimarySecondaryText("Example Mod", "example"), presentation.text());
@@ -28,7 +32,11 @@ class RuntimeModulePresentationTest {
                 4,
                 Path.of("example.jar"),
                 "file:///runtime/example.jar",
-                new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                new RuntimeInventory.RuntimeModule(
+                        "example",
+                        "Example Mod",
+                        RuntimeInventory.ModuleKind.MOD
+                )
         );
 
         var presentation = RuntimeModulePresentation.of(source);
@@ -39,9 +47,9 @@ class RuntimeModulePresentationTest {
     @Test
     void summarizesSeveralModulesInStableOrder() {
         String summary = RuntimeModulePresentation.compactSummary(List.of(
-                new RuntimeInventory.RuntimeModule("gamma", "Gamma"),
-                new RuntimeInventory.RuntimeModule("alpha", "Alpha"),
-                new RuntimeInventory.RuntimeModule("beta", "Beta")
+                new RuntimeInventory.RuntimeModule("gamma", "Gamma", RuntimeInventory.ModuleKind.MOD),
+                new RuntimeInventory.RuntimeModule("alpha", "Alpha", RuntimeInventory.ModuleKind.MOD),
+                new RuntimeInventory.RuntimeModule("beta", "Beta", RuntimeInventory.ModuleKind.MOD)
         ));
 
         assertEquals("Alpha, Beta +1", summary);
@@ -50,8 +58,8 @@ class RuntimeModulePresentationTest {
     @Test
     void disambiguatesOnlyDuplicateDisplayNamesInSummaries() {
         String summary = RuntimeModulePresentation.compactSummary(List.of(
-                new RuntimeInventory.RuntimeModule("first", "Library"),
-                new RuntimeInventory.RuntimeModule("second", "Library")
+                new RuntimeInventory.RuntimeModule("first", "Library", RuntimeInventory.ModuleKind.LIBRARY),
+                new RuntimeInventory.RuntimeModule("second", "Library", RuntimeInventory.ModuleKind.LIBRARY)
         ));
 
         assertEquals("Library (first), Library (second)", summary);

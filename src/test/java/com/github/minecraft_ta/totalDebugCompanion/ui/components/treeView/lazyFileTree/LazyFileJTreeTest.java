@@ -32,6 +32,16 @@ class LazyFileJTreeTest {
     }
 
     @Test
+    void honorsExplicitPriorityBeforeAlphabeticalOrdering() {
+        DirectoryTreeItem javaRuntime = emptyDirectory("Java Runtime");
+        javaRuntime.setSortPriority(30);
+        DirectoryTreeItem libraries = emptyDirectory("Libraries");
+        libraries.setSortPriority(20);
+
+        assertTrue(LazyFileJTree.compareTreeItems(libraries, javaRuntime) < 0);
+    }
+
+    @Test
     void ignoresRefreshFromRetiredTopLevelItem() {
         LazyFileJTree tree = new LazyFileJTree();
         DirectoryTreeItem retiredRoot = emptyDirectory("retired");

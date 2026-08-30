@@ -10,6 +10,7 @@ public class TreeItem {
     private final String name;
     private PrimarySecondaryText presentation;
     private Icon icon;
+    private int sortPriority;
 
     protected TreeItem(String name) {
         this(name, false);
@@ -58,5 +59,13 @@ public class TreeItem {
 
     public Icon getIcon() {
         return this.icon;
+    }
+
+    public int getSortPriority() {
+        return this.sortPriority;
+    }
+
+    public void setSortPriority(int sortPriority) {
+        this.sortPriority = sortPriority;
     }
 }

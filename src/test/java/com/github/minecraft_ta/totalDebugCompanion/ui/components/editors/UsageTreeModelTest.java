@@ -87,13 +87,21 @@ class UsageTreeModelTest {
                         1,
                         example,
                         "logical:example",
-                        new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                        new RuntimeInventory.RuntimeModule(
+                                "example",
+                                "Example Mod",
+                                RuntimeInventory.ModuleKind.MOD
+                        )
                 ),
                 new RuntimeSnapshotBytecodeSource.Source(
                         2,
                         minecraft,
                         "logical:minecraft",
-                        new RuntimeInventory.RuntimeModule("minecraft", "Minecraft")
+                        new RuntimeInventory.RuntimeModule(
+                                "minecraft",
+                                "Minecraft",
+                                RuntimeInventory.ModuleKind.PLATFORM
+                        )
                 )
         ));
     }

@@ -20,7 +20,11 @@ class CodeInsightServiceTest {
 
     @Test
     void locatesTheSingleSourceOwningAQualifiedClass() throws Exception {
-        var module = new RuntimeInventory.RuntimeModule("sample", "Sample");
+        var module = new RuntimeInventory.RuntimeModule(
+                "sample",
+                "Sample",
+                RuntimeInventory.ModuleKind.MOD
+        );
         List<RuntimeSnapshotBytecodeSource.Source> sources = List.of(
                 source(7, "lists.jar", module),
                 source(8, "maps.jar", module),

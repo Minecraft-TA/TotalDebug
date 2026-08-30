@@ -22,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources.bytecodeSource;
+import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources.librarySource;
 
 class RuntimeSnapshotBytecodeSourceTest {
     @TempDir
@@ -38,10 +40,7 @@ class RuntimeSnapshotBytecodeSourceTest {
                 IndexSource.archive(0, decoy.toString()),
                 IndexSource.archive(1, selected.toString())
         ))) {
-            RuntimeSnapshotBytecodeSource source = new RuntimeSnapshotBytecodeSource(
-                    List.of(decoy, selected),
-                    index
-            );
+            RuntimeSnapshotBytecodeSource source = bytecodeSource(List.of(decoy, selected), index);
 
             assertArrayEquals(expected, source.findClassBytes(ArchiveFixture.class.getName()));
         }
@@ -60,7 +59,11 @@ class RuntimeSnapshotBytecodeSourceTest {
                             4,
                             selected,
                             logical,
-                            new RuntimeInventory.RuntimeModule("example", "Example Mod")
+                            new RuntimeInventory.RuntimeModule(
+                                    "example",
+                                    "Example Mod",
+                                    RuntimeInventory.ModuleKind.MOD
+                            )
                     )),
                     index
             );
@@ -85,7 +88,7 @@ class RuntimeSnapshotBytecodeSourceTest {
         Files.write(classFile, expected);
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, expected)))) {
-            RuntimeSnapshotBytecodeSource source = new RuntimeSnapshotBytecodeSource(List.of(classes), index);
+            RuntimeSnapshotBytecodeSource source = bytecodeSource(List.of(classes), index);
 
             assertArrayEquals(expected, source.findClassBytes(resourceName));
         }
@@ -101,7 +104,11 @@ class RuntimeSnapshotBytecodeSourceTest {
                             5,
                             javaHome,
                             "jrt:/",
-                            new RuntimeInventory.RuntimeModule("java-runtime", "Java Runtime")
+                            new RuntimeInventory.RuntimeModule(
+                                    "java-runtime",
+                                    "Java Runtime",
+                                    RuntimeInventory.ModuleKind.JAVA_RUNTIME
+                            )
                     )),
                     index
             );
@@ -118,7 +125,7 @@ class RuntimeSnapshotBytecodeSourceTest {
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, indexFixture)))) {
             RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, archive)),
+                    List.of(librarySource(0, archive)),
                     index
             );
 
@@ -134,7 +141,7 @@ class RuntimeSnapshotBytecodeSourceTest {
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(7, expected)))) {
             RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(7, corruptArchive)),
+                    List.of(librarySource(7, corruptArchive)),
                     index
             );
 
@@ -152,8 +159,8 @@ class RuntimeSnapshotBytecodeSourceTest {
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(4, expected)))) {
             RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
                     List.of(
-                            new RuntimeSnapshotBytecodeSource.Source(4, selected),
-                            new RuntimeSnapshotBytecodeSource.Source(5, fallback)
+                            librarySource(4, selected),
+                            librarySource(5, fallback)
                     ),
                     index
             );
@@ -173,7 +180,7 @@ class RuntimeSnapshotBytecodeSourceTest {
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(4, expected)))) {
             RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(5, unrelated)),
+                    List.of(librarySource(5, unrelated)),
                     index
             );
 
@@ -196,7 +203,7 @@ class RuntimeSnapshotBytecodeSourceTest {
 
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(9, expected)))) {
             RuntimeSnapshotBytecodeSource source = RuntimeSnapshotBytecodeSource.fromIndexedSources(
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(9, corruptArchive)),
+                    List.of(librarySource(9, corruptArchive)),
                     index
             );
 
@@ -210,7 +217,7 @@ class RuntimeSnapshotBytecodeSourceTest {
         byte[] fixture = classBytes(ArchiveFixture.class);
         Path archive = jar("fixture.jar", resourceName(ArchiveFixture.class), fixture);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.archive(0, archive.toString())))) {
-            RuntimeSnapshotBytecodeSource source = new RuntimeSnapshotBytecodeSource(List.of(archive), index);
+            RuntimeSnapshotBytecodeSource source = bytecodeSource(List.of(archive), index);
 
             assertThrows(IllegalArgumentException.class, () -> source.findClassBytes("../secret.Type"));
             assertThrows(IllegalArgumentException.class, () -> source.findClassBytes("example//Type"));
