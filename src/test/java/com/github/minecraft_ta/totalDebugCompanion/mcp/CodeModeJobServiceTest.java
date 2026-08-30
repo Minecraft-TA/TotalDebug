@@ -37,21 +37,62 @@ class CodeModeJobServiceTest {
             assertEquals(1, transport.executions.size());
             assertTrue(transport.executions.getFirst().source.contains("import java.util.List;"));
             assertTrue(transport.executions.getFirst().source.contains("class McpCodeJob1 extends BaseScript"));
+            assertTrue(transport.executions.getFirst().source.contains("void result(Object value)"));
             assertEquals(64, submitted.sourceSha256().length());
             assertTrue(Files.isRegularFile(Path.of((String) submitted.artifacts().get("source"))));
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "");
+            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
             assertEquals(
                     CodeModeJobService.JobState.RUNNING,
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.RUN_COMPLETED, "[proof]\n");
+            service.acceptStatus(
+                    -1,
+                    ScriptStatusMessage.Type.RUN_COMPLETED,
+                    "[proof]\n",
+                    "{\"values\":[1,2]}",
+                    ""
+            );
             CodeModeJobService.JobSnapshot completed = service.get(submitted.jobId()).orElseThrow();
             assertEquals(CodeModeJobService.JobState.SUCCEEDED, completed.state());
             assertEquals("[proof]\n", completed.output());
+            assertTrue(completed.resultPresent());
+            assertEquals(java.util.Map.of("values", List.of(1.0, 2.0)), completed.result());
             assertTrue(service.readArtifact(submitted.jobId(), "source").contains("logln"));
             assertTrue(service.readArtifact(submitted.jobId(), "job").contains("\"state\": \"succeeded\""));
+        }
+    }
+
+    @Test
+    void preservesOutputAndStructuredResultWhenExecutionFails() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            CodeModeJobService.JobSnapshot submitted = service.submit(
+                    "log(\"before\"); result(java.util.Map.of(\"phase\", 2)); throw new RuntimeException();",
+                    List.of(),
+                    CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD
+            );
+
+            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
+            service.acceptStatus(
+                    -1,
+                    ScriptStatusMessage.Type.RUN_EXCEPTION,
+                    "before",
+                    "{\"phase\":2}",
+                    "java.lang.RuntimeException: boom"
+            );
+
+            CodeModeJobService.JobSnapshot failed = service.get(submitted.jobId()).orElseThrow();
+            assertEquals(CodeModeJobService.JobState.FAILED, failed.state());
+            assertEquals("before", failed.output());
+            assertEquals(java.util.Map.of("phase", 2.0), failed.result());
+            assertEquals("java.lang.RuntimeException: boom", failed.error());
+            assertEquals(
+                    java.util.Set.of("job_id", "state", "output", "result", "error"),
+                    failed.responseMap().keySet()
+            );
         }
     }
 
@@ -73,11 +114,17 @@ class CodeModeJobServiceTest {
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.RUN_EXCEPTION, "Script run cancelled");
-            assertEquals(
-                    CodeModeJobService.JobState.CANCELLED,
-                    service.get(submitted.jobId()).orElseThrow().state()
+            service.acceptStatus(
+                    -1,
+                    ScriptStatusMessage.Type.RUN_EXCEPTION,
+                    "partial output",
+                    null,
+                    "Script run cancelled"
             );
+            CodeModeJobService.JobSnapshot cancelled = service.get(submitted.jobId()).orElseThrow();
+            assertEquals(CodeModeJobService.JobState.CANCELLED, cancelled.state());
+            assertEquals("partial output", cancelled.output());
+            assertEquals("Script run cancelled", cancelled.error());
             assertFalse(service.cancel(submitted.jobId()));
         }
     }

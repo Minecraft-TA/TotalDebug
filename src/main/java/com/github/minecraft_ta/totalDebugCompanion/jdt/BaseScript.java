@@ -171,6 +171,8 @@ public class BaseScript {
                 */
                         
                 private StringWriter logWriter = new StringWriter();
+                private Object resultValue;
+                private boolean resultSet;
                         
                 public void logln(Object s) {
                     this.log(String.format("%s%n", s));
@@ -178,6 +180,11 @@ public class BaseScript {
                         
                 public void log(Object s) {
                     this.logWriter.append(String.valueOf(s));
+                }
+
+                public void result(Object value) {
+                    this.resultValue = value;
+                    this.resultSet = true;
                 }
                         
                 public abstract void run() throws Throwable;

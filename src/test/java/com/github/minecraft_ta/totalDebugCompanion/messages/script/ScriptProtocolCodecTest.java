@@ -38,12 +38,17 @@ class ScriptProtocolCodecTest {
         ScriptStatusMessage message = new ScriptStatusMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(
-                HEX.parseHex("000000070000000d52554e5f434f4d504c45544544000000026f6b")
+                HEX.parseHex(
+                        "000000070000000d52554e5f434f4d504c45544544"
+                                + "000000036f7574010000000b7b226f6b223a747275657d00000000"
+                )
         )));
 
         assertEquals(7, message.getScriptId());
         assertEquals(ScriptStatusMessage.Type.RUN_COMPLETED, message.getType());
-        assertEquals("ok", message.getMessage());
+        assertEquals("out", message.getOutput());
+        assertEquals("{\"ok\":true}", message.getResultJson());
+        assertEquals("", message.getError());
     }
 
     @Test

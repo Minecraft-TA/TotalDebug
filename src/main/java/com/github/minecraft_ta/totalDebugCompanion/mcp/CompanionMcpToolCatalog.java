@@ -18,7 +18,7 @@ final class CompanionMcpToolCatalog {
             "Use code_execute for runtime facts. It executes unrestricted Java inside the connected "
                     + "Minecraft JVM. Poll jobs_get until the job reaches a terminal state.";
 
-    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
     private static final List<McpSchema.Tool> TOOLS = List.of(
             tool(
                     "status",
@@ -28,7 +28,7 @@ final class CompanionMcpToolCatalog {
             tool(
                     "code_execute",
                     "Submit unrestricted Java statements for execution inside the connected Minecraft JVM. "
-                            + "Use log or logln in the code to return observed values.",
+                            + "Use result(value) for structured data and log or logln for supplemental text.",
                     objectSchema(
                             Map.of(
                                     "code", stringSchema("Java statements inserted into BaseScript.run()."),

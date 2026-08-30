@@ -35,6 +35,12 @@ final class CodeModeSourceBuilder {
             source.append("import ").append(normalized).append(";\n");
         }
         source.append("public final class ").append(className).append(" extends BaseScript {\n")
+                .append("    private Object resultValue;\n")
+                .append("    private boolean resultSet;\n")
+                .append("    public void result(Object value) {\n")
+                .append("        this.resultValue = value;\n")
+                .append("        this.resultSet = true;\n")
+                .append("    }\n")
                 .append("    @Override\n")
                 .append("    public void run() throws Throwable {\n")
                 .append(code).append('\n')

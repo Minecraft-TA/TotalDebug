@@ -16,7 +16,11 @@ import java.util.UUID;
 final class CodeModeArtifactStore {
     static final String SOURCE_ARTIFACT = "source";
     static final String JOB_ARTIFACT = "job";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final Gson GSON = new GsonBuilder()
+            .serializeNulls()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .create();
 
     private final Path root;
 
