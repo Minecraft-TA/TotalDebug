@@ -56,20 +56,31 @@ class CompanionMcpSidecarTest {
             send(writer, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
             JsonObject tools = response(reader, executor, 2);
-            assertTrue(tools.toString().contains("code_execute"));
-            assertTrue(tools.toString().contains("artifacts_read"));
+            assertTrue(tools.toString().contains("client_code_execute"));
+            assertTrue(tools.toString().contains("server_code_execute"));
+            assertTrue(tools.toString().contains("job_source"));
+            assertFalse(tools.toString().contains("artifacts_read"));
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{" +
                     "\"name\":\"status\",\"arguments\":{}}}");
             JsonObject offlineStatus = response(reader, executor, 3);
             assertTrue(offlineStatus.toString().contains("companion_available"));
+            assertTrue(offlineStatus.toString().contains("debugger_connected"));
             assertTrue(offlineStatus.toString().contains("false"));
             assertFalse(offlineStatus.toString().contains("sidecar_process_id"));
             assertFalse(offlineStatus.toString().contains("mcp_url"));
             assertFalse(offlineStatus.toString().contains("error"));
 
+            send(writer, "{\"jsonrpc\":\"2.0\",\"id\":29,\"method\":\"tools/call\",\"params\":{" +
+                    "\"name\":\"search_symbols\",\"arguments\":{}}}");
+            JsonObject invalidSearch = response(reader, executor, 29);
+            assertTrue(invalidSearch.getAsJsonObject("result").get("isError").getAsBoolean());
+            assertTrue(invalidSearch.toString().contains("error"));
+            assertFalse(invalidSearch.toString().contains("companion_unreachable"));
+            assertFalse(invalidSearch.toString().contains("\"type\":\"text\""));
+
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"tools/call\",\"params\":{" +
-                    "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}");
+                    "\"name\":\"client_code_execute\",\"arguments\":{\"code\":\"return 1;\"}}}");
             assertUnreachableFailure(response(reader, executor, 30));
 
             try (CompanionMcpServer companion = companion(port, "first")) {
@@ -84,7 +95,7 @@ class CompanionMcpSidecarTest {
             }
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
-                    "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}");
+                    "\"name\":\"client_code_execute\",\"arguments\":{\"code\":\"return 1;\"}}}");
             JsonObject stoppedExecution = response(reader, executor, 5);
             assertUnreachableFailure(stoppedExecution);
 
@@ -124,8 +135,6 @@ class CompanionMcpSidecarTest {
         );
         return new CompanionMcpServer(
                 this.temporaryDirectory.resolve(instance).resolve("data"),
-                () -> this.temporaryDirectory.resolve("workspace"),
-                () -> this.temporaryDirectory.resolve("index.bin"),
                 jobs,
                 port
         );

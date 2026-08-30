@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.fonts.inter.FlatInterFont;
 import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
@@ -450,11 +449,18 @@ public final class CompanionApp {
     }
 
     private static void setupDataDirectories() throws IOException {
-        Files.createDirectories(getRootPath().resolve("decompiled-files"));
-        if (supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            Files.createDirectories(getRootPath().resolve("scripts"));
-            BaseScript.writeToFileIfNotExists();
+        setupDataDirectories(
+                getRootPath(),
+                supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)
+        );
+    }
+
+    static void setupDataDirectories(Path rootPath, boolean scriptExecutionEnabled) throws IOException {
+        Files.createDirectories(rootPath.resolve("decompiled-files"));
+        if (!scriptExecutionEnabled) {
+            return;
         }
+        Files.createDirectories(rootPath.resolve("scripts"));
     }
 
     private static void prewarmJavaParser() {
@@ -479,12 +485,7 @@ public final class CompanionApp {
                 CompanionApp::runtimeContext,
                 launchConfiguration.appHome().resolve("mcp").resolve("artifacts")
         );
-        CompanionMcpServer server = new CompanionMcpServer(
-                launchConfiguration.appHome(),
-                () -> hasProfile() ? getWorkspaceDirectory() : null,
-                () -> activeIndexFile,
-                jobs
-        );
+        CompanionMcpServer server = new CompanionMcpServer(launchConfiguration.appHome(), jobs);
         try {
             server.start();
             mcpServer = server;
@@ -761,6 +762,16 @@ public final class CompanionApp {
             }
             return controller;
         }
+    }
+
+    public static boolean isDebuggerConnected() {
+        DebuggerSessionController controller = debuggerController;
+        if (controller == null) {
+            return false;
+        }
+        DebuggerSessionController.Phase phase = controller.status().phase();
+        return phase == DebuggerSessionController.Phase.RUNNING
+                || phase == DebuggerSessionController.Phase.PAUSED;
     }
 
     private static DebuggerSessionController createDebuggerController() {

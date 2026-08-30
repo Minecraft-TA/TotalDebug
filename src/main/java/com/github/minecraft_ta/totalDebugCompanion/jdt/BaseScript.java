@@ -1,19 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.util.Pair;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class BaseScript {
 
     private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s(.*?);");
-
     private static final String BASE_SCRIPT_IMPORTS = """
             import net.minecraft.network.chat.Component;
             import net.minecraft.server.MinecraftServer;
@@ -170,9 +164,7 @@ public class BaseScript {
                 ---- Logging
                 */
                         
-                private StringWriter logWriter = new StringWriter();
-                private Object resultValue;
-                private boolean resultSet;
+                private final StringWriter logWriter = new StringWriter();
                         
                 public void logln(Object s) {
                     this.log(String.format("%s%n", s));
@@ -182,56 +174,21 @@ public class BaseScript {
                     this.logWriter.append(String.valueOf(s));
                 }
 
-                public void result(Object value) {
-                    this.resultValue = value;
-                    this.resultSet = true;
-                }
-                        
-                public abstract void run() throws Throwable;
+                public abstract Object run() throws Throwable;
             }""".replace("    ", "\t");
 
     private static final String BASE_SCRIPT = BASE_SCRIPT_IMPORTS + BASE_SCRIPT_TEXT;
-    private static FileTime lastChanged;
-    private static Path cachedPath;
-    private static String cachedContents;
 
     private BaseScript() {
     }
 
     public static String mergeWithNormalScript(String scriptText) {
-        var pair = extractImports(getText());
+        var pair = extractImports(BASE_SCRIPT);
         return pair.a() + scriptText + pair.b();
     }
 
-    public static void writeToFileIfNotExists() {
-        try {
-            Path path = path();
-            if (!Files.exists(path))
-                Files.writeString(path, BASE_SCRIPT);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     public static String getText() {
-        try {
-            Path path = path();
-            var lastModifiedTime = Files.getLastModifiedTime(path);
-            if (!path.equals(cachedPath) || !lastModifiedTime.equals(lastChanged)) {
-                cachedPath = path;
-                lastChanged = lastModifiedTime;
-                cachedContents = Files.readString(path).replace("\r\n", "\n");
-            }
-
-            return cachedContents;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    private static Path path() {
-        return CompanionApp.getRootPath().resolve("scripts").resolve("BaseScript.java");
+        return BASE_SCRIPT;
     }
 
     private static Pair<String, String> extractImports(String code) {

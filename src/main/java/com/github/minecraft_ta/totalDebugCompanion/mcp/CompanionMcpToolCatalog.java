@@ -1,7 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -13,58 +11,47 @@ import java.util.function.Function;
 
 final class CompanionMcpToolCatalog {
     static final String SERVER_NAME = "totaldebug-companion";
-    static final String SERVER_VERSION = "1.0.0";
+    static final String SERVER_VERSION = "2.0.0";
     static final String INSTRUCTIONS =
-            "Use code_execute for runtime facts. It executes unrestricted Java inside the connected "
-                    + "Minecraft JVM and waits briefly for a result. Use jobs_wait for longer jobs.";
+            "Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. "
+                    + "Both execute unrestricted Java and return the value from the submitted code body.";
 
-    private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
+    private static final Map<String, Object> EXECUTE_INPUT_SCHEMA = objectSchema(
+            Map.of(
+                    "code", stringSchema("Body of a Java method that returns the structured result."),
+                    "imports", arraySchema(
+                            stringSchema("Java import target, for example java.util.Map or static java.lang.Math.*.")
+                    ),
+                    "environment", enumSchema(
+                            "Execution thread. Tick jobs cannot be interrupted safely after starting.",
+                            "thread", "pre_tick", "post_tick"
+                    ),
+                    "wait_ms", integerSchema(
+                            "How long to wait before returning the current job state.",
+                            0,
+                            CodeModeJobService.MAX_WAIT_MILLISECONDS
+                    )
+            ),
+            List.of("code")
+    );
     private static final List<McpSchema.Tool> TOOLS = List.of(
+            tool("status", "Report Companion, Minecraft, and debugger connectivity.", emptySchema()),
             tool(
-                    "status",
-                    "Report whether Companion and Minecraft are connected.",
-                    objectSchema(Map.of(), List.of())
+                    "client_code_execute",
+                    "Execute a value-returning Java body in the connected Minecraft client JVM.",
+                    EXECUTE_INPUT_SCHEMA
             ),
             tool(
-                    "code_execute",
-                    "Submit unrestricted Java statements for execution inside the connected Minecraft JVM. "
-                            + "Use result(value) for structured data and log or logln for supplemental text.",
+                    "server_code_execute",
+                    "Execute a value-returning Java body with server authority.",
+                    EXECUTE_INPUT_SCHEMA
+            ),
+            tool(
+                    "job_wait",
+                    "Wait for one code job to finish or return its current state at the timeout.",
                     objectSchema(
                             Map.of(
-                                    "code", stringSchema("Java statements inserted into BaseScript.run()."),
-                                    "imports", arraySchema(
-                                            stringSchema("Java import target, for example java.util.Map or static java.lang.Math.*.")
-                                    ),
-                                    "side", enumSchema("Minecraft execution side.", "client", "server"),
-                                    "environment", enumSchema(
-                                            "Execution thread. Tick environments cannot be interrupted safely after starting.",
-                                            "thread",
-                                            "pre_tick",
-                                            "post_tick"
-                                    ),
-                                    "wait_ms", integerSchema(
-                                            "How long to wait for completion before returning the current state.",
-                                            0,
-                                            CodeModeJobService.MAX_WAIT_MILLISECONDS
-                                    )
-                            ),
-                            List.of("code")
-                    )
-            ),
-            tool(
-                    "jobs_get",
-                    "Get one code job and its terminal output or error.",
-                    objectSchema(
-                            Map.of("job_id", stringSchema("UUID returned by code_execute.")),
-                            List.of("job_id")
-                    )
-            ),
-            tool(
-                    "jobs_wait",
-                    "Wait for one code job to finish, or return its current state when the timeout expires.",
-                    objectSchema(
-                            Map.of(
-                                    "job_id", stringSchema("UUID returned by code_execute."),
+                                    "job_id", stringSchema("Code job identifier."),
                                     "wait_ms", integerSchema(
                                             "Maximum wait in milliseconds.",
                                             0,
@@ -74,49 +61,41 @@ final class CompanionMcpToolCatalog {
                             List.of("job_id")
                     )
             ),
-            tool(
-                    "jobs_list",
-                    "List recent code jobs in newest-first order.",
-                    objectSchema(
-                            Map.of("limit", integerSchema("Maximum jobs to return, from 1 to 256.", 1, 256)),
-                            List.of()
-                    )
-            ),
-            tool(
-                    "jobs_cancel",
-                    "Request cooperative cancellation of a running code job.",
-                    objectSchema(
-                            Map.of("job_id", stringSchema("UUID returned by code_execute.")),
-                            List.of("job_id")
-                    )
-            ),
+            tool("job_cancel", "Request cancellation of one code job.", jobIdSchema()),
+            tool("job_source", "Return the exact generated Java source for one code job.", jobIdSchema()),
             tool(
                     "search_classes",
-                    "Resolve an exact binary name or search class names in the connected Minecraft runtime.",
+                    "Resolve an exact binary name first, otherwise search full binary names by literal text.",
                     objectSchema(
-                            Map.of(
-                                    "query", stringSchema("Binary name or class-name fragment; package-qualified queries are supported."),
-                                    "limit", integerSchema("Maximum matches to return, from 1 to 200.", 1, 200)
-                            ),
+                            Map.of("query", stringSchema("Exact binary name or case-insensitive name fragment.")),
                             List.of("query")
                     )
             ),
-            classTool("class_source", "Return decompiled Java source for one runtime class."),
-            classTool("class_bytecode", "Return readable JVM bytecode for one runtime class."),
-            classTool("class_origin", "Return the runtime source and module that define one class."),
-            classTool("class_members", "Return declared fields and methods with descriptors and modifiers."),
             tool(
-                    "artifacts_read",
-                    "Read the exact generated Java source or current job record retained by Companion.",
+                    "class_source",
+                    "Return complete Vineflower Java source for one runtime class, decompiling it when needed.",
+                    binaryNameSchema()
+            ),
+            tool(
+                    "search_symbols",
+                    "Search field and method declarations, or list declarations owned by one class.",
+                    searchSymbolsSchema()
+            ),
+            tool(
+                    "find_usages",
+                    "Find declaration sites that reference one exact class, field, or method.",
                     objectSchema(
-                            Map.of(
-                                    "job_id", stringSchema("UUID returned by code_execute."),
-                                    "artifact", enumSchema("Artifact to read.", "source", "job")
-                            ),
-                            List.of("job_id", "artifact")
+                            Map.of("target", usageTargetSchema()),
+                            List.of("target")
                     )
+            ),
+            tool(
+                    "search_literals",
+                    "Search indexed Java string literal values by case-sensitive text.",
+                    objectSchema(Map.of("query", stringSchema("Literal text fragment.")), List.of("query"))
             )
     );
+    private static final Map<String, McpSchema.Tool> TOOLS_BY_NAME = indexTools();
 
     private CompanionMcpToolCatalog() {
     }
@@ -135,20 +114,26 @@ final class CompanionMcpToolCatalog {
 
     static McpSchema.CallToolResult result(Map<String, Object> value, boolean error) {
         return McpSchema.CallToolResult.builder()
-                .addTextContent(GSON.toJson(value))
                 .structuredContent(value)
                 .isError(error)
                 .build();
     }
 
-    static McpSchema.CallToolResult companionUnavailable(
-            String tool,
-            ConnectionFailure failure
-    ) {
+    static void validateRequest(McpSchema.CallToolRequest request) {
+        Objects.requireNonNull(request, "request");
+        McpSchema.Tool tool = TOOLS_BY_NAME.get(request.name());
+        if (tool == null) {
+            throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
+        }
+        validateSchema(tool.inputSchema(), request.arguments(), "arguments");
+    }
+
+    static McpSchema.CallToolResult companionUnavailable(String tool, ConnectionFailure failure) {
         if ("status".equals(tool)) {
             return result(Map.of(
                     "companion_available", false,
-                    "minecraft_connected", false
+                    "minecraft_connected", false,
+                    "debugger_connected", false
             ), false);
         }
         return result(Map.of("error", failure.asMap()), true);
@@ -160,10 +145,59 @@ final class CompanionMcpToolCatalog {
                 .build();
     }
 
-    private static Map<String, Object> objectSchema(
-            Map<String, Object> properties,
-            List<String> required
-    ) {
+    private static Map<String, Object> emptySchema() {
+        return objectSchema(Map.of(), List.of());
+    }
+
+    private static Map<String, Object> jobIdSchema() {
+        return objectSchema(Map.of("job_id", stringSchema("Code job identifier.")), List.of("job_id"));
+    }
+
+    private static Map<String, Object> binaryNameSchema() {
+        return objectSchema(Map.of("binary_name", stringSchema("Exact Java binary name.")), List.of("binary_name"));
+    }
+
+    private static Map<String, Object> searchSymbolsSchema() {
+        Map<String, Object> schema = objectSchema(
+                Map.of(
+                        "query", stringSchema("Case-insensitive literal member-name fragment."),
+                        "owner", stringSchema("Exact owning class binary name.")
+                ),
+                List.of()
+        );
+        schema.put("anyOf", List.of(
+                Map.of("required", List.of("query")),
+                Map.of("required", List.of("owner"))
+        ));
+        return schema;
+    }
+
+    private static Map<String, Object> usageTargetSchema() {
+        Map<String, Object> schema = objectSchema(
+                Map.of(
+                        "kind", enumSchema("Target kind.", "class", "field", "method"),
+                        "owner", stringSchema("Exact owning class binary name."),
+                        "name", stringSchema("Exact member name."),
+                        "descriptor", stringSchema("Exact JVM member descriptor.")
+                ),
+                List.of()
+        );
+        schema.put("oneOf", List.of(
+                usageTargetVariant("class", List.of("kind", "owner")),
+                usageTargetVariant("field", List.of("kind", "owner", "name", "descriptor")),
+                usageTargetVariant("method", List.of("kind", "owner", "name", "descriptor"))
+        ));
+        return schema;
+    }
+
+    private static Map<String, Object> usageTargetVariant(String kind, List<String> required) {
+        return Map.of(
+                "properties", Map.of("kind", Map.of("const", kind)),
+                "required", required
+        );
+    }
+
+    private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", properties);
@@ -173,11 +207,11 @@ final class CompanionMcpToolCatalog {
     }
 
     private static Map<String, Object> stringSchema(String description) {
-        return Map.of("type", "string", "description", description);
+        return Map.of("type", "string", "description", description, "minLength", 1);
     }
 
     private static Map<String, Object> arraySchema(Map<String, Object> items) {
-        return Map.of("type", "array", "items", items, "default", List.of());
+        return Map.of("type", "array", "items", items);
     }
 
     private static Map<String, Object> enumSchema(String description, String... values) {
@@ -193,12 +227,152 @@ final class CompanionMcpToolCatalog {
         );
     }
 
-    record ConnectionFailure(
-            String code,
-            String stage,
-            String endpointHealth,
-            boolean retryable
+    private static Map<String, McpSchema.Tool> indexTools() {
+        Map<String, McpSchema.Tool> indexed = new LinkedHashMap<>();
+        for (McpSchema.Tool tool : TOOLS) {
+            indexed.put(tool.name(), tool);
+        }
+        return Map.copyOf(indexed);
+    }
+
+    private static void validateSchema(Map<String, Object> schema, Object value, String path) {
+        Object expected = schema.get("const");
+        if (schema.containsKey("const") && !Objects.equals(expected, value)) {
+            throw new IllegalArgumentException(path + " must be " + expected);
+        }
+
+        if (schema.get("enum") instanceof List<?> values && !values.contains(value)) {
+            throw new IllegalArgumentException(path + " must be one of " + values);
+        }
+
+        Object type = schema.get("type");
+        if (type instanceof String typeName) {
+            switch (typeName) {
+                case "object" -> requireObject(value, path);
+                case "array" -> requireArray(value, path);
+                case "string" -> requireString(value, schema, path);
+                case "integer" -> requireInteger(value, schema, path);
+                default -> throw new IllegalStateException("Unsupported input schema type: " + typeName);
+            }
+        }
+
+        if (schema.containsKey("properties") || schema.containsKey("required")) {
+            validateObject(schema, requireObject(value, path), path);
+        }
+        if (schema.get("items") instanceof Map<?, ?> itemSchema) {
+            List<?> items = requireArray(value, path);
+            for (int index = 0; index < items.size(); index++) {
+                validateSchema(schemaMap(itemSchema), items.get(index), path + "[" + index + "]");
+            }
+        }
+        validateAlternatives(schema, value, path, "anyOf", false);
+        validateAlternatives(schema, value, path, "oneOf", true);
+    }
+
+    private static void validateObject(Map<String, Object> schema, Map<?, ?> value, String path) {
+        Map<String, Object> properties = schemaMap(schema.getOrDefault("properties", Map.of()));
+        if (Boolean.FALSE.equals(schema.get("additionalProperties"))) {
+            for (Object key : value.keySet()) {
+                if (!(key instanceof String stringKey)) {
+                    throw new IllegalArgumentException(path + " must have string keys");
+                }
+                if (!properties.containsKey(stringKey)) {
+                    throw new IllegalArgumentException(path + "." + stringKey + " is not allowed");
+                }
+            }
+        }
+        if (schema.get("required") instanceof List<?> required) {
+            for (Object name : required) {
+                if (!(name instanceof String stringName) || !value.containsKey(stringName)) {
+                    throw new IllegalArgumentException(path + "." + name + " is required");
+                }
+            }
+        }
+        for (Map.Entry<String, Object> property : properties.entrySet()) {
+            if (value.containsKey(property.getKey())) {
+                validateSchema(
+                        schemaMap(property.getValue()),
+                        value.get(property.getKey()),
+                        path + "." + property.getKey()
+                );
+            }
+        }
+    }
+
+    private static void validateAlternatives(
+            Map<String, Object> schema,
+            Object value,
+            String path,
+            String keyword,
+            boolean exactlyOne
     ) {
+        if (!(schema.get(keyword) instanceof List<?> alternatives)) {
+            return;
+        }
+        int matches = 0;
+        for (Object alternative : alternatives) {
+            try {
+                validateSchema(schemaMap(alternative), value, path);
+                matches++;
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        if ((exactlyOne && matches != 1) || (!exactlyOne && matches == 0)) {
+            throw new IllegalArgumentException(
+                    path + (exactlyOne
+                            ? " must match exactly one allowed shape"
+                            : " must match at least one allowed shape")
+            );
+        }
+    }
+
+    private static Map<?, ?> requireObject(Object value, String path) {
+        if (!(value instanceof Map<?, ?> map)) {
+            throw new IllegalArgumentException(path + " must be an object");
+        }
+        return map;
+    }
+
+    private static List<?> requireArray(Object value, String path) {
+        if (!(value instanceof List<?> list)) {
+            throw new IllegalArgumentException(path + " must be an array");
+        }
+        return list;
+    }
+
+    private static void requireString(Object value, Map<String, Object> schema, String path) {
+        if (!(value instanceof String string)) {
+            throw new IllegalArgumentException(path + " must be a string");
+        }
+        if (schema.get("minLength") instanceof Number minimum && string.length() < minimum.intValue()) {
+            throw new IllegalArgumentException(path + " must not be blank");
+        }
+    }
+
+    private static void requireInteger(Object value, Map<String, Object> schema, String path) {
+        if (!(value instanceof Number number)
+                || !Double.isFinite(number.doubleValue())
+                || number.doubleValue() != Math.rint(number.doubleValue())) {
+            throw new IllegalArgumentException(path + " must be an integer");
+        }
+        double integer = number.doubleValue();
+        if (schema.get("minimum") instanceof Number minimum && integer < minimum.doubleValue()) {
+            throw new IllegalArgumentException(path + " must be at least " + minimum);
+        }
+        if (schema.get("maximum") instanceof Number maximum && integer > maximum.doubleValue()) {
+            throw new IllegalArgumentException(path + " must be at most " + maximum);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> schemaMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            throw new IllegalStateException("Input schema must contain an object");
+        }
+        return (Map<String, Object>) map;
+    }
+
+    record ConnectionFailure(String code, String stage, String endpointHealth, boolean retryable) {
         ConnectionFailure {
             Objects.requireNonNull(code, "code");
             Objects.requireNonNull(stage, "stage");
@@ -213,16 +387,5 @@ final class CompanionMcpToolCatalog {
                     "retryable", this.retryable
             );
         }
-    }
-
-    private static McpSchema.Tool classTool(String name, String description) {
-        return tool(
-                name,
-                description,
-                objectSchema(
-                        Map.of("binary_name", stringSchema("Exact Java binary name.")),
-                        List.of("binary_name")
-                )
-        );
     }
 }

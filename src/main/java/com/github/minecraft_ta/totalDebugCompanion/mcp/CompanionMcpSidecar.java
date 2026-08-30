@@ -20,6 +20,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 
@@ -56,6 +57,7 @@ public final class CompanionMcpSidecar {
                                     + " Companion may start or restart after this MCP session initializes; call status again."
                     )
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build())
+                    .validateToolInputs(false)
                     .tools(CompanionMcpToolCatalog.specifications(remote::call))
                     .build();
 
@@ -100,6 +102,14 @@ public final class CompanionMcpSidecar {
 
         private synchronized McpSchema.CallToolResult call(McpSchema.CallToolRequest request) {
             Objects.requireNonNull(request, "request");
+            try {
+                CompanionMcpToolCatalog.validateRequest(request);
+            } catch (IllegalArgumentException exception) {
+                return CompanionMcpToolCatalog.result(
+                        Map.of("error", Objects.requireNonNullElse(exception.getMessage(), exception.toString())),
+                        true
+                );
+            }
             try {
                 ensureConnected();
                 try {

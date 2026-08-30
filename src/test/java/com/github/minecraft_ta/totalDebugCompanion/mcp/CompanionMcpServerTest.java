@@ -36,8 +36,6 @@ class CompanionMcpServerTest {
         Path dataDirectory = this.temporaryDirectory.resolve("data");
         CompanionMcpServer server = new CompanionMcpServer(
                 dataDirectory,
-                () -> this.temporaryDirectory.resolve("workspace"),
-                () -> this.temporaryDirectory.resolve("index.bin"),
                 jobs,
                 0
         );
@@ -76,13 +74,18 @@ class CompanionMcpServerTest {
                     "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}"
             );
             assertEquals(200, tools.statusCode());
-            assertTrue(tools.body().contains("code_execute"));
-            assertTrue(tools.body().contains("jobs_wait"));
+            assertTrue(tools.body().contains("client_code_execute"));
+            assertTrue(tools.body().contains("server_code_execute"));
+            assertTrue(tools.body().contains("job_wait"));
             assertTrue(tools.body().contains("class_source"));
-            assertTrue(tools.body().contains("class_bytecode"));
-            assertTrue(tools.body().contains("class_origin"));
-            assertTrue(tools.body().contains("class_members"));
-            assertTrue(tools.body().contains("artifacts_read"));
+            assertTrue(tools.body().contains("search_symbols"));
+            assertTrue(tools.body().contains("find_usages"));
+            assertTrue(tools.body().contains("search_literals"));
+            assertFalse(tools.body().contains("outputSchema"));
+            assertFalse(tools.body().contains("class_bytecode"));
+            assertFalse(tools.body().contains("class_origin"));
+            assertFalse(tools.body().contains("class_members"));
+            assertFalse(tools.body().contains("artifacts_read"));
 
             HttpResponse<String> status = post(
                     client,
@@ -94,18 +97,32 @@ class CompanionMcpServerTest {
             assertEquals(200, status.statusCode());
             assertTrue(status.body().contains("minecraft_connected"));
             assertTrue(status.body().contains("companion_available"));
+            assertTrue(status.body().contains("debugger_connected"));
+            assertFalse(status.body().contains("\"type\":\"text\""), status.body());
             assertFalse(status.body().contains("workspace_directory"));
             assertFalse(status.body().contains("class_index"));
             assertFalse(status.body().contains("mcp_url"));
             assertFalse(status.body().contains("retained_jobs"));
+
+            HttpResponse<String> invalidSearch = post(
+                    client,
+                    descriptor.url(),
+                    sessionId,
+                    "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"search_symbols\",\"arguments\":{}}}"
+            );
+            assertEquals(200, invalidSearch.statusCode());
+            assertTrue(invalidSearch.body().contains("\"isError\":true"), invalidSearch.body());
+            assertTrue(invalidSearch.body().contains("\"error\""), invalidSearch.body());
+            assertFalse(invalidSearch.body().contains("\"type\":\"text\""), invalidSearch.body());
 
             HttpResponse<String> unavailableExecution = post(
                     client,
                     descriptor.url(),
                     sessionId,
                     "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"code_execute\",\"arguments\":{" +
-                            "\"code\":\"logln(1);\",\"wait_ms\":0}}}"
+                            "\"name\":\"client_code_execute\",\"arguments\":{" +
+                            "\"code\":\"return 1;\",\"wait_ms\":0}}}"
             );
             assertEquals(200, unavailableExecution.statusCode());
             assertTrue(unavailableExecution.body().contains("not available"));
@@ -130,8 +147,6 @@ class CompanionMcpServerTest {
         );
         CompanionMcpServer server = new CompanionMcpServer(
                 this.temporaryDirectory.resolve("data"),
-                () -> this.temporaryDirectory.resolve("workspace"),
-                () -> this.temporaryDirectory.resolve("index.bin"),
                 jobs,
                 0
         );
@@ -144,44 +159,34 @@ class CompanionMcpServerTest {
                     server.endpointUrl(),
                     sessionId,
                     "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"code_execute\",\"arguments\":{" +
-                            "\"code\":\"logln(1);\",\"wait_ms\":0}}}"
+                            "\"name\":\"client_code_execute\",\"arguments\":{" +
+                            "\"code\":\"logln(1); return 1;\",\"wait_ms\":0}}}"
             );
             assertEquals(200, submitted.statusCode());
             assertConciseJobResponse(submitted.body());
 
             String jobId = jobs.list(1).getFirst().jobId();
-            HttpResponse<String> job = post(
-                    client,
-                    server.endpointUrl(),
-                    sessionId,
-                    "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"jobs_get\",\"arguments\":{\"job_id\":\"" + jobId + "\"}}}"
-            );
-            assertEquals(200, job.statusCode());
-            assertConciseJobResponse(job.body());
-
             HttpResponse<String> waitedJob = post(
                     client,
                     server.endpointUrl(),
                     sessionId,
-                    "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"jobs_wait\",\"arguments\":{" +
+                    "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"job_wait\",\"arguments\":{" +
                             "\"job_id\":\"" + jobId + "\",\"wait_ms\":0}}}"
             );
             assertEquals(200, waitedJob.statusCode());
             assertConciseJobResponse(waitedJob.body());
 
-            HttpResponse<String> jobsList = post(
+            HttpResponse<String> source = post(
                     client,
                     server.endpointUrl(),
                     sessionId,
-                    "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"jobs_list\",\"arguments\":{}}}"
+                    "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"job_source\",\"arguments\":{\"job_id\":\"" + jobId + "\"}}}"
             );
-            assertEquals(200, jobsList.statusCode());
-            assertConciseJobResponse(jobsList.body());
-
+            assertEquals(200, source.statusCode());
+            assertTrue(source.body().contains("public Object run()"));
+            assertFalse(source.body().contains("source_sha256"));
         }
     }
 

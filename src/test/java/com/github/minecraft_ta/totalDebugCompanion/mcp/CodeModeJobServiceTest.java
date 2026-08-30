@@ -27,7 +27,7 @@ class CodeModeJobServiceTest {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
-                    "        logln(List.of(\"proof\"));",
+                    "        logln(List.of(\"proof\")); return java.util.Map.of(\"values\", List.of(1, 2));",
                     List.of("java.util.List"),
                     CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
@@ -38,7 +38,9 @@ class CodeModeJobServiceTest {
             assertEquals(1, transport.executions.size());
             assertTrue(transport.executions.getFirst().source.contains("import java.util.List;"));
             assertTrue(transport.executions.getFirst().source.contains("class McpCodeJob1 extends BaseScript"));
-            assertTrue(transport.executions.getFirst().source.contains("void result(Object value)"));
+            assertTrue(transport.executions.getFirst().source.contains("public Object run() throws Throwable"));
+            assertTrue(transport.executions.getFirst().source.contains("return java.util.Map.of"));
+            assertFalse(transport.executions.getFirst().source.contains("resultValue"));
             assertEquals(64, submitted.sourceSha256().length());
             assertTrue(Files.isRegularFile(Path.of((String) submitted.artifacts().get("source"))));
 
@@ -66,11 +68,11 @@ class CodeModeJobServiceTest {
     }
 
     @Test
-    void preservesOutputAndStructuredResultWhenExecutionFails() {
+    void preservesLogsWhenExecutionFails() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
-                    "log(\"before\"); result(java.util.Map.of(\"phase\", 2)); throw new RuntimeException();",
+                    "log(\"before\"); throw new RuntimeException();",
                     List.of(),
                     CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
@@ -81,17 +83,17 @@ class CodeModeJobServiceTest {
                     -1,
                     ScriptStatusMessage.Type.RUN_EXCEPTION,
                     "before",
-                    "{\"phase\":2}",
+                    null,
                     "java.lang.RuntimeException: boom"
             );
 
             CodeModeJobService.JobSnapshot failed = service.get(submitted.jobId()).orElseThrow();
             assertEquals(CodeModeJobService.JobState.FAILED, failed.state());
             assertEquals("before", failed.output());
-            assertEquals(java.util.Map.of("phase", 2.0), failed.result());
+            assertFalse(failed.resultPresent());
             assertEquals("java.lang.RuntimeException: boom", failed.error());
             assertEquals(
-                    java.util.Set.of("job_id", "state", "output", "result", "error"),
+                    java.util.Set.of("job_id", "state", "logs", "error"),
                     failed.responseMap().keySet()
             );
         }
@@ -102,7 +104,7 @@ class CodeModeJobServiceTest {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
-                    "result(42);",
+                    "return 42;",
                     List.of(),
                     CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
@@ -128,7 +130,7 @@ class CodeModeJobServiceTest {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
-                    "        Thread.sleep(10_000L);",
+                    "        Thread.sleep(10_000L); return null;",
                     List.of(),
                     CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
@@ -162,7 +164,7 @@ class CodeModeJobServiceTest {
             IllegalStateException exception = assertThrows(
                     IllegalStateException.class,
                     () -> service.submit(
-                            "logln(1);",
+                            "return 1;",
                             List.of(),
                             CodeModeJobService.ExecutionSide.CLIENT,
                             CodeModeJobService.ExecutionEnvironment.THREAD
@@ -178,7 +180,7 @@ class CodeModeJobServiceTest {
         try (CodeModeJobService service = new CodeModeJobService(
                 () -> true,
                 transport,
-                source -> "abstract class BaseScript { abstract void run() throws Throwable; }\n" + source,
+                source -> "abstract class BaseScript { abstract Object run() throws Throwable; }\n" + source,
                 () -> java.util.Map.of(
                         "profile_id", "instance-a",
                         "runtime_signature", "sha256:abc"
@@ -187,7 +189,7 @@ class CodeModeJobServiceTest {
                 Clock.fixed(Instant.parse("2026-08-23T12:00:00Z"), ZoneOffset.UTC)
         )) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
-                    "logln(1);",
+                    "return 1;",
                     List.of(),
                     CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD
@@ -205,7 +207,7 @@ class CodeModeJobServiceTest {
         return new CodeModeJobService(
                 () -> available,
                 transport,
-                source -> "abstract class BaseScript { abstract void run() throws Throwable; }\n" + source,
+                source -> "abstract class BaseScript { abstract Object run() throws Throwable; }\n" + source,
                 this.temporaryDirectory.resolve("artifacts"),
                 Clock.fixed(Instant.parse("2026-08-23T12:00:00Z"), ZoneOffset.UTC)
         );

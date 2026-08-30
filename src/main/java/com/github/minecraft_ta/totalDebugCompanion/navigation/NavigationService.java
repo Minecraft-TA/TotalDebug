@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.SourceFileNavigation;
-import com.github.minecraft_ta.totalDebugCompanion.model.BaseScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
@@ -368,9 +367,7 @@ public final class NavigationService {
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,
                     view -> view.getTitle().equals(fileName),
-                    () -> scriptName.equals("BaseScript")
-                            ? new BaseScriptView(scriptName)
-                            : new ScriptView(scriptName)
+                    () -> new ScriptView(scriptName)
             ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         if (fileName.endsWith(".java")) {

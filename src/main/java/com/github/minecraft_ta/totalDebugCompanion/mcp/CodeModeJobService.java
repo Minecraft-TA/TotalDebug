@@ -515,7 +515,7 @@ public final class CodeModeJobService implements AutoCloseable {
             result.put("job_id", this.jobId);
             result.put("state", this.state.name().toLowerCase());
             if (this.output != null && !this.output.isEmpty()) {
-                result.put("output", this.output);
+                result.put("logs", this.output);
             }
             if (this.resultPresent) {
                 result.put("result", this.result);

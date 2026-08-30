@@ -1,8 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.Opcodes;
 
@@ -13,49 +12,118 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class McpClassSearchTest {
-    @AfterEach
-    void closeIndex() {
-        CompanionClassIndex.close();
+    private static final RuntimeInventory.RuntimeModule FIXTURE_MODULE = new RuntimeInventory.RuntimeModule(
+            "fixture-mod",
+            "Fixture Mod",
+            RuntimeInventory.ModuleKind.MOD
+    );
+
+    @Test
+    void resolvesExactNamesAndSearchesCompleteBinaryNamesWithModuleOwnership() throws Exception {
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(
+                classBytes(ExactFixture.class),
+                classBytes(QualifiedSearchFixture.class)
+        ))) {
+            CompanionMcpSearchService search = search(index);
+            Map<String, Object> exact = search.searchClasses(ExactFixture.class.getName());
+            List<?> exactClasses = (List<?>) exact.get("classes");
+            assertEquals(1, exactClasses.size());
+            Map<?, ?> exactClass = (Map<?, ?>) exactClasses.getFirst();
+            assertEquals(ExactFixture.class.getName(), exactClass.get("binary_name"));
+            assertEquals(
+                    Map.of("id", "fixture-mod", "name", "Fixture Mod", "kind", "mod"),
+                    exactClass.get("module")
+            );
+            assertFalse(exactClass.containsKey("access_flags"));
+
+            Map<String, Object> qualified = search.searchClasses("totaldebugcompanion.mcp.mcpclasssearchtest$qualified");
+            List<?> qualifiedClasses = (List<?>) qualified.get("classes");
+            assertEquals(1, qualifiedClasses.size());
+            assertEquals(
+                    QualifiedSearchFixture.class.getName(),
+                    ((Map<?, ?>) qualifiedClasses.getFirst()).get("binary_name")
+            );
+            assertFalse(qualified.containsKey("query"));
+            assertFalse(qualified.containsKey("count"));
+        }
     }
 
     @Test
-    void resolvesExactBinaryNamesAndSearchesInsideQualifiedPackages() throws Exception {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
-                classBytes(ExactFixture.class),
-                classBytes(QualifiedSearchFixture.class)
-        )));
+    void ownerSearchReplacesTheOldClassMembersTool() throws Exception {
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(MemberFixture.class)))) {
+            Map<String, Object> result = search(index).searchSymbols(null, MemberFixture.class.getName());
+            List<?> symbols = (List<?>) result.get("symbols");
+            assertTrue(symbols.stream().map(Map.class::cast).anyMatch(symbol ->
+                    symbol.get("kind").equals("field")
+                            && symbol.get("name").equals("CONSTANT")
+                            && symbol.get("descriptor").equals("I")
+                            && ((List<?>) symbol.get("modifiers")).containsAll(List.of("static", "final"))
+            ));
+            assertTrue(symbols.stream().map(Map.class::cast).anyMatch(symbol ->
+                    symbol.get("kind").equals("method")
+                            && symbol.get("name").equals("answer")
+                            && symbol.get("descriptor").equals("()I")
+            ));
+            assertFalse(result.toString().contains("access_flags"));
+        }
+    }
 
-        Map<String, Object> exact = CompanionMcpServer.searchClasses(ExactFixture.class.getName(), 10);
-        List<?> exactClasses = (List<?>) exact.get("classes");
-        assertEquals(1, exactClasses.size());
-        Map<?, ?> exactClass = (Map<?, ?>) exactClasses.getFirst();
-        assertEquals(ExactFixture.class.getName(), exactClass.get("binary_name"));
-        assertFalse(exactClass.containsKey("access_flags"));
-        assertFalse(exactClass.containsKey("source_name"));
+    @Test
+    void exposesIndexedUsagesAndLiteralValuesWithoutIndexLocalIds() throws Exception {
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(
+                classBytes(UsageFixture.class),
+                classBytes(MemberFixture.class)
+        ))) {
+            CompanionMcpSearchService search = search(index);
+            Map<String, Object> usages = search.findUsages(Map.of(
+                    "kind", "method",
+                    "owner", MemberFixture.class.getName(),
+                    "name", "answer",
+                    "descriptor", "()I"
+            ));
+            assertTrue(((List<?>) usages.get("usages")).stream().map(Map.class::cast).anyMatch(usage ->
+                    usage.get("owner").equals(UsageFixture.class.getName())
+            ));
+            assertFalse(usages.toString().contains("site_id"));
+            assertFalse(usages.toString().contains("source_id"));
 
-        String qualifiedPrefix = McpClassSearchTest.class.getPackageName()
-                + ".McpClassSearchTest$Qualified";
-        Map<String, Object> qualified = CompanionMcpServer.searchClasses(qualifiedPrefix, 10);
-        List<?> qualifiedClasses = (List<?>) qualified.get("classes");
-        assertEquals(1, qualifiedClasses.size());
-        assertEquals(
-                QualifiedSearchFixture.class.getName(),
-                ((Map<?, ?>) qualifiedClasses.getFirst()).get("binary_name")
-        );
-
-        assertFalse(qualified.containsKey("query"));
-        assertFalse(qualified.containsKey("count"));
+            Map<String, Object> literals = search.searchLiterals("literal-proof");
+            assertTrue(((List<?>) literals.get("literals")).stream().map(Map.class::cast).anyMatch(literal ->
+                    literal.get("value").equals("mcp-literal-proof")
+            ));
+        }
     }
 
     @Test
     void decodesClassAccessFlagsInsteadOfReturningAnInteger() {
         int flags = Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_RECORD | Opcodes.ACC_SYNTHETIC;
 
-        assertEquals("record", CompanionMcpServer.classKind(flags));
-        assertEquals(List.of("public", "final", "synthetic"), CompanionMcpServer.classModifiers(flags));
+        assertEquals("record", CompanionMcpSearchService.classKind(flags));
+        assertEquals(
+                List.of("public", "final", "synthetic"),
+                CompanionMcpSearchService.classModifiers(flags)
+        );
+    }
+
+    @Test
+    void rejectsIncompleteSymbolAndUsageQueriesAtRuntime() throws Exception {
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(MemberFixture.class)))) {
+            CompanionMcpSearchService search = search(index);
+
+            assertThrows(IllegalArgumentException.class, () -> search.searchSymbols(null, null));
+            assertThrows(IllegalArgumentException.class, () -> search.findUsages(Map.of(
+                    "kind", "method",
+                    "owner", MemberFixture.class.getName()
+            )));
+        }
+    }
+
+    private static CompanionMcpSearchService search(ClassIndex index) {
+        return new CompanionMcpSearchService(() -> index, sourceId -> FIXTURE_MODULE);
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {
@@ -72,5 +140,21 @@ class McpClassSearchTest {
     }
 
     private static final class QualifiedSearchFixture {
+    }
+
+    private static final class MemberFixture {
+        private static final int CONSTANT = 42;
+
+        int answer() {
+            return CONSTANT;
+        }
+    }
+
+    private static final class UsageFixture {
+        private static final String MARKER = "mcp-literal-proof";
+
+        int use(MemberFixture fixture) {
+            return fixture.answer() + MARKER.length();
+        }
     }
 }

@@ -28,14 +28,7 @@ public class ScriptView implements IEditorPanel {
         this.path = CompanionApp.getRootPath().resolve("scripts").resolve(scriptName + ".java");
         try {
             if (!Files.exists(this.path)) {
-                this.text = """
-                        public class %s extends BaseScript {
-                        \t@Override
-                        \tpublic void run() throws Throwable {
-                        \t\t
-                        \t}
-                        }
-                        """.formatted(scriptName);
+                this.text = initialSource(scriptName);
                 Files.writeString(this.path, this.text);
             } else {
                 this.text = Files.readString(this.path);
@@ -43,6 +36,17 @@ public class ScriptView implements IEditorPanel {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    static String initialSource(String scriptName) {
+        return """
+                public class %s extends BaseScript {
+                \t@Override
+                \tpublic Object run() throws Throwable {
+                \t\treturn null;
+                \t}
+                }
+                """.formatted(scriptName);
     }
 
     @Override
