@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -92,6 +93,32 @@ class CodeModeJobServiceTest {
             assertEquals(
                     java.util.Set.of("job_id", "state", "output", "result", "error"),
                     failed.responseMap().keySet()
+            );
+        }
+    }
+
+    @Test
+    void waitsForTerminalStateWithoutPolling() throws Exception {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            CodeModeJobService.JobSnapshot submitted = service.submit(
+                    "result(42);",
+                    List.of(),
+                    CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD
+            );
+            AtomicReference<CodeModeJobService.JobSnapshot> waited = new AtomicReference<>();
+            Thread waiter = Thread.startVirtualThread(() -> waited.set(service.waitFor(submitted.jobId(), 5_000)));
+
+            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
+            service.acceptStatus(-1, ScriptStatusMessage.Type.RUN_COMPLETED, "", "42", "");
+            waiter.join();
+
+            assertEquals(CodeModeJobService.JobState.SUCCEEDED, waited.get().state());
+            assertEquals(42.0, waited.get().result());
+            assertEquals(
+                    CodeModeJobService.JobState.SUCCEEDED,
+                    service.waitFor(submitted.jobId(), 0).state()
             );
         }
     }

@@ -161,6 +161,10 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "jobs_get" -> this.jobs.get(requiredString(request.arguments(), "job_id"))
                         .map(CodeModeJobService.JobSnapshot::responseMap)
                         .orElseThrow(() -> new IllegalArgumentException("Unknown job"));
+                case "jobs_wait" -> this.jobs.waitFor(
+                        requiredString(request.arguments(), "job_id"),
+                        optionalInteger(request.arguments(), "wait_ms", 30_000)
+                ).responseMap();
                 case "jobs_list" -> Map.of(
                         "jobs",
                         this.jobs.list(optionalInteger(request.arguments(), "limit", 20)).stream()
@@ -207,8 +211,11 @@ public final class CompanionMcpServer implements AutoCloseable {
                 CodeModeJobService.ExecutionEnvironment.class,
                 optionalString(arguments, "environment", "thread")
         );
-        return this.jobs.submit(code, imports, side, environment)
-                .responseMap();
+        CodeModeJobService.JobSnapshot submitted = this.jobs.submit(code, imports, side, environment);
+        return this.jobs.waitFor(
+                submitted.jobId(),
+                optionalInteger(arguments, "wait_ms", 10_000)
+        ).responseMap();
     }
 
     static Map<String, Object> searchClasses(String query, int limit) {

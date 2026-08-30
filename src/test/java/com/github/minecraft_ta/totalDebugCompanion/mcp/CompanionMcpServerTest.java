@@ -77,6 +77,7 @@ class CompanionMcpServerTest {
             );
             assertEquals(200, tools.statusCode());
             assertTrue(tools.body().contains("code_execute"));
+            assertTrue(tools.body().contains("jobs_wait"));
             assertTrue(tools.body().contains("artifacts_read"));
 
             HttpResponse<String> status = post(
@@ -99,7 +100,8 @@ class CompanionMcpServerTest {
                     descriptor.url(),
                     sessionId,
                     "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}"
+                            "\"name\":\"code_execute\",\"arguments\":{" +
+                            "\"code\":\"logln(1);\",\"wait_ms\":0}}}"
             );
             assertEquals(200, unavailableExecution.statusCode());
             assertTrue(unavailableExecution.body().contains("not available"));
@@ -138,7 +140,8 @@ class CompanionMcpServerTest {
                     server.endpointUrl(),
                     sessionId,
                     "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
-                            "\"name\":\"code_execute\",\"arguments\":{\"code\":\"logln(1);\"}}}"
+                            "\"name\":\"code_execute\",\"arguments\":{" +
+                            "\"code\":\"logln(1);\",\"wait_ms\":0}}}"
             );
             assertEquals(200, submitted.statusCode());
             assertConciseJobResponse(submitted.body());
@@ -153,6 +156,17 @@ class CompanionMcpServerTest {
             );
             assertEquals(200, job.statusCode());
             assertConciseJobResponse(job.body());
+
+            HttpResponse<String> waitedJob = post(
+                    client,
+                    server.endpointUrl(),
+                    sessionId,
+                    "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{" +
+                            "\"name\":\"jobs_wait\",\"arguments\":{" +
+                            "\"job_id\":\"" + jobId + "\",\"wait_ms\":0}}}"
+            );
+            assertEquals(200, waitedJob.statusCode());
+            assertConciseJobResponse(waitedJob.body());
 
             HttpResponse<String> jobsList = post(
                     client,

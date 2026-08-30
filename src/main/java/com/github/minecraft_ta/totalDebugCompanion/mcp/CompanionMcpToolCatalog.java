@@ -16,7 +16,7 @@ final class CompanionMcpToolCatalog {
     static final String SERVER_VERSION = "1.0.0";
     static final String INSTRUCTIONS =
             "Use code_execute for runtime facts. It executes unrestricted Java inside the connected "
-                    + "Minecraft JVM. Poll jobs_get until the job reaches a terminal state.";
+                    + "Minecraft JVM and waits briefly for a result. Use jobs_wait for longer jobs.";
 
     private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
     private static final List<McpSchema.Tool> TOOLS = List.of(
@@ -41,6 +41,11 @@ final class CompanionMcpToolCatalog {
                                             "thread",
                                             "pre_tick",
                                             "post_tick"
+                                    ),
+                                    "wait_ms", integerSchema(
+                                            "How long to wait for completion before returning the current state.",
+                                            0,
+                                            CodeModeJobService.MAX_WAIT_MILLISECONDS
                                     )
                             ),
                             List.of("code")
@@ -51,6 +56,21 @@ final class CompanionMcpToolCatalog {
                     "Get one code job and its terminal output or error.",
                     objectSchema(
                             Map.of("job_id", stringSchema("UUID returned by code_execute.")),
+                            List.of("job_id")
+                    )
+            ),
+            tool(
+                    "jobs_wait",
+                    "Wait for one code job to finish, or return its current state when the timeout expires.",
+                    objectSchema(
+                            Map.of(
+                                    "job_id", stringSchema("UUID returned by code_execute."),
+                                    "wait_ms", integerSchema(
+                                            "Maximum wait in milliseconds.",
+                                            0,
+                                            CodeModeJobService.MAX_WAIT_MILLISECONDS
+                                    )
+                            ),
                             List.of("job_id")
                     )
             ),

@@ -39,6 +39,7 @@ import java.util.function.UnaryOperator;
 public final class CodeModeJobService implements AutoCloseable {
     static final int MAX_RETAINED_JOBS = 256;
     static final int MAX_OUTPUT_CHARACTERS = 250_000;
+    static final int MAX_WAIT_MILLISECONDS = 120_000;
     private static final String TRUNCATED_SUFFIX = "\n[Companion truncated the code-mode output]";
     private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
 
@@ -234,6 +235,24 @@ public final class CodeModeJobService implements AutoCloseable {
     public Optional<JobSnapshot> get(String jobId) {
         Job job = this.jobs.get(requireJobId(jobId));
         return job == null ? Optional.empty() : Optional.of(job.snapshot());
+    }
+
+    public JobSnapshot waitFor(String jobId, int waitMilliseconds) {
+        if (waitMilliseconds < 0 || waitMilliseconds > MAX_WAIT_MILLISECONDS) {
+            throw new IllegalArgumentException(
+                    "waitMilliseconds must be between 0 and " + MAX_WAIT_MILLISECONDS
+            );
+        }
+        Job job = this.jobs.get(requireJobId(jobId));
+        if (job == null) {
+            throw new IllegalArgumentException("Unknown job");
+        }
+        try {
+            return job.awaitTerminal(waitMilliseconds);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the code job", exception);
+        }
     }
 
     public List<JobSnapshot> list(int limit) {
@@ -634,6 +653,18 @@ public final class CodeModeJobService implements AutoCloseable {
             this.error = error;
             this.updatedAt = now;
             this.completedAt = now;
+            notifyAll();
+        }
+
+        private synchronized JobSnapshot awaitTerminal(int waitMilliseconds) throws InterruptedException {
+            if (!this.state.terminal() && waitMilliseconds > 0) {
+                long deadline = System.nanoTime() + waitMilliseconds * 1_000_000L;
+                long remaining;
+                while (!this.state.terminal() && (remaining = deadline - System.nanoTime()) > 0) {
+                    wait(remaining / 1_000_000L, (int) (remaining % 1_000_000L));
+                }
+            }
+            return snapshot();
         }
 
         private synchronized boolean disconnect(Instant now) {
