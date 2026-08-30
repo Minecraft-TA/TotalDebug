@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion.message;
 
-import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
+import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
 import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
@@ -8,31 +8,30 @@ import java.util.Objects;
 
 public final class ScriptStatusMessage extends AbstractMessageOutgoing {
     private final int scriptId;
-    private final ScriptStatusType type;
-    private final String message;
+    private final ScriptStatus status;
 
-    public ScriptStatusMessage(int scriptId, ScriptStatusType type, String message) {
+    public ScriptStatusMessage(int scriptId, ScriptStatus status) {
         this.scriptId = scriptId;
-        this.type = Objects.requireNonNull(type, "type");
-        this.message = Objects.requireNonNullElse(message, "");
+        this.status = Objects.requireNonNull(status, "status");
     }
 
     @Override
     public void write(ByteBufferOutputStream messageStream) {
         messageStream.writeInt(this.scriptId);
-        messageStream.writeString(this.type.name());
-        messageStream.writeString(this.message);
+        messageStream.writeString(this.status.type().name());
+        messageStream.writeString(this.status.output());
+        messageStream.writeBoolean(this.status.resultJson() != null);
+        if (this.status.resultJson() != null) {
+            messageStream.writeString(this.status.resultJson());
+        }
+        messageStream.writeString(this.status.error());
     }
 
     public int scriptId() {
         return this.scriptId;
     }
 
-    public ScriptStatusType type() {
-        return this.type;
-    }
-
-    public String message() {
-        return this.message;
+    public ScriptStatus status() {
+        return this.status;
     }
 }

@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import net.minecraft.world.level.block.Block;
 
 import java.io.PrintWriter;
@@ -25,6 +27,8 @@ import java.util.regex.Pattern;
 /** Compiles, defines, runs, and cooperatively cancels live Java scripts. */
 public final class ScriptRunner implements AutoCloseable {
     static final Duration DEFAULT_STOP_GRACE = Duration.ofSeconds(1);
+    private static final int MAX_RESULT_CHARACTERS = 250_000;
+    private static final Gson RESULT_GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
     private static final Pattern SCRIPT_CLASS_PATTERN = Pattern.compile(
             "\\bpublic\\s+(?:final\\s+)?class\\s+"
                     + "([\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*)"
@@ -198,25 +202,25 @@ public final class ScriptRunner implements AutoCloseable {
             return;
         }
 
-        String logOutput = null;
-        Throwable failure = null;
+        ScriptExecutionOutcome outcome;
         try {
-            logOutput = compiledScript.execute();
+            outcome = compiledScript.execute();
         } catch (Throwable throwable) {
-            failure = unwrapInvocationException(throwable);
+            outcome = new ScriptExecutionOutcome("", null, unwrapInvocationException(throwable));
         } finally {
             run.clearExecutionThread(Thread.currentThread());
         }
 
         if (run.isCancellationRequested()) {
-            run.finish(ScriptStatusType.RUN_EXCEPTION, "Script run cancelled");
-        } else if (failure != null) {
-            run.finish(
-                    ScriptStatusType.RUN_EXCEPTION,
-                    shortenedStackTrace(failure, compiledScript.className)
-            );
+            run.finish(ScriptStatus.failed(outcome.output(), outcome.resultJson(), "Script run cancelled"));
+        } else if (outcome.failure() != null) {
+            run.finish(ScriptStatus.failed(
+                    outcome.output(),
+                    outcome.resultJson(),
+                    shortenedStackTrace(outcome.failure(), compiledScript.className)
+            ));
         } else {
-            run.finish(ScriptStatusType.RUN_COMPLETED, logOutput);
+            run.finish(ScriptStatus.completed(outcome.output(), outcome.resultJson()));
         }
     }
 
@@ -278,10 +282,25 @@ public final class ScriptRunner implements AutoCloseable {
     }
 
     private void sendStatus(int scriptId, ScriptStatusType type, String message) {
+        ScriptStatus status = switch (type) {
+            case COMPILATION_COMPLETED -> ScriptStatus.progress(type);
+            case COMPILATION_FAILED -> ScriptStatus.failure(type, message);
+            case RUN_EXCEPTION -> ScriptStatus.failed("", null, message);
+            case RUN_COMPLETED -> ScriptStatus.completed(message, null);
+        };
+        sendStatus(scriptId, status);
+    }
+
+    private void sendStatus(int scriptId, ScriptStatus status) {
         try {
-            this.statusSink.send(scriptId, type, Objects.requireNonNullElse(message, ""));
+            this.statusSink.send(scriptId, status);
         } catch (RuntimeException exception) {
-            TotalDebug.LOGGER.warn("Unable to send script status {} for script {}", type, scriptId, exception);
+            TotalDebug.LOGGER.warn(
+                    "Unable to send script status {} for script {}",
+                    status.type(),
+                    scriptId,
+                    exception
+            );
         }
     }
 
@@ -420,18 +439,35 @@ public final class ScriptRunner implements AutoCloseable {
         }
 
         private void finish(ScriptStatusType type, String message) {
+            ScriptStatus status = switch (type) {
+                case COMPILATION_COMPLETED -> ScriptStatus.progress(type);
+                case COMPILATION_FAILED -> ScriptStatus.failure(type, message);
+                case RUN_EXCEPTION -> ScriptStatus.failed("", null, message);
+                case RUN_COMPLETED -> ScriptStatus.completed(message, null);
+            };
+            finish(status);
+        }
+
+        private void finish(ScriptStatus status) {
             synchronized (this.lock) {
                 if (this.terminal) {
                     return;
                 }
                 this.terminal = true;
-                sendStatus(this.scriptId, type, message);
+                sendStatus(this.scriptId, status);
             }
             runs.remove(this.scriptId, this);
         }
     }
 
-    private record CompiledScript(Class<?> scriptClass, Method runMethod, Field logWriterField, String className) {
+    private record CompiledScript(
+            Class<?> scriptClass,
+            Method runMethod,
+            Field logWriterField,
+            Field resultField,
+            Field resultSetField,
+            String className
+    ) {
         private static CompiledScript load(ClassLoader classLoader, String className) throws ReflectiveOperationException {
             Class<?> scriptClass = classLoader.loadClass(className);
             Class<?> baseScriptClass = scriptClass.getSuperclass();
@@ -439,19 +475,68 @@ public final class ScriptRunner implements AutoCloseable {
                 throw new IllegalArgumentException(className + " does not directly extend BaseScript");
             }
             Method runMethod = scriptClass.getMethod("run");
-            Field logWriterField = baseScriptClass.getDeclaredField("logWriter");
+            Field logWriterField = findField(scriptClass, "logWriter");
+            Field resultField = findField(scriptClass, "resultValue");
+            Field resultSetField = findField(scriptClass, "resultSet");
             logWriterField.setAccessible(true);
-            return new CompiledScript(scriptClass, runMethod, logWriterField, className);
+            resultField.setAccessible(true);
+            resultSetField.setAccessible(true);
+            return new CompiledScript(
+                    scriptClass,
+                    runMethod,
+                    logWriterField,
+                    resultField,
+                    resultSetField,
+                    className
+            );
         }
 
-        private String execute() throws Throwable {
+        private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+            Class<?> current = type;
+            while (current != null) {
+                try {
+                    return current.getDeclaredField(name);
+                } catch (NoSuchFieldException ignored) {
+                    current = current.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException(name);
+        }
+
+        private ScriptExecutionOutcome execute() throws Throwable {
             Object instance = this.scriptClass.getDeclaredConstructor().newInstance();
+            Throwable failure = null;
             try {
                 this.runMethod.invoke(instance);
             } catch (InvocationTargetException exception) {
-                throw exception.getCause();
+                failure = exception.getCause();
             }
-            return this.logWriterField.get(instance).toString();
+            String output = this.logWriterField.get(instance).toString();
+            String resultJson = null;
+            if (this.resultSetField.getBoolean(instance)) {
+                try {
+                    resultJson = RESULT_GSON.toJson(this.resultField.get(instance));
+                    if (resultJson.length() > MAX_RESULT_CHARACTERS) {
+                        throw new IllegalArgumentException(
+                                "Structured script result exceeds " + MAX_RESULT_CHARACTERS + " characters"
+                        );
+                    }
+                } catch (Throwable serializationFailure) {
+                    if (failure == null) {
+                        failure = new IllegalArgumentException(
+                                "Unable to serialize the structured script result",
+                                serializationFailure
+                        );
+                    } else {
+                        failure.addSuppressed(serializationFailure);
+                    }
+                    resultJson = null;
+                }
+            }
+            return new ScriptExecutionOutcome(output, resultJson, failure);
         }
+    }
+
+    private record ScriptExecutionOutcome(String output, String resultJson, Throwable failure) {
     }
 }

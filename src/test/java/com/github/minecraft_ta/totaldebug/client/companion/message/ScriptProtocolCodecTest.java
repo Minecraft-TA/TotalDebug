@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion.message;
 
+import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
 import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
@@ -32,13 +33,19 @@ class ScriptProtocolCodecTest {
 
     @Test
     void scriptStatusMatchesTheSharedGoldenBytes() {
-        ScriptStatusMessage message = new ScriptStatusMessage(7, ScriptStatusType.RUN_COMPLETED, "ok");
+        ScriptStatusMessage message = new ScriptStatusMessage(
+                7,
+                new ScriptStatus(ScriptStatusType.RUN_COMPLETED, "out", "{\"ok\":true}", "")
+        );
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("000000070000000d52554e5f434f4d504c45544544000000026f6b"),
+                HEX.parseHex(
+                        "000000070000000d52554e5f434f4d504c45544544"
+                                + "000000036f7574010000000b7b226f6b223a747275657d00000000"
+                ),
                 writtenBytes(output)
         );
     }

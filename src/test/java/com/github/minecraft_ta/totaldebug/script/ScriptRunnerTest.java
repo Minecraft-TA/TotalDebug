@@ -27,11 +27,53 @@ class ScriptRunnerTest {
             Status terminal = statuses.awaitTerminal();
 
             assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
-            assertEquals("hello" + System.lineSeparator(), terminal.message());
+            assertEquals("hello" + System.lineSeparator(), terminal.output());
             assertEquals(
                     List.of(ScriptStatusType.COMPILATION_COMPLETED, ScriptStatusType.RUN_COMPLETED),
                     statuses.types()
             );
+        }
+    }
+
+    @Test
+    void threadRunReturnsStructuredResultSeparateFromOutput() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(
+                    5,
+                    script(
+                            "ResultFixture",
+                            "log(\"observed\"); result(java.util.Map.of(\"answer\", 42));"
+                    ),
+                    ScriptExecutionEnvironment.THREAD
+            );
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals("observed", terminal.output());
+            assertEquals("{\"answer\":42}", terminal.resultJson());
+        }
+    }
+
+    @Test
+    void failedRunPreservesOutputWrittenBeforeTheException() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(
+                    6,
+                    script(
+                            "FailureFixture",
+                            "log(\"before failure\"); throw new IllegalStateException(\"boom\");"
+                    ),
+                    ScriptExecutionEnvironment.THREAD
+            );
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
+            assertEquals("before failure", terminal.output());
+            assertTrue(terminal.error().contains("boom"));
         }
     }
 
@@ -57,7 +99,7 @@ class ScriptRunnerTest {
 
             Status terminal = statuses.awaitTerminal();
             assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
-            assertEquals(Thread.currentThread().getName(), terminal.message());
+            assertEquals(Thread.currentThread().getName(), terminal.output());
         }
     }
 
@@ -74,7 +116,7 @@ class ScriptRunnerTest {
             scheduled.get().run();
 
             assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
-            assertTrue(terminal.message().contains("before execution"));
+            assertTrue(terminal.error().contains("before execution"));
             assertEquals(2, statuses.types().size());
         }
     }
@@ -97,7 +139,7 @@ class ScriptRunnerTest {
             Status terminal = statuses.awaitTerminal();
 
             assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
-            assertTrue(terminal.message().contains("still running"));
+            assertTrue(terminal.error().contains("still running"));
         }
     }
 
@@ -145,14 +187,32 @@ class ScriptRunnerTest {
                 }
                 abstract class BaseScript {
                     private final StringWriter logWriter = new StringWriter();
+                    private Object resultValue;
+                    private boolean resultSet;
                     public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
                     public void logln(Object value) { log(String.format("%%s%%n", value)); }
+                    public void result(Object value) { this.resultValue = value; this.resultSet = true; }
                     public abstract void run() throws Throwable;
                 }
                 """.formatted(className, body);
     }
 
-    private record Status(int scriptId, ScriptStatusType type, String message) {
+    private record Status(int scriptId, ScriptStatus status) {
+        private ScriptStatusType type() {
+            return this.status.type();
+        }
+
+        private String output() {
+            return this.status.output();
+        }
+
+        private String resultJson() {
+            return this.status.resultJson();
+        }
+
+        private String error() {
+            return this.status.error();
+        }
     }
 
     private static final class StatusRecorder implements ScriptStatusSink {
@@ -161,9 +221,9 @@ class ScriptRunnerTest {
         private final CountDownLatch terminal = new CountDownLatch(1);
 
         @Override
-        public void send(int scriptId, ScriptStatusType type, String message) {
-            this.statuses.add(new Status(scriptId, type, message));
-            if (type == ScriptStatusType.COMPILATION_COMPLETED) {
+        public void send(int scriptId, ScriptStatus status) {
+            this.statuses.add(new Status(scriptId, status));
+            if (status.type() == ScriptStatusType.COMPILATION_COMPLETED) {
                 this.compilation.countDown();
             } else {
                 this.terminal.countDown();

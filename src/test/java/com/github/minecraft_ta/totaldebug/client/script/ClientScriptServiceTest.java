@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMess
 import com.github.minecraft_ta.totaldebug.network.ForwardedScriptStatus;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
+import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
 import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
@@ -29,7 +30,10 @@ class ClientScriptServiceTest {
         service.handleRunRequest(serverRun(7));
 
         assertTrue(transport.runs.isEmpty());
-        assertEquals(List.of(new Status(7, ScriptStatusType.RUN_EXCEPTION, "unsupported server")), statuses);
+        assertEquals(List.of(new Status(
+                7,
+                ScriptStatus.failed("", null, "unsupported server")
+        )), statuses);
     }
 
     @Test
@@ -41,14 +45,12 @@ class ClientScriptServiceTest {
         service.handleRunRequest(serverRun(7));
         service.handleForwardedPayload(new ForwardedScriptStatus(
                 7,
-                ScriptStatusType.COMPILATION_COMPLETED,
-                ""
+                ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)
         ).toPayload());
         service.stopScript(7);
         service.handleForwardedPayload(new ForwardedScriptStatus(
                 7,
-                ScriptStatusType.RUN_EXCEPTION,
-                "Script run cancelled"
+                ScriptStatus.failed("partial", null, "Script run cancelled")
         ).toPayload());
         service.stopScript(7);
 
@@ -57,8 +59,8 @@ class ClientScriptServiceTest {
         assertEquals(List.of(new StopServerScriptPayload(7)), transport.stops);
         assertEquals(
                 List.of(
-                        new Status(7, ScriptStatusType.COMPILATION_COMPLETED, ""),
-                        new Status(7, ScriptStatusType.RUN_EXCEPTION, "Script run cancelled")
+                        new Status(7, ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)),
+                        new Status(7, ScriptStatus.failed("partial", null, "Script run cancelled"))
                 ),
                 statuses
         );
@@ -74,8 +76,7 @@ class ClientScriptServiceTest {
 
         service.handleForwardedPayload(new ForwardedScriptStatus(
                 99,
-                ScriptStatusType.RUN_COMPLETED,
-                "forged"
+                ScriptStatus.completed("forged", null)
         ).toPayload());
 
         assertTrue(statuses.isEmpty());
@@ -91,16 +92,18 @@ class ClientScriptServiceTest {
         service.onServerDisconnect();
         service.handleForwardedPayload(new ForwardedScriptStatus(
                 7,
-                ScriptStatusType.RUN_COMPLETED,
-                "stale"
+                ScriptStatus.completed("stale", null)
         ).toPayload());
         service.stopScript(7);
 
         assertEquals(
                 List.of(new Status(
                         7,
-                        ScriptStatusType.RUN_EXCEPTION,
-                        "Disconnected from the server while the script was running"
+                        ScriptStatus.failed(
+                                "",
+                                null,
+                                "Disconnected from the server while the script was running"
+                        )
                 )),
                 statuses
         );
@@ -109,7 +112,7 @@ class ClientScriptServiceTest {
 
     private static ClientScriptService service(List<Status> statuses, ServerScriptTransport transport) {
         return new ClientScriptService(
-                (scriptId, type, message) -> statuses.add(new Status(scriptId, type, message)),
+                (scriptId, status) -> statuses.add(new Status(scriptId, status)),
                 new TickTaskScheduler(),
                 transport
         );
@@ -128,7 +131,7 @@ class ClientScriptServiceTest {
         return message;
     }
 
-    private record Status(int scriptId, ScriptStatusType type, String message) {
+    private record Status(int scriptId, ScriptStatus status) {
     }
 
     private static final class FakeServerTransport implements ServerScriptTransport {

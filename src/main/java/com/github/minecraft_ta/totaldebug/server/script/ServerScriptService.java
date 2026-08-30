@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedScriptStatus;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.script.ScriptCompilerClasspath;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
 import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
@@ -104,7 +105,7 @@ public final class ServerScriptService {
                 classpath.argument(),
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.SERVER, phase, task),
-                (scriptId, type, message) -> sendStatus(server, player, scriptId, type, message)
+                (scriptId, status) -> sendStatus(server, player, scriptId, status)
         );
         this.runners.put(playerId, new RunnerSession(player, created));
         return created;
@@ -131,13 +132,28 @@ public final class ServerScriptService {
             ScriptStatusType type,
             String message
     ) {
+        ScriptStatus status = switch (type) {
+            case COMPILATION_COMPLETED -> ScriptStatus.progress(type);
+            case COMPILATION_FAILED -> ScriptStatus.failure(type, message);
+            case RUN_EXCEPTION -> ScriptStatus.failed("", null, message);
+            case RUN_COMPLETED -> ScriptStatus.completed(message, null);
+        };
+        sendStatus(server, sessionPlayer, scriptId, status);
+    }
+
+    private static void sendStatus(
+            MinecraftServer server,
+            ServerPlayer sessionPlayer,
+            int scriptId,
+            ScriptStatus status
+    ) {
         server.execute(() -> {
             ServerPlayer currentPlayer = server.getPlayerList().getPlayer(sessionPlayer.getUUID());
             if (currentPlayer != sessionPlayer
                     || !sessionPlayer.connection.hasChannel(ForwardedCompanionPayload.TYPE)) {
                 return;
             }
-            sessionPlayer.connection.send(new ForwardedScriptStatus(scriptId, type, message).toPayload());
+            sessionPlayer.connection.send(new ForwardedScriptStatus(scriptId, status).toPayload());
         });
     }
 

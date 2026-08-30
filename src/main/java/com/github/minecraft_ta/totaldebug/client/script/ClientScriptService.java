@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.script.ScriptCompilerClasspath;
 import com.github.minecraft_ta.totaldebug.script.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
+import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
 import com.github.minecraft_ta.totaldebug.script.ScriptStatusSink;
 import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
@@ -178,12 +179,12 @@ public final class ClientScriptService implements AutoCloseable {
         if (this.activeRuns.get(status.scriptId()) != ExecutionSide.SERVER) {
             TotalDebug.LOGGER.warn(
                     "Discarding server script status {} for inactive or client-side script {}",
-                    status.type(),
+                    status.status().type(),
                     status.scriptId()
             );
             return;
         }
-        acceptStatus(status.scriptId(), status.type(), status.message(), ExecutionSide.SERVER);
+        acceptStatus(status.scriptId(), status.status(), ExecutionSide.SERVER);
     }
 
     private synchronized ScriptRunner runner() throws IOException {
@@ -202,7 +203,7 @@ public final class ClientScriptService implements AutoCloseable {
                 classpath.argument(),
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
-                (scriptId, type, message) -> acceptStatus(scriptId, type, message, ExecutionSide.CLIENT)
+                (scriptId, status) -> acceptStatus(scriptId, status, ExecutionSide.CLIENT)
         );
         return this.runner;
     }
@@ -221,27 +222,32 @@ public final class ClientScriptService implements AutoCloseable {
 
     private synchronized void acceptStatus(
             int scriptId,
-            ScriptStatusType type,
-            String message,
+            ScriptStatus status,
             ExecutionSide expectedSide
     ) {
-        boolean accepted = isTerminal(type)
+        boolean accepted = isTerminal(status.type())
                 ? this.activeRuns.remove(scriptId, expectedSide)
                 : this.activeRuns.get(scriptId) == expectedSide;
         if (!accepted) {
             TotalDebug.LOGGER.warn(
                     "Discarding stale {} script status {} for script {}",
                     expectedSide.name().toLowerCase(),
-                    type,
+                    status.type(),
                     scriptId
             );
             return;
         }
-        this.statusSink.send(scriptId, type, Objects.requireNonNullElse(message, ""));
+        this.statusSink.send(scriptId, status);
     }
 
     private void sendUntrackedStatus(int scriptId, ScriptStatusType type, String message) {
-        this.statusSink.send(scriptId, type, Objects.requireNonNullElse(message, ""));
+        ScriptStatus status = switch (type) {
+            case COMPILATION_COMPLETED -> ScriptStatus.progress(type);
+            case COMPILATION_FAILED -> ScriptStatus.failure(type, message);
+            case RUN_EXCEPTION -> ScriptStatus.failed("", null, message);
+            case RUN_COMPLETED -> ScriptStatus.completed(message, null);
+        };
+        this.statusSink.send(scriptId, status);
     }
 
     private static boolean isTerminal(ScriptStatusType type) {
