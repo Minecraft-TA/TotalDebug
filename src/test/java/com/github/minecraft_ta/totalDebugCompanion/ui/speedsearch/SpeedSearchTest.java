@@ -7,11 +7,14 @@ import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
+import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import java.awt.Dimension;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.lang.reflect.InvocationTargetException;
@@ -67,6 +70,34 @@ class SpeedSearchTest {
             type(list, 'a');
             press(list, KeyEvent.VK_ESCAPE, 0);
             assertFalse(search.isActive());
+            search.close();
+        });
+    }
+
+    @Test
+    void spacesSeparateFragmentsAndArrowsVisitOnlyMatchingRows() throws Exception {
+        onEventThread(() -> {
+            JList<String> list = new JList<>(new String[]{
+                    "build.gradle",
+                    "model",
+                    "gradlew",
+                    "logger",
+                    "settings.gradle"
+            });
+            list.setSelectedIndex(0);
+            SpeedSearch search = SpeedSearch.install(list, value -> value);
+
+            for (char character : "gra le".toCharArray()) {
+                type(list, character);
+            }
+            assertEquals("gra le", search.query());
+            list.setSelectedIndex(0);
+            press(list, KeyEvent.VK_DOWN, 0);
+            assertEquals(2, list.getSelectedIndex());
+            press(list, KeyEvent.VK_DOWN, 0);
+            assertEquals(4, list.getSelectedIndex());
+            press(list, KeyEvent.VK_DOWN, 0);
+            assertEquals(0, list.getSelectedIndex());
             search.close();
         });
     }
@@ -179,6 +210,41 @@ class SpeedSearchTest {
 
             tableSearch.close();
             tabSearch.close();
+        });
+    }
+
+    @Test
+    void treeSelectionPreservesTheHorizontalViewport() throws Exception {
+        onEventThread(() -> {
+            DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
+            DefaultMutableTreeNode parent = root;
+            for (int index = 0; index < 20; index++) {
+                DefaultMutableTreeNode child = new DefaultMutableTreeNode(
+                        index == 19 ? "Needle" : "Group " + index
+                );
+                parent.add(child);
+                parent = child;
+            }
+            JTree tree = new JTree(new DefaultTreeModel(root));
+            tree.setRootVisible(false);
+            tree.setRowHeight(20);
+            tree.setSize(700, 400);
+            for (int row = 0; row < 20; row++) {
+                tree.expandRow(row);
+            }
+            JViewport viewport = new JViewport();
+            viewport.setExtentSize(new Dimension(120, 60));
+            viewport.setView(tree);
+            viewport.setViewPosition(new Point(0, 0));
+
+            SpeedSearchTarget target = SpeedSearchTargets.tree(
+                    tree,
+                    path -> path.getLastPathComponent().toString()
+            );
+            target.select(19);
+
+            assertEquals(0, viewport.getViewPosition().x);
+            assertTrue(viewport.getViewPosition().y > 0);
         });
     }
 

@@ -198,7 +198,17 @@ final class SpeedSearchTargets {
         @Override
         public void select(int index) {
             this.tree.setSelectionRow(index);
-            this.tree.scrollRowToVisible(index);
+            Rectangle rowBounds = this.tree.getRowBounds(index);
+            if (rowBounds == null) {
+                return;
+            }
+            Rectangle visible = this.tree.getVisibleRect();
+            this.tree.scrollRectToVisible(new Rectangle(
+                    visible.x,
+                    rowBounds.y,
+                    Math.max(1, visible.width),
+                    Math.max(1, rowBounds.height)
+            ));
         }
 
         @Override

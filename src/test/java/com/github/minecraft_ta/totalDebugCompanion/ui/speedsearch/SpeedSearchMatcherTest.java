@@ -17,31 +17,23 @@ class SpeedSearchMatcherTest {
     }
 
     @Test
-    void matchesCamelCaseWordStarts() {
+    void matchesOrderedContiguousFragmentsSeparatedByWhitespace() {
         assertEquals(
                 List.of(
-                        new SpeedSearch.MatchRange(0, 1),
-                        new SpeedSearch.MatchRange(8, 9),
-                        new SpeedSearch.MatchRange(13, 14)
+                        new SpeedSearch.MatchRange(6, 9),
+                        new SpeedSearch.MatchRange(10, 12)
                 ),
-                SpeedSearchMatcher.match("DebuggerValueTree", "dvt")
+                SpeedSearchMatcher.match("build.gradle", "gra le")
         );
     }
 
     @Test
-    void fallsBackToAnOrderedSubsequence() {
-        assertEquals(
-                List.of(
-                        new SpeedSearch.MatchRange(0, 1),
-                        new SpeedSearch.MatchRange(3, 4),
-                        new SpeedSearch.MatchRange(5, 6)
-                ),
-                SpeedSearchMatcher.match("packet", "pkt")
-        );
+    void rejectsScatteredCharacters() {
+        assertTrue(SpeedSearchMatcher.match("AllTheCompressed", "asd").isEmpty());
     }
 
     @Test
-    void rejectsOutOfOrderCharacters() {
-        assertTrue(SpeedSearchMatcher.match("frames", "sf").isEmpty());
+    void requiresFragmentsInOrder() {
+        assertTrue(SpeedSearchMatcher.match("level.graph", "gra le").isEmpty());
     }
 }

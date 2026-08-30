@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.JComponent;
 import javax.swing.JLayeredPane;
+import javax.swing.LookAndFeel;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
 import javax.swing.SwingUtilities;
@@ -23,6 +24,7 @@ final class SpeedSearchPopup extends JPanel {
 
     private final FlatIconTextField field = new FlatIconTextField(Icons.SEARCH_ICON);
     private JLayeredPane layeredPane;
+    private LookAndFeel lookAndFeel;
 
     SpeedSearchPopup() {
         super(new BorderLayout());
@@ -33,6 +35,7 @@ final class SpeedSearchPopup extends JPanel {
     }
 
     void showFor(JComponent target, String query, boolean hasMatches) {
+        refreshLookAndFeel();
         this.field.setText(query);
         Color normal = UIManager.getColor("TextField.foreground");
         this.field.setForeground(hasMatches ? normal == null ? ThemeColors.text() : normal : ThemeColors.error());
@@ -55,7 +58,7 @@ final class SpeedSearchPopup extends JPanel {
         Dimension size = preferredSize(query);
         Rectangle anchor = SwingUtilities.convertRectangle(target, target.getVisibleRect(), this.layeredPane);
         int x = Math.max(EDGE_GAP, Math.min(
-                anchor.x + anchor.width - size.width - EDGE_GAP,
+                anchor.x + EDGE_GAP,
                 this.layeredPane.getWidth() - size.width - EDGE_GAP
         ));
         int y = Math.max(EDGE_GAP, Math.min(
@@ -76,6 +79,15 @@ final class SpeedSearchPopup extends JPanel {
         this.layeredPane.remove(this);
         this.layeredPane.repaint(previousBounds);
         this.layeredPane = null;
+    }
+
+    private void refreshLookAndFeel() {
+        LookAndFeel current = UIManager.getLookAndFeel();
+        if (this.lookAndFeel == current) {
+            return;
+        }
+        this.lookAndFeel = current;
+        SwingUtilities.updateComponentTreeUI(this);
     }
 
     private Dimension preferredSize(String query) {
