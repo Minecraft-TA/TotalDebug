@@ -102,7 +102,14 @@ public class NameLookupImpl extends NameLookup {
             else
                 classes = Arrays.stream(indexedPackage.getClasses()).filter(c -> c.getName().equals(finalName)).toArray(IndexedClass[]::new);
         } else {
-            classes = CompanionClassIndex.get().findClasses(name, SearchOptions.with(SearchOptions.SearchMode.CONTAINS, SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY, 5000));
+            classes = CompanionClassIndex.get().findClasses(
+                    name,
+                    SearchOptions.with(
+                            SearchOptions.SearchMode.CONTAINS,
+                            SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY,
+                            5000
+                    )
+            ).results();
         }
 
         for (IndexedClass foundClass : classes) {

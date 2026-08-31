@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
+import com.github.tth05.jindex.ClassSearchPage;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.IndexedField;
 import com.github.tth05.jindex.IndexedMethod;
@@ -27,11 +28,10 @@ import java.util.function.Supplier;
 
 final class CompanionMcpSearchService {
     static final int RESULT_LIMIT = 100;
-    private static final int PROBE_LIMIT = RESULT_LIMIT + 1;
     private static final SearchOptions CONTAINS = SearchOptions.with(
             SearchOptions.SearchMode.CONTAINS,
             SearchOptions.MatchMode.IGNORE_CASE,
-            PROBE_LIMIT
+            RESULT_LIMIT
     );
 
     private final Supplier<ClassIndex> classIndex;
@@ -53,11 +53,10 @@ final class CompanionMcpSearchService {
             return Map.of("classes", List.of(describeClass(exact)));
         }
 
-        IndexedClass[] matches = index.findClassesByBinaryName(checkedQuery, CONTAINS);
-        return boundedList("classes", java.util.Arrays.stream(matches)
-                .limit(RESULT_LIMIT)
+        ClassSearchPage matches = index.findClassesByBinaryName(checkedQuery, CONTAINS);
+        return boundedList("classes", java.util.Arrays.stream(matches.results())
                 .map(this::describeClass)
-                .toList(), matches.length > RESULT_LIMIT);
+                .toList(), matches.truncated());
     }
 
     Map<String, Object> searchSymbols(String query, String owner) {

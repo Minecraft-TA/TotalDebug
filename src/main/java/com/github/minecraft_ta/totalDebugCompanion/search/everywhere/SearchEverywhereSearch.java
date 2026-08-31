@@ -141,8 +141,8 @@ public final class SearchEverywhereSearch {
         ArrayList<Result> results = new ArrayList<>(limit * 2);
         if (category == Category.ALL || category == Category.CLASSES) {
             IndexedClass[] classes = sourceIds == null
-                    ? index.findClasses(query, options)
-                    : index.findClasses(query, options, sourceIds);
+                    ? index.findClasses(query, options).results()
+                    : index.findClasses(query, options, sourceIds).results();
             Arrays.stream(classes).map(SearchEverywhereSearch::classResult).forEach(results::add);
         }
         if (category == Category.ALL || category == Category.SYMBOLS) {

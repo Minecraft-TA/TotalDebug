@@ -43,7 +43,7 @@ final class IndexedTypeCompletion {
                                 SearchOptions.MatchMode.IGNORE_CASE,
                                 256
                         )
-                ))
+                ).results())
                 .filter(type -> type.getInnerClassType() == null
                         || type.getInnerClassType() == InnerClassType.MEMBER)
                 .map(TypeCandidate::from)
@@ -102,7 +102,7 @@ final class IndexedTypeCompletion {
                                 SearchOptions.MatchMode.MATCH_CASE,
                                 128
                         )
-                ))
+                ).results())
                 .filter(type -> Objects.equals(type.getSourceName(), simpleName))
                 .map(TypeCandidate::from)
                 .toList();
