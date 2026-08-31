@@ -42,25 +42,25 @@ class ClientScriptServiceTest {
         FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
         ClientScriptService service = service(statuses, transport);
 
-        service.handleRunRequest(serverRun(7));
+        service.handleRunRequest(serverRun(-1));
         service.handleForwardedPayload(new ForwardedScriptStatus(
-                7,
+                -1,
                 ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)
         ).toPayload());
-        service.stopScript(7);
+        service.stopScript(-1);
         service.handleForwardedPayload(new ForwardedScriptStatus(
-                7,
+                -1,
                 ScriptStatus.failed("partial", null, "Script run cancelled")
         ).toPayload());
-        service.stopScript(7);
+        service.stopScript(-1);
 
         assertEquals(1, transport.runs.size());
-        assertEquals(7, transport.runs.getFirst().scriptId());
-        assertEquals(List.of(new StopServerScriptPayload(7)), transport.stops);
+        assertEquals(-1, transport.runs.getFirst().scriptId());
+        assertEquals(List.of(new StopServerScriptPayload(-1)), transport.stops);
         assertEquals(
                 List.of(
-                        new Status(7, ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)),
-                        new Status(7, ScriptStatus.failed("partial", null, "Script run cancelled"))
+                        new Status(-1, ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)),
+                        new Status(-1, ScriptStatus.failed("partial", null, "Script run cancelled"))
                 ),
                 statuses
         );

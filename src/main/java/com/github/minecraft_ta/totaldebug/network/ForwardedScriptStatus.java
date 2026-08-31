@@ -19,9 +19,6 @@ public record ForwardedScriptStatus(int scriptId, ScriptStatus status) {
     private static final String TRUNCATED_SUFFIX = "\n[TotalDebug truncated the server script output]";
 
     public ForwardedScriptStatus {
-        if (scriptId < 0) {
-            throw new IllegalArgumentException("scriptId must not be negative");
-        }
         status = Objects.requireNonNull(status, "status");
         String resultJson = status.resultJson();
         if (resultJson != null && resultJson.length() > MAX_MESSAGE_CHARACTERS) {

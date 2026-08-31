@@ -39,9 +39,6 @@ public record RunServerScriptPayload(
     };
 
     public RunServerScriptPayload {
-        if (scriptId < 0) {
-            throw new IllegalArgumentException("scriptId must not be negative");
-        }
         sourceCode = Objects.requireNonNull(sourceCode, "sourceCode");
         environment = Objects.requireNonNull(environment, "environment");
         int sourceBytes = sourceCode.getBytes(StandardCharsets.UTF_8).length;

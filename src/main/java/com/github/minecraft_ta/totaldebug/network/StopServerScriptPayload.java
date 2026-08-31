@@ -23,12 +23,6 @@ public record StopServerScriptPayload(int scriptId) implements CustomPacketPaylo
         }
     };
 
-    public StopServerScriptPayload {
-        if (scriptId < 0) {
-            throw new IllegalArgumentException("scriptId must not be negative");
-        }
-    }
-
     @Override
     public Type<StopServerScriptPayload> type() {
         return TYPE;

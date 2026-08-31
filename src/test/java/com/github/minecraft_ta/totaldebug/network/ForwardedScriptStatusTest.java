@@ -16,7 +16,7 @@ class ForwardedScriptStatusTest {
     @Test
     void roundTripsTheWhitelistedStatusFormat() {
         ForwardedScriptStatus original = new ForwardedScriptStatus(
-                7,
+                -1,
                 new ScriptStatus(
                         ScriptStatusType.RUN_COMPLETED,
                         "server output",

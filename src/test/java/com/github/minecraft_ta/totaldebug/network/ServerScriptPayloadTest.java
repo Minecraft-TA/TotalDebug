@@ -12,7 +12,7 @@ class ServerScriptPayloadTest {
     @Test
     void runPayloadRoundTripsWithinTheServerBoundLimit() {
         RunServerScriptPayload original = new RunServerScriptPayload(
-                7,
+                -1,
                 "public class Test extends BaseScript {}",
                 ScriptExecutionEnvironment.POST_TICK
         );
@@ -44,7 +44,7 @@ class ServerScriptPayloadTest {
 
     @Test
     void stopPayloadRoundTrips() {
-        StopServerScriptPayload original = new StopServerScriptPayload(7);
+        StopServerScriptPayload original = new StopServerScriptPayload(-1);
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
             StopServerScriptPayload.STREAM_CODEC.encode(buffer, original);
