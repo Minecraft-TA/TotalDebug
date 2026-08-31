@@ -26,7 +26,7 @@ Each tool returns only the values needed to use that tool. Runtime paths, hashes
 - Job responses return `job_id`, `state`, and any available `logs`, `result`, or `error`.
 - A sidecar connection failure returns one `error` object with `code`, `stage`, `endpoint_health`, and `retryable`.
 
-Responses use `structuredContent` only. The required MCP `content` array is empty; Companion does not repeat the same JSON in a text block. Tools omit `outputSchema`, because MCP Java 2.0.1 otherwise adds that duplicate text automatically and requires operational errors to match a success schema. SDK input validation is disabled for the same reason: its failures are text-only. The shared tool catalog validates the advertised input schemas inside both the HTTP server and sidecar, so invalid calls return structured errors.
+Every tool advertises an `outputSchema` covering its exact success result and the shared structured error result. Companion returns `structuredContent` and otherwise keeps MCP Java's default structured-output handling, including its equivalent JSON text block for clients that need it. SDK input validation remains disabled because its failures are text-only. The shared tool catalog validates the advertised input schemas inside both the HTTP server and sidecar, so invalid calls return structured errors.
 
 ## Tools
 

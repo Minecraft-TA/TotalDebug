@@ -35,16 +35,23 @@ final class CompanionMcpToolCatalog {
             List.of("code")
     );
     private static final List<McpSchema.Tool> TOOLS = List.of(
-            tool("status", "Report Companion, Minecraft, and debugger connectivity.", emptySchema()),
+            tool(
+                    "status",
+                    "Report Companion, Minecraft, and debugger connectivity.",
+                    emptySchema(),
+                    statusOutputSchema()
+            ),
             tool(
                     "client_code_execute",
                     "Execute a value-returning Java body in the connected Minecraft client JVM.",
-                    EXECUTE_INPUT_SCHEMA
+                    EXECUTE_INPUT_SCHEMA,
+                    jobOutputSchema()
             ),
             tool(
                     "server_code_execute",
                     "Execute a value-returning Java body with server authority.",
-                    EXECUTE_INPUT_SCHEMA
+                    EXECUTE_INPUT_SCHEMA,
+                    jobOutputSchema()
             ),
             tool(
                     "job_wait",
@@ -59,27 +66,41 @@ final class CompanionMcpToolCatalog {
                                     )
                             ),
                             List.of("job_id")
-                    )
+                    ),
+                    jobOutputSchema()
             ),
-            tool("job_cancel", "Request cancellation of one code job.", jobIdSchema()),
-            tool("job_source", "Return the exact generated Java source for one code job.", jobIdSchema()),
+            tool(
+                    "job_cancel",
+                    "Request cancellation of one code job.",
+                    jobIdSchema(),
+                    jobCancellationOutputSchema()
+            ),
+            tool(
+                    "job_source",
+                    "Return the exact generated Java source for one code job.",
+                    jobIdSchema(),
+                    sourceOutputSchema()
+            ),
             tool(
                     "search_classes",
                     "Resolve an exact binary name first, otherwise search full binary names by literal text.",
                     objectSchema(
                             Map.of("query", stringSchema("Exact binary name or case-insensitive name fragment.")),
                             List.of("query")
-                    )
+                    ),
+                    boundedListOutputSchema("classes", classOutputSchema())
             ),
             tool(
                     "class_source",
                     "Return complete Vineflower Java source for one runtime class, decompiling it when needed.",
-                    binaryNameSchema()
+                    binaryNameSchema(),
+                    sourceOutputSchema()
             ),
             tool(
                     "search_symbols",
                     "Search field and method declarations, or list declarations owned by one class.",
-                    searchSymbolsSchema()
+                    searchSymbolsSchema(),
+                    boundedListOutputSchema("symbols", symbolOutputSchema())
             ),
             tool(
                     "find_usages",
@@ -87,12 +108,14 @@ final class CompanionMcpToolCatalog {
                     objectSchema(
                             Map.of("target", usageTargetSchema()),
                             List.of("target")
-                    )
+                    ),
+                    boundedListOutputSchema("usages", usageOutputSchema())
             ),
             tool(
                     "search_literals",
                     "Search indexed Java string literal values by case-sensitive text.",
-                    objectSchema(Map.of("query", stringSchema("Literal text fragment.")), List.of("query"))
+                    objectSchema(Map.of("query", stringSchema("Literal text fragment.")), List.of("query")),
+                    boundedListOutputSchema("literals", literalOutputSchema())
             )
     );
     private static final Map<String, McpSchema.Tool> TOOLS_BY_NAME = indexTools();
@@ -139,10 +162,171 @@ final class CompanionMcpToolCatalog {
         return result(Map.of("error", failure.asMap()), true);
     }
 
-    private static McpSchema.Tool tool(String name, String description, Map<String, Object> inputSchema) {
+    private static McpSchema.Tool tool(
+            String name,
+            String description,
+            Map<String, Object> inputSchema,
+            Map<String, Object> outputSchema
+    ) {
         return McpSchema.Tool.builder(name, inputSchema)
                 .description(description)
+                .outputSchema(outputSchema)
                 .build();
+    }
+
+    private static Map<String, Object> statusOutputSchema() {
+        return toolOutputSchema(objectSchema(
+                Map.of(
+                        "companion_available", booleanSchema("Whether Companion is reachable."),
+                        "minecraft_connected", booleanSchema("Whether Minecraft is connected to Companion."),
+                        "debugger_connected", booleanSchema("Whether the debugger is attached.")
+                ),
+                List.of("companion_available", "minecraft_connected", "debugger_connected")
+        ));
+    }
+
+    private static Map<String, Object> jobOutputSchema() {
+        return toolOutputSchema(objectSchema(
+                Map.of(
+                        "job_id", stringSchema("Code job identifier."),
+                        "state", enumSchema(
+                                "Current code job state.",
+                                "compiling", "running", "cancelling", "succeeded", "failed", "cancelled",
+                                "disconnected"
+                        ),
+                        "logs", stringValueSchema("Output written by the code body."),
+                        "result", Map.of(),
+                        "error", stringValueSchema("Failure diagnostic for a completed job.")
+                ),
+                List.of("job_id", "state")
+        ));
+    }
+
+    private static Map<String, Object> jobCancellationOutputSchema() {
+        return toolOutputSchema(objectSchema(
+                Map.of(
+                        "job_id", stringSchema("Code job identifier."),
+                        "cancellation_requested", booleanSchema("Whether cancellation was requested.")
+                ),
+                List.of("job_id", "cancellation_requested")
+        ));
+    }
+
+    private static Map<String, Object> sourceOutputSchema() {
+        return toolOutputSchema(objectSchema(
+                Map.of("source", stringSchema("Complete Java source.")),
+                List.of("source")
+        ));
+    }
+
+    private static Map<String, Object> boundedListOutputSchema(String key, Map<String, Object> itemSchema) {
+        return toolOutputSchema(objectSchema(
+                Map.of(
+                        key, arraySchema(itemSchema),
+                        "truncated", Map.of("type", "boolean", "const", true)
+                ),
+                List.of(key)
+        ));
+    }
+
+    private static Map<String, Object> classOutputSchema() {
+        return objectSchema(
+                Map.of(
+                        "binary_name", stringSchema("Java binary name."),
+                        "kind", enumSchema(
+                                "Java class kind.",
+                                "annotation", "enum", "record", "interface", "module", "class"
+                        ),
+                        "modifiers", modifiersOutputSchema(),
+                        "module", moduleOutputSchema()
+                ),
+                List.of("binary_name", "kind", "module")
+        );
+    }
+
+    private static Map<String, Object> symbolOutputSchema() {
+        return objectSchema(
+                Map.of(
+                        "kind", enumSchema("Member kind.", "field", "method"),
+                        "owner", stringSchema("Owning class binary name."),
+                        "name", stringSchema("Member name."),
+                        "descriptor", stringSchema("JVM member descriptor."),
+                        "modifiers", modifiersOutputSchema(),
+                        "module", moduleOutputSchema()
+                ),
+                List.of("kind", "owner", "name", "descriptor", "module")
+        );
+    }
+
+    private static Map<String, Object> usageOutputSchema() {
+        return objectSchema(
+                Map.of(
+                        "kind", enumSchema("Declaration kind.", "class", "field", "method", "record_component"),
+                        "owner", stringSchema("Owning class binary name."),
+                        "name", stringSchema("Member name."),
+                        "descriptor", stringSchema("JVM member descriptor."),
+                        "relationships", arraySchema(enumSchema(
+                                "Relationship to the requested target.",
+                                "class_hierarchy", "class_declaration", "class_annotation_or_metadata",
+                                "class_runtime_type", "class_member_usage", "field_read", "field_write",
+                                "field_handle", "method_invoke", "method_handle", "string_literal"
+                        )),
+                        "occurrences", integerSchema("Number of matching references.", 1, Integer.MAX_VALUE),
+                        "module", moduleOutputSchema()
+                ),
+                List.of("kind", "owner", "relationships", "occurrences", "module")
+        );
+    }
+
+    private static Map<String, Object> literalOutputSchema() {
+        return objectSchema(
+                Map.of(
+                        "value", stringValueSchema("Indexed Java string literal."),
+                        "modules", arraySchema(moduleOutputSchema())
+                ),
+                List.of("value", "modules")
+        );
+    }
+
+    private static Map<String, Object> moduleOutputSchema() {
+        return objectSchema(
+                Map.of(
+                        "id", stringSchema("Runtime module identifier."),
+                        "name", stringSchema("Runtime module display name."),
+                        "kind", enumSchema("Runtime module kind.", "platform", "mod", "library", "java_runtime")
+                ),
+                List.of("id", "name", "kind")
+        );
+    }
+
+    private static Map<String, Object> modifiersOutputSchema() {
+        return arraySchema(enumSchema(
+                "Decoded Java modifier.",
+                "public", "protected", "private", "abstract", "static", "final", "synthetic", "deprecated",
+                "volatile", "transient", "enum", "synchronized", "bridge", "varargs", "native", "strictfp"
+        ));
+    }
+
+    private static Map<String, Object> toolOutputSchema(Map<String, Object> successSchema) {
+        return Map.of("oneOf", List.of(successSchema, errorOutputSchema()));
+    }
+
+    private static Map<String, Object> errorOutputSchema() {
+        return objectSchema(
+                Map.of("error", Map.of("oneOf", List.of(
+                        stringSchema("Tool failure diagnostic."),
+                        objectSchema(
+                                Map.of(
+                                        "code", stringSchema("Stable connection failure code."),
+                                        "stage", stringSchema("Connection stage that failed."),
+                                        "endpoint_health", stringSchema("Observed Companion endpoint health."),
+                                        "retryable", booleanSchema("Whether retrying can succeed.")
+                                ),
+                                List.of("code", "stage", "endpoint_health", "retryable")
+                        )
+                ))),
+                List.of("error")
+        );
     }
 
     private static Map<String, Object> emptySchema() {
@@ -208,6 +392,14 @@ final class CompanionMcpToolCatalog {
 
     private static Map<String, Object> stringSchema(String description) {
         return Map.of("type", "string", "description", description, "minLength", 1);
+    }
+
+    private static Map<String, Object> stringValueSchema(String description) {
+        return Map.of("type", "string", "description", description);
+    }
+
+    private static Map<String, Object> booleanSchema(String description) {
+        return Map.of("type", "boolean", "description", description);
     }
 
     private static Map<String, Object> arraySchema(Map<String, Object> items) {

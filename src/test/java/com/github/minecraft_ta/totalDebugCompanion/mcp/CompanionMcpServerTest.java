@@ -81,7 +81,7 @@ class CompanionMcpServerTest {
             assertTrue(tools.body().contains("search_symbols"));
             assertTrue(tools.body().contains("find_usages"));
             assertTrue(tools.body().contains("search_literals"));
-            assertFalse(tools.body().contains("outputSchema"));
+            assertTrue(tools.body().contains("outputSchema"));
             assertFalse(tools.body().contains("class_bytecode"));
             assertFalse(tools.body().contains("class_origin"));
             assertFalse(tools.body().contains("class_members"));
@@ -98,7 +98,7 @@ class CompanionMcpServerTest {
             assertTrue(status.body().contains("minecraft_connected"));
             assertTrue(status.body().contains("companion_available"));
             assertTrue(status.body().contains("debugger_connected"));
-            assertFalse(status.body().contains("\"type\":\"text\""), status.body());
+            assertTrue(status.body().contains("\"type\":\"text\""), status.body());
             assertFalse(status.body().contains("workspace_directory"));
             assertFalse(status.body().contains("class_index"));
             assertFalse(status.body().contains("mcp_url"));

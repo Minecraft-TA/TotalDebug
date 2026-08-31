@@ -59,6 +59,7 @@ class CompanionMcpSidecarTest {
             assertTrue(tools.toString().contains("client_code_execute"));
             assertTrue(tools.toString().contains("server_code_execute"));
             assertTrue(tools.toString().contains("job_source"));
+            assertTrue(tools.toString().contains("outputSchema"));
             assertFalse(tools.toString().contains("artifacts_read"));
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{" +
@@ -70,6 +71,7 @@ class CompanionMcpSidecarTest {
             assertFalse(offlineStatus.toString().contains("sidecar_process_id"));
             assertFalse(offlineStatus.toString().contains("mcp_url"));
             assertFalse(offlineStatus.toString().contains("error"));
+            assertTrue(offlineStatus.toString().contains("\"type\":\"text\""));
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":29,\"method\":\"tools/call\",\"params\":{" +
                     "\"name\":\"search_symbols\",\"arguments\":{}}}");
