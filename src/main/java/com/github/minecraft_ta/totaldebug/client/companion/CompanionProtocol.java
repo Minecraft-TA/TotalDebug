@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 7;
+    public static final int VERSION = 9;
 
     public static final short READY = 1;
     public static final short OPEN_CLASS = 2;
@@ -11,7 +11,7 @@ public final class CompanionProtocol {
     public static final short CHUNK_GRID_REQUEST_INFO_UPDATE = 6;
     public static final short UPDATE_FOLLOW_PLAYER_STATE = 7;
     public static final short RUN_SCRIPT = 8;
-    public static final short SCRIPT_STATUS = 9;
+    public static final short EXECUTION_RESULT = 9;
     public static final short STOP_SCRIPT = 10;
     public static final short FOCUS_WINDOW = 11;
     public static final short PACKET_LOGGER_STATE_CHANGE = 12;

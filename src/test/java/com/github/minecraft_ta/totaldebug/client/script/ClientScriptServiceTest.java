@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
 import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.network.ForwardedScriptStatus;
+import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
-import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
+import com.github.minecraft_ta.totaldebug.script.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.script.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
@@ -32,7 +32,7 @@ class ClientScriptServiceTest {
         assertTrue(transport.runs.isEmpty());
         assertEquals(List.of(new Status(
                 7,
-                ScriptStatus.failed("", null, "unsupported server")
+                ExecutionResult.failed("", null, "unsupported server")
         )), statuses);
     }
 
@@ -43,15 +43,15 @@ class ClientScriptServiceTest {
         ClientScriptService service = service(statuses, transport);
 
         service.handleRunRequest(serverRun(-1));
-        service.handleForwardedPayload(new ForwardedScriptStatus(
+        forward(service, new ForwardedExecutionResult(
                 -1,
-                ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)
-        ).toPayload());
+                ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)
+        ));
         service.stopScript(-1);
-        service.handleForwardedPayload(new ForwardedScriptStatus(
+        forward(service, new ForwardedExecutionResult(
                 -1,
-                ScriptStatus.failed("partial", null, "Script run cancelled")
-        ).toPayload());
+                ExecutionResult.failed("partial", null, "Script run cancelled")
+        ));
         service.stopScript(-1);
 
         assertEquals(1, transport.runs.size());
@@ -59,8 +59,8 @@ class ClientScriptServiceTest {
         assertEquals(List.of(new StopServerScriptPayload(-1)), transport.stops);
         assertEquals(
                 List.of(
-                        new Status(-1, ScriptStatus.progress(ScriptStatusType.COMPILATION_COMPLETED)),
-                        new Status(-1, ScriptStatus.failed("partial", null, "Script run cancelled"))
+                        new Status(-1, ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)),
+                        new Status(-1, ExecutionResult.failed("partial", null, "Script run cancelled"))
                 ),
                 statuses
         );
@@ -74,10 +74,10 @@ class ClientScriptServiceTest {
                 new FakeServerTransport(ServerScriptTransport.Availability.supported())
         );
 
-        service.handleForwardedPayload(new ForwardedScriptStatus(
+        forward(service, new ForwardedExecutionResult(
                 99,
-                ScriptStatus.completed("forged", null)
-        ).toPayload());
+                ExecutionResult.completed("forged", null)
+        ));
 
         assertTrue(statuses.isEmpty());
     }
@@ -90,16 +90,16 @@ class ClientScriptServiceTest {
 
         service.handleRunRequest(serverRun(7));
         service.onServerDisconnect();
-        service.handleForwardedPayload(new ForwardedScriptStatus(
+        forward(service, new ForwardedExecutionResult(
                 7,
-                ScriptStatus.completed("stale", null)
-        ).toPayload());
+                ExecutionResult.completed("stale", null)
+        ));
         service.stopScript(7);
 
         assertEquals(
                 List.of(new Status(
                         7,
-                        ScriptStatus.failed(
+                        ExecutionResult.failed(
                                 "",
                                 null,
                                 "Disconnected from the server while the script was running"
@@ -118,10 +118,15 @@ class ClientScriptServiceTest {
         );
     }
 
+    private static void forward(ClientScriptService service, ForwardedExecutionResult forwarded) {
+        forwarded.toPayloads().forEach(service::handleForwardedPayload);
+    }
+
     private static RunScriptMessage serverRun(int scriptId) {
         ByteBufferOutputStream output = new ByteBufferOutputStream();
         output.writeInt(scriptId);
-        output.writeString("public class Test extends BaseScript { public void run() {} }");
+        output.writeString("public class Test extends com.github.minecraft_ta.totaldebug.script.ScriptProgram "
+                + "{ public Object run() { return null; } }");
         output.writeBoolean(true);
         output.writeString("THREAD");
         ByteBuffer bytes = output.getBuffer().duplicate();
@@ -131,7 +136,7 @@ class ClientScriptServiceTest {
         return message;
     }
 
-    private record Status(int scriptId, ScriptStatus status) {
+    private record Status(int scriptId, ExecutionResult status) {
     }
 
     private static final class FakeServerTransport implements ServerScriptTransport {

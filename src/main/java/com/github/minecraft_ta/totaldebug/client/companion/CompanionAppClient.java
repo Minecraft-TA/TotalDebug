@@ -10,10 +10,10 @@ import com.github.minecraft_ta.totaldebug.client.companion.message.FocusWindowMe
 import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.RuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.client.companion.message.ScriptStatusMessage;
+import com.github.minecraft_ta.totaldebug.client.companion.message.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.client.companion.message.StopScriptMessage;
-import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
+import com.github.minecraft_ta.totaldebug.script.ExecutionResult;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
@@ -168,16 +168,16 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener = Objects.requireNonNull(listener, "listener");
     }
 
-    public void sendScriptStatus(int scriptId, ScriptStatus status) {
+    public void sendExecutionResult(int scriptId, ExecutionResult result) {
         if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             TotalDebug.LOGGER.debug(
-                    "Discarding script status {} for script {} because script execution is not negotiated",
-                    status.type(),
+                    "Discarding execution result {} for script {} because script execution is not negotiated",
+                    result.status(),
                     scriptId
             );
             return;
         }
-        this.client.getMessageProcessor().enqueueMessage(new ScriptStatusMessage(scriptId, status));
+        this.client.getMessageProcessor().enqueueMessage(new ExecutionResultMessage(scriptId, result));
     }
 
     public synchronized void openClassAndFocus(
@@ -241,8 +241,8 @@ public final class CompanionAppClient implements AutoCloseable {
                 RunScriptMessage::new
         );
         this.client.getMessageProcessor().registerMessage(
-                CompanionProtocol.SCRIPT_STATUS,
-                ScriptStatusMessage.class
+                CompanionProtocol.EXECUTION_RESULT,
+                ExecutionResultMessage.class
         );
         this.client.getMessageProcessor().registerMessage(
                 CompanionProtocol.STOP_SCRIPT,

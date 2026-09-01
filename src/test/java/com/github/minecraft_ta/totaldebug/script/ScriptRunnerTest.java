@@ -14,10 +14,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ScriptRunnerTest {
+public class ScriptRunnerTest {
     @Test
     void threadRunReturnsLogOutput() throws Exception {
         StatusRecorder statuses = new StatusRecorder();
@@ -26,11 +28,11 @@ class ScriptRunnerTest {
 
             Status terminal = statuses.awaitTerminal();
 
-            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type(), terminal.error());
             assertEquals("hello" + System.lineSeparator(), terminal.output());
-            assertEquals("null", terminal.resultJson());
+            assertEquals(ExecutionValue.Kind.NULL, terminal.value().kind());
             assertEquals(
-                    List.of(ScriptStatusType.COMPILATION_COMPLETED, ScriptStatusType.RUN_COMPLETED),
+                    List.of(ExecutionStatus.COMPILATION_COMPLETED, ExecutionStatus.RUN_COMPLETED),
                     statuses.types()
             );
         }
@@ -48,9 +50,34 @@ class ScriptRunnerTest {
 
             Status terminal = statuses.awaitTerminal();
 
-            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type());
             assertEquals("observed", terminal.output());
-            assertEquals("{\"answer\":42}", terminal.resultJson());
+            assertAnswerMap(terminal.value());
+        }
+    }
+
+    @Test
+    void fallThroughSentinelProducesNoResult() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(
+                    9,
+                    """
+                    public class NoResultFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
+                        public Object run() {
+                            log("done");
+                            return noResult();
+                        }
+                    }
+                    """,
+                    ScriptExecutionEnvironment.THREAD
+            );
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type(), terminal.error());
+            assertEquals("done", terminal.output());
+            assertNull(terminal.value());
         }
     }
 
@@ -62,9 +89,74 @@ class ScriptRunnerTest {
 
             Status terminal = statuses.awaitTerminal();
 
-            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type());
             assertEquals("observed", terminal.output());
-            assertEquals("{\"answer\":42}", terminal.resultJson());
+            assertAnswerMap(terminal.value());
+        }
+    }
+
+    @Test
+    void snippetCanReadWriteAndInvokePrivateApplicationMembers() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(
+                    8,
+                    script(
+                            "PrivateAccessFixture",
+                            """
+                            String initial = Boolean.parseBoolean("true") ? "initial" : "unused";
+                            var secret = new com.github.minecraft_ta.totaldebug.script.ScriptRunnerTest.SecretFixture(initial);
+                            secret.value = "changed";
+                            com.github.minecraft_ta.totaldebug.script.ScriptRunnerTest.SecretFixture.prefix = "static";
+                            return com.github.minecraft_ta.totaldebug.script.ScriptRunnerTest.SecretFixture
+                                    .combineStatic(secret.combine(2));
+                            """
+                    ),
+                    ScriptExecutionEnvironment.THREAD
+            );
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type(), terminal.error());
+            assertEquals(ExecutionValue.Kind.STRING, terminal.value().kind());
+            assertEquals("static:changed:2", terminal.value().value().text());
+        }
+    }
+
+    @Test
+    void oversizedResultRetainsUsefulTopLevelChildren() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(
+                    9,
+                    script(
+                            "WideResultFixture",
+                            """
+                            var result = new java.util.ArrayList<Object>();
+                            String value = "x".repeat(320);
+                            for (int outer = 0; outer < 79; outer++) {
+                                var nested = new java.util.ArrayList<String>();
+                                for (int inner = 0; inner < 64; inner++) {
+                                    nested.add(value);
+                                }
+                                result.add(nested);
+                            }
+                            return result;
+                            """
+                    ),
+                    ScriptExecutionEnvironment.THREAD
+            );
+
+            Status terminal = statuses.awaitTerminal();
+            ExecutionValue snapshot = terminal.value();
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type(), terminal.error());
+            assertEquals(79, snapshot.totalChildren());
+            assertEquals(79, snapshot.children().size(), "oversize fallback discarded top-level values");
+            assertFalse(
+                    snapshot.children().getFirst().value().children().isEmpty(),
+                    "oversize fallback retained no inspectable nested values"
+            );
         }
     }
 
@@ -83,10 +175,27 @@ class ScriptRunnerTest {
 
             Status terminal = statuses.awaitTerminal();
 
-            assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
             assertEquals("before failure", terminal.output());
             assertTrue(terminal.error().contains("boom"));
         }
+    }
+
+    @Test
+    void boundsRenderedFailuresBeforeCreatingTheExecutionResult() {
+        StackTraceProbe failure = new StackTraceProbe("x".repeat(1_000));
+        failure.setStackTrace(new StackTraceElement[]{
+                new StackTraceElement("example.Helper", "invoke", "Helper.java", 12),
+                new StackTraceElement("ExampleScript", "run", "ExampleScript.java", 4)
+        });
+
+        ExecutionText rendered = ScriptRunner.renderStackTrace(failure, "ExampleScript", 128);
+
+        assertEquals(128, rendered.text().length());
+        assertTrue(rendered.text().startsWith(failure.getClass().getName() + ": "));
+        assertTrue(rendered.truncated());
+        assertTrue(rendered.totalCharacters() > rendered.text().length());
+        assertFalse(failure.stackTraceRead);
     }
 
     @Test
@@ -110,7 +219,7 @@ class ScriptRunnerTest {
             scheduled.get().run();
 
             Status terminal = statuses.awaitTerminal();
-            assertEquals(ScriptStatusType.RUN_COMPLETED, terminal.type());
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type());
             assertEquals(Thread.currentThread().getName(), terminal.output());
         }
     }
@@ -127,7 +236,7 @@ class ScriptRunnerTest {
             Status terminal = statuses.awaitTerminal();
             scheduled.get().run();
 
-            assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
             assertTrue(terminal.error().contains("before execution"));
             assertEquals(2, statuses.types().size());
         }
@@ -150,14 +259,14 @@ class ScriptRunnerTest {
             runner.stopScript(4);
             Status terminal = statuses.awaitTerminal();
 
-            assertEquals(ScriptStatusType.RUN_EXCEPTION, terminal.type());
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
             assertTrue(terminal.error().contains("still running"));
         }
     }
 
     private static ScriptRunner runner(
             ScriptTickScheduler tickScheduler,
-            ScriptStatusSink statusSink,
+            ExecutionResultSink resultSink,
             Duration grace
     ) {
         ExecutorService compilerExecutor = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
@@ -166,7 +275,7 @@ class ScriptRunnerTest {
                 "",
                 ScriptRunnerTest.class.getClassLoader(),
                 tickScheduler,
-                statusSink,
+                resultSink,
                 new InMemoryJavaCompiler(),
                 grace,
                 compilerExecutor,
@@ -190,89 +299,110 @@ class ScriptRunnerTest {
 
     private static String script(String className, String body) {
         return """
-                import java.io.StringWriter;
-                public class %s extends BaseScript {
-                    private void execute() throws Throwable {
-                        %s
-                    }
+                public class %s extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
-                        execute();
+                        if (Boolean.TRUE.booleanValue()) {
+                            %s
+                        }
                         return null;
                     }
-                }
-                abstract class BaseScript {
-                    private final StringWriter logWriter = new StringWriter();
-                    public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
-                    public void logln(Object value) { log(String.format("%%s%%n", value)); }
-                    public abstract Object run() throws Throwable;
                 }
                 """.formatted(className, body);
     }
 
     private static String normalEditorValueScript() {
         return """
-                import java.io.StringWriter;
-                public class ResultFixture extends BaseScript {
+                public class ResultFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
                         log("observed");
                         return java.util.Map.of("answer", 42);
                     }
-                }
-                abstract class BaseScript {
-                    private final StringWriter logWriter = new StringWriter();
-                    public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
-                    public abstract Object run() throws Throwable;
                 }
                 """;
     }
 
     private static String valueReturningScript() {
         return """
-                import java.io.StringWriter;
-                public class McpValueFixture extends BaseScript {
+                public class McpValueFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
                         log("observed");
                         return java.util.Map.of("answer", 42);
                     }
                 }
-                abstract class BaseScript {
-                    private final StringWriter logWriter = new StringWriter();
-                    public void log(Object value) { this.logWriter.append(String.valueOf(value)); }
-                    public abstract Object run() throws Throwable;
-                }
                 """;
     }
 
-    private record Status(int scriptId, ScriptStatus status) {
-        private ScriptStatusType type() {
-            return this.status.type();
+    private static void assertAnswerMap(ExecutionValue value) {
+        assertEquals(ExecutionValue.Kind.MAP, value.kind());
+        assertEquals(1, value.children().size());
+        ExecutionValue.Child entry = value.children().getFirst();
+        assertEquals(ExecutionValue.Kind.STRING, entry.key().kind());
+        assertEquals("answer", entry.key().value().text());
+        assertEquals(ExecutionValue.Kind.NUMBER, entry.value().kind());
+        assertEquals("42", entry.value().value().text());
+    }
+
+    public static final class SecretFixture {
+        private static String prefix = "initial";
+        private String value;
+
+        private SecretFixture(String value) {
+            this.value = value;
         }
 
-        private String output() {
-            return this.status.output();
+        private String combine(int suffix) {
+            return this.value + ':' + suffix;
         }
 
-        private String resultJson() {
-            return this.status.resultJson();
-        }
-
-        private String error() {
-            return this.status.error();
+        private static String combineStatic(String value) {
+            return prefix + ':' + value;
         }
     }
 
-    private static final class StatusRecorder implements ScriptStatusSink {
+    private static final class StackTraceProbe extends IllegalStateException {
+        private boolean stackTraceRead;
+
+        private StackTraceProbe(String message) {
+            super(message);
+        }
+
+        @Override
+        public StackTraceElement[] getStackTrace() {
+            this.stackTraceRead = true;
+            return super.getStackTrace();
+        }
+    }
+
+    private record Status(int scriptId, ExecutionResult status) {
+        private ExecutionStatus type() {
+            return this.status.status();
+        }
+
+        private String output() {
+            return this.status.logs().text();
+        }
+
+        private ExecutionValue value() {
+            return this.status.value();
+        }
+
+        private String error() {
+            return this.status.error().text();
+        }
+    }
+
+    private static final class StatusRecorder implements ExecutionResultSink {
         private final List<Status> statuses = new CopyOnWriteArrayList<>();
         private final CountDownLatch compilation = new CountDownLatch(1);
         private final CountDownLatch terminal = new CountDownLatch(1);
 
         @Override
-        public void send(int scriptId, ScriptStatus status) {
+        public void send(int scriptId, ExecutionResult status) {
             this.statuses.add(new Status(scriptId, status));
-            if (status.type() == ScriptStatusType.COMPILATION_COMPLETED) {
+            if (status.status() == ExecutionStatus.COMPILATION_COMPLETED) {
                 this.compilation.countDown();
             } else {
                 this.terminal.countDown();
@@ -288,7 +418,7 @@ class ScriptRunnerTest {
             return this.statuses.getLast();
         }
 
-        private List<ScriptStatusType> types() {
+        private List<ExecutionStatus> types() {
             return this.statuses.stream().map(Status::type).toList();
         }
     }

@@ -58,7 +58,7 @@ public final class InMemoryJavaCompiler {
             if (!Boolean.TRUE.equals(task.call())) {
                 throw new InMemoryCompilationException(formatDiagnostics(diagnostics));
             }
-            Map<String, byte[]> bytecode = fileManager.bytecode();
+            Map<String, byte[]> bytecode = ScriptBytecodeTransformer.transform(fileManager.bytecode());
             if (!bytecode.containsKey(primaryBinaryName)) {
                 throw new InMemoryCompilationException(
                         "Compilation completed without producing the primary class " + primaryBinaryName

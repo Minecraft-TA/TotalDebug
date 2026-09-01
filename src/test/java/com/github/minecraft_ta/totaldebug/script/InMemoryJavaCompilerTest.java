@@ -53,6 +53,33 @@ class InMemoryJavaCompilerTest {
     }
 
     @Test
+    void compilesImportedProgramWhenAClassShadowsThePackageRoot() throws Exception {
+        Path shadowJar = this.temporaryDirectory.resolve("package-root-shadow.jar");
+        Map<String, byte[]> shadow = this.compiler.compile("public final class com {}", "com", "");
+        try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(shadowJar))) {
+            output.putNextEntry(new ZipEntry("com.class"));
+            output.write(shadow.get("com"));
+            output.closeEntry();
+        }
+
+        Map<String, byte[]> result = this.compiler.compile(
+                """
+                        import com.github.minecraft_ta.totaldebug.script.ScriptProgram;
+                        public final class CompanionExpression extends ScriptProgram {
+                            @Override
+                            public Object run() throws Throwable {
+                                return 42;
+                            }
+                        }
+                """,
+                "CompanionExpression",
+                shadowJar + File.pathSeparator + codeSource(ScriptProgram.class)
+        );
+
+        assertTrue(result.containsKey("CompanionExpression"));
+    }
+
+    @Test
     void reportsJavacDiagnosticsOnFailure() {
         InMemoryCompilationException exception = assertThrows(
                 InMemoryCompilationException.class,

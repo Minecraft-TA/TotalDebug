@@ -13,7 +13,8 @@ class ServerScriptPayloadTest {
     void runPayloadRoundTripsWithinTheServerBoundLimit() {
         RunServerScriptPayload original = new RunServerScriptPayload(
                 -1,
-                "public class Test extends BaseScript {}",
+                "public class Test extends com.github.minecraft_ta.totaldebug.script.ScriptProgram "
+                        + "{ public Object run() { return null; } }",
                 ScriptExecutionEnvironment.POST_TICK
         );
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());

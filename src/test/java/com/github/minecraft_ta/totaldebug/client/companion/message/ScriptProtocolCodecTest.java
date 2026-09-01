@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.client.companion.message;
 
-import com.github.minecraft_ta.totaldebug.script.ScriptStatus;
-import com.github.minecraft_ta.totaldebug.script.ScriptStatusType;
+import com.github.minecraft_ta.totaldebug.script.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.script.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.script.ExecutionText;
+import com.github.minecraft_ta.totaldebug.script.ExecutionValue;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
@@ -32,22 +34,35 @@ class ScriptProtocolCodecTest {
     }
 
     @Test
-    void scriptStatusMatchesTheSharedGoldenBytes() {
-        ScriptStatusMessage message = new ScriptStatusMessage(
+    void executionResultRoundTripsTheCanonicalEnvelope() {
+        ExecutionValue value = new ExecutionValue(
+                ExecutionText.complete("java.lang.Boolean"),
+                ExecutionText.complete("true"),
+                ExecutionText.empty(),
+                ExecutionValue.Kind.BOOLEAN,
+                0,
+                0,
+                false,
+                java.util.List.of()
+        );
+        ExecutionResult result = new ExecutionResult(
+                ExecutionStatus.RUN_COMPLETED,
+                ExecutionText.complete("out"),
+                value,
+                ExecutionText.empty()
+        );
+        ExecutionResultMessage message = new ExecutionResultMessage(
                 7,
-                new ScriptStatus(ScriptStatusType.RUN_COMPLETED, "out", "{\"ok\":true}", "")
+                result
         );
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
         message.write(output);
+        ByteBufferInputStream input = new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output)));
 
-        assertArrayEquals(
-                HEX.parseHex(
-                        "000000070000000d52554e5f434f4d504c45544544"
-                                + "000000036f7574010000000b7b226f6b223a747275657d00000000"
-                ),
-                writtenBytes(output)
-        );
+        assertEquals(7, input.readInt());
+        assertEquals("""
+                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false}}""", input.readString());
     }
 
     @Test
