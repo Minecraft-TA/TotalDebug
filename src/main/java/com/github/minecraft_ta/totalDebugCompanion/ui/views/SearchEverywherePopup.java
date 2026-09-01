@@ -29,6 +29,9 @@ import com.github.tth05.jindex.SymbolKind;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -52,12 +55,26 @@ public class SearchEverywherePopup extends JFrame {
     private static final int RESULT_LIMIT = 160;
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
+    private static final String NEXT_CATEGORY_ACTION = "searchEverywhere.nextCategory";
+    private static final String PREVIOUS_CATEGORY_ACTION = "searchEverywhere.previousCategory";
 
     private final SearchEverywhereSearch search = new SearchEverywhereSearch();
     private final ScheduledExecutorService searchExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> Thread.ofPlatform()
             .daemon(true)
             .name("totaldebug-search-everywhere")
             .unstarted(runnable));
+    private final Action nextCategoryAction = new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            cycleCategory(1);
+        }
+    };
+    private final Action previousCategoryAction = new AbstractAction() {
+        @Override
+        public void actionPerformed(ActionEvent event) {
+            cycleCategory(-1);
+        }
+    };
     private final AtomicLong searchGeneration = new AtomicLong();
     private final DefaultListModel<Result> resultModel = new DefaultListModel<>();
     private final JList<Result> resultList = new JList<>(this.resultModel);
@@ -65,7 +82,7 @@ public class SearchEverywherePopup extends JFrame {
     private final JLabel messageLabel = new JLabel("Type to search the runtime index", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
     private final JLabel resultCount = new JLabel(" ");
-    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Enter Open    Esc Close");
+    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Tab Category    Enter Open    Esc Close");
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton moduleFilterButton = new JButton(Icons.FILTER);
     private final Map<Category, JToggleButton> categoryButtons = new LinkedHashMap<>();
@@ -220,6 +237,8 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void configureResultList() {
+        this.resultList.setName("searchEverywhere.results");
+        installCategoryCycling(this.resultList);
         this.resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.resultList.setCellRenderer(new SearchResultRenderer());
         this.resultList.setFixedCellHeight(32);
@@ -250,6 +269,8 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void configureSearchField() {
+        this.searchTextField.setName("searchEverywhere.query");
+        installCategoryCycling(this.searchTextField);
         this.searchTextField.putClientProperty("JTextField.placeholderText", "Search classes and symbols");
         this.searchTextField.getDocument().addDocumentListener((DocumentChangeListener) event -> queueDocumentRefresh());
         this.searchTextField.registerKeyboardAction(
@@ -262,6 +283,20 @@ public class SearchEverywherePopup extends JFrame {
                 KeyStroke.getKeyStroke("DOWN"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+    }
+
+    private void installCategoryCycling(JComponent component) {
+        component.setFocusTraversalKeysEnabled(false);
+        component.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0),
+                NEXT_CATEGORY_ACTION
+        );
+        component.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_TAB, InputEvent.SHIFT_DOWN_MASK),
+                PREVIOUS_CATEGORY_ACTION
+        );
+        component.getActionMap().put(NEXT_CATEGORY_ACTION, this.nextCategoryAction);
+        component.getActionMap().put(PREVIOUS_CATEGORY_ACTION, this.previousCategoryAction);
     }
 
     private void queueDocumentRefresh() {
@@ -338,6 +373,11 @@ public class SearchEverywherePopup extends JFrame {
                 selected == Category.TEXT ? "Search indexed string literals" : "Search classes and symbols"
         );
         refreshResults();
+    }
+
+    private void cycleCategory(int direction) {
+        Category[] categories = Category.values();
+        selectCategory(categories[Math.floorMod(this.category.ordinal() + direction, categories.length)]);
     }
 
     private void setSelectedModules(Set<String> moduleIds) {

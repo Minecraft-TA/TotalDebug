@@ -15,6 +15,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.CaretListener;
 import java.util.Objects;
 import java.util.function.IntConsumer;
+import java.util.function.Function;
 
 /** Java-specific parsing and navigation layered on top of the shared text editor. */
 public class AbstractCodeViewPanel extends AbstractTextViewPanel implements JavaEditorContext {
@@ -23,6 +24,14 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     private boolean astDisposed;
 
     public AbstractCodeViewPanel(String identifier, String className) {
+        this(identifier, className, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource::identity);
+    }
+
+    protected AbstractCodeViewPanel(
+            String identifier,
+            String className,
+            Function<String, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource> sourceFactory
+    ) {
         super();
         this.identifier = identifier;
 
@@ -31,7 +40,8 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
             if (event.getType() == DocumentEvent.EventType.CHANGE) {
                 return;
             }
-            ASTCache.update(identifier, className, UIUtils.getText(this.editorPane));
+            String editorText = UIUtils.getText(this.editorPane);
+            ASTCache.update(identifier, className, editorText, sourceFactory.apply(editorText));
         });
 
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);

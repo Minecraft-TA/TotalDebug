@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
 import java.util.Objects;
+import java.util.List;
 
 /** A typed proposal shared by runtime and source-backed debugger completion. */
 public record DebuggerCompletionProposal(
@@ -11,7 +12,8 @@ public record DebuggerCompletionProposal(
         int replacementStart,
         int replacementEnd,
         int caretOffset,
-        int rank
+        int rank,
+        List<String> requiredImports
 ) {
     public DebuggerCompletionProposal {
         if (Objects.requireNonNull(label, "label").isBlank()) {
@@ -28,6 +30,21 @@ public record DebuggerCompletionProposal(
         if (caretOffset < 0 || caretOffset > insertionText.length()) {
             throw new IllegalArgumentException("Caret offset is outside insertion text");
         }
+        requiredImports = List.copyOf(requiredImports);
+    }
+
+    public DebuggerCompletionProposal(
+            String label,
+            String insertionText,
+            Kind kind,
+            String detail,
+            int replacementStart,
+            int replacementEnd,
+            int caretOffset,
+            int rank
+    ) {
+        this(label, insertionText, kind, detail, replacementStart, replacementEnd,
+                caretOffset, rank, List.of());
     }
 
     public DebuggerCompletionProposal(
@@ -38,13 +55,14 @@ public record DebuggerCompletionProposal(
             int replacementStart,
             int replacementEnd
     ) {
-        this(label, insertionText, kind, detail, replacementStart, replacementEnd, insertionText.length(), 0);
+        this(label, insertionText, kind, detail, replacementStart, replacementEnd,
+                insertionText.length(), 0, List.of());
     }
 
     public DebuggerCompletionProposal withRange(int start, int end) {
         return new DebuggerCompletionProposal(
                 this.label, this.insertionText, this.kind, this.detail,
-                start, end, this.caretOffset, this.rank
+                start, end, this.caretOffset, this.rank, this.requiredImports
         );
     }
 

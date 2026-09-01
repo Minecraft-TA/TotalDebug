@@ -51,9 +51,9 @@ logln("inspecting runtime");
 return Map.of("players", getServerPlayers().size());
 ```
 
-`log` and `logln` write the optional `logs` field. A failed job preserves logs written before the exception. Editor scripts and MCP jobs use the same `public Object run() throws Throwable` contract. The game serializes the returned value as the structured result.
+`log` and `logln` write the optional `logs` field. A failed job preserves logs written before the exception. Editor scripts and MCP jobs share one body-snippet contract: Companion generates the hidden `ScriptProgram` subclass and `Object run()` entry point, while the submitted source contains only imports and statements. The game serializes an explicit return value as the structured result.
 
-Companion merges an internal `BaseScript` implementation into every submitted source. Script files contain only their concrete class and must return a value or `null` from `run()`.
+Trusted snippets can directly use non-public fields, methods, and constructors on application types that are themselves accessible. The compiler and runtime linker provide that access without a reflection helper in the submitted code; inaccessible private types remain inaccessible.
 
 There is no sandbox. Code can read or mutate anything available to the Minecraft process. Server-side execution follows TotalDebug's server script policy. Cancellation is cooperative. Code already running on a tick thread cannot be interrupted safely.
 

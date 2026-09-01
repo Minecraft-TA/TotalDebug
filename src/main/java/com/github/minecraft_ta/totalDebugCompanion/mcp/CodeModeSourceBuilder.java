@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import java.nio.charset.StandardCharsets;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
+
 import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 final class CodeModeSourceBuilder {
-    static final int MAX_SOURCE_BYTES = 30_000;
+    static final int MAX_SOURCE_BYTES = JavaSnippetSource.MAX_SOURCE_BYTES;
 
     private CodeModeSourceBuilder() {
     }
@@ -14,44 +14,28 @@ final class CodeModeSourceBuilder {
     static GeneratedSource build(
             int scriptId,
             String code,
-            List<String> imports,
-            UnaryOperator<String> baseScriptMerger
+            List<String> imports
     ) {
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(imports, "imports");
-        Objects.requireNonNull(baseScriptMerger, "baseScriptMerger");
         if (code.isBlank()) {
             throw new IllegalArgumentException("code must not be blank");
         }
 
         String className = "McpCodeJob" + Math.abs((long) scriptId);
-        StringBuilder source = new StringBuilder();
+        StringBuilder snippet = new StringBuilder();
         for (String importName : imports) {
             String normalized = Objects.requireNonNull(importName, "imports must not contain null")
                     .trim();
             if (normalized.isEmpty()) {
                 throw new IllegalArgumentException("imports must not contain blank values");
             }
-            source.append("import ").append(normalized).append(";\n");
+            snippet.append("import ").append(normalized).append(";\n");
         }
-        source.append("public final class ").append(className).append(" extends BaseScript {\n")
-                .append("    @Override\n")
-                .append("    public Object run() throws Throwable {\n")
-                .append(code).append('\n')
-                .append("    }\n")
-                .append("}\n");
-
-        String mergedSource = Objects.requireNonNull(
-                baseScriptMerger.apply(source.toString()),
-                "baseScriptMerger returned null"
-        );
-        int sourceBytes = mergedSource.getBytes(StandardCharsets.UTF_8).length;
-        if (sourceBytes > MAX_SOURCE_BYTES) {
-            throw new IllegalArgumentException(
-                    "Generated source exceeds " + MAX_SOURCE_BYTES + " UTF-8 bytes: " + sourceBytes
-            );
-        }
-        return new GeneratedSource(className, mergedSource, sourceBytes);
+        snippet.append(code);
+        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.body(className, snippet.toString());
+        generated.requireExecutableSize();
+        return new GeneratedSource(className, generated.source(), generated.sourceBytes());
     }
 
     record GeneratedSource(String className, String source, int sourceBytes) {

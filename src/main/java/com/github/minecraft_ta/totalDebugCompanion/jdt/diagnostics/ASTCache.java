@@ -18,6 +18,10 @@ public class ASTCache {
             new ConcurrentHashMap<>();
 
     public static void update(String key, String className, String contents) {
+        update(key, className, contents, JavaEditorSource.identity(contents));
+    }
+
+    public static void update(String key, String className, String editorContents, JavaEditorSource source) {
         int version = 0;
         synchronized (CACHE) {
             var existing = CACHE.get(key);
@@ -27,7 +31,7 @@ public class ASTCache {
 
         int finalVersion = version;
         CompletableFuture.runAsync(() -> {
-            var ast = rawParse(className, contents);
+            var ast = rawParse(className, source.text());
 
             synchronized (CACHE) {
                 var entry = CACHE.computeIfAbsent(key, (k) -> new Entry());
@@ -37,7 +41,10 @@ public class ASTCache {
 
                 entry.version = finalVersion;
                 entry.unit = ast;
-                entry.contents = contents;
+                entry.contents = editorContents;
+                entry.generatedContents = source.text();
+                entry.sourceMap = source.sourceMap();
+                entry.privilegedAccess = source.privilegedAccess();
             }
             notifyListeners(key, ast, finalVersion);
         });
@@ -95,6 +102,27 @@ public class ASTCache {
         }
     }
 
+    public static int toGeneratedOffset(String key, int editorOffset) {
+        synchronized (CACHE) {
+            Entry entry = CACHE.get(key);
+            return entry == null ? editorOffset : entry.sourceMap.toGeneratedOffset(editorOffset);
+        }
+    }
+
+    public static int toEditorOffset(String key, int generatedOffset) {
+        synchronized (CACHE) {
+            Entry entry = CACHE.get(key);
+            return entry == null ? generatedOffset : entry.sourceMap.toEditorOffset(generatedOffset);
+        }
+    }
+
+    public static boolean allowsPrivilegedAccess(String key) {
+        synchronized (CACHE) {
+            Entry entry = CACHE.get(key);
+            return entry != null && entry.privilegedAccess;
+        }
+    }
+
     public static List<CompilationUnit> cachedUnits() {
         synchronized (CACHE) {
             return CACHE.values().stream()
@@ -119,5 +147,8 @@ public class ASTCache {
         public int version;
         public CompilationUnit unit;
         public String contents;
+        public String generatedContents;
+        public JavaSourceMap sourceMap = JavaSourceMap.IDENTITY;
+        public boolean privilegedAccess;
     }
 }

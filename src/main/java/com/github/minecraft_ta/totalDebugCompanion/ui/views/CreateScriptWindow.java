@@ -3,15 +3,16 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.*;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -33,7 +34,9 @@ public class CreateScriptWindow extends JFrame {
         var textField = new FlatIconTextField(new FlatSVGIcon(Icons.JAVA_FILE));
         textField.setPreferredSize(new Dimension(150, (int) textField.getPreferredSize().getHeight()));
 
-        var verifyInput = (Predicate<String>) (s) -> !s.isBlank() && !Files.exists(CompanionApp.getRootPath().resolve("scripts").resolve(s + ".java")) && s.matches("^[^\\d_]\\w*$");
+        var verifyInput = (Predicate<String>) (s) -> JavaSnippetSource.isValidClassName(s)
+                && !Files.exists(CompanionApp.getRootPath().resolve("scripts")
+                .resolve(s + ScriptView.FILE_EXTENSION));
         var setIconAndVerify = (Supplier<Boolean>) () -> {
             var result = verifyInput.test(textField.getText());
             textField.setIconFilter(result ? null : new FlatSVGIcon.ColorFilter((c) -> ThemeColors.error()));

@@ -29,7 +29,6 @@ class CompanionMcpServerTest {
         CodeModeJobService jobs = new CodeModeJobService(
                 () -> false,
                 new NoOpTransport(),
-                source -> source,
                 this.temporaryDirectory.resolve("artifacts"),
                 Clock.systemUTC()
         );
@@ -136,7 +135,6 @@ class CompanionMcpServerTest {
         CodeModeJobService jobs = new CodeModeJobService(
                 () -> true,
                 new NoOpTransport(),
-                source -> source,
                 () -> Map.of(
                         "workspace_directory", this.temporaryDirectory.resolve("workspace").toString(),
                         "runtime_signature", "sha256:runtime",

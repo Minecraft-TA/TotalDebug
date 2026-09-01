@@ -1,11 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -37,31 +40,36 @@ class CodeModeJobServiceTest {
             assertEquals(-1, submitted.scriptId());
             assertEquals(1, transport.executions.size());
             assertTrue(transport.executions.getFirst().source.contains("import java.util.List;"));
-            assertTrue(transport.executions.getFirst().source.contains("class McpCodeJob1 extends BaseScript"));
+            assertTrue(transport.executions.getFirst().source.contains(
+                    "import com.github.minecraft_ta.totaldebug.script.ScriptProgram;"
+            ));
+            assertTrue(transport.executions.getFirst().source.contains(
+                    "class McpCodeJob1 extends ScriptProgram"
+            ));
             assertTrue(transport.executions.getFirst().source.contains("public Object run() throws Throwable"));
             assertTrue(transport.executions.getFirst().source.contains("return java.util.Map.of"));
             assertFalse(transport.executions.getFirst().source.contains("resultValue"));
             assertEquals(64, submitted.sourceSha256().length());
             assertTrue(Files.isRegularFile(Path.of((String) submitted.artifacts().get("source"))));
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
+            service.acceptResult(-1, progress());
             assertEquals(
                     CodeModeJobService.JobState.RUNNING,
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
-            service.acceptStatus(
+            service.acceptResult(
                     -1,
-                    ScriptStatusMessage.Type.RUN_COMPLETED,
-                    "[proof]\n",
-                    "{\"values\":[1,2]}",
-                    ""
+                    completed("[proof]\n", stringMap("values", sequence(number("1"), number("2"))))
             );
             CodeModeJobService.JobSnapshot completed = service.get(submitted.jobId()).orElseThrow();
             assertEquals(CodeModeJobService.JobState.SUCCEEDED, completed.state());
             assertEquals("[proof]\n", completed.output());
             assertTrue(completed.resultPresent());
-            assertEquals(java.util.Map.of("values", List.of(1.0, 2.0)), completed.result());
+            assertEquals(
+                    java.util.Map.of("values", List.of(BigInteger.ONE, BigInteger.TWO)),
+                    completed.result()
+            );
             assertTrue(service.readArtifact(submitted.jobId(), "source").contains("logln"));
             assertTrue(service.readArtifact(submitted.jobId(), "job").contains("\"state\": \"succeeded\""));
         }
@@ -78,13 +86,10 @@ class CodeModeJobServiceTest {
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
-            service.acceptStatus(
+            service.acceptResult(-1, progress());
+            service.acceptResult(
                     -1,
-                    ScriptStatusMessage.Type.RUN_EXCEPTION,
-                    "before",
-                    null,
-                    "java.lang.RuntimeException: boom"
+                    failed("before", null, "java.lang.RuntimeException: boom")
             );
 
             CodeModeJobService.JobSnapshot failed = service.get(submitted.jobId()).orElseThrow();
@@ -112,12 +117,12 @@ class CodeModeJobServiceTest {
             AtomicReference<CodeModeJobService.JobSnapshot> waited = new AtomicReference<>();
             Thread waiter = Thread.startVirtualThread(() -> waited.set(service.waitFor(submitted.jobId(), 5_000)));
 
-            service.acceptStatus(-1, ScriptStatusMessage.Type.COMPILATION_COMPLETED, "", null, "");
-            service.acceptStatus(-1, ScriptStatusMessage.Type.RUN_COMPLETED, "", "42", "");
+            service.acceptResult(-1, progress());
+            service.acceptResult(-1, completed("", number("42")));
             waiter.join();
 
             assertEquals(CodeModeJobService.JobState.SUCCEEDED, waited.get().state());
-            assertEquals(42.0, waited.get().result());
+            assertEquals(BigInteger.valueOf(42), waited.get().result());
             assertEquals(
                     CodeModeJobService.JobState.SUCCEEDED,
                     service.waitFor(submitted.jobId(), 0).state()
@@ -143,12 +148,9 @@ class CodeModeJobServiceTest {
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
-            service.acceptStatus(
+            service.acceptResult(
                     -1,
-                    ScriptStatusMessage.Type.RUN_EXCEPTION,
-                    "partial output",
-                    null,
-                    "Script run cancelled"
+                    failed("partial output", null, "Script run cancelled")
             );
             CodeModeJobService.JobSnapshot cancelled = service.get(submitted.jobId()).orElseThrow();
             assertEquals(CodeModeJobService.JobState.CANCELLED, cancelled.state());
@@ -180,7 +182,6 @@ class CodeModeJobServiceTest {
         try (CodeModeJobService service = new CodeModeJobService(
                 () -> true,
                 transport,
-                source -> "abstract class BaseScript { abstract Object run() throws Throwable; }\n" + source,
                 () -> java.util.Map.of(
                         "profile_id", "instance-a",
                         "runtime_signature", "sha256:abc"
@@ -207,9 +208,119 @@ class CodeModeJobServiceTest {
         return new CodeModeJobService(
                 () -> available,
                 transport,
-                source -> "abstract class BaseScript { abstract Object run() throws Throwable; }\n" + source,
                 this.temporaryDirectory.resolve("artifacts"),
                 Clock.fixed(Instant.parse("2026-08-23T12:00:00Z"), ZoneOffset.UTC)
+        );
+    }
+
+    @Test
+    void keepsTransportTextAndItsTruncationMetadataWithoutAnotherCutoff() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            CodeModeJobService.JobSnapshot submitted = service.submit(
+                    "return null;",
+                    List.of(),
+                    CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD
+            );
+            String retained = "x".repeat(300_000);
+            service.acceptResult(-1, new ExecutionResult(
+                    ExecutionResult.Status.RUN_COMPLETED,
+                    new ExecutionText(retained, 400_000, true),
+                    null,
+                    text("")
+            ));
+
+            CodeModeJobService.JobSnapshot completed = service.get(submitted.jobId()).orElseThrow();
+            assertEquals(retained, completed.output());
+            assertTrue(completed.outputTruncated());
+            assertEquals(400_000, completed.outputTotalCharacters());
+            assertEquals(true, completed.responseMap().get("logs_truncated"));
+            assertEquals(400_000, completed.responseMap().get("logs_total_characters"));
+        }
+    }
+
+    private static ExecutionResult progress() {
+        return new ExecutionResult(
+                ExecutionResult.Status.COMPILATION_COMPLETED,
+                text(""),
+                null,
+                text("")
+        );
+    }
+
+    private static ExecutionResult completed(String logs, ExecutionValue value) {
+        return new ExecutionResult(
+                ExecutionResult.Status.RUN_COMPLETED,
+                text(logs),
+                value,
+                text("")
+        );
+    }
+
+    private static ExecutionResult failed(String logs, ExecutionValue value, String error) {
+        return new ExecutionResult(
+                ExecutionResult.Status.RUN_EXCEPTION,
+                text(logs),
+                value,
+                text(error)
+        );
+    }
+
+    private static ExecutionText text(String value) {
+        return new ExecutionText(value, value.length(), false);
+    }
+
+    private static ExecutionValue number(String value) {
+        return value("java.lang.Integer", value, ExecutionValue.Kind.NUMBER, List.of());
+    }
+
+    private static ExecutionValue sequence(ExecutionValue... values) {
+        List<ExecutionValue.Child> children = java.util.stream.IntStream.range(0, values.length)
+                .mapToObj(index -> new ExecutionValue.Child(
+                        text(Integer.toString(index)),
+                        ExecutionValue.ChildKind.COLLECTION_ELEMENT,
+                        null,
+                        values[index]
+                ))
+                .toList();
+        return value("java.util.List", "size = " + values.length, ExecutionValue.Kind.COLLECTION, children);
+    }
+
+    private static ExecutionValue stringMap(String key, ExecutionValue mapValue) {
+        ExecutionValue keyValue = value("java.lang.String", key, ExecutionValue.Kind.STRING, List.of());
+        return value(
+                "java.util.Map",
+                "size = 1",
+                ExecutionValue.Kind.MAP,
+                List.of(new ExecutionValue.Child(
+                        text("0"),
+                        ExecutionValue.ChildKind.MAP_ENTRY,
+                        keyValue,
+                        mapValue
+                ))
+        );
+    }
+
+    private static ExecutionValue value(
+            String type,
+            String value,
+            ExecutionValue.Kind kind,
+            List<ExecutionValue.Child> children
+    ) {
+        int identity = switch (kind) {
+            case OPTIONAL, ARRAY, COLLECTION, MAP, OBJECT, REFERENCE -> 1;
+            default -> 0;
+        };
+        return new ExecutionValue(
+                text(type),
+                text(value),
+                text(""),
+                kind,
+                identity,
+                children.size(),
+                false,
+                children
         );
     }
 

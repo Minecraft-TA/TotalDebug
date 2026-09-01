@@ -2,6 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.messages.script;
 
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -34,21 +37,32 @@ class ScriptProtocolCodecTest {
     }
 
     @Test
-    void scriptStatusReadsTheSharedGoldenBytes() {
-        ScriptStatusMessage message = new ScriptStatusMessage();
+    void executionResultRoundTripsTheCanonicalEnvelope() {
+        ExecutionValue value = new ExecutionValue(
+                new ExecutionText("java.lang.Boolean", 17, false),
+                new ExecutionText("true", 4, false),
+                new ExecutionText("", 0, false),
+                ExecutionValue.Kind.BOOLEAN,
+                0,
+                0,
+                false,
+                java.util.List.of()
+        );
+        ExecutionResult result = new ExecutionResult(
+                ExecutionResult.Status.RUN_COMPLETED,
+                new ExecutionText("out", 3, false),
+                value,
+                new ExecutionText("", 0, false)
+        );
+        ExecutionResultMessage written = new ExecutionResultMessage(7, result);
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
 
-        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
-                HEX.parseHex(
-                        "000000070000000d52554e5f434f4d504c45544544"
-                                + "000000036f7574010000000b7b226f6b223a747275657d00000000"
-                )
-        )));
+        written.write(output);
+        ExecutionResultMessage read = new ExecutionResultMessage();
+        read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
 
-        assertEquals(7, message.getScriptId());
-        assertEquals(ScriptStatusMessage.Type.RUN_COMPLETED, message.getType());
-        assertEquals("out", message.getOutput());
-        assertEquals("{\"ok\":true}", message.getResultJson());
-        assertEquals("", message.getError());
+        assertEquals(7, read.getScriptId());
+        assertEquals(result, read.getResult());
     }
 
     @Test

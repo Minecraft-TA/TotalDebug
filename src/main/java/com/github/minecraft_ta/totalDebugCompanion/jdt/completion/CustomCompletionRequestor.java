@@ -246,6 +246,11 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         if (isIgnored(proposal.getKind())) {
             return true;
         }
+        if ((proposal.getKind() == CompletionProposal.TYPE_REF
+                || proposal.getKind() == CompletionProposal.ANONYMOUS_CLASS_DECLARATION)
+                && Flags.isPrivate(proposal.getFlags())) {
+            return true;
+        }
         // Only filter types and constructors from completion.
         switch (proposal.getKind()) {
             case CompletionProposal.CONSTRUCTOR_INVOCATION:

@@ -46,6 +46,7 @@ public final class FileTypeResolver {
         return switch (extension) {
             case "class" -> type(ResourceFileType.Kind.CLASS, null, Icons.JAVA_CLASS, "Java class");
             case "java" -> text(RSyntaxTextArea.SYNTAX_STYLE_JAVA, Icons.JAVA_FILE, "Java");
+            case "tdscript" -> text(RSyntaxTextArea.SYNTAX_STYLE_JAVA, Icons.JAVA_FILE, "Java snippet");
             case "png" -> type(ResourceFileType.Kind.PNG, null, Icons.IMAGE_FILE, "PNG image");
             case "toml" -> text(SYNTAX_STYLE_TOML, Icons.CONFIG_FILE, "TOML");
             case "cfg", "conf", "config", "ini" -> text(RSyntaxTextArea.SYNTAX_STYLE_INI, Icons.CONFIG_FILE, "Configuration");

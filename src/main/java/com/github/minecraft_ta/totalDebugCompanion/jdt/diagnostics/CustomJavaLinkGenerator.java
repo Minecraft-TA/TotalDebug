@@ -121,9 +121,13 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                     }
 
+                    int editorOffset = ASTCache.toEditorOffset(sourcePath.toString(), sourceRange.getOffset());
+                    if (editorOffset < 0) {
+                        return null;
+                    }
                     navigator.accept(new NavigationTarget.LocalFile(
                             sourcePath,
-                            sourceRange.getOffset()
+                            editorOffset
                     ));
                     return null;
                 }

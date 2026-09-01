@@ -2,11 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
+import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
 import javax.swing.*;
@@ -16,17 +17,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class ScriptView implements IEditorPanel {
+    public static final String FILE_EXTENSION = ".tdscript";
 
     private final String text;
     private final Path path;
     protected ScriptPanel scriptPanel;
 
     public ScriptView(String scriptName) {
+        if (!JavaSnippetSource.isValidClassName(scriptName)) {
+            throw new IllegalArgumentException("Invalid script name: " + scriptName);
+        }
         if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             throw new IllegalStateException("Script execution was not negotiated for this session");
         }
-        this.path = CompanionApp.getRootPath().resolve("scripts").resolve(scriptName + ".java");
+        this.path = CompanionApp.getRootPath().resolve("scripts").resolve(scriptName + FILE_EXTENSION);
         try {
+            Files.createDirectories(this.path.getParent());
             if (!Files.exists(this.path)) {
                 this.text = initialSource(scriptName);
                 Files.writeString(this.path, this.text);
@@ -39,21 +45,14 @@ public class ScriptView implements IEditorPanel {
     }
 
     static String initialSource(String scriptName) {
-        return """
-                public class %s extends BaseScript {
-                \t@Override
-                \tpublic Object run() throws Throwable {
-                \t\treturn null;
-                \t}
-                }
-                """.formatted(scriptName);
+        return "";
     }
 
     @Override
     public boolean canClose() {
         var result = this.scriptPanel.canSave();
         if (result)
-            CompanionApp.SERVER.getMessageBus().unregister(ScriptStatusMessage.class, this.scriptPanel);
+            CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this.scriptPanel);
 
         return result;
     }
@@ -73,6 +72,11 @@ public class ScriptView implements IEditorPanel {
     @Override
     public String getTitle() {
         return this.path.getFileName().toString();
+    }
+
+    public String getScriptName() {
+        String fileName = this.path.getFileName().toString();
+        return fileName.substring(0, fileName.length() - FILE_EXTENSION.length());
     }
 
     @Override

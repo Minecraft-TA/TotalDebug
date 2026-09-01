@@ -33,8 +33,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
-/** Keyboard-driven completion for the subset of Java expressions supported by the debugger. */
+/** Keyboard-driven completion shared by debugger and running-JVM Java expression fields. */
 public final class ExpressionCompletionSupport implements AutoCloseable {
     private static final String NEXT = "debugExpressionCompletion.next";
     private static final String PREVIOUS = "debugExpressionCompletion.previous";
@@ -60,6 +61,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private final AtomicLong completionRevision = new AtomicLong();
     private JWindow popup;
     private boolean applying;
+    private Consumer<DebuggerCompletionProposal> acceptanceListener = ignored -> { };
 
     public ExpressionCompletionSupport(JavaExpressionField field) {
         this.field = Objects.requireNonNull(field, "field");
@@ -75,6 +77,10 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         if (isCompletionVisible()) {
             updatePopup(true);
         }
+    }
+
+    public void setAcceptanceListener(Consumer<DebuggerCompletionProposal> acceptanceListener) {
+        this.acceptanceListener = Objects.requireNonNull(acceptanceListener, "acceptanceListener");
     }
 
     private void configurePopup() {
@@ -270,10 +276,11 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         } finally {
             this.applying = false;
         }
+        this.acceptanceListener.accept(selected);
         hidePopup();
     }
 
-    boolean isCompletionVisible() {
+    public boolean isCompletionVisible() {
         return this.popup != null && this.popup.isVisible();
     }
 

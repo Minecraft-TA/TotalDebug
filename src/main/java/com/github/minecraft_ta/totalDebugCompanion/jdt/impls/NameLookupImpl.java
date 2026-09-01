@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.ScriptProgramSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JIndexResolvedBinaryType;
@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 public class NameLookupImpl extends NameLookup {
+    private static final String SCRIPT_PROGRAM_PACKAGE = "com.github.minecraft_ta.totaldebug.script";
 
     public NameLookupImpl(JavaProjectImpl javaProject) {
         super(
@@ -32,7 +33,9 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public boolean isPackage(String[] pkgName) {
-        return CompanionClassIndex.get().findPackage(Util.concatWith(pkgName, '/')) != null;
+        String packageName = String.join(".", pkgName);
+        return SCRIPT_PROGRAM_PACKAGE.equals(packageName)
+                || CompanionClassIndex.get().findPackage(Util.concatWith(pkgName, '/')) != null;
     }
 
     @Override
@@ -58,13 +61,20 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public Answer findType(String typeName, String packageName, boolean partialMatch, int acceptFlags, boolean considerSecondaryTypes, boolean waitForIndexes, boolean checkRestrictions, IProgressMonitor monitor, IPackageFragmentRoot[] moduleContext, int release) {
-        //Special case for BaseScript resolution
-        if (packageName.equals("") && typeName.equals("BaseScript"))
-            return JDTHacks.createNameLookupAnswer(new CompilationUnitImpl("BaseScript", BaseScript.getText()).getType("BaseScript"), null, null);
-
         var foundClass = CompanionClassIndex.get().findClass(packageName, typeName.replace('.', '$'));
         if (foundClass != null) {
             return JDTHacks.createNameLookupAnswer(new JIndexResolvedBinaryType(foundClass), null, null);
+        }
+
+        // ScriptProgram exists in the connected game, but snippets also need its API while
+        // the runtime index is still coming online.
+        if (packageName.equals(SCRIPT_PROGRAM_PACKAGE)
+                && typeName.equals("ScriptProgram")) {
+            return JDTHacks.createNameLookupAnswer(
+                    new CompilationUnitImpl("ScriptProgram", ScriptProgramSource.text()).getType("ScriptProgram"),
+                    null,
+                    null
+            );
         }
         return null;
     }

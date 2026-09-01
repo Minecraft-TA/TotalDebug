@@ -35,7 +35,14 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
             if (version != lastVisitedVersion)
                 return;
 
-            setSemanticTokenTypes(tokenTypes, textComponent);
+            var editorTokenTypes = new HashMap<Integer, Integer>();
+            tokenTypes.forEach((generatedOffset, tokenType) -> {
+                int editorOffset = ASTCache.toEditorOffset(identifier, generatedOffset);
+                if (editorOffset >= 0) {
+                    editorTokenTypes.put(editorOffset, tokenType);
+                }
+            });
+            setSemanticTokenTypes(editorTokenTypes, textComponent);
         });
     }
 

@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -87,6 +88,41 @@ final class ExpressionCompletionSupportUiTest {
                     assertEquals("false", fixture.field().getText());
                     assertFalse(fixture.completion().isCompletionVisible());
                 });
+            } finally {
+                onEdt(fixture::close);
+            }
+        });
+    }
+
+    @Test
+    void preservesRequiredImportsWhenACompletionIsAccepted() throws Exception {
+        withPopupFactory(ignored -> {
+            Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            try {
+                AtomicReference<DebuggerCompletionProposal> accepted = new AtomicReference<>();
+                DebuggerCompletionProposal proposal = new DebuggerCompletionProposal(
+                        "TotalDebug",
+                        "TotalDebug",
+                        DebuggerCompletionProposal.Kind.TYPE,
+                        "com.github.minecraft_ta.totaldebug.TotalDebug",
+                        0,
+                        8,
+                        10,
+                        80,
+                        List.of("com.github.minecraft_ta.totaldebug.TotalDebug")
+                );
+                onEdt(() -> {
+                    fixture.completion().setCompletionProvider((text, caret, explicit) ->
+                            CompletableFuture.completedFuture(List.of(proposal)));
+                    fixture.completion().setAcceptanceListener(accepted::set);
+                    fixture.field().setText("TotalDeb");
+                });
+                await(fixture.completion()::isCompletionVisible);
+
+                onEdt(() -> invokeFieldAction(fixture.field(), "TAB"));
+
+                assertEquals("TotalDebug", onEdt((Callable<String>) fixture.field()::getText));
+                assertEquals(proposal.requiredImports(), accepted.get().requiredImports());
             } finally {
                 onEdt(fixture::close);
             }

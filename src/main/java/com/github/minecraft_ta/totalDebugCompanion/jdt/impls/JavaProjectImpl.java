@@ -21,7 +21,8 @@ public class JavaProjectImpl extends JavaProject {
         OPTIONS = new HashMap<>();
         JdtConfiguration.applyJavaCompilerOptions(OPTIONS);
         OPTIONS.put(DefaultCodeFormatterConstants.FORMATTER_BLANK_LINES_BETWEEN_IMPORT_GROUPS, "1");
-        OPTIONS.put(AssistOptions.OPTION_PerformVisibilityCheck, AssistOptions.ENABLED);
+        // Snippets deliberately expose application members through TotalDebug's privileged linker.
+        OPTIONS.put(AssistOptions.OPTION_PerformVisibilityCheck, AssistOptions.DISABLED);
         OPTIONS.put(AssistOptions.OPTION_PerformForbiddenReferenceCheck, AssistOptions.ENABLED);
         OPTIONS.put(AssistOptions.OPTION_CamelCaseMatch, AssistOptions.DISABLED);
         OPTIONS.put(AssistOptions.OPTION_SubwordMatch, AssistOptions.DISABLED);

@@ -195,8 +195,16 @@ final class CompanionMcpToolCatalog {
                                 "disconnected"
                         ),
                         "logs", stringValueSchema("Output written by the code body."),
+                        "logs_truncated", booleanSchema("Whether the returned logs are incomplete."),
+                        "logs_total_characters", nonNegativeIntegerSchema(
+                                "Complete log length before transport truncation."
+                        ),
                         "result", Map.of(),
-                        "error", stringValueSchema("Failure diagnostic for a completed job.")
+                        "error", stringValueSchema("Failure diagnostic for a completed job."),
+                        "error_truncated", booleanSchema("Whether the returned diagnostic is incomplete."),
+                        "error_total_characters", nonNegativeIntegerSchema(
+                                "Complete diagnostic length before transport truncation."
+                        )
                 ),
                 List.of("job_id", "state")
         ));
@@ -416,6 +424,14 @@ final class CompanionMcpToolCatalog {
                 "description", description,
                 "minimum", minimum,
                 "maximum", maximum
+        );
+    }
+
+    private static Map<String, Object> nonNegativeIntegerSchema(String description) {
+        return Map.of(
+                "type", "integer",
+                "description", description,
+                "minimum", 0
         );
     }
 

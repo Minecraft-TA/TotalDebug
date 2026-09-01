@@ -361,9 +361,9 @@ public final class NavigationService {
         String fileName = path.getFileName().toString();
         Path scripts = CompanionApp.getRootPath().resolve("scripts").toAbsolutePath().normalize();
         if (path.getParent().equals(scripts)
-                && fileName.endsWith(".java")
+                && fileName.endsWith(ScriptView.FILE_EXTENSION)
                 && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            String scriptName = fileName.substring(0, fileName.length() - ".java".length());
+            String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,
                     view -> view.getTitle().equals(fileName),

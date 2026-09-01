@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
@@ -28,6 +29,7 @@ import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -45,11 +47,14 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final ApplicationStatusBar statusBar;
     private final Action chunkGridAction;
     private final Action packetLoggerAction;
+    private final Action evaluateExpressionAction;
     private final Action newScriptAction;
     private final DebuggerActions debuggerActions;
     private final DebuggerShortcuts debuggerShortcuts;
     private DebuggerWindow debuggerWindow;
     private BreakpointsWindow breakpointsWindow;
+    private EvaluateExpressionWindow evaluateExpressionWindow;
+    private SnippetExecutionService snippetExecutions;
     private final DebuggerSessionController.Listener debuggerListener;
 
     private long lastShiftReleasedTime = 0;
@@ -95,6 +100,17 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.toolsMenu.add(this.chunkGridAction);
         this.toolsMenu.add(this.packetLoggerAction);
         menuBar.add(this.toolsMenu);
+
+        this.evaluateExpressionAction = new AbstractAction("Evaluate Expression...", Icons.EVALUATE_EXPRESSION) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                evaluateExpressionWindow().showWindow();
+            }
+        };
+        JMenuItem evaluateExpression = new JMenuItem(this.evaluateExpressionAction);
+        evaluateExpression.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F8, InputEvent.ALT_DOWN_MASK));
+        this.scriptMenu.add(evaluateExpression);
+        this.scriptMenu.addSeparator();
 
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
@@ -248,6 +264,16 @@ public class MainWindow extends JFrame implements AWTEventListener {
         return this.breakpointsWindow;
     }
 
+    private EvaluateExpressionWindow evaluateExpressionWindow() {
+        if (this.snippetExecutions == null) {
+            this.snippetExecutions = new SnippetExecutionService();
+        }
+        if (this.evaluateExpressionWindow == null) {
+            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions);
+        }
+        return this.evaluateExpressionWindow;
+    }
+
     public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
         SwingUtilities.invokeLater(() ->
                 debuggerWindow(CompanionApp.getDebuggerController()).showVariable(frame, variable));
@@ -382,12 +408,18 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.chunkGridAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID));
         this.packetLoggerAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER));
         this.scriptMenu.setVisible(scripts);
+        this.evaluateExpressionAction.setEnabled(
+                CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)
+        );
         this.newScriptAction.setEnabled(scripts);
         this.debuggerState.setVisible(debugger);
     }
 
     public void setGameStatus(ServiceStatus status) {
         this.statusBar.setGameStatus(status);
+        if (status.state() != ServiceStatus.State.AVAILABLE && this.snippetExecutions != null) {
+            this.snippetExecutions.runtimeDisconnected();
+        }
         refreshActions();
     }
 

@@ -19,12 +19,12 @@ class SessionProtocolCodecTest {
 
     @Test
     void clientHelloReadsTheSharedGoldenBytes() {
-        byte[] golden = HEX.parseHex("00000007000000036162630000000000000007000000017000000001640000000177");
+        byte[] golden = HEX.parseHex("00000009000000036162630000000000000007000000017000000001640000000177");
         ClientHelloMessage message = new ClientHelloMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
-        assertEquals(7, message.protocolVersion());
+        assertEquals(9, message.protocolVersion());
         assertEquals("abc", message.token());
         assertEquals(7, message.requestedCapabilities());
         assertEquals("p", message.profileId());
@@ -40,7 +40,7 @@ class SessionProtocolCodecTest {
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("0000000701000000000000000700000000"),
+                HEX.parseHex("0000000901000000000000000700000000"),
                 writtenBytes(output)
         );
     }

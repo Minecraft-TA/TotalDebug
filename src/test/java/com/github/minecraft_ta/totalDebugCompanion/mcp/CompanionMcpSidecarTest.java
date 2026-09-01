@@ -131,7 +131,6 @@ class CompanionMcpSidecarTest {
         CodeModeJobService jobs = new CodeModeJobService(
                 () -> false,
                 new NoOpTransport(),
-                source -> source,
                 this.temporaryDirectory.resolve(instance).resolve("artifacts"),
                 Clock.systemUTC()
         );

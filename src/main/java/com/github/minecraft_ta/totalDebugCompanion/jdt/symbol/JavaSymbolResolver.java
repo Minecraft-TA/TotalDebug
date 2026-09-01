@@ -43,7 +43,11 @@ public final class JavaSymbolResolver {
             return null;
         }
 
-        IJavaElement[] elements = unit.getTypeRoot().codeSelect(offset, 0);
+        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        if (generatedOffset < 0) {
+            return null;
+        }
+        IJavaElement[] elements = unit.getTypeRoot().codeSelect(generatedOffset, 0);
         if (elements == null || elements.length == 0) {
             return null;
         }
@@ -59,7 +63,10 @@ public final class JavaSymbolResolver {
         if (unit == null) {
             return Resolution.unavailable("Java model is still loading");
         }
-        return resolve(unit, offset);
+        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        return generatedOffset < 0
+                ? Resolution.unavailable("The selected text is not part of the generated Java source")
+                : resolve(unit, generatedOffset);
     }
 
     /** Resolves the concrete class that owns a qualified package segment at an editor offset. */
@@ -69,7 +76,11 @@ public final class JavaSymbolResolver {
             return null;
         }
 
-        ASTNode current = NodeFinder.perform(unit, offset, 0);
+        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        if (generatedOffset < 0) {
+            return null;
+        }
+        ASTNode current = NodeFinder.perform(unit, generatedOffset, 0);
         while (current != null) {
             IBinding binding = switch (current) {
                 case Name name -> name.resolveBinding();

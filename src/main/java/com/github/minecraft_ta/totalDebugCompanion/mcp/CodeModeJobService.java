@@ -1,13 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.BaseScript;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
 import com.github.tth05.scnet.Server;
 
 import java.io.IOException;
@@ -33,21 +31,16 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 /** Owns asynchronous MCP code jobs while execution remains inside the Minecraft JVM. */
 public final class CodeModeJobService implements AutoCloseable {
     static final int MAX_RETAINED_JOBS = 256;
-    static final int MAX_OUTPUT_CHARACTERS = 250_000;
     static final int MAX_WAIT_MILLISECONDS = 120_000;
-    private static final String TRUNCATED_SUFFIX = "\n[Companion truncated the code-mode output]";
-    private static final Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().create();
 
     private final Server server;
     private final ExecutorService statusExecutor;
     private final BooleanSupplier available;
     private final Transport transport;
-    private final UnaryOperator<String> baseScriptMerger;
     private final Supplier<Map<String, Object>> runtimeContext;
     private final CodeModeArtifactStore artifacts;
     private final Clock clock;
@@ -96,22 +89,15 @@ public final class CodeModeJobService implements AutoCloseable {
                         }
                     }
                 },
-                BaseScript::mergeWithNormalScript,
                 runtimeContext,
                 new CodeModeArtifactStore(artifactDirectory),
                 Clock.systemUTC()
         );
-        server.getMessageBus().listenAlways(ScriptStatusMessage.class, this, message -> {
+        server.getMessageBus().listenAlways(ExecutionResultMessage.class, this, message -> {
             int scriptId = message.getScriptId();
-            ScriptStatusMessage.Type type = message.getType();
+            ExecutionResult result = message.getResult();
             try {
-                this.statusExecutor.execute(() -> acceptStatus(
-                        scriptId,
-                        type,
-                        message.getOutput(),
-                        message.getResultJson(),
-                        message.getError()
-                ));
+                this.statusExecutor.execute(() -> acceptResult(scriptId, result));
             } catch (RejectedExecutionException ignored) {
             }
         });
@@ -120,17 +106,15 @@ public final class CodeModeJobService implements AutoCloseable {
     CodeModeJobService(
             BooleanSupplier available,
             Transport transport,
-            UnaryOperator<String> baseScriptMerger,
             Path artifactDirectory,
             Clock clock
     ) {
-        this(available, transport, baseScriptMerger, Map::of, artifactDirectory, clock);
+        this(available, transport, Map::of, artifactDirectory, clock);
     }
 
     CodeModeJobService(
             BooleanSupplier available,
             Transport transport,
-            UnaryOperator<String> baseScriptMerger,
             Supplier<Map<String, Object>> runtimeContext,
             Path artifactDirectory,
             Clock clock
@@ -140,7 +124,6 @@ public final class CodeModeJobService implements AutoCloseable {
                 null,
                 available,
                 transport,
-                baseScriptMerger,
                 runtimeContext,
                 new CodeModeArtifactStore(artifactDirectory),
                 clock
@@ -152,7 +135,6 @@ public final class CodeModeJobService implements AutoCloseable {
             ExecutorService statusExecutor,
             BooleanSupplier available,
             Transport transport,
-            UnaryOperator<String> baseScriptMerger,
             Supplier<Map<String, Object>> runtimeContext,
             CodeModeArtifactStore artifacts,
             Clock clock
@@ -161,7 +143,6 @@ public final class CodeModeJobService implements AutoCloseable {
         this.statusExecutor = statusExecutor;
         this.available = Objects.requireNonNull(available, "available");
         this.transport = Objects.requireNonNull(transport, "transport");
-        this.baseScriptMerger = Objects.requireNonNull(baseScriptMerger, "baseScriptMerger");
         this.runtimeContext = Objects.requireNonNull(runtimeContext, "runtimeContext");
         this.artifacts = Objects.requireNonNull(artifacts, "artifacts");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -188,8 +169,7 @@ public final class CodeModeJobService implements AutoCloseable {
         CodeModeSourceBuilder.GeneratedSource generated = CodeModeSourceBuilder.build(
                 scriptId,
                 code,
-                List.copyOf(imports),
-                this.baseScriptMerger
+                List.copyOf(imports)
         );
         String jobId = UUID.randomUUID().toString();
         Instant submittedAt = this.clock.instant();
@@ -294,13 +274,7 @@ public final class CodeModeJobService implements AutoCloseable {
         return this.artifacts.read(jobId, artifact);
     }
 
-    void acceptStatus(
-            int scriptId,
-            ScriptStatusMessage.Type type,
-            String output,
-            String resultJson,
-            String error
-    ) {
+    void acceptResult(int scriptId, ExecutionResult result) {
         if (this.closed) {
             return;
         }
@@ -313,40 +287,34 @@ public final class CodeModeJobService implements AutoCloseable {
             return;
         }
 
+        Objects.requireNonNull(result, "result");
         Instant now = this.clock.instant();
-        ParsedResult parsedResult;
-        try {
-            parsedResult = parseResult(resultJson);
-        } catch (JsonParseException exception) {
-            job.finish(
+        boolean valuePresent = result.value() != null;
+        Object value = valuePresent ? result.value().toJsonValue() : null;
+        switch (result.status()) {
+            case COMPILATION_COMPLETED -> job.markRunning(now);
+            case COMPILATION_FAILED -> job.finish(
                     JobState.FAILED,
-                    bounded(output),
-                    false,
-                    null,
-                    "Minecraft returned an invalid structured result: " + exception.getMessage(),
+                    result.logs(),
+                    valuePresent,
+                    value,
+                    result.error(),
                     now
             );
-            this.jobsByScriptId.remove(scriptId, jobId);
-            persist(job);
-            return;
-        }
-        switch (Objects.requireNonNull(type, "type")) {
-            case COMPILATION_COMPLETED -> job.markRunning(now);
-            case COMPILATION_FAILED -> job.finish(JobState.FAILED, null, false, null, error, now);
             case RUN_COMPLETED -> job.finish(
                     JobState.SUCCEEDED,
-                    bounded(output),
-                    parsedResult.present(),
-                    parsedResult.value(),
-                    null,
+                    result.logs(),
+                    valuePresent,
+                    value,
+                    result.error(),
                     now
             );
             case RUN_EXCEPTION -> job.finish(
                     job.cancellationRequested() ? JobState.CANCELLED : JobState.FAILED,
-                    bounded(output),
-                    parsedResult.present(),
-                    parsedResult.value(),
-                    bounded(error),
+                    result.logs(),
+                    valuePresent,
+                    value,
+                    result.error(),
                     now
             );
         }
@@ -420,14 +388,6 @@ public final class CodeModeJobService implements AutoCloseable {
         return UUID.fromString(jobId).toString();
     }
 
-    private static String bounded(String value) {
-        String message = Objects.requireNonNullElse(value, "");
-        if (message.length() <= MAX_OUTPUT_CHARACTERS) {
-            return message;
-        }
-        return message.substring(0, MAX_OUTPUT_CHARACTERS - TRUNCATED_SUFFIX.length()) + TRUNCATED_SUFFIX;
-    }
-
     private static String sha256(String source) {
         try {
             return HexFormat.of().formatHex(
@@ -445,20 +405,13 @@ public final class CodeModeJobService implements AutoCloseable {
         }
         this.closed = true;
         if (this.server != null) {
-            this.server.getMessageBus().unregister(ScriptStatusMessage.class, this);
+            this.server.getMessageBus().unregister(ExecutionResultMessage.class, this);
         }
         if (this.statusExecutor != null) {
             this.statusExecutor.shutdownNow();
         }
         runtimeDisconnected();
         this.jobsByScriptId.clear();
-    }
-
-    private static ParsedResult parseResult(String resultJson) throws JsonParseException {
-        if (resultJson == null) {
-            return new ParsedResult(false, null);
-        }
-        return new ParsedResult(true, GSON.fromJson(resultJson, Object.class));
     }
 
     public enum ExecutionSide {
@@ -504,9 +457,13 @@ public final class CodeModeJobService implements AutoCloseable {
             Instant completedAt,
             boolean cancellationRequested,
             String output,
+            boolean outputTruncated,
+            int outputTotalCharacters,
             boolean resultPresent,
             Object result,
             String error,
+            boolean errorTruncated,
+            int errorTotalCharacters,
             Map<String, Object> artifacts,
             Map<String, Object> runtime
     ) {
@@ -514,14 +471,22 @@ public final class CodeModeJobService implements AutoCloseable {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("job_id", this.jobId);
             result.put("state", this.state.name().toLowerCase());
-            if (this.output != null && !this.output.isEmpty()) {
+            if (this.output != null && (!this.output.isEmpty() || this.outputTruncated)) {
                 result.put("logs", this.output);
+                if (this.outputTruncated) {
+                    result.put("logs_truncated", true);
+                    result.put("logs_total_characters", this.outputTotalCharacters);
+                }
             }
             if (this.resultPresent) {
                 result.put("result", this.result);
             }
             if (this.error != null) {
                 result.put("error", this.error);
+                if (this.errorTruncated) {
+                    result.put("error_truncated", true);
+                    result.put("error_total_characters", this.errorTotalCharacters);
+                }
             }
             return result;
         }
@@ -544,12 +509,16 @@ public final class CodeModeJobService implements AutoCloseable {
             result.put("cancellation_requested", this.cancellationRequested);
             if (this.output != null) {
                 result.put("output", this.output);
+                result.put("output_truncated", this.outputTruncated);
+                result.put("output_total_characters", this.outputTotalCharacters);
             }
             if (this.resultPresent) {
                 result.put("result", this.result);
             }
             if (this.error != null) {
                 result.put("error", this.error);
+                result.put("error_truncated", this.errorTruncated);
+                result.put("error_total_characters", this.errorTotalCharacters);
             }
             result.put("artifacts", this.artifacts);
             result.put("runtime", this.runtime);
@@ -578,9 +547,13 @@ public final class CodeModeJobService implements AutoCloseable {
         private Instant completedAt;
         private boolean cancellationRequested;
         private String output;
+        private boolean outputTruncated;
+        private int outputTotalCharacters;
         private boolean resultPresent;
         private Object result;
         private String error;
+        private boolean errorTruncated;
+        private int errorTotalCharacters;
         private CodeModeArtifactStore.ArtifactPaths artifacts;
 
         private Job(
@@ -648,12 +621,32 @@ public final class CodeModeJobService implements AutoCloseable {
             }
             this.state = state;
             this.output = output;
+            this.outputTruncated = false;
+            this.outputTotalCharacters = output == null ? 0 : output.length();
             this.resultPresent = resultPresent;
             this.result = result;
             this.error = error;
+            this.errorTruncated = false;
+            this.errorTotalCharacters = error == null ? 0 : error.length();
             this.updatedAt = now;
             this.completedAt = now;
             notifyAll();
+        }
+
+        private synchronized void finish(
+                JobState state,
+                ExecutionText logs,
+                boolean resultPresent,
+                Object result,
+                ExecutionText error,
+                Instant now
+        ) {
+            String errorText = error.text().isEmpty() && !error.truncated() ? null : error.text();
+            finish(state, logs.text(), resultPresent, result, errorText, now);
+            this.outputTruncated = logs.truncated();
+            this.outputTotalCharacters = logs.totalCharacters();
+            this.errorTruncated = error.truncated();
+            this.errorTotalCharacters = error.totalCharacters();
         }
 
         private synchronized JobSnapshot awaitTerminal(int waitMilliseconds) throws InterruptedException {
@@ -710,15 +703,17 @@ public final class CodeModeJobService implements AutoCloseable {
                     this.completedAt,
                     this.cancellationRequested,
                     this.output,
+                    this.outputTruncated,
+                    this.outputTotalCharacters,
                     this.resultPresent,
                     this.result,
                     this.error,
+                    this.errorTruncated,
+                    this.errorTotalCharacters,
                     artifactMap,
                     this.runtime
             );
         }
     }
 
-    private record ParsedResult(boolean present, Object value) {
-    }
 }

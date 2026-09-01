@@ -18,7 +18,7 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.PacketC
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.PacketLoggerStateChangeMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.packetLogger.SetChannelMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ScriptStatusMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.search.OpenSearchResultsMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
@@ -142,7 +142,11 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.CHUNK_GRID_REQUEST_INFO_UPDATE, ChunkGridRequestInfoUpdateMessage.class, ChunkGridRequestInfoUpdateMessage::new);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.UPDATE_FOLLOW_PLAYER_STATE, UpdateFollowPlayerStateMessage.class);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.SCRIPT_STATUS, ScriptStatusMessage.class, ScriptStatusMessage::new);
+        this.server.getMessageProcessor().registerMessage(
+                CompanionProtocol.EXECUTION_RESULT,
+                ExecutionResultMessage.class,
+                ExecutionResultMessage::new
+        );
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class, FocusWindowMessage::new);
         this.server.getMessageProcessor().registerMessage(CompanionProtocol.PACKET_LOGGER_STATE_CHANGE, PacketLoggerStateChangeMessage.class);
@@ -204,7 +208,7 @@ public final class CompanionSession implements AutoCloseable {
         guardFeature(ChunkGridRequestInfoUpdateMessage.class, CompanionProtocol.CAPABILITY_CHUNK_GRID, "ChunkGridRequestInfoUpdate");
         guardFeature(UpdateFollowPlayerStateMessage.class, CompanionProtocol.CAPABILITY_CHUNK_GRID, "UpdateFollowPlayerState");
         guardFeature(RunScriptMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "RunScript");
-        guardFeature(ScriptStatusMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "ScriptStatus");
+        guardFeature(ExecutionResultMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "ExecutionResult");
         guardFeature(StopScriptMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "StopScript");
         guardFeature(PacketLoggerStateChangeMessage.class, CompanionProtocol.CAPABILITY_PACKET_LOGGER, "PacketLoggerStateChange");
         guardFeature(IncomingPacketsMessage.class, CompanionProtocol.CAPABILITY_PACKET_LOGGER, "IncomingPackets");

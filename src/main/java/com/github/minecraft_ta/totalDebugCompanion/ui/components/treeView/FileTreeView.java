@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
@@ -95,7 +96,8 @@ public class FileTreeView extends JScrollPane {
         if (item instanceof FileSystemFileItem fileItem) {
             String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
             boolean javaFile = lowerName.endsWith(".java");
-            if (javaFile
+            boolean scriptFile = lowerName.endsWith(ScriptView.FILE_EXTENSION);
+            if (scriptFile
                     && node.getParent().getUserObject().getName().equals("scripts")
                     && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
                 navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
