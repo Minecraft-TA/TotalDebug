@@ -32,7 +32,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private final Path dataDirectory;
     private final Path endpointDescriptor;
     private final CodeModeJobService jobs;
-    private final CompanionMcpClassInspector classInspector;
+    private final CompanionMcpRuntimeSource runtimeSource;
     private final CompanionMcpSearchService search;
     private final int port;
     private HttpServletStreamableServerTransportProvider transportProvider;
@@ -49,7 +49,7 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.dataDirectory = normalize(dataDirectory);
         this.endpointDescriptor = this.dataDirectory.resolve(McpEndpointDescriptor.FILE_NAME);
         this.jobs = Objects.requireNonNull(jobs, "jobs");
-        this.classInspector = new CompanionMcpClassInspector(CompanionApp::getDecompilationService);
+        this.runtimeSource = new CompanionMcpRuntimeSource(CompanionApp::getDecompilationService);
         this.search = new CompanionMcpSearchService(
                 CompanionClassIndex::get,
                 sourceId -> CompanionApp.getRuntimeSourceCatalog().moduleFor(sourceId)
@@ -163,8 +163,8 @@ public final class CompanionMcpServer implements AutoCloseable {
                         this.jobs.readArtifact(requiredString(request.arguments(), "job_id"), "source")
                 );
                 case "search_classes" -> this.search.searchClasses(requiredString(request.arguments(), "query"));
-                case "class_source" -> this.classInspector.source(
-                        requiredString(request.arguments(), "binary_name")
+                case "runtime_source" -> this.runtimeSource.source(
+                        requiredObject(request.arguments(), "target")
                 );
                 case "search_symbols" -> this.search.searchSymbols(
                         optionalString(request.arguments(), "query"),

@@ -76,12 +76,13 @@ class CompanionMcpServerTest {
             assertTrue(tools.body().contains("client_code_execute"));
             assertTrue(tools.body().contains("server_code_execute"));
             assertTrue(tools.body().contains("job_wait"));
-            assertTrue(tools.body().contains("class_source"));
+            assertTrue(tools.body().contains("runtime_source"));
             assertTrue(tools.body().contains("search_symbols"));
             assertTrue(tools.body().contains("find_usages"));
             assertTrue(tools.body().contains("search_literals"));
             assertTrue(tools.body().contains("outputSchema"));
             assertFalse(tools.body().contains("class_bytecode"));
+            assertFalse(tools.body().contains("class_source"));
             assertFalse(tools.body().contains("class_origin"));
             assertFalse(tools.body().contains("class_members"));
             assertFalse(tools.body().contains("artifacts_read"));

@@ -206,14 +206,7 @@ final class CompanionMcpSearchService {
 
     private Map<String, Object> describeUsage(ReferenceResult usage) {
         Map<String, Object> value = new LinkedHashMap<>();
-        value.put("kind", usage.kind().name().toLowerCase(Locale.ROOT));
-        value.put("owner", binaryName(usage.ownerInternalName()));
-        if (!usage.name().isEmpty()) {
-            value.put("name", usage.name());
-        }
-        if (!usage.descriptor().isEmpty()) {
-            value.put("descriptor", usage.descriptor());
-        }
+        value.put("source_target", sourceTarget(usage));
         value.put("relationships", usage.kinds().stream()
                 .map(kind -> kind.name().toLowerCase(Locale.ROOT))
                 .sorted()
@@ -221,6 +214,20 @@ final class CompanionMcpSearchService {
         value.put("occurrences", usage.occurrenceCount());
         value.put("module", module(usage.sourceId()));
         return value;
+    }
+
+    private static Map<String, Object> sourceTarget(ReferenceResult usage) {
+        String kind = usage.kind().name().toLowerCase(Locale.ROOT);
+        String owner = binaryName(usage.ownerInternalName());
+        if (kind.equals("class")) {
+            return Map.of("kind", kind, "binary_name", owner);
+        }
+        return Map.of(
+                "kind", kind,
+                "owner", owner,
+                "name", usage.name(),
+                "descriptor", usage.descriptor()
+        );
     }
 
     private Map<String, Object> describeLiteral(LiteralSearchResult literal) {

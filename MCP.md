@@ -37,12 +37,14 @@ Every tool advertises an `outputSchema` covering its exact success result and th
 - `job_cancel` requests cancellation of one code job.
 - `job_source` returns the exact generated Java source for one job.
 - `search_classes` resolves an exact binary name first, then performs a case-insensitive literal search over complete binary names. Results include decoded class kind and modifiers plus the owning runtime module's `id`, `name`, and `kind`.
-- `class_source` returns complete Vineflower Java source for one exact binary name, decompiling it when needed.
+- `runtime_source` returns one exact class, method, field, or record-component source scope. Package and imports are separate metadata rather than part of the source snippet.
 - `search_symbols` searches fields and methods globally by literal name, or lists the declarations of one exact owner. Results contain the exact owner, name, JVM descriptor, decoded modifiers, and runtime module.
-- `find_usages` accepts an exact class, field, or method target and returns declaration sites, semantic relationships, occurrence counts, runtime modules, and whether the result was truncated.
+- `find_usages` accepts an exact class, field, or method target and returns declaration sites, semantic relationships, occurrence counts, runtime modules, and whether the result was truncated. Each result contains a `source_target` accepted unchanged by `runtime_source`.
 - `search_literals` searches indexed Java string values and returns the modules containing each value.
 
 Literal searches return at most 100 matches. Class and symbol searches use the same fixed cap. A search adds `truncated: true` only when additional matches were omitted.
+
+For source investigations, resolve the exact symbol, call `find_usages`, and pass only relevant `source_target` values to `runtime_source`. Request class scope when member source does not contain enough surrounding state or initialization logic.
 
 Execution tools accept imports, worker-thread or tick-thread scheduling, and `wait_ms` up to 120 seconds. The submitted body must return its JSON-serializable value directly:
 
@@ -50,6 +52,8 @@ Execution tools accept imports, worker-thread or tick-thread scheduling, and `wa
 logln("inspecting runtime");
 return Map.of("players", getServerPlayers().size());
 ```
+
+Return collections, maps, arrays, records, numbers, booleans, and strings as their real Java values. Formatting a collection or object with `toString()` intentionally produces one scalar string and discards its structure.
 
 `log` and `logln` write the optional `logs` field. A failed job preserves logs written before the exception. Editor scripts and MCP jobs share one body-snippet contract: Companion generates the hidden `ScriptProgram` subclass and `Object run()` entry point, while the submitted source contains only imports and statements. The game serializes an explicit return value as the structured result.
 

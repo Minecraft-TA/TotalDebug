@@ -85,9 +85,15 @@ class McpClassSearchTest {
                     "name", "answer",
                     "descriptor", "()I"
             ));
-            assertTrue(((List<?>) usages.get("usages")).stream().map(Map.class::cast).anyMatch(usage ->
-                    usage.get("owner").equals(UsageFixture.class.getName())
-            ));
+            assertTrue(((List<?>) usages.get("usages")).stream().map(Map.class::cast).anyMatch(usage -> {
+                Map<?, ?> sourceTarget = (Map<?, ?>) usage.get("source_target");
+                return sourceTarget.equals(Map.of(
+                        "kind", "method",
+                        "owner", UsageFixture.class.getName(),
+                        "name", "use",
+                        "descriptor", "(L" + MemberFixture.class.getName().replace('.', '/') + ";)I"
+                ));
+            }));
             assertFalse(usages.toString().contains("site_id"));
             assertFalse(usages.toString().contains("source_id"));
 

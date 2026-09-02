@@ -33,6 +33,12 @@ class CompanionMcpToolCatalogTest {
                 "result", Map.of("answer", 42)
         );
         Map<String, Object> source = Map.of("source", "class Fixture {}");
+        Map<String, Object> methodSourceTarget = Map.of(
+                "kind", "method",
+                "owner", "example.Fixture",
+                "name", "run",
+                "descriptor", "()V"
+        );
         Map<String, Map<String, Object>> samples = Map.ofEntries(
                 Map.entry("status", Map.of(
                         "companion_available", true,
@@ -53,7 +59,13 @@ class CompanionMcpToolCatalogTest {
                         "modifiers", List.of("public", "final"),
                         "module", module
                 )))),
-                Map.entry("class_source", source),
+                Map.entry("runtime_source", Map.of(
+                        "target", methodSourceTarget,
+                        "package", "example",
+                        "imports", List.of("java.util.List"),
+                        "start_line", 12,
+                        "source", "public void run() {}"
+                )),
                 Map.entry("search_symbols", Map.of("symbols", List.of(Map.of(
                         "kind", "method",
                         "owner", "example.Fixture",
@@ -63,10 +75,12 @@ class CompanionMcpToolCatalogTest {
                         "module", module
                 )))),
                 Map.entry("find_usages", Map.of("usages", List.of(Map.of(
-                        "kind", "method",
-                        "owner", "example.Caller",
-                        "name", "call",
-                        "descriptor", "()V",
+                        "source_target", Map.of(
+                                "kind", "method",
+                                "owner", "example.Caller",
+                                "name", "call",
+                                "descriptor", "()V"
+                        ),
                         "relationships", List.of("method_invoke"),
                         "occurrences", 1,
                         "module", module
@@ -124,6 +138,22 @@ class CompanionMcpToolCatalogTest {
     }
 
     @Test
+    void runtimeSourceAdvertisesClassAndMemberScopes() {
+        Map<?, ?> target = (Map<?, ?>) ((Map<?, ?>) tool("runtime_source").inputSchema().get("properties"))
+                .get("target");
+        List<?> variants = (List<?>) target.get("oneOf");
+
+        assertEquals(4, variants.size());
+        assertEquals(List.of("kind", "binary_name"), ((Map<?, ?>) variants.getFirst()).get("required"));
+        for (int index = 1; index < variants.size(); index++) {
+            assertEquals(
+                    List.of("kind", "owner", "name", "descriptor"),
+                    ((Map<?, ?>) variants.get(index)).get("required")
+            );
+        }
+    }
+
+    @Test
     void handlerValidationEnforcesTheAdvertisedSchemas() {
         assertThrows(
                 IllegalArgumentException.class,
@@ -143,10 +173,32 @@ class CompanionMcpToolCatalogTest {
                         Map.of("target", Map.of("kind", "method", "owner", "example.Owner"))
                 ))
         );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> CompanionMcpToolCatalog.validateRequest(request(
+                        "runtime_source",
+                        Map.of("target", Map.of("kind", "method", "owner", "example.Owner"))
+                ))
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> CompanionMcpToolCatalog.validateRequest(request(
+                        "runtime_source",
+                        Map.of("target", Map.of(
+                                "kind", "class",
+                                "binary_name", "example.Owner",
+                                "owner", "example.Owner"
+                        ))
+                ))
+        );
 
         CompanionMcpToolCatalog.validateRequest(request(
                 "find_usages",
                 Map.of("target", Map.of("kind", "class", "owner", "example.Owner"))
+        ));
+        CompanionMcpToolCatalog.validateRequest(request(
+                "runtime_source",
+                Map.of("target", Map.of("kind", "class", "binary_name", "example.Owner"))
         ));
     }
 

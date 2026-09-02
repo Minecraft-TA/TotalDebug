@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,8 +14,11 @@ final class CompanionMcpToolCatalog {
     static final String SERVER_NAME = "totaldebug-companion";
     static final String SERVER_VERSION = "2.0.0";
     static final String INSTRUCTIONS =
-            "Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. "
-                    + "Both execute unrestricted Java and return the value from the submitted code body.";
+            "Resolve exact symbols before finding usages. Read the relevant source_target values with "
+                    + "runtime_source, and request class scope only when a member does not provide enough context. "
+                    + "Use client_code_execute for client runtime facts and server_code_execute for server runtime "
+                    + "facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar "
+                    + "values directly so the result remains structured.";
 
     private static final Map<String, Object> EXECUTE_INPUT_SCHEMA = objectSchema(
             Map.of(
@@ -91,10 +95,13 @@ final class CompanionMcpToolCatalog {
                     boundedListOutputSchema("classes", classOutputSchema())
             ),
             tool(
-                    "class_source",
-                    "Return complete Vineflower Java source for one runtime class, decompiling it when needed.",
-                    binaryNameSchema(),
-                    sourceOutputSchema()
+                    "runtime_source",
+                    "Return one exact class or member source scope from a runtime class.",
+                    objectSchema(
+                            Map.of("target", runtimeSourceTargetSchema()),
+                            List.of("target")
+                    ),
+                    runtimeSourceOutputSchema()
             ),
             tool(
                     "search_symbols",
@@ -227,6 +234,21 @@ final class CompanionMcpToolCatalog {
         ));
     }
 
+    private static Map<String, Object> runtimeSourceOutputSchema() {
+        return toolOutputSchema(objectSchema(
+                Map.of(
+                        "target", runtimeSourceTargetSchema(),
+                        "package", stringSchema("Declared Java package."),
+                        "imports", arraySchema(stringSchema(
+                                "Java import target, prefixed with static when applicable."
+                        )),
+                        "start_line", integerSchema("First line of the returned scope.", 1, Integer.MAX_VALUE),
+                        "source", stringSchema("Exact decompiled source text for the requested scope.")
+                ),
+                List.of("target", "imports", "start_line", "source")
+        ));
+    }
+
     private static Map<String, Object> boundedListOutputSchema(String key, Map<String, Object> itemSchema) {
         return toolOutputSchema(objectSchema(
                 Map.of(
@@ -269,10 +291,7 @@ final class CompanionMcpToolCatalog {
     private static Map<String, Object> usageOutputSchema() {
         return objectSchema(
                 Map.of(
-                        "kind", enumSchema("Declaration kind.", "class", "field", "method", "record_component"),
-                        "owner", stringSchema("Owning class binary name."),
-                        "name", stringSchema("Member name."),
-                        "descriptor", stringSchema("JVM member descriptor."),
+                        "source_target", runtimeSourceTargetSchema(),
                         "relationships", arraySchema(enumSchema(
                                 "Relationship to the requested target.",
                                 "class_hierarchy", "class_declaration", "class_annotation_or_metadata",
@@ -282,7 +301,7 @@ final class CompanionMcpToolCatalog {
                         "occurrences", integerSchema("Number of matching references.", 1, Integer.MAX_VALUE),
                         "module", moduleOutputSchema()
                 ),
-                List.of("kind", "owner", "relationships", "occurrences", "module")
+                List.of("source_target", "relationships", "occurrences", "module")
         );
     }
 
@@ -345,10 +364,6 @@ final class CompanionMcpToolCatalog {
         return objectSchema(Map.of("job_id", stringSchema("Code job identifier.")), List.of("job_id"));
     }
 
-    private static Map<String, Object> binaryNameSchema() {
-        return objectSchema(Map.of("binary_name", stringSchema("Exact Java binary name.")), List.of("binary_name"));
-    }
-
     private static Map<String, Object> searchSymbolsSchema() {
         Map<String, Object> schema = objectSchema(
                 Map.of(
@@ -365,28 +380,55 @@ final class CompanionMcpToolCatalog {
     }
 
     private static Map<String, Object> usageTargetSchema() {
-        Map<String, Object> schema = objectSchema(
-                Map.of(
-                        "kind", enumSchema("Target kind.", "class", "field", "method"),
-                        "owner", stringSchema("Exact owning class binary name."),
-                        "name", stringSchema("Exact member name."),
-                        "descriptor", stringSchema("Exact JVM member descriptor.")
+        return Map.of("oneOf", List.of(
+                targetVariant(
+                        "class",
+                        Map.of("owner", stringSchema("Exact class binary name.")),
+                        List.of("owner")
                 ),
-                List.of()
-        );
-        schema.put("oneOf", List.of(
-                usageTargetVariant("class", List.of("kind", "owner")),
-                usageTargetVariant("field", List.of("kind", "owner", "name", "descriptor")),
-                usageTargetVariant("method", List.of("kind", "owner", "name", "descriptor"))
+                targetVariant("field", memberTargetProperties(), List.of("owner", "name", "descriptor")),
+                targetVariant("method", memberTargetProperties(), List.of("owner", "name", "descriptor"))
         ));
-        return schema;
     }
 
-    private static Map<String, Object> usageTargetVariant(String kind, List<String> required) {
+    private static Map<String, Object> runtimeSourceTargetSchema() {
+        return Map.of("oneOf", List.of(
+                targetVariant(
+                        "class",
+                        Map.of("binary_name", stringSchema("Exact class binary name.")),
+                        List.of("binary_name")
+                ),
+                targetVariant("field", memberTargetProperties(), List.of("owner", "name", "descriptor")),
+                targetVariant("method", memberTargetProperties(), List.of("owner", "name", "descriptor")),
+                targetVariant(
+                        "record_component",
+                        memberTargetProperties(),
+                        List.of("owner", "name", "descriptor")
+                )
+        ));
+    }
+
+    private static Map<String, Object> memberTargetProperties() {
         return Map.of(
-                "properties", Map.of("kind", Map.of("const", kind)),
-                "required", required
+                "owner", stringSchema("Exact owning class binary name."),
+                "name", stringSchema("Exact member name."),
+                "descriptor", stringSchema("Exact JVM member descriptor.")
         );
+    }
+
+    private static Map<String, Object> targetVariant(
+            String kind,
+            Map<String, Object> properties,
+            List<String> required
+    ) {
+        Map<String, Object> variantProperties = new LinkedHashMap<>();
+        variantProperties.put("kind", Map.of("type", "string", "const", kind));
+        variantProperties.putAll(properties);
+
+        List<String> variantRequired = new ArrayList<>(required.size() + 1);
+        variantRequired.add("kind");
+        variantRequired.addAll(required);
+        return objectSchema(variantProperties, List.copyOf(variantRequired));
     }
 
     private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {

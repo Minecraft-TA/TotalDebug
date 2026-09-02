@@ -59,6 +59,8 @@ class CompanionMcpSidecarTest {
             assertTrue(tools.toString().contains("client_code_execute"));
             assertTrue(tools.toString().contains("server_code_execute"));
             assertTrue(tools.toString().contains("job_source"));
+            assertTrue(tools.toString().contains("runtime_source"));
+            assertFalse(tools.toString().contains("class_source"));
             assertTrue(tools.toString().contains("outputSchema"));
             assertFalse(tools.toString().contains("artifacts_read"));
 
