@@ -5,6 +5,7 @@ import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,13 +16,58 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeIndexServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void indexesOnlyThePublishedSourcesNotArbitraryEmbeddedJars() throws Exception {
+        byte[] nested = archive(RuntimeInventoryTest.class, null);
+        Path outer = Files.write(this.temporaryDirectory.resolve("outer.jar"), archive(RuntimeIndexServiceTest.class, nested));
+        Path dependency = Files.write(this.temporaryDirectory.resolve("dependency.jar"), nested);
+        var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
+        var outerSource = new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, outer, outer.toUri().toString(), module);
+        var dependencySource = new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, dependency, "nested:/dependency", module);
+
+        for (var sources : List.of(List.of(outerSource), List.of(outerSource, dependencySource))) {
+            RuntimeInventory inventory = new RuntimeInventory("fixture", "21", System.getProperty("java.home"), true, sources);
+            var inputs = RuntimeIndexService.prepareInputs(inventory);
+            assertEquals(sources.size(), inputs.size());
+            assertEquals(sources.stream().map(RuntimeInventory.Source::path).toList(),
+                    inputs.stream().map(input -> input.publishedSource().path()).toList());
+            try (ClassIndex index = ClassIndex.fromSources(inputs.stream().map(RuntimeIndexService.PreparedInput::indexSource).toList())) {
+                assertNotNull(index.findClass(RuntimeIndexServiceTest.class.getName()));
+                if (sources.size() == 1) {
+                    assertNull(index.findClass(RuntimeInventoryTest.class.getName()));
+                } else {
+                    assertNotNull(index.findClass(RuntimeInventoryTest.class.getName()));
+                }
+            }
+        }
+    }
+
+    private static byte[] archive(Class<?> type, byte[] nested) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream output = new ZipOutputStream(bytes)) {
+            output.putNextEntry(new ZipEntry(type.getName().replace('.', '/') + ".class"));
+            output.write(classBytes(type));
+            output.closeEntry();
+            if (nested != null) {
+                output.putNextEntry(new ZipEntry("META-INF/jarjar/dependency.jar"));
+                output.write(nested);
+                output.closeEntry();
+            }
+        }
+        return bytes.toByteArray();
+    }
 
     @Test
     void keepsTheRestoredSnapshotWhenTheLiveInventoryMatches() throws Exception {
@@ -88,7 +134,7 @@ class RuntimeIndexServiceTest {
 
     private static void writeIndexMetadata(Path file, String inventoryId) throws Exception {
         Properties properties = new Properties();
-        properties.setProperty("format", "1");
+        properties.setProperty("format", "2");
         properties.setProperty("inventory.id", inventoryId);
         try (var output = Files.newOutputStream(file)) {
             properties.store(output, "test runtime index");

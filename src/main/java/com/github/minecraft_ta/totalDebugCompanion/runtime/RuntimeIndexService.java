@@ -26,14 +26,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public final class RuntimeIndexService implements AutoCloseable {
     private static final String INDEX_DIRECTORY_NAME = "index";
     private static final String INDEX_FILE_NAME = "index";
     private static final String METADATA_FILE_NAME = "index.properties";
-    private static final String CACHE_FORMAT = "1";
+    private static final String CACHE_FORMAT = "2";
 
     public enum Phase {
         WAITING,
@@ -78,7 +76,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private record PreparedInput(IndexSource indexSource, RuntimeSnapshotBytecodeSource.Source publishedSource) {
+    record PreparedInput(IndexSource indexSource, RuntimeSnapshotBytecodeSource.Source publishedSource) {
     }
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> Thread.ofPlatform()
@@ -199,7 +197,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         Files.createDirectories(dataDirectory);
         Path staged = Files.createTempDirectory(dataDirectory, ".runtime-index-");
         try {
-            List<PreparedInput> prepared = prepareInputs(inventory, staged, indexDirectory);
+            List<PreparedInput> prepared = prepareInputs(inventory);
             List<IndexSource> indexSources = new ArrayList<>();
             var publishedSourcesById = new LinkedHashMap<Integer, RuntimeSnapshotBytecodeSource.Source>();
             for (PreparedInput input : prepared) {
@@ -249,11 +247,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static List<PreparedInput> prepareInputs(
-            RuntimeInventory inventory,
-            Path staged,
-            Path publishedDirectory
-    ) throws IOException {
+    static List<PreparedInput> prepareInputs(RuntimeInventory inventory) throws IOException {
         List<PreparedInput> inputs = new ArrayList<>();
         int sourceId = 0;
         for (int sourceNumber = 0; sourceNumber < inventory.sources().size(); sourceNumber++) {
@@ -294,65 +288,9 @@ public final class RuntimeIndexService implements AutoCloseable {
                                 source.module()
                         )
                 ));
-                sourceId = extractNestedArchives(
-                        source.path(),
-                        source.logicalUri(),
-                        source.module(),
-                        staged.resolve("nested").resolve("source-" + sourceNumber),
-                        publishedDirectory.resolve("nested").resolve("source-" + sourceNumber),
-                        sourceId,
-                        inputs
-                );
             }
         }
         return List.copyOf(inputs);
-    }
-
-    private static int extractNestedArchives(
-            Path archive,
-            String logicalArchive,
-            RuntimeInventory.RuntimeModule runtimeModule,
-            Path stagedDirectory,
-            Path publishedDirectory,
-            int nextSourceId,
-            List<PreparedInput> inputs
-    ) throws IOException {
-        try (ZipFile zip = new ZipFile(archive.toFile())) {
-            List<? extends ZipEntry> entries = zip.stream()
-                    .filter(entry -> !entry.isDirectory() && entry.getName().endsWith(".jar"))
-                    .sorted(Comparator.comparing(ZipEntry::getName))
-                    .toList();
-            for (int nestedNumber = 0; nestedNumber < entries.size(); nestedNumber++) {
-                ZipEntry entry = entries.get(nestedNumber);
-                Path stagedJar = stagedDirectory.resolve("nested-" + nestedNumber + ".jar");
-                Path publishedJar = publishedDirectory.resolve("nested-" + nestedNumber + ".jar");
-                Files.createDirectories(stagedJar.getParent());
-                try (InputStream input = zip.getInputStream(entry)) {
-                    Files.copy(input, stagedJar);
-                }
-                int sourceId = nextSourceId++;
-                String logicalSource = logicalArchive + "!/" + entry.getName();
-                inputs.add(new PreparedInput(
-                        IndexSource.archive(sourceId, stagedJar.toString()),
-                        new RuntimeSnapshotBytecodeSource.Source(
-                                sourceId,
-                                publishedJar,
-                                logicalSource,
-                                runtimeModule
-                        )
-                ));
-                nextSourceId = extractNestedArchives(
-                        stagedJar,
-                        logicalSource,
-                        runtimeModule,
-                        stagedDirectory.resolve("nested-" + nestedNumber),
-                        publishedDirectory.resolve("nested-" + nestedNumber),
-                        nextSourceId,
-                        inputs
-                );
-            }
-        }
-        return nextSourceId;
     }
 
     private static void addJdkClasses(int sourceId, List<IndexSource> sources) throws IOException {

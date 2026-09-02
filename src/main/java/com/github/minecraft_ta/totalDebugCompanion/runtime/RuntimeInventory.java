@@ -17,7 +17,7 @@ public record RuntimeInventory(
         boolean production,
         List<Source> sources
 ) {
-    public static final int FORMAT_VERSION = 3;
+    public static final int FORMAT_VERSION = 4;
 
     public enum SourceKind {
         ARCHIVE,

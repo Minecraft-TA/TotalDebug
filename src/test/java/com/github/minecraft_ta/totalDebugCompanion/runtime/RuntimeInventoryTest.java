@@ -19,7 +19,7 @@ class RuntimeInventoryTest {
         Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
         Path file = this.temporaryDirectory.resolve("runtime-inventory.properties");
         Files.writeString(file, """
-                format=3
+                format=4
                 inventory.id=abc
                 java.runtime.version=21.0.12
                 java.home=C:/jdk
@@ -47,7 +47,7 @@ class RuntimeInventoryTest {
     void rejectsAnInventoryIdentityWithoutSources() throws Exception {
         Path file = this.temporaryDirectory.resolve("runtime-inventory.properties");
         Files.writeString(file, """
-                format=3
+                format=4
                 inventory.id=abc
                 java.runtime.version=21
                 java.home=C:/jdk
