@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -80,6 +82,10 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
     }
 
+    /** Atomic externally observable state. Frame and value handles belong to one pause only. */
+    public record Snapshot(long revision, Status status, String pauseId, PausedState pause) {
+    }
+
     public record BreakpointDefinition(
             URI sourceUri,
             String binaryName,
@@ -144,6 +150,14 @@ public final class DebuggerSessionController implements AutoCloseable {
     private volatile DebugTargetDescriptor target;
     private volatile DebugEngine engine;
     private volatile PausedState pausedState;
+    private final Object changeMonitor = new Object();
+    private volatile Snapshot snapshot = new Snapshot(0, this.status, null, null);
+    private String pauseId;
+    private long pauseGeneration;
+    private final Map<Integer, ExposedValue> exposedValues = new HashMap<>();
+
+    private record ExposedValue(DebugEngine.StackFrame frame, boolean indexed) {
+    }
     private volatile boolean breakOnCaughtExceptions;
     private volatile boolean breakOnUncaughtExceptions;
     private volatile boolean breakpointsMuted;
@@ -167,6 +181,146 @@ public final class DebuggerSessionController implements AutoCloseable {
 
     public PausedState pausedState() {
         return this.pausedState;
+    }
+
+    public Snapshot snapshot() {
+        return this.snapshot;
+    }
+
+    /** Waits outside the debugger command queue so events and commands can still run. */
+    public Snapshot waitForChange(long afterRevision, int waitMilliseconds) throws InterruptedException {
+        checkWait(waitMilliseconds);
+        synchronized (this.changeMonitor) {
+            if (afterRevision < 0 || afterRevision > this.snapshot.revision()) {
+                throw new IllegalArgumentException("after_revision does not belong to the current debugger session");
+            }
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMilliseconds);
+            while (!this.closed && this.snapshot.revision() == afterRevision) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
+                TimeUnit.NANOSECONDS.timedWait(this.changeMonitor, remaining);
+            }
+            return this.snapshot;
+        }
+    }
+
+    public Snapshot waitUntilStopped(int waitMilliseconds) throws InterruptedException {
+        checkWait(waitMilliseconds);
+        synchronized (this.changeMonitor) {
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMilliseconds);
+            while (!this.closed && this.snapshot.status().phase() == Phase.RUNNING) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
+                TimeUnit.NANOSECONDS.timedWait(this.changeMonitor, remaining);
+            }
+            return this.snapshot;
+        }
+    }
+
+    private static void checkWait(int milliseconds) {
+        if (milliseconds < 0 || milliseconds > 120_000) {
+            throw new IllegalArgumentException("wait_ms must be between 0 and 120000");
+        }
+    }
+
+    public CompletableFuture<List<DebugEngine.DebugThread>> threads() {
+        return submitValue(() -> requireEngine().threads().join());
+    }
+
+    public CompletableFuture<Void> pause(long threadId) {
+        if (threadId <= 0) throw new IllegalArgumentException("thread_id must be positive");
+        return submitFuture(() -> {
+            if (this.status.phase() != Phase.RUNNING) {
+                throw new IllegalStateException("Debugger pause requires state RUNNING");
+            }
+            this.queue.invalidateAdvisoryWork();
+            requireEngine().pause(threadId).join();
+        });
+    }
+
+    public CompletableFuture<Void> controlPaused(String expectedPauseId, String action) {
+        Objects.requireNonNull(expectedPauseId, "pause_id");
+        ThreadControl operation = switch (action) {
+            case "continue" -> DebugEngine::resume;
+            case "step_over" -> DebugEngine::stepOver;
+            case "step_into" -> DebugEngine::stepInto;
+            case "step_out" -> DebugEngine::stepOut;
+            default -> throw new IllegalArgumentException("Unknown paused debugger action: " + action);
+        };
+        return control(action, expectedPauseId, operation);
+    }
+
+    public CompletableFuture<List<DebugEngine.StackFrame>> frames(String expectedPauseId) {
+        return submitValue(() -> requireRemotePause(expectedPauseId).frames());
+    }
+
+    public CompletableFuture<List<DebugEngine.Variable>> variables(
+            String expectedPauseId, Integer frameId, Integer valueReference, int start, int count
+    ) {
+        if ((frameId == null) == (valueReference == null)) {
+            throw new IllegalArgumentException("Specify exactly one of frame_id and value_ref");
+        }
+        if (start < 0 || count < 1 || count > 501 || start > Integer.MAX_VALUE - count) {
+            throw new IllegalArgumentException("Invalid debugger variable page");
+        }
+        return submitValue(() -> {
+            requireRemotePause(expectedPauseId);
+            DebugEngine.StackFrame frame;
+            List<DebugEngine.Variable> values;
+            if (frameId != null) {
+                frame = remoteFrame(expectedPauseId, frameId);
+                List<DebugEngine.Variable> locals = loadVariables(requireEngine(), frame);
+                int from = Math.min(start, locals.size());
+                values = List.copyOf(locals.subList(from, Math.min(from + count, locals.size())));
+            } else {
+                ExposedValue exposed = this.exposedValues.get(valueReference);
+                if (exposed == null) throw new IllegalArgumentException("Unknown value_ref for this pause");
+                frame = exposed.frame();
+                if (exposed.indexed()) {
+                    values = requireEngine().variables(valueReference, start, count).join();
+                } else {
+                    List<DebugEngine.Variable> fields = requireEngine().variables(valueReference, 0, 0).join();
+                    int from = Math.min(start, fields.size());
+                    values = List.copyOf(fields.subList(from, Math.min(from + count, fields.size())));
+                }
+            }
+            requireRemotePause(expectedPauseId);
+            for (DebugEngine.Variable value : values) {
+                exposeValue(value.variablesReference(), value.type(), frame);
+            }
+            return values;
+        });
+    }
+
+    public CompletableFuture<DebugEngine.EvaluationResult> evaluate(
+            String expectedPauseId, int frameId, String expression
+    ) {
+        return submitValue(() -> {
+            DebugEngine.StackFrame frame = remoteFrame(expectedPauseId, frameId);
+            DebugEngine.EvaluationResult result = requireEngine().evaluate(expression, frame.id()).join();
+            requireRemotePause(expectedPauseId);
+            exposeValue(result.variablesReference(), result.type(), frame);
+            return result;
+        });
+    }
+
+    private void exposeValue(int reference, String type, DebugEngine.StackFrame frame) {
+        if (reference > 0) this.exposedValues.put(reference, new ExposedValue(frame, type.endsWith("[]")));
+    }
+
+    private DebugEngine.StackFrame remoteFrame(String expectedPauseId, int frameId) {
+        return requireRemotePause(expectedPauseId).frames().stream()
+                .filter(frame -> frame.id() == frameId).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown frame_id for this pause"));
+    }
+
+    private PausedState requireRemotePause(String expectedPauseId) {
+        PausedState pause = requirePausedState();
+        if (!Objects.equals(this.pauseId, expectedPauseId)
+                || this.pauseGeneration != this.queue.advisoryGeneration()) {
+            throw new IllegalStateException("pause_id is stale; read debugger_status for the current pause");
+        }
+        return pause;
     }
 
     public void addListener(Listener listener) {
@@ -210,7 +364,6 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     public CompletableFuture<Void> attach() {
-        this.queue.invalidateAdvisoryWork();
         return submitFuture(() -> {
             DebugTargetDescriptor currentTarget = requireTarget();
             Phase phase = this.status.phase();
@@ -218,6 +371,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 throw new IllegalStateException("Debugger attach requires state DETACHED or FAILED, current state is "
                         + phase);
             }
+            this.queue.invalidateAdvisoryWork();
             if (this.engine != null) {
                 closeEngine();
             }
@@ -390,6 +544,7 @@ public final class DebuggerSessionController implements AutoCloseable {
         for (Listener listener : this.listeners) {
             listener.breakpointsMutedChanged(muted);
         }
+        advanceRevision();
         changed.forEach(this::notifyBreakpointsChanged);
         return submitFuture(() -> {
             DebugEngine current = this.engine;
@@ -626,6 +781,29 @@ public final class DebuggerSessionController implements AutoCloseable {
         return configureBreakpoint(checkedSource.uri(), checkedRequest, checkedSource, registration);
     }
 
+    /** Deterministic create/update, including explicit enabled state. */
+    public CompletableFuture<Void> putBreakpoint(
+            DebugEngine.Source source, DebugEngine.SourceBreakpoint request, boolean enabled
+    ) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(request, "request");
+        SourceRegistration registration = registerSourceModel(source);
+        DebugEngine.SourceBreakpoint normalized = request.withConditions(
+                normalizeExpression(request.condition()), normalizeExpression(request.hitCondition()));
+        List<Breakpoint> changed;
+        synchronized (this.modelLock) {
+            NavigableMap<Integer, Breakpoint> entries = this.breakpoints.computeIfAbsent(
+                    source.uri(), ignored -> new TreeMap<>());
+            this.breakpointBinaryNames.put(source.uri(), source.binaryName());
+            removeBreakpointBindingLocked(source.uri(), request.line());
+            entries.put(request.line(), enabled ? createdBreakpoint(source, normalized)
+                    : new Breakpoint(normalized, BreakpointState.DISABLED, ""));
+            changed = List.copyOf(entries.values());
+        }
+        notifyBreakpointsChanged(source.uri(), changed);
+        return applySourceBreakpointMutation(source, registration, null);
+    }
+
     public CompletableFuture<Void> configureBreakpoint(
             URI sourceUri,
             DebugEngine.SourceBreakpoint request
@@ -778,12 +956,20 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private CompletableFuture<Void> control(String detail, ThreadControl control) {
-        this.queue.invalidateAdvisoryWork();
+        return control(detail, null, control);
+    }
+
+    private CompletableFuture<Void> control(String detail, String expectedPauseId, ThreadControl control) {
+        if (expectedPauseId == null) this.queue.invalidateAdvisoryWork();
         return submitFuture(() -> {
             DebugEngine current = requireEngine();
             PausedState pause = this.pausedState;
             if (this.status.phase() != Phase.PAUSED || pause == null) {
                 throw new IllegalStateException("Debugger control requires state PAUSED");
+            }
+            if (expectedPauseId != null) {
+                requireRemotePause(expectedPauseId);
+                this.queue.invalidateAdvisoryWork();
             }
             this.pausedState = null;
             updateStatus(Phase.RUNNING, detail, null);
@@ -803,6 +989,7 @@ public final class DebuggerSessionController implements AutoCloseable {
             } catch (Throwable failure) {
                 Throwable cause = unwrap(failure);
                 this.pausedState = pause;
+                this.pauseGeneration = this.queue.advisoryGeneration();
                 updateStatus(Phase.PAUSED, detail + " failed: " + failureMessage(cause), cause);
                 throw propagate(cause);
             }
@@ -903,6 +1090,9 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (this.engine != sourceEngine) {
             return;
         }
+        this.pauseId = UUID.randomUUID().toString();
+        this.pauseGeneration = this.queue.advisoryGeneration();
+        this.exposedValues.clear();
         try {
             List<DebugEngine.StackFrame> frames = sourceEngine.stackTrace(event.threadId()).join();
             List<DebugEngine.Variable> variables = frames.isEmpty()
@@ -1088,6 +1278,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private void notifyBreakpointsChanged(URI sourceUri, List<Breakpoint> snapshot) {
+        advanceRevision();
         for (Listener listener : this.listeners) {
             listener.breakpointsChanged(sourceUri, snapshot);
         }
@@ -1158,8 +1349,18 @@ public final class DebuggerSessionController implements AutoCloseable {
     private void updateStatus(Phase phase, String detail, Throwable failure) {
         Status replacement = new Status(phase, this.target, detail, failure);
         this.status = replacement;
+        publishSnapshot();
         for (Listener listener : this.listeners) {
             listener.statusChanged(replacement);
+        }
+    }
+
+    private void advanceRevision() {
+        synchronized (this.changeMonitor) {
+            Snapshot previous = this.snapshot;
+            this.snapshot = new Snapshot(previous.revision() + 1, previous.status(),
+                    previous.pauseId(), previous.pause());
+            this.changeMonitor.notifyAll();
         }
     }
 
@@ -1198,6 +1399,24 @@ public final class DebuggerSessionController implements AutoCloseable {
         });
     }
 
+    private void publishSnapshot() {
+        synchronized (this.changeMonitor) {
+            boolean paused = this.status.phase() == Phase.PAUSED && this.pausedState != null;
+            Snapshot previous = this.snapshot;
+            if (previous.status().phase() == this.status.phase()
+                    && Objects.equals(previous.status().target(), this.status.target())
+                    && Objects.equals(previous.pauseId(), paused ? this.pauseId : null)
+                    && Objects.equals(previous.pause(), paused ? this.pausedState : null)
+                    && Objects.equals(previous.status().failure(), this.status.failure())
+                    && (this.status.failure() == null || previous.status().detail().equals(this.status.detail()))) {
+                return;
+            }
+            this.snapshot = new Snapshot(this.snapshot.revision() + 1, this.status,
+                    paused ? this.pauseId : null, paused ? this.pausedState : null);
+            this.changeMonitor.notifyAll();
+        }
+    }
+
     private <T> CompletableFuture<T> submitAdvisory(DebugEngine.StackFrame frame, Supplier<T> action) {
         Objects.requireNonNull(frame, "frame");
         long generation = this.queue.advisoryGeneration();
@@ -1234,9 +1453,17 @@ public final class DebuggerSessionController implements AutoCloseable {
             return;
         }
         try {
-            submitFuture(this::closeEngine).join();
+            submitFuture(() -> {
+                closeEngine();
+                this.pausedState = null;
+                this.target = null;
+                updateStatus(Phase.UNAVAILABLE, "Debugger session is closed", null);
+            }).join();
         } finally {
             this.closed = true;
+            synchronized (this.changeMonitor) {
+                this.changeMonitor.notifyAll();
+            }
             this.queue.close();
             this.listeners.clear();
         }

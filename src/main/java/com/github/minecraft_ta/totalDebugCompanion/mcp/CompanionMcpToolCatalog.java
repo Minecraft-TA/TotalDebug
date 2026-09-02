@@ -18,9 +18,11 @@ final class CompanionMcpToolCatalog {
                     + "runtime_source, and request class scope only when a member does not provide enough context. "
                     + "Use client_code_execute for client runtime facts and server_code_execute for server runtime "
                     + "facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar "
-                    + "values directly so the result remains structured.";
+                    + "values directly so the result remains structured. Debugger tools control the same session as "
+                    + "Companion's UI. Carry the current pause_id into inspections and continue/step commands; use "
+                    + "debugger_wait to wait for state changes.";
 
-    private static final Map<String, Object> EXECUTE_INPUT_SCHEMA = objectSchema(
+    static final Map<String, Object> EXECUTE_INPUT_SCHEMA = objectSchema(
             Map.of(
                     "code", stringSchema("Body of a Java method that returns the structured result."),
                     "imports", arraySchema(
@@ -134,7 +136,7 @@ final class CompanionMcpToolCatalog {
             Function<McpSchema.CallToolRequest, McpSchema.CallToolResult> handler
     ) {
         Objects.requireNonNull(handler, "handler");
-        return TOOLS.stream()
+        return allTools().stream()
                 .map(tool -> McpServerFeatures.SyncToolSpecification.builder()
                         .tool(tool)
                         .callHandler((exchange, request) -> handler.apply(request))
@@ -169,7 +171,7 @@ final class CompanionMcpToolCatalog {
         return result(Map.of("error", failure.asMap()), true);
     }
 
-    private static McpSchema.Tool tool(
+    static McpSchema.Tool tool(
             String name,
             String description,
             Map<String, Object> inputSchema,
@@ -334,7 +336,7 @@ final class CompanionMcpToolCatalog {
         ));
     }
 
-    private static Map<String, Object> toolOutputSchema(Map<String, Object> successSchema) {
+    static Map<String, Object> toolOutputSchema(Map<String, Object> successSchema) {
         return Map.of("oneOf", List.of(successSchema, errorOutputSchema()));
     }
 
@@ -431,7 +433,7 @@ final class CompanionMcpToolCatalog {
         return objectSchema(variantProperties, List.copyOf(variantRequired));
     }
 
-    private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
+    static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", properties);
@@ -440,27 +442,27 @@ final class CompanionMcpToolCatalog {
         return schema;
     }
 
-    private static Map<String, Object> stringSchema(String description) {
+    static Map<String, Object> stringSchema(String description) {
         return Map.of("type", "string", "description", description, "minLength", 1);
     }
 
-    private static Map<String, Object> stringValueSchema(String description) {
+    static Map<String, Object> stringValueSchema(String description) {
         return Map.of("type", "string", "description", description);
     }
 
-    private static Map<String, Object> booleanSchema(String description) {
+    static Map<String, Object> booleanSchema(String description) {
         return Map.of("type", "boolean", "description", description);
     }
 
-    private static Map<String, Object> arraySchema(Map<String, Object> items) {
+    static Map<String, Object> arraySchema(Map<String, Object> items) {
         return Map.of("type", "array", "items", items);
     }
 
-    private static Map<String, Object> enumSchema(String description, String... values) {
+    static Map<String, Object> enumSchema(String description, String... values) {
         return Map.of("type", "string", "description", description, "enum", List.of(values));
     }
 
-    private static Map<String, Object> integerSchema(String description, int minimum, int maximum) {
+    static Map<String, Object> integerSchema(String description, int minimum, int maximum) {
         return Map.of(
                 "type", "integer",
                 "description", description,
@@ -477,9 +479,13 @@ final class CompanionMcpToolCatalog {
         );
     }
 
+    private static List<McpSchema.Tool> allTools() {
+        return java.util.stream.Stream.concat(TOOLS.stream(), DebuggerMcpToolCatalog.tools().stream()).toList();
+    }
+
     private static Map<String, McpSchema.Tool> indexTools() {
         Map<String, McpSchema.Tool> indexed = new LinkedHashMap<>();
-        for (McpSchema.Tool tool : TOOLS) {
+        for (McpSchema.Tool tool : allTools()) {
             indexed.put(tool.name(), tool);
         }
         return Map.copyOf(indexed);
@@ -502,6 +508,9 @@ final class CompanionMcpToolCatalog {
                 case "array" -> requireArray(value, path);
                 case "string" -> requireString(value, schema, path);
                 case "integer" -> requireInteger(value, schema, path);
+                case "boolean" -> {
+                    if (!(value instanceof Boolean)) throw new IllegalArgumentException(path + " must be a boolean");
+                }
                 default -> throw new IllegalStateException("Unsupported input schema type: " + typeName);
             }
         }

@@ -28,7 +28,7 @@ import java.util.concurrent.CountDownLatch;
 public final class CompanionMcpSidecar {
     static final URI DEFAULT_ENDPOINT = URI.create("http://127.0.0.1:" + CompanionMcpServer.MCP_PORT + "/mcp");
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(1);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(150);
 
     private CompanionMcpSidecar() {
     }
@@ -95,12 +95,13 @@ public final class CompanionMcpSidecar {
     private static final class RemoteCompanion implements AutoCloseable {
         private final URI endpoint;
         private McpSyncClient client;
+        private boolean closed;
 
         private RemoteCompanion(URI endpoint) {
             this.endpoint = validateEndpoint(endpoint);
         }
 
-        private synchronized McpSchema.CallToolResult call(McpSchema.CallToolRequest request) {
+        private McpSchema.CallToolResult call(McpSchema.CallToolRequest request) {
             Objects.requireNonNull(request, "request");
             try {
                 CompanionMcpToolCatalog.validateRequest(request);
@@ -110,20 +111,14 @@ public final class CompanionMcpSidecar {
                         true
                 );
             }
+            McpSyncClient current = null;
             try {
-                ensureConnected();
-                try {
-                    this.client.ping();
-                } catch (RuntimeException staleConnection) {
-                    disconnect();
-                    connect();
-                }
-                return this.client.callTool(request);
+                current = connectedClient();
+                return current.callTool(request);
             } catch (ConnectionFailureException exception) {
-                disconnect();
                 return CompanionMcpToolCatalog.companionUnavailable(request.name(), exception.failure());
             } catch (RuntimeException exception) {
-                disconnect();
+                disconnect(current);
                 return CompanionMcpToolCatalog.companionUnavailable(
                         request.name(),
                         forwardingFailure(this.endpoint, exception)
@@ -131,10 +126,18 @@ public final class CompanionMcpSidecar {
             }
         }
 
-        private void ensureConnected() {
+        private synchronized McpSyncClient connectedClient() {
+            if (this.closed) throw new IllegalStateException("Companion MCP sidecar is closed");
             if (this.client == null) {
                 connect();
             }
+            try {
+                this.client.ping();
+            } catch (RuntimeException staleConnection) {
+                disconnect(this.client);
+                connect();
+            }
+            return this.client;
         }
 
         private void connect() {
@@ -243,7 +246,8 @@ public final class CompanionMcpSidecar {
             return endpoint;
         }
 
-        private void disconnect() {
+        private synchronized void disconnect(McpSyncClient expected) {
+            if (this.client != expected) return;
             McpSyncClient current = this.client;
             this.client = null;
             if (current != null) {
@@ -256,7 +260,8 @@ public final class CompanionMcpSidecar {
 
         @Override
         public synchronized void close() {
-            disconnect();
+            this.closed = true;
+            disconnect(this.client);
         }
     }
 

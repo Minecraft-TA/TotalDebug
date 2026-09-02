@@ -61,6 +61,25 @@ Trusted snippets can directly use non-public fields, methods, and constructors o
 
 There is no sandbox. Code can read or mutate anything available to the Minecraft process. Server-side execution follows TotalDebug's server script policy. Cancellation is cooperative. Code already running on a tick thread cannot be interrupted safely.
 
+## Debugger tools
+
+Debugger tools control the same session, breakpoints, and paused JVM as Companion's UI. They attach to the Minecraft process already published by TotalDebug, not an arbitrary PID or host. The integrated server is in that JVM; a separate dedicated server is not a debugger target yet.
+
+- `debugger_status` returns `revision`, `phase`, the available `target`, and a `pause` summary when stopped. A pause contains its unique `id`, stop reason, thread ID, suspension scope, and top frame when available.
+- `debugger_wait(after_revision, wait_ms)` waits for a state or breakpoint revision change, defaulting to 30 seconds and allowing up to 120 seconds. At timeout it returns the current snapshot. Waiting does not occupy the debugger command queue.
+- `debugger_control(action, ...)` accepts `attach`, `detach`, `pause`, `continue`, `step_over`, `step_into`, or `step_out`. Pause requires `thread_id`. Continue and step require the exact `pause_id`. Pause and step wait up to 10 seconds by default; the other actions return after acknowledgement. `wait_ms` overrides that wait. Detach does not terminate Minecraft.
+- `debugger_threads` lists attached JVM thread IDs and names.
+- `debugger_breakpoints` lists the shared breakpoints and global mute state.
+- `debugger_breakpoint_set(binary_name, line, condition?, hit_condition?, enabled?)` deterministically creates or replaces one breakpoint. Omitted conditions are cleared and enabled defaults to true. `line` is the absolute displayed Vineflower line, not a line relative to a `runtime_source` member snippet. Use its `start_line` to calculate that absolute line. Source is loaded without opening an editor; method declarations use the same executable-line resolver as the UI.
+- `debugger_breakpoint_remove(binary_name, line)` returns whether a breakpoint was removed.
+- `debugger_frames(pause_id)` returns the stack of the thread that caused the stop, with frame IDs, method names, and available binary names and displayed lines.
+- `debugger_variables(pause_id, frame_id | value_ref, start?, count?)` returns frame locals or one level of object/array children. The default page has 100 entries, the maximum is 500, and `truncated: true` means another page exists. Only returned expandable values have a `value_ref`.
+- `debugger_evaluate(pause_id, frame_id, expression)` returns the value representation, Java type, and an expandable `value_ref` when applicable. Java method calls can mutate Minecraft. The existing evaluator detaches the debugger if evaluation exceeds five seconds; it cannot promise to undo target-side effects.
+
+Pause IDs are unique for each stop and expire when execution resumes, the target changes, or the debugger detaches. Frame IDs and value references are accepted only with the current pause ID. A stale request fails explicitly, even if the adapter reuses the same numeric IDs. Breakpoints created through MCP are visible and persisted through the existing UI controller.
+
+The sidecar's request deadline is 150 seconds so a 120-second wait can finish. TCP connection and initialization attempts remain bounded separately. Forwarded tool calls run concurrently, so a wait does not block status or control requests.
+
 ## Proof and artifacts
 
 Companion retains the exact merged source and its internal job record under `<companion-app-home>/mcp/artifacts/<job-id>`. Only the source is public through MCP, addressed by `job_id`; internal paths and provenance are not tool output.
@@ -78,6 +97,8 @@ java -cp TotalDebugCompanion.jar com.github.minecraft_ta.totalDebugCompanion.mcp
 The sidecar owns Codex's long-lived stdio MCP session. It does not start Companion. `status` succeeds while Companion is offline and returns all three booleans as `false`. Operational tools return a retryable connection error. When Companion starts later, the next call connects without restarting Codex. The sidecar also pings an existing HTTP session before forwarding each call, which detects a Companion restart.
 
 The HTTP server and sidecar load one tool catalog from the same JAR. Installing a JAR with changed schemas still requires a new Codex task because an already-running sidecar retains the catalog it loaded at startup.
+
+Set `tool_timeout_sec = 180` under `[mcp_servers.totaldebug-companion]` in Codex's `config.toml`. Its [default tool timeout is 60 seconds](https://developers.openai.com/codex/mcp), shorter than the supported 120-second waits.
 
 ## Deferred runtime profiling
 

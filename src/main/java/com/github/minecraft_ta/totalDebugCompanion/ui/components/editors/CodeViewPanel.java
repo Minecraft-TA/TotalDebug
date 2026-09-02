@@ -8,9 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyRel
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerBreakpointResolver;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.ExpressionScopeAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
@@ -558,63 +558,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             String condition,
             String hitCount
     ) {
-        String source = ASTCache.getContents(this.identifier);
         var unit = ASTCache.getFromCache(this.identifier);
-        if (source == null || unit == null) {
+        if (unit == null) {
             throw new IllegalStateException("Source analysis is still loading");
         }
-        int lineStart;
-        int lineEnd;
-        try {
-            lineStart = this.editorPane.getLineStartOffset(displayedLine - 1);
-            lineEnd = this.editorPane.getLineEndOffset(displayedLine - 1);
-        } catch (BadLocationException exception) {
-            throw new IllegalArgumentException("Source has no displayed line " + displayedLine, exception);
-        }
-
-        SourceDeclaration methodDeclaration = SourceDeclarationAnalyzer.analyze(unit, source).stream()
-                .filter(declaration -> declaration.symbol() instanceof CodeSymbol.MethodSymbol)
-                .filter(declaration -> declaration.markerOffset() >= lineStart
-                        && declaration.markerOffset() < lineEnd)
-                .findFirst()
-                .orElse(null);
-        if (methodDeclaration == null) {
-            if (!this.debugSource.lineMap().isEmpty()
-                    && !this.debugSource.lineMap().containsDisplayedLine(displayedLine)) {
-                return Optional.empty();
-            }
-            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount));
-        }
-        if (this.debugSource.lineMap().isEmpty()) {
-            return Optional.of(new DebugEngine.SourceBreakpoint(displayedLine, condition, hitCount));
-        }
-
-        CodeSymbol.MethodSymbol method = (CodeSymbol.MethodSymbol) methodDeclaration.symbol();
-        int methodEndLine;
-        try {
-            int lastMethodOffset = Math.max(
-                    methodDeclaration.markerOffset(),
-                    methodDeclaration.endOffset() - 1
-            );
-            methodEndLine = this.editorPane.getLineOfOffset(lastMethodOffset) + 1;
-        } catch (BadLocationException exception) {
-            throw new IllegalStateException("Unable to resolve method source range", exception);
-        }
-        var debuggerLine = this.debugSource.lineMap().firstMappedDisplayedLine(displayedLine, methodEndLine);
-        if (debuggerLine.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(DebugEngine.SourceBreakpoint.methodEntry(
-                displayedLine,
-                debuggerLine.getAsInt(),
-                new DebugEngine.MethodTarget(
-                        method.ownerClassName(),
-                        method.name(),
-                        method.descriptor()
-                ),
-                condition,
-                hitCount
-        ));
+        return DebuggerBreakpointResolver.resolve(
+                this.debugSource, unit, displayedLine, condition, hitCount);
     }
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {

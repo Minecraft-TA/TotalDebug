@@ -34,6 +34,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private final CodeModeJobService jobs;
     private final CompanionMcpRuntimeSource runtimeSource;
     private final CompanionMcpSearchService search;
+    private final DebuggerMcpService debugger;
     private final int port;
     private HttpServletStreamableServerTransportProvider transportProvider;
     private McpSyncServer mcpServer;
@@ -46,9 +47,15 @@ public final class CompanionMcpServer implements AutoCloseable {
     }
 
     CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port) {
+        this(dataDirectory, jobs, port, new DebuggerMcpService(CompanionApp::getDebuggerController,
+                name -> CompanionApp.getDecompilationService().loadDebugSource(name)));
+    }
+
+    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger) {
         this.dataDirectory = normalize(dataDirectory);
         this.endpointDescriptor = this.dataDirectory.resolve(McpEndpointDescriptor.FILE_NAME);
         this.jobs = Objects.requireNonNull(jobs, "jobs");
+        this.debugger = Objects.requireNonNull(debugger, "debugger");
         this.runtimeSource = new CompanionMcpRuntimeSource(CompanionApp::getDecompilationService);
         this.search = new CompanionMcpSearchService(
                 CompanionClassIndex::get,
@@ -172,6 +179,10 @@ public final class CompanionMcpServer implements AutoCloseable {
                 );
                 case "find_usages" -> this.search.findUsages(requiredObject(request.arguments(), "target"));
                 case "search_literals" -> this.search.searchLiterals(requiredString(request.arguments(), "query"));
+                case "debugger_status", "debugger_wait", "debugger_control", "debugger_threads",
+                     "debugger_breakpoints", "debugger_breakpoint_set", "debugger_breakpoint_remove",
+                     "debugger_frames", "debugger_variables", "debugger_evaluate" ->
+                        this.debugger.call(request.name(), request.arguments());
                 default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
             };
             return CompanionMcpToolCatalog.result(result, false);

@@ -93,6 +93,7 @@ class CompanionMcpToolCatalogTest {
 
         List<McpSchema.Tool> tools = CompanionMcpToolCatalog.specifications(request -> null).stream()
                 .map(specification -> specification.tool())
+                .filter(tool -> !tool.name().startsWith("debugger_"))
                 .toList();
         assertEquals(samples.keySet(), tools.stream().map(McpSchema.Tool::name).collect(java.util.stream.Collectors.toSet()));
 

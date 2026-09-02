@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,6 +25,68 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerSessionControllerTest {
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(2);
+
+    @Test
+    void remoteHandlesExpireEvenWhenTheAdapterReusesFrameAndValueIds() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebugEngine.StackFrame frame = new DebugEngine.StackFrame(1, "run", "example.Test",
+                URI.create("decompiled:///Test.java"), 4, 0);
+        engine.frames = List.of(frame);
+        engine.scopes = List.of(new DebugEngine.Scope("Local", 10, false));
+        engine.variables.put(10, List.of(new DebugEngine.Variable("object", "object", "object", "Object@1",
+                "Object", DebugEngine.VariableKind.LOCAL, 10, 20, 1, 0)));
+        engine.variables.put(20, List.of(new DebugEngine.Variable("x", "x", "object.x", "7", "int",
+                DebugEngine.VariableKind.FIELD, 20, 0, 0, 0)));
+        try (DebuggerSessionController controller = new DebuggerSessionController(engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50321, timeout))) {
+            controller.acceptTarget(new DebugTargetDescriptor("game", "Minecraft", 42));
+            controller.attach().join();
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 42, true));
+            awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+            String first = controller.snapshot().pauseId();
+            assertEquals(List.of(frame), controller.frames(first).join());
+            assertThrows(CompletionException.class, () -> controller.variables(first, null, 20, 0, 10).join());
+            assertEquals(1, controller.variables(first, 1, null, 0, 10).join().size());
+            assertEquals("7", controller.variables(first, null, 20, 0, 10).join().getFirst().value());
+            controller.controlPaused(first, "continue").join();
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 42, true));
+            awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+            String second = controller.snapshot().pauseId();
+            assertFalse(first.equals(second));
+            assertThrows(CompletionException.class, () -> controller.frames(first).join());
+            assertThrows(CompletionException.class, () -> controller.evaluate(first, 1, "x").join());
+            assertThrows(CompletionException.class, () -> controller.controlPaused(first, "step_over").join());
+            assertEquals(List.of(frame), controller.frames(second).join());
+            assertThrows(CompletionException.class, () -> controller.variables(second, null, 20, 0, 10).join());
+        }
+    }
+
+    @Test
+    void revisionWaitsDoNotBlockCommandsAndWakeOnClose() throws Exception {
+        DebuggerSessionController controller = new DebuggerSessionController(RecordingEngine::newProxy,
+                (target, timeout) -> DebugEngine.Target.local(50321, timeout));
+        try {
+            long revision = controller.snapshot().revision();
+            CompletableFuture<DebuggerSessionController.Snapshot> waiting = CompletableFuture.supplyAsync(() -> {
+                try { return controller.waitForChange(revision, 10_000); }
+                catch (InterruptedException e) { throw new RuntimeException(e); }
+            });
+            controller.acceptTarget(new DebugTargetDescriptor("game", "Minecraft", 42));
+            var changed = waiting.get(2, TimeUnit.SECONDS);
+            assertTrue(changed.revision() > revision);
+            assertEquals(DebuggerSessionController.Phase.DETACHED, changed.status().phase());
+            assertEquals(changed, controller.waitForChange(changed.revision(), 0));
+            assertThrows(IllegalArgumentException.class, () -> controller.waitForChange(Long.MAX_VALUE, 0));
+            CompletableFuture<?> closingWait = CompletableFuture.supplyAsync(() -> {
+                try { return controller.waitForChange(changed.revision(), 10_000); }
+                catch (InterruptedException e) { throw new RuntimeException(e); }
+            });
+            controller.close();
+            closingWait.get(2, TimeUnit.SECONDS);
+        } finally {
+            controller.close();
+        }
+    }
 
     @Test
     void appliesExceptionPreferencesOnAttachAndWhileRunning() throws Exception {

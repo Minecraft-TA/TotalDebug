@@ -14,6 +14,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -28,7 +29,7 @@ class CompanionMcpSidecarTest {
     Path temporaryDirectory;
 
     @Test
-    void initializesOfflineThenForwardsAfterCompanionAppears() throws Exception {
+    void initializesOfflineForwardsConcurrentWaitsAndReconnects() throws Exception {
         int port = availablePort();
         URI endpoint = URI.create("http://127.0.0.1:" + port + "/mcp");
 
@@ -62,6 +63,8 @@ class CompanionMcpSidecarTest {
             assertTrue(tools.toString().contains("runtime_source"));
             assertFalse(tools.toString().contains("class_source"));
             assertTrue(tools.toString().contains("outputSchema"));
+            assertTrue(tools.toString().contains("debugger_control"));
+            assertTrue(tools.toString().contains("debugger_evaluate"));
             assertFalse(tools.toString().contains("artifacts_read"));
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{" +
@@ -87,7 +90,22 @@ class CompanionMcpSidecarTest {
                     "\"name\":\"client_code_execute\",\"arguments\":{\"code\":\"return 1;\"}}}");
             assertUnreachableFailure(response(reader, executor, 30));
 
-            try (CompanionMcpServer companion = companion(port, "first")) {
+            send(writer, "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"tools/call\",\"params\":{" +
+                    "\"name\":\"debugger_status\",\"arguments\":{}}}");
+            assertUnreachableFailure(response(reader, executor, 31));
+
+            CompletableFuture<Void> submitted = new CompletableFuture<>();
+            CodeModeJobService.Transport waitingTransport = new CodeModeJobService.Transport() {
+                @Override
+                public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
+                                    CodeModeJobService.ExecutionEnvironment environment) {
+                    submitted.complete(null);
+                }
+
+                @Override
+                public void cancel(int id) { }
+            };
+            try (CompanionMcpServer companion = companion(port, "first", waitingTransport)) {
                 companion.start();
                 send(writer, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{" +
                         "\"name\":\"status\",\"arguments\":{}}}");
@@ -95,7 +113,18 @@ class CompanionMcpSidecarTest {
                 assertTrue(onlineStatus.toString().contains("companion_available"));
                 assertTrue(onlineStatus.toString().contains("minecraft_connected"));
                 assertFalse(onlineStatus.toString().contains("companion_process_id"));
-
+                send(writer, """
+                        {"jsonrpc":"2.0","id":40,"method":"tools/call","params":{
+                          "name":"client_code_execute","arguments":{"code":"return 1;","wait_ms":12000}}}
+                        """);
+                submitted.get(5, TimeUnit.SECONDS);
+                send(writer, """
+                        {"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"status","arguments":{}}}
+                        """);
+                assertFalse(response(reader, executor, 41).getAsJsonObject("result").get("isError").getAsBoolean());
+                JsonObject waited = response(reader, executor, 40, 20).getAsJsonObject("result");
+                assertFalse(waited.get("isError").getAsBoolean());
+                assertTrue(waited.getAsJsonObject("structuredContent").has("job_id"));
             }
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
@@ -130,9 +159,13 @@ class CompanionMcpSidecarTest {
     }
 
     private CompanionMcpServer companion(int port, String instance) {
+        return companion(port, instance, new NoOpTransport());
+    }
+
+    private CompanionMcpServer companion(int port, String instance, CodeModeJobService.Transport transport) {
         CodeModeJobService jobs = new CodeModeJobService(
-                () -> false,
-                new NoOpTransport(),
+                () -> true,
+                transport,
                 this.temporaryDirectory.resolve(instance).resolve("artifacts"),
                 Clock.systemUTC()
         );
@@ -156,9 +189,13 @@ class CompanionMcpSidecarTest {
     }
 
     private static JsonObject response(BufferedReader reader, ExecutorService executor, int id) throws Exception {
+        return response(reader, executor, id, 5);
+    }
+
+    private static JsonObject response(BufferedReader reader, ExecutorService executor, int id, int timeoutSeconds) throws Exception {
         for (int index = 0; index < 20; index++) {
             Future<String> line = executor.submit(reader::readLine);
-            String value = line.get(5, TimeUnit.SECONDS);
+            String value = line.get(timeoutSeconds, TimeUnit.SECONDS);
             if (value == null) {
                 throw new AssertionError("Sidecar output closed before response " + id);
             }
