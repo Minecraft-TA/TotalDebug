@@ -3,13 +3,20 @@ package com.github.minecraft_ta.totaldebug;
 import com.mojang.logging.LogUtils;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
+import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
 import com.github.minecraft_ta.totaldebug.server.script.ServerScriptService;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
+import io.github.classgraph.ClassGraph;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.util.Objects;
 
 @Mod(TotalDebug.MOD_ID)
@@ -23,6 +30,7 @@ public final class TotalDebug {
     private final TickTaskScheduler tickTaskScheduler;
     private final TotalDebugNetwork network;
     private final ServerScriptService serverScripts;
+    private PreparedRuntimeSources runtimeSources;
 
     public TotalDebug(IEventBus modEventBus, ModContainer modContainer) {
         if (instance != null) {
@@ -63,5 +71,15 @@ public final class TotalDebug {
 
     public ServerScriptService serverScripts() {
         return this.serverScripts;
+    }
+
+    public synchronized PreparedRuntimeSources runtimeSources() throws IOException {
+        if (this.runtimeSources == null) {
+            this.runtimeSources = RuntimeSourceMaterializer.prepare(
+                    RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class),
+                    FMLPaths.GAMEDIR.get().resolve("total-debug/data/runtime-sources")
+            );
+        }
+        return this.runtimeSources;
     }
 }

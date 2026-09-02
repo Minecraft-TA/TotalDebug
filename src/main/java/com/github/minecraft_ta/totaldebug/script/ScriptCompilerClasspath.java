@@ -1,12 +1,10 @@
 package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
-import io.github.classgraph.ClassGraph;
-import net.minecraft.world.level.block.Block;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -18,18 +16,14 @@ public record ScriptCompilerClasspath(List<Path> sources, String argument) {
         sources = List.copyOf(Objects.requireNonNull(sources, "sources"));
         argument = Objects.requireNonNull(argument, "argument");
         for (Path source : sources) {
-            if (!Files.exists(source)) {
-                throw new IllegalArgumentException("Compiler classpath source does not exist: " + source);
+            if (source.getFileSystem() != FileSystems.getDefault() || !Files.exists(source)) {
+                throw new IllegalArgumentException("Compiler classpath source must be a prepared physical path: " + source);
             }
         }
     }
 
     public static ScriptCompilerClasspath discover() throws IOException {
-        return fromSources(RuntimeSourceInventory.discover(
-                TotalDebug.class,
-                Block.class,
-                ClassGraph.class
-        ));
+        return fromSources(TotalDebug.get().runtimeSources().paths());
     }
 
     static ScriptCompilerClasspath fromSources(List<Path> sources) {

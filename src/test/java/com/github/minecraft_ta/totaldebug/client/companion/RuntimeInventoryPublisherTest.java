@@ -1,8 +1,11 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
+import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -21,11 +24,14 @@ class RuntimeInventoryPublisherTest {
         Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
         Files.write(classes.resolve("Example.class"), new byte[]{1});
         Path archive = Files.write(this.temporaryDirectory.resolve("runtime.jar"), new byte[]{2});
-        Path staged = Files.createDirectories(this.temporaryDirectory.resolve("staged"));
-        Path published = this.temporaryDirectory.resolve("published");
+        var prepared = RuntimeSourceMaterializer.prepare(
+                List.of(new RuntimeSourceInventory.Source(classes, "total_debug"),
+                        new RuntimeSourceInventory.Source(archive, "example")),
+                this.temporaryDirectory.resolve("cache")
+        );
 
         List<RuntimeInventory.Source> sources = RuntimeInventoryPublisher.prepareSources(
-                List.of(classes, archive),
+                prepared,
                 Map.of(
                         classes, new RuntimeInventory.RuntimeModule(
                                 "total_debug",
@@ -37,9 +43,7 @@ class RuntimeInventoryPublisherTest {
                                 "Example Mod",
                                 RuntimeInventory.ModuleKind.MOD
                         )
-                ),
-                staged,
-                published
+                )
         );
 
         assertEquals(classes, sources.get(0).path());
@@ -49,6 +53,25 @@ class RuntimeInventoryPublisherTest {
         assertEquals("TotalDebug", sources.get(0).module().displayName());
         assertEquals("example", sources.get(1).module().id());
         assertEquals(RuntimeInventory.ModuleKind.MOD, sources.get(1).module().kind());
+    }
+
+    @Test
+    void publishesExactlyThePreparedCompilerSourcesIncludingVirtualModules() throws Exception {
+        Path archive = this.temporaryDirectory.resolve("nested.jar");
+        try (var filesystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
+            Path root = filesystem.getPath("/");
+            Files.write(root.resolve("Dependency.class"), new byte[]{1});
+            var prepared = RuntimeSourceMaterializer.prepare(
+                    List.of(new RuntimeSourceInventory.Source(root, "dependency")),
+                    this.temporaryDirectory.resolve("cache")
+            );
+            var sources = RuntimeInventoryPublisher.prepareSources(prepared, Map.of(
+                    root, new RuntimeInventory.RuntimeModule("dependency", "Dependency", RuntimeInventory.ModuleKind.LIBRARY)
+            ));
+            assertEquals(prepared.paths(), sources.stream().map(RuntimeInventory.Source::path).toList());
+            assertEquals(root.toUri().toASCIIString(), sources.getFirst().logicalUri());
+            assertEquals(RuntimeInventory.SourceKind.ARCHIVE, sources.getFirst().kind());
+        }
     }
 
     @Test

@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.Properties;
 
 final class RuntimeInventory {
-    static final int FORMAT_VERSION = 3;
+    static final int FORMAT_VERSION = 4;
     static final String FILE_NAME = "runtime-inventory.properties";
 
     enum SourceKind {

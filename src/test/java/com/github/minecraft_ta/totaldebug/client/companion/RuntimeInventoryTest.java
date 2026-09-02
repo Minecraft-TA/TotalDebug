@@ -59,7 +59,7 @@ class RuntimeInventoryTest {
     void rejectsAnUnavailablePublishedSource() throws Exception {
         Path file = this.temporaryDirectory.resolve(RuntimeInventory.FILE_NAME);
         Files.writeString(file, """
-                format=3
+                format=4
                 inventory.id=id
                 java.runtime.version=21
                 java.home=jdk

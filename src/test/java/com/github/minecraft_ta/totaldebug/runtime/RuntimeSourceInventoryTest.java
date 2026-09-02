@@ -3,14 +3,20 @@ package com.github.minecraft_ta.totaldebug.runtime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RuntimeSourceInventoryTest {
     @TempDir
@@ -55,6 +61,23 @@ class RuntimeSourceInventoryTest {
 
         assertEquals(stringOwner, owners.get(String.class));
         assertEquals(inventoryOwner, owners.get(RuntimeSourceInventory.class));
+    }
+
+    @Test
+    void resolvesRuntimeModuleLocationsThroughTheirFilesystemProvider() throws Exception {
+        Path archive = jar("module.jar", "example/Dependency.class");
+        try (var filesystem = FileSystems.newFileSystem(URI.create("jar:" + archive.toUri()), Map.of())) {
+            Path root = filesystem.getPath("/");
+            assertEquals(root, RuntimeSourceInventory.modulePath("dependency", root.toUri()));
+        }
+    }
+
+    @Test
+    void skipsGeneratedAndJdkModulesButRejectsUnresolvableSources() throws Exception {
+        assertNull(RuntimeSourceInventory.modulePath("synthetic", null));
+        assertNull(RuntimeSourceInventory.modulePath("java.base", URI.create("jrt:/java.base")));
+        assertThrows(IOException.class, () -> RuntimeSourceInventory.modulePath(
+                "unresolvable", URI.create("missing-provider:/module")));
     }
 
     private Path jar(String fileName, String entryName) throws Exception {

@@ -4,6 +4,7 @@ import net.neoforged.fml.ModList;
 
 import java.io.IOException;
 import java.lang.module.ResolvedModule;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.FileSystems;
@@ -12,40 +13,48 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
-/** Discovers physical JARs and class directories in runtime ownership order. */
+/** Discovers physical and virtual class sources in runtime ownership order. */
 public final class RuntimeSourceInventory {
+    public record Source(Path path, String moduleName) {
+        public Source {
+            path = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
+        }
+    }
+
     private RuntimeSourceInventory() {
     }
 
-    public static List<Path> discover(Class<?>... anchors) throws IOException {
+    public static List<Source> discover(Class<?>... anchors) throws IOException {
         Set<Path> sources = new LinkedHashSet<>();
-        Consumer<Path> addSource = path -> {
-            if (path != null) {
-                sources.add(path.toAbsolutePath().normalize());
-            }
-        };
-
-        ModList.get().forEachModFile(modFile -> addSource.accept(modFile.getFilePath()));
+        Map<Path, String> moduleNames = new LinkedHashMap<>();
+        ModList.get().forEachModFile(modFile -> {
+            Path path = modFile.getFilePath().toAbsolutePath().normalize();
+            sources.add(path);
+            moduleNames.put(path, modFile.getModFileInfo().moduleName());
+        });
         Set<ModuleLayer> visitedLayers = new LinkedHashSet<>();
         for (Class<?> anchor : anchors) {
-            addModuleLayerSources(sources, anchor.getModule().getLayer(), visitedLayers);
-            addCodeSource(sources, anchor);
+            addModuleLayerSources(sources, moduleNames, anchor.getModule().getLayer(), visitedLayers);
+            if (!moduleNames.containsValue(anchor.getModule().getName())) {
+                addCodeSource(sources, anchor);
+            }
         }
         addJavaClasspathSources(sources, anchors);
 
-        return existingSources(sources);
+        return existingSources(sources).stream().map(path -> new Source(path, moduleNames.get(path))).toList();
     }
 
     static List<Path> existingSources(Set<Path> sources) throws IOException {
@@ -83,28 +92,39 @@ public final class RuntimeSourceInventory {
 
     private static void addModuleLayerSources(
             Set<Path> sources,
+            Map<Path, String> moduleNames,
             ModuleLayer layer,
             Set<ModuleLayer> visitedLayers
     ) throws IOException {
         if (layer == null || !visitedLayers.add(layer)) {
             return;
         }
-        for (ResolvedModule module : layer.configuration().modules()) {
-            var location = module.reference().location().orElse(null);
-            if (location == null || "jrt".equalsIgnoreCase(location.getScheme())) {
+        for (ResolvedModule module : layer.configuration().modules().stream()
+                .sorted(Comparator.comparing(ResolvedModule::name)).toList()) {
+            if (moduleNames.containsValue(module.name())) {
                 continue;
             }
-            if (!"file".equalsIgnoreCase(location.getScheme())) {
+            Path path = modulePath(module.name(), module.reference().location().orElse(null));
+            if (path == null) {
                 continue;
             }
-            try {
-                sources.add(Path.of(location).toAbsolutePath().normalize());
-            } catch (IllegalArgumentException exception) {
-                throw new IOException("Invalid module location for " + module.name() + ": " + location, exception);
-            }
+            sources.add(path);
+            moduleNames.putIfAbsent(path, module.name());
         }
         for (ModuleLayer parent : layer.parents()) {
-            addModuleLayerSources(sources, parent, visitedLayers);
+            addModuleLayerSources(sources, moduleNames, parent, visitedLayers);
+        }
+    }
+
+    static Path modulePath(String moduleName, URI location) throws IOException {
+        // Generated modules have no backing source; JDK modules are supplied by the JDK itself.
+        if (location == null || "jrt".equalsIgnoreCase(location.getScheme())) {
+            return null;
+        }
+        try {
+            return Path.of(location).toAbsolutePath().normalize();
+        } catch (RuntimeException exception) {
+            throw new IOException("Cannot resolve runtime module " + moduleName + " at " + location, exception);
         }
     }
 
