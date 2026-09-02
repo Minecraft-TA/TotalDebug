@@ -4,7 +4,7 @@ The persistent Companion process hosts a Streamable HTTP MCP server at `http://1
 
 Codex launches `CompanionMcpSidecar` over stdio instead of connecting to HTTP directly. The sidecar publishes the tool catalog even when Companion is absent. It reconnects before each call, so one Codex task can outlive Companion and Minecraft starts, stops, and restarts.
 
-The active endpoint is written to `<companion-app-home>/mcp-endpoint.json`:
+The active endpoint is written to `<companion-app-home>/run/companion/mcp-endpoint.json`:
 
 ```json
 {
@@ -80,11 +80,11 @@ Pause IDs are unique for each stop and expire when execution resumes, the target
 
 The sidecar's request deadline is 150 seconds so a 120-second wait can finish. TCP connection and initialization attempts remain bounded separately. Forwarded tool calls run concurrently, so a wait does not block status or control requests.
 
-## Proof and artifacts
+## Execution lifetime
 
-Companion retains the exact merged source and its internal job record under `<companion-app-home>/mcp/artifacts/<job-id>`. Only the source is public through MCP, addressed by `job_id`; internal paths and provenance are not tool output.
+Companion keeps the exact generated source, status, logs, result, and runtime context in the same in-memory job record. `job_source` reads that record. Completed records are evicted oldest-first when a new submission exceeds the 256-record retention target; active jobs are never evicted. An unknown or expired job reports an error. Restarting Companion discards all job records. No execution source or result files are written.
 
-The MCP layer does not execute Java. It sends the existing authenticated SCNet script messages to TotalDebug, which compiles and runs the source inside Minecraft. Companion owns indexing, job coordination, and retained evidence. The game process owns runtime authority.
+The MCP layer does not execute Java. It sends the existing authenticated SCNet script messages to TotalDebug, which compiles and runs the source inside Minecraft. Companion owns indexing and in-memory job coordination. The game process owns runtime authority.
 
 ## Codex sidecar
 

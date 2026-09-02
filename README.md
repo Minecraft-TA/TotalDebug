@@ -3,7 +3,7 @@ The companion app for the [TotalDebug](https://github.com/Minecraft-TA/TotalDebu
 
 ## Development
 
-The project requires JDK 21. Build and test it with:
+The project requires JDK 21. For coordinated local development, first publish the shared storage module from the sibling TotalDebug checkout with `./gradlew :storage:publishToMavenLocal`. Then build and test Companion with:
 
 ```shell
 ./gradlew clean build
@@ -35,3 +35,4 @@ Companion keeps one workspace open at a time. Cached sources, scripts, class sea
 ## Screenshots
 
 ![Main View](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/images/main.png?raw=true)
+The current storage layout and manual development reset are documented in the sibling TotalDebug repository's `docs/STORAGE.md`. No legacy files are migrated automatically.

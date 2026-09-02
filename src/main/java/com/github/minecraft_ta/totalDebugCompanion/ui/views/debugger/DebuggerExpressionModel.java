@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerValueTree.DebugValue;
 
 import java.util.ArrayList;
@@ -30,7 +30,7 @@ final class DebuggerExpressionModel {
         }
     }
 
-    private final Set<String> watches = new LinkedHashSet<>(GlobalConfig.getInstance().debuggerWatches());
+    private final Set<String> watches = new LinkedHashSet<>(CompanionApp.instanceState().debuggerWatches());
     private final Set<Key> submitted = new HashSet<>();
     private final Map<Key, Outcome> outcomes = new HashMap<>();
     private String retainedExpression = "";
@@ -101,6 +101,6 @@ final class DebuggerExpressionModel {
     }
 
     private void persistWatches() {
-        GlobalConfig.getInstance().setDebuggerWatches(List.copyOf(this.watches));
+        CompanionApp.instanceState().setDebuggerWatches(List.copyOf(this.watches));
     }
 }

@@ -19,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources.bytecodeSource;
 
@@ -40,14 +39,12 @@ class CompanionDecompilationServiceTest {
                 assertEquals(firstOutput, service.decompile(CacheFixture.class.getName()).join());
             }
             assertEquals(1, firstRuns.get());
-            assertEquals(
-                    this.temporaryDirectory.resolve("data/decompiled-files/" + CacheFixture.class.getName() + ".java"),
-                    firstOutput
-            );
+            assertTrue(firstOutput.startsWith(this.temporaryDirectory.resolve("data/cache/decompiled")));
+            assertEquals(CacheFixture.class.getName() + ".java", firstOutput.getFileName().toString());
             assertTrue(Files.readString(firstOutput).contains("first"));
 
             AtomicInteger secondRuns = new AtomicInteger();
-            try (CompanionDecompilationService service = service(bytecodeSource, secondRuns, "second")) {
+            try (CompanionDecompilationService service = service(bytecodeSource(List.of(classes), index), secondRuns, "second")) {
                 assertEquals(firstOutput, service.decompile(CacheFixture.class.getName()).join());
             }
             assertEquals(0, secondRuns.get());
@@ -74,11 +71,12 @@ class CompanionDecompilationServiceTest {
 
             try (CompanionDecompilationService ignored = service(
                     "second-runtime",
-                    bytecodeSource,
+                    bytecodeSource(List.of(classes), index),
                     new AtomicInteger(),
                     "second"
             )) {
-                assertFalse(Files.exists(output));
+                assertTrue(!Files.exists(output));
+                assertTrue(ignored.cachedClasses().isEmpty());
             }
         }
     }
@@ -123,7 +121,7 @@ class CompanionDecompilationServiceTest {
             try (CompanionDecompilationService service = new CompanionDecompilationService(
                     "runtime-signature",
                     this.temporaryDirectory.resolve("data"),
-                    bytecodeSource,
+                    bytecodeSource(List.of(classes), index),
                     blockingDecompiler
             )) {
                 CompletableFuture<Path> cold = service.decompile(ColdFixture.class.getName());
@@ -135,6 +133,49 @@ class CompanionDecompilationServiceTest {
                     releaseCold.countDown();
                 }
                 cold.join();
+            }
+        }
+    }
+
+    @Test
+    void closeCancelsQueuedWorkAndPreventsLatePublication() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch exited = new CountDownLatch(1);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
+            JavaDecompiler delayed = (name, source) -> {
+                started.countDown();
+                try {
+                    while (true) {
+                        try {
+                            release.await();
+                            return completeSource("late");
+                        } catch (InterruptedException ignored) {
+                            // Model third-party decompilation that does not stop immediately on interruption.
+                        }
+                    }
+                } finally {
+                    exited.countDown();
+                }
+            };
+            var service = new CompanionDecompilationService("old", this.temporaryDirectory.resolve("data"),
+                    bytecodeSource(List.of(classes), index), delayed);
+            try {
+                var running = service.load(CacheFixture.class.getName());
+                assertTrue(started.await(5, TimeUnit.SECONDS));
+                var queued = service.load(ColdFixture.class.getName());
+                service.close();
+                assertTrue(running.isCancelled());
+                assertTrue(queued.isCancelled());
+                index.close();
+                release.countDown();
+                assertTrue(exited.await(5, TimeUnit.SECONDS));
+                assertTrue(service.cachedClasses().isEmpty());
+            } finally {
+                release.countDown();
+                service.close();
             }
         }
     }

@@ -82,7 +82,7 @@ class DebuggerMcpIntegrationTest {
                 } catch (Exception e) { throw new RuntimeException(e); }
             }).get(10, TimeUnit.SECONDS);
             CodeModeJobService jobs = new CodeModeJobService(() -> false, new NoOpTransport(),
-                    temporaryDirectory.resolve("artifacts"), Clock.systemUTC());
+                    Clock.systemUTC());
             DebuggerMcpService debugger = new DebuggerMcpService(() -> controller, name -> source);
             try (CompanionMcpServer server = new CompanionMcpServer(temporaryDirectory.resolve("data"), jobs, 0, debugger)) {
                 server.start();

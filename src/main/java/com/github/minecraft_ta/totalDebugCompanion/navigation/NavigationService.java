@@ -46,6 +46,7 @@ public final class NavigationService {
     private final NavigationHistory history = new NavigationHistory(100);
     private final AtomicBoolean traversingHistory = new AtomicBoolean();
     private volatile NavigationEntry currentEntry;
+    private final java.util.concurrent.atomic.AtomicLong runtimeGeneration = new java.util.concurrent.atomic.AtomicLong();
     private final Action backAction = new AbstractAction("Back") {
         @Override
         public void actionPerformed(ActionEvent event) {
@@ -96,6 +97,11 @@ public final class NavigationService {
     }
 
     public void runtimeChanged() {
+        this.runtimeGeneration.incrementAndGet();
+        SwingUtilities.invokeLater(() -> this.tabs.closeMatching(editor ->
+                editor instanceof CodeView view && view.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
+                        || editor instanceof ResourceView resource && resource.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
+                        || editor instanceof UsagesView || editor instanceof LiteralUsagesView));
         refreshHistoryActions();
     }
 
@@ -338,18 +344,25 @@ public final class NavigationService {
             int executionLine,
             Activation activation
     ) {
-        return CompanionApp.getDecompilationService().load(binaryName).thenCompose(source -> {
+        var service = CompanionApp.getDecompilationService();
+        long generation = this.runtimeGeneration.get();
+        return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
-            return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
-                    CodeView.class,
-                    view -> view.getPath().equals(source.path()),
-                    () -> new CodeView(source, offset, SourceFileNavigation.location(source))
-            ).thenAccept(view -> {
-                view.navigateToOffset(offset);
-                if (executionLine > 0) {
-                    view.showExecutionLine(executionLine);
+            return onEdt(() -> {
+                if (generation != this.runtimeGeneration.get() || service != CompanionApp.getDecompilationService()) {
+                    return CompletableFuture.failedFuture(new IllegalStateException("Runtime changed during source navigation"));
                 }
-            }), activation);
+                return this.tabs.focusOrCreateIfAbsent(
+                        CodeView.class,
+                        view -> view.getPath().equals(source.path()),
+                        () -> new CodeView(source, offset, SourceFileNavigation.location(source))
+                ).thenAccept(view -> {
+                    view.navigateToOffset(offset);
+                    if (executionLine > 0) {
+                        view.showExecutionLine(executionLine);
+                    }
+                });
+            }, activation);
         });
     }
 
@@ -359,7 +372,7 @@ public final class NavigationService {
             return CompletableFuture.failedFuture(new IllegalArgumentException("File does not exist: " + path));
         }
         String fileName = path.getFileName().toString();
-        Path scripts = CompanionApp.getRootPath().resolve("scripts").toAbsolutePath().normalize();
+        Path scripts = CompanionApp.instancePaths().scripts().toAbsolutePath().normalize();
         if (path.getParent().equals(scripts)
                 && fileName.endsWith(ScriptView.FILE_EXTENSION)
                 && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {

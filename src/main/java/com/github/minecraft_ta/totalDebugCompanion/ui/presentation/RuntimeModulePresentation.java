@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.presentation;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 
 import java.util.Collection;
 import java.util.Comparator;

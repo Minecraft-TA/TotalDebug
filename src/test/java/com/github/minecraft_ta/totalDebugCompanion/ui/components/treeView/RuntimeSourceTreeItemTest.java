@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import org.junit.jupiter.api.Test;

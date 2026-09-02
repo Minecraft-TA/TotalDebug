@@ -18,7 +18,7 @@ class CompanionAppDataDirectoryTest {
         CompanionApp.setupDataDirectories(this.appHome, true);
 
         assertTrue(Files.isDirectory(this.appHome.resolve("scripts")));
-        assertTrue(Files.isDirectory(this.appHome.resolve("decompiled-files")));
+        assertFalse(Files.exists(this.appHome.resolve("decompiled-files")));
         assertFalse(Files.exists(this.appHome.resolve("scripts/BaseScript.java")));
         assertFalse(Files.exists(this.appHome.resolve("scripts/ScriptProgram.java")));
     }

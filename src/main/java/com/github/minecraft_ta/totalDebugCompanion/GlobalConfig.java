@@ -1,26 +1,17 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.github.minecraft_ta.totalDebugCompanion.storage.JsonStateWriter;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.awt.Rectangle;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Application wide, user facing settings.
@@ -29,8 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * directory. Writes are coalesced, so dragging a slider does not produce one file write per
  * pixel; {@link #saveNow()} flushes synchronously during shutdown.
  *
- * <p>A missing or corrupt settings file is never fatal - the defaults are used and the file is
- * rewritten on the next save.
  */
 public final class GlobalConfig {
 
@@ -38,40 +27,31 @@ public final class GlobalConfig {
     public static final float MAX_FONT_SIZE = 40f;
 
     /** Bumped only when the on-disk shape changes incompatibly. */
-    private static final int SETTINGS_VERSION = 3;
-    private static final String SETTINGS_FILE_NAME = "companion-ui-settings.json";
+    private static final int SETTINGS_VERSION = 1;
     private static final String EDITOR_FONT_SIZE_PROPERTY = "editorFontSize";
     private static final String DEBUGGER_INLINE_VALUES_PROPERTY = "debuggerInlineValues";
     private static final String DEBUGGER_PREVIEWS_PROPERTY = "automaticDebuggerPreviews";
-    private static final long SAVE_DELAY_MILLIS = 500;
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = JsonFiles.GSON;
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
-    private final AtomicBoolean savePending = new AtomicBoolean();
 
     private volatile String themeId = "islands-dark";
     private volatile float editorFontSize = 14f;
     private volatile float uiFontSize = 13f;
     private volatile Rectangle debuggerWindowBounds;
-    private volatile List<String> debuggerWatches = List.of();
-    private volatile Map<String, List<PersistedBreakpoint>> debuggerBreakpoints = Map.of();
-    private volatile boolean debuggerBreakpointsMuted;
-    private volatile boolean breakOnCaughtExceptions;
-    private volatile boolean breakOnUncaughtExceptions;
     private volatile boolean debuggerInlineValues = true;
     private volatile boolean automaticDebuggerPreviews = true;
-    private volatile Path settingsFile;
-    private volatile ScheduledExecutorService saveExecutor;
+    private JsonStateWriter writer;
 
-    private GlobalConfig() {
+    GlobalConfig() {
     }
 
     public String themeId() {
         return this.themeId;
     }
 
-    public void setThemeId(String themeId) {
+    public synchronized void setThemeId(String themeId) {
         if (themeId == null || themeId.isBlank() || themeId.equals(this.themeId)) {
             return;
         }
@@ -83,7 +63,7 @@ public final class GlobalConfig {
         return this.editorFontSize;
     }
 
-    public void setEditorFontSize(float editorFontSize) {
+    public synchronized void setEditorFontSize(float editorFontSize) {
         float value = clampFontSize(editorFontSize);
         float previous = this.editorFontSize;
         if (Float.compare(previous, value) == 0) {
@@ -98,7 +78,7 @@ public final class GlobalConfig {
         return this.uiFontSize;
     }
 
-    public void setUiFontSize(float uiFontSize) {
+    public synchronized void setUiFontSize(float uiFontSize) {
         float value = clampFontSize(uiFontSize);
         if (Float.compare(this.uiFontSize, value) == 0) {
             return;
@@ -112,7 +92,7 @@ public final class GlobalConfig {
         return bounds == null ? null : new Rectangle(bounds);
     }
 
-    public void setDebuggerWindowBounds(Rectangle debuggerWindowBounds) {
+    public synchronized void setDebuggerWindowBounds(Rectangle debuggerWindowBounds) {
         Rectangle replacement = debuggerWindowBounds == null ? null : new Rectangle(debuggerWindowBounds);
         Rectangle previous = this.debuggerWindowBounds;
         if (Objects.equals(previous, replacement)) {
@@ -122,86 +102,11 @@ public final class GlobalConfig {
         scheduleSave();
     }
 
-    public List<String> debuggerWatches() {
-        return this.debuggerWatches;
-    }
-
-    public void setDebuggerWatches(List<String> expressions) {
-        List<String> replacement = normalizeWatches(expressions);
-        if (replacement.equals(this.debuggerWatches)) {
-            return;
-        }
-        this.debuggerWatches = replacement;
-        scheduleSave();
-    }
-
-    public List<PersistedBreakpoint> debuggerBreakpoints(String runtimeSignature) {
-        if (runtimeSignature == null || runtimeSignature.isBlank()) {
-            return List.of();
-        }
-        return this.debuggerBreakpoints.getOrDefault(runtimeSignature, List.of());
-    }
-
-    public void setDebuggerBreakpoints(String runtimeSignature, List<PersistedBreakpoint> breakpoints) {
-        if (runtimeSignature == null || runtimeSignature.isBlank()) {
-            throw new IllegalArgumentException("Runtime signature must not be blank");
-        }
-        List<PersistedBreakpoint> replacement = List.copyOf(Objects.requireNonNull(breakpoints, "breakpoints"));
-        Map<String, List<PersistedBreakpoint>> updated = new HashMap<>(this.debuggerBreakpoints);
-        if (replacement.isEmpty()) {
-            updated.remove(runtimeSignature);
-        } else {
-            updated.put(runtimeSignature, replacement);
-        }
-        Map<String, List<PersistedBreakpoint>> immutable = Map.copyOf(updated);
-        if (immutable.equals(this.debuggerBreakpoints)) {
-            return;
-        }
-        this.debuggerBreakpoints = immutable;
-        scheduleSave();
-    }
-
-    public boolean debuggerBreakpointsMuted() {
-        return this.debuggerBreakpointsMuted;
-    }
-
-    public void setDebuggerBreakpointsMuted(boolean muted) {
-        if (this.debuggerBreakpointsMuted == muted) {
-            return;
-        }
-        this.debuggerBreakpointsMuted = muted;
-        scheduleSave();
-    }
-
-    public boolean breakOnCaughtExceptions() {
-        return this.breakOnCaughtExceptions;
-    }
-
-    public void setBreakOnCaughtExceptions(boolean enabled) {
-        if (this.breakOnCaughtExceptions == enabled) {
-            return;
-        }
-        this.breakOnCaughtExceptions = enabled;
-        scheduleSave();
-    }
-
-    public boolean breakOnUncaughtExceptions() {
-        return this.breakOnUncaughtExceptions;
-    }
-
-    public void setBreakOnUncaughtExceptions(boolean enabled) {
-        if (this.breakOnUncaughtExceptions == enabled) {
-            return;
-        }
-        this.breakOnUncaughtExceptions = enabled;
-        scheduleSave();
-    }
-
     public boolean debuggerInlineValues() {
         return this.debuggerInlineValues;
     }
 
-    public void setDebuggerInlineValues(boolean enabled) {
+    public synchronized void setDebuggerInlineValues(boolean enabled) {
         boolean previous = this.debuggerInlineValues;
         if (previous == enabled) {
             return;
@@ -215,7 +120,7 @@ public final class GlobalConfig {
         return this.automaticDebuggerPreviews;
     }
 
-    public void setAutomaticDebuggerPreviews(boolean enabled) {
+    public synchronized void setAutomaticDebuggerPreviews(boolean enabled) {
         boolean previous = this.automaticDebuggerPreviews;
         if (previous == enabled) {
             return;
@@ -256,135 +161,66 @@ public final class GlobalConfig {
      * Safe to call before the UI exists; must be called before the look and feel is installed so the
      * persisted theme is the first one applied.
      */
-    public void loadFrom(Path dataDirectory) {
-        this.settingsFile = dataDirectory.resolve(SETTINGS_FILE_NAME);
-        if (!Files.isRegularFile(this.settingsFile)) {
-            return;
+    public synchronized void loadFrom(Path appHome) throws IOException {
+        Path target = new AppPaths(appHome).settings();
+        PersistedSettings persisted = null;
+        if (Files.exists(target)) {
+            var json = JsonFiles.read(target);
+            try {
+                if (JsonFiles.integer(json, "version") != SETTINGS_VERSION) {
+                    throw new IllegalArgumentException("Unsupported settings format");
+                }
+                JsonFiles.string(json, "theme");
+                JsonFiles.bool(json, "debuggerInlineValues");
+                JsonFiles.bool(json, "automaticDebuggerPreviews");
+                for (String font : java.util.List.of("editorFontSize", "uiFontSize")) {
+                    var value = json.get(font);
+                    if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
+                            || !Float.isFinite(value.getAsFloat())) {
+                        throw new IllegalArgumentException("Invalid font size: " + font);
+                    }
+                }
+                persisted = GSON.fromJson(json, PersistedSettings.class);
+                var bounds = java.util.List.of("debuggerWindowX", "debuggerWindowY",
+                        "debuggerWindowWidth", "debuggerWindowHeight");
+                if (bounds.stream().anyMatch(json::has)) {
+                    bounds.forEach(field -> JsonFiles.integer(json, field));
+                    if (persisted.debuggerWindowWidth < 1 || persisted.debuggerWindowHeight < 1) {
+                        throw new IllegalArgumentException("Invalid debugger window dimensions");
+                    }
+                }
+            } catch (RuntimeException exception) {
+                throw new IOException("Invalid settings " + target + ": " + exception.getMessage(), exception);
+            }
         }
-
-        PersistedSettings persisted;
-        try {
-            String json = Files.readString(this.settingsFile, StandardCharsets.UTF_8);
-            persisted = GSON.fromJson(json, PersistedSettings.class);
-        } catch (IOException | JsonParseException exception) {
-            System.err.println("Ignoring unreadable companion settings at " + this.settingsFile
-                    + " (" + exception.getMessage() + "); falling back to defaults");
-            return;
+        if (this.writer != null) {
+            this.writer.close();
         }
+        this.writer = new JsonStateWriter(target);
         if (persisted == null) {
             return;
         }
-        if (persisted.version != SETTINGS_VERSION) {
-            System.err.println("Ignoring companion settings version " + persisted.version
-                    + " at " + this.settingsFile + "; expected " + SETTINGS_VERSION);
-            return;
-        }
-
-        if (persisted.theme != null && !persisted.theme.isBlank()) {
-            this.themeId = persisted.theme;
-        }
-        if (persisted.editorFontSize != null) {
-            this.editorFontSize = clampFontSize(persisted.editorFontSize);
-        }
-        if (persisted.uiFontSize != null) {
-            this.uiFontSize = clampFontSize(persisted.uiFontSize);
-        }
-        if (persisted.debuggerWindowX != null
-                && persisted.debuggerWindowY != null
-                && persisted.debuggerWindowWidth != null
-                && persisted.debuggerWindowHeight != null
-                && persisted.debuggerWindowWidth > 0
-                && persisted.debuggerWindowHeight > 0) {
-            this.debuggerWindowBounds = new Rectangle(
-                    persisted.debuggerWindowX,
-                    persisted.debuggerWindowY,
-                    persisted.debuggerWindowWidth,
-                    persisted.debuggerWindowHeight
-            );
-        }
-        if (persisted.debuggerWatches != null) {
-            this.debuggerWatches = normalizeWatches(persisted.debuggerWatches);
-        }
-        if (persisted.debuggerBreakpoints != null) {
-            Map<String, List<PersistedBreakpoint>> loaded = new HashMap<>();
-            for (Map.Entry<String, List<PersistedBreakpoint>> entry : persisted.debuggerBreakpoints.entrySet()) {
-                if (entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
-                    loaded.put(entry.getKey(), List.copyOf(entry.getValue()));
-                }
-            }
-            this.debuggerBreakpoints = Map.copyOf(loaded);
-        }
-        if (persisted.debuggerBreakpointsMuted != null) {
-            this.debuggerBreakpointsMuted = persisted.debuggerBreakpointsMuted;
-        }
-        if (persisted.breakOnCaughtExceptions != null) {
-            this.breakOnCaughtExceptions = persisted.breakOnCaughtExceptions;
-        }
-        if (persisted.breakOnUncaughtExceptions != null) {
-            this.breakOnUncaughtExceptions = persisted.breakOnUncaughtExceptions;
-        }
-        if (persisted.debuggerInlineValues != null) {
-            this.debuggerInlineValues = persisted.debuggerInlineValues;
-        }
-        if (persisted.automaticDebuggerPreviews != null) {
-            this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
-        }
+        this.themeId = persisted.theme;
+        this.editorFontSize = clampFontSize(persisted.editorFontSize);
+        this.uiFontSize = clampFontSize(persisted.uiFontSize);
+        this.debuggerInlineValues = persisted.debuggerInlineValues;
+        this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
+        this.debuggerWindowBounds = persisted.debuggerWindowX == null ? null : new Rectangle(
+                persisted.debuggerWindowX, persisted.debuggerWindowY,
+                persisted.debuggerWindowWidth, persisted.debuggerWindowHeight);
     }
 
     private static float clampFontSize(float value) {
+        if (!Float.isFinite(value)) {
+            throw new IllegalArgumentException("Font size must be finite");
+        }
         return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value));
     }
 
-    private static List<String> normalizeWatches(List<String> expressions) {
-        if (expressions == null || expressions.isEmpty()) {
-            return List.of();
-        }
-        LinkedHashSet<String> normalized = new LinkedHashSet<>();
-        for (String expression : expressions) {
-            if (expression == null) {
-                continue;
-            }
-            String trimmed = expression.trim();
-            if (!trimmed.isEmpty()) {
-                normalized.add(trimmed);
-            }
-        }
-        return List.copyOf(normalized);
-    }
-
-    private void scheduleSave() {
-        if (this.settingsFile == null || !savePending.compareAndSet(false, true)) {
+    private synchronized void scheduleSave() {
+        if (this.writer == null) {
             return;
         }
-        saveExecutor().schedule(() -> {
-            savePending.set(false);
-            writeSettings();
-        }, SAVE_DELAY_MILLIS, TimeUnit.MILLISECONDS);
-    }
-
-    private synchronized ScheduledExecutorService saveExecutor() {
-        if (this.saveExecutor == null) {
-            this.saveExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "Companion settings writer");
-                thread.setDaemon(true);
-                return thread;
-            });
-        }
-        return this.saveExecutor;
-    }
-
-    /** Flushes any pending change synchronously. Called during shutdown. */
-    public void saveNow() {
-        savePending.set(false);
-        writeSettings();
-    }
-
-    private void writeSettings() {
-        Path target = this.settingsFile;
-        if (target == null) {
-            return;
-        }
-
         Rectangle debuggerBounds = this.debuggerWindowBounds;
         PersistedSettings snapshot = new PersistedSettings(
                 SETTINGS_VERSION,
@@ -395,40 +231,21 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.y,
                 debuggerBounds == null ? null : debuggerBounds.width,
                 debuggerBounds == null ? null : debuggerBounds.height,
-                this.debuggerWatches,
-                this.debuggerBreakpoints,
-                this.debuggerBreakpointsMuted,
-                this.breakOnCaughtExceptions,
-                this.breakOnUncaughtExceptions,
                 this.debuggerInlineValues,
                 this.automaticDebuggerPreviews
         );
 
-        Path parent = target.toAbsolutePath().normalize().getParent();
-        if (parent == null) {
-            return;
-        }
-        Path staged = null;
-        try {
-            Files.createDirectories(parent);
-            staged = Files.createTempFile(parent, ".companion-ui-settings-", ".tmp");
-            Files.writeString(staged, GSON.toJson(snapshot), StandardCharsets.UTF_8);
-            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            staged = null;
-        } catch (IOException exception) {
-            System.err.println("Failed to persist companion settings to " + target
-                    + " (" + exception.getMessage() + ")");
-        } finally {
-            if (staged != null) {
-                try {
-                    Files.deleteIfExists(staged);
-                } catch (IOException ignored) {
-                }
-            }
+        this.writer.schedule(GSON.toJsonTree(snapshot));
+    }
+
+    /** Flushes any pending change synchronously. Called during shutdown. */
+    public synchronized void saveNow() throws IOException {
+        if (this.writer != null) {
+            this.writer.flush();
         }
     }
 
-    /** On-disk shape. Boxed fields so an absent entry falls back to the in-memory default. */
+    /** Nullable geometry means the debugger window has not been placed yet. */
     private record PersistedSettings(
             int version,
             String theme,
@@ -438,39 +255,9 @@ public final class GlobalConfig {
             Integer debuggerWindowY,
             Integer debuggerWindowWidth,
             Integer debuggerWindowHeight,
-            List<String> debuggerWatches,
-            Map<String, List<PersistedBreakpoint>> debuggerBreakpoints,
-            Boolean debuggerBreakpointsMuted,
-            Boolean breakOnCaughtExceptions,
-            Boolean breakOnUncaughtExceptions,
             Boolean debuggerInlineValues,
             Boolean automaticDebuggerPreviews
     ) {
-    }
-
-    public record PersistedBreakpoint(
-            String sourceUri,
-            String binaryName,
-            int line,
-            int debuggerLine,
-            String methodOwner,
-            String methodName,
-            String methodDescriptor,
-            String condition,
-            String hitCondition,
-            boolean enabled
-    ) {
-        public PersistedBreakpoint {
-            if (sourceUri == null || sourceUri.isBlank()) {
-                throw new IllegalArgumentException("Breakpoint source URI must not be blank");
-            }
-            if (binaryName == null || binaryName.isBlank()) {
-                throw new IllegalArgumentException("Breakpoint binary name must not be blank");
-            }
-            if (line < 1 || debuggerLine < 0) {
-                throw new IllegalArgumentException("Breakpoint lines are invalid");
-            }
-        }
     }
 
     // ---------------------------------------------------------------- singleton

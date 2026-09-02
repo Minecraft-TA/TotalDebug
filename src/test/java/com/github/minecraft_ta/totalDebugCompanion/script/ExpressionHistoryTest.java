@@ -13,15 +13,19 @@ class ExpressionHistoryTest {
     Path temporaryDirectory;
 
     @Test
-    void persistsOnlyTheBoundedMostRecentUniqueExpressions() {
-        Path file = this.temporaryDirectory.resolve("history.json");
-        ExpressionHistory history = new ExpressionHistory(file);
+    void persistsOnlyTheBoundedMostRecentUniqueExpressions() throws Exception {
+        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(this.temporaryDirectory);
+        var state = com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState.open(paths);
+        ExpressionHistory history = state.expressionHistory();
         for (int index = 0; index < ExpressionHistory.MAX_ENTRIES + 5; index++) {
             history.record(entry("value" + index));
         }
         history.record(entry("value10"));
 
-        List<ExpressionHistory.Entry> restored = new ExpressionHistory(file).entries();
+        state.close();
+        var reopened = com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState.open(paths);
+        List<ExpressionHistory.Entry> restored = reopened.expressionHistory().entries();
+        reopened.close();
 
         assertEquals(ExpressionHistory.MAX_ENTRIES, restored.size());
         assertEquals("value10", restored.getFirst().expression());

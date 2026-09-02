@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.ClassSearchPage;
 import com.github.tth05.jindex.IndexedClass;

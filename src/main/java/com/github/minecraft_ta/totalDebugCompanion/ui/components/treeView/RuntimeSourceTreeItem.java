@@ -2,14 +2,13 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 
-import javax.swing.Icon;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileSystems;

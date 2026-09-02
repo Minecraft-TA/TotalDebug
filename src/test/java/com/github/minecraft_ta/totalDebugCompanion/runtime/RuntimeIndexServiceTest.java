@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
@@ -11,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -73,27 +74,23 @@ class RuntimeIndexServiceTest {
     void keepsTheRestoredSnapshotWhenTheLiveInventoryMatches() throws Exception {
         String inventoryId = "matching-inventory";
         Path dataDirectory = this.temporaryDirectory.resolve("data");
-        Path cacheDirectory = dataDirectory.resolve("index");
-        Path indexFile = cacheDirectory.resolve("index");
-        Path sourcesFile = cacheDirectory.resolve(PreparedRuntimeSources.FILE_NAME);
+        Path indexFile = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(dataDirectory).index();
         Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
-        Files.createDirectories(cacheDirectory);
-
         try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
-            index.saveToFile(indexFile.toString());
+            IndexCache.write(indexFile, index, new IndexCache.Manifest(inventoryId,
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, classes, classes.toUri().toASCIIString(),
+                            new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD)))));
         }
-        PreparedRuntimeSources.write(sourcesFile, List.of(new RuntimeSnapshotBytecodeSource.Source(
-                0,
-                classes,
-                classes.toUri().toASCIIString(),
-                new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD)
-        )));
-        writeIndexMetadata(cacheDirectory.resolve("index.properties"), inventoryId);
+
+        new RuntimeInventory(inventoryId, "21", System.getProperty("java.home"), true,
+                List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.DIRECTORY, classes, classes.toUri().toString(),
+                        new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD))))
+                .write(new com.github.minecraft_ta.totaldebug.storage.InstancePaths(dataDirectory).inventory());
 
         AtomicInteger installations = new AtomicInteger();
         List<RuntimeIndexService.ReadySnapshot> snapshots = new ArrayList<>();
         CountDownLatch restored = new CountDownLatch(1);
-        try (RuntimeIndexService service = new RuntimeIndexService(snapshot -> {
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshot -> {
             snapshots.add(snapshot);
             installations.incrementAndGet();
             restored.countDown();
@@ -122,6 +119,59 @@ class RuntimeIndexServiceTest {
         }
     }
 
+
+    @Test
+    void rebuildsOneIndexInPlaceAndRestoresOnlyTheCurrentInventory() throws Exception {
+        Path root = this.temporaryDirectory.resolve("instance");
+        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(root);
+        Path jar = this.temporaryDirectory.resolve("current.jar");
+        var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
+        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        try {
+            for (int version = 0; version < 2; version++) {
+                Class<?> type = version == 0 ? RuntimeIndexServiceTest.class : RuntimeInventoryTest.class;
+                Files.write(jar, archive(type, null));
+                new RuntimeInventory("runtime-" + version, "21", System.getProperty("java.home"), true,
+                        List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
+                        .write(paths.inventory());
+                try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshots::add)) {
+                    CountDownLatch settled = new CountDownLatch(1);
+                    service.addStatusListener(status -> {
+                        if (status.phase() == RuntimeIndexService.Phase.READY || status.phase() == RuntimeIndexService.Phase.FAILED) {
+                            settled.countDown();
+                        }
+                    });
+                    service.accept(root, "runtime-" + version, paths.inventory());
+                    assertTrue(settled.await(30, TimeUnit.SECONDS));
+                    assertEquals(RuntimeIndexService.Phase.READY, service.status().phase(), service.status().detail());
+                    var snapshot = snapshots.getLast();
+                    assertEquals(paths.index(), snapshot.indexFile());
+                    assertNotNull(snapshot.index().findClass(type.getName()));
+                    if (version == 1) {
+                        assertNull(snapshot.index().findClass(RuntimeIndexServiceTest.class.getName()));
+                    }
+                }
+            }
+            try (var files = Files.list(paths.runtime())) {
+                assertEquals(List.of(".lock", "index.jindex", "inventory.json"),
+                        files.map(path -> path.getFileName().toString()).sorted().toList());
+            }
+            Files.delete(paths.inventory());
+            try (RuntimeIndexService service = new RuntimeIndexService(new Object(),
+                    ignored -> { throw new AssertionError("An index without its current inventory must not be restored"); })) {
+                CountDownLatch failed = new CountDownLatch(1);
+                service.addStatusListener(status -> {
+                    if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown();
+                });
+                service.restore(root);
+                assertTrue(failed.await(5, TimeUnit.SECONDS));
+                assertTrue(service.status().detail().contains("Runtime cache has changed"));
+            }
+        } finally {
+            snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
+        }
+    }
+
     private static byte[] classBytes(Class<?> type) throws Exception {
         String resource = "/" + type.getName().replace('.', '/') + ".class";
         try (InputStream input = type.getResourceAsStream(resource)) {
@@ -132,12 +182,5 @@ class RuntimeIndexServiceTest {
         }
     }
 
-    private static void writeIndexMetadata(Path file, String inventoryId) throws Exception {
-        Properties properties = new Properties();
-        properties.setProperty("format", "2");
-        properties.setProperty("inventory.id", inventoryId);
-        try (var output = Files.newOutputStream(file)) {
-            properties.store(output, "test runtime index");
-        }
-    }
+
 }

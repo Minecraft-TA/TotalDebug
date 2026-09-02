@@ -1,5 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
+
+import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
+
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
 import com.github.minecraft_ta.totalDebugCompanion.messages.FocusWindowMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.ReadyMessage;
 import com.github.minecraft_ta.totalDebugCompanion.messages.chunkGrid.ChunkGridDataMessage;

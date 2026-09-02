@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +28,6 @@ class CompanionMcpServerTest {
         CodeModeJobService jobs = new CodeModeJobService(
                 () -> false,
                 new NoOpTransport(),
-                this.temporaryDirectory.resolve("artifacts"),
                 Clock.systemUTC()
         );
         Path dataDirectory = this.temporaryDirectory.resolve("data");
@@ -141,7 +139,6 @@ class CompanionMcpServerTest {
                         "runtime_signature", "sha256:runtime",
                         "profile_id", "profile-a"
                 ),
-                this.temporaryDirectory.resolve("artifacts"),
                 Clock.fixed(Instant.parse("2026-08-30T12:00:00Z"), ZoneOffset.UTC)
         );
         CompanionMcpServer server = new CompanionMcpServer(

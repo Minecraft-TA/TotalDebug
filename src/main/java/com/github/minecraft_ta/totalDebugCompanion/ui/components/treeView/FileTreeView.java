@@ -5,7 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -93,19 +93,15 @@ public class FileTreeView extends JScrollPane {
             return;
         }
 
-        if (item instanceof FileSystemFileItem fileItem) {
+        if (item instanceof DecompiledSourcesTreeItem.SourceItem source) {
+            navigator.accept(new NavigationTarget.RuntimeClass(source.binaryName()));
+        } else if (item instanceof FileSystemFileItem fileItem) {
             String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
-            boolean javaFile = lowerName.endsWith(".java");
             boolean scriptFile = lowerName.endsWith(ScriptView.FILE_EXTENSION);
             if (scriptFile
                     && node.getParent().getUserObject().getName().equals("scripts")
                     && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
                 navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-            } else if (javaFile && fileItem.getPath().getParent().equals(
-                    CompanionApp.getRootPath().resolve("decompiled-files")
-            )) {
-                String binaryName = fileItem.getName().substring(0, fileItem.getName().length() - ".java".length());
-                navigator.accept(new NavigationTarget.RuntimeClass(binaryName));
             } else {
                 navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
             }
@@ -138,18 +134,15 @@ public class FileTreeView extends JScrollPane {
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
         if (CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(
-                    CompanionApp.getRootPath().resolve("scripts"),
+                    CompanionApp.instancePaths().scripts(),
                     true
             );
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
-        var decompiledFiles = this.tree.getItemFactory().createFileSystemDirectoryItem(
-                CompanionApp.getRootPath().resolve("decompiled-files"),
-                true
-        );
-        decompiledFiles.setIcon(FileTreeIcons.forRootDirectory("decompiled-files"));
-        rootItems.add(decompiledFiles);
+        if (!CompanionApp.getRuntimeSourceCatalog().modules().isEmpty()) {
+            rootItems.add(new DecompiledSourcesTreeItem(this.tree, CompanionApp.getDecompilationService()));
+        }
 
         RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
         if (!catalog.modules().isEmpty()) {
@@ -221,8 +214,7 @@ public class FileTreeView extends JScrollPane {
     public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
         Path target = directory.toAbsolutePath().normalize();
         for (Path root : List.of(
-                CompanionApp.getRootPath().resolve("scripts").toAbsolutePath().normalize(),
-                CompanionApp.getRootPath().resolve("decompiled-files").toAbsolutePath().normalize()
+                CompanionApp.instancePaths().scripts()
         )) {
             if (!target.startsWith(root)) {
                 continue;

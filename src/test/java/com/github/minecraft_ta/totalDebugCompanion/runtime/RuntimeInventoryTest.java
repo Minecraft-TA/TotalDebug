@@ -1,73 +1,34 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimeInventoryTest {
-    @TempDir
-    Path temporaryDirectory;
+    @TempDir Path home;
 
     @Test
-    void readsTheGameRuntimeInventoryFormat() throws Exception {
-        Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
-        Path file = this.temporaryDirectory.resolve("runtime-inventory.properties");
-        Files.writeString(file, """
-                format=4
-                inventory.id=abc
-                java.runtime.version=21.0.12
-                java.home=C:/jdk
-                production=false
-                source.count=1
-                source.0.kind=DIRECTORY
-                source.0.path=%s
-                source.0.logical=logical:classes
-                source.0.module.id=total_debug
-                source.0.module.name=TotalDebug
-                source.0.module.kind=MOD
-                """.formatted(classes.toUri().toASCIIString()));
-
-        RuntimeInventory inventory = RuntimeInventory.read(file);
-
-        assertEquals("abc", inventory.id());
-        assertEquals(classes, inventory.sources().getFirst().path());
-        assertEquals(RuntimeInventory.SourceKind.DIRECTORY, inventory.sources().getFirst().kind());
-        assertEquals("total_debug", inventory.sources().getFirst().module().id());
-        assertEquals("TotalDebug", inventory.sources().getFirst().module().displayName());
-        assertEquals(RuntimeInventory.ModuleKind.MOD, inventory.sources().getFirst().module().kind());
+    void readsTheSharedGameInventory() throws Exception {
+        Path classes = Files.createDirectory(this.home.resolve("classes"));
+        var source = new RuntimeInventory.Source(RuntimeInventory.SourceKind.DIRECTORY, classes, "logical:classes",
+                new RuntimeInventory.RuntimeModule("total_debug", "TotalDebug", RuntimeInventory.ModuleKind.MOD));
+        var inventory = new RuntimeInventory("abc", "21.0.12", System.getProperty("java.home"), false, List.of(source));
+        Path file = this.home.resolve("inventory.json");
+        inventory.write(file);
+        assertEquals(inventory, RuntimeInventory.read(file));
     }
 
     @Test
-    void rejectsAnInventoryIdentityWithoutSources() throws Exception {
-        Path file = this.temporaryDirectory.resolve("runtime-inventory.properties");
-        Files.writeString(file, """
-                format=4
-                inventory.id=abc
-                java.runtime.version=21
-                java.home=C:/jdk
-                production=false
-                source.count=0
-                """);
-
-        assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
-    }
-
-    @Test
-    void explainsThatAMismatchedPublisherRequiresAMinecraftRestart() throws Exception {
-        Path file = this.temporaryDirectory.resolve("runtime-inventory.properties");
-        Files.writeString(file, """
-                format=2
-                inventory.id=old
-                """);
-
-        java.io.IOException exception = assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
-
-        assertTrue(exception.getMessage().contains("Restart Minecraft"));
+    void rejectsWrongFormatAndEmptySources() throws Exception {
+        Path file = this.home.resolve("inventory.json");
+        for (String invalid : List.of("{\"format\":999}", "{\"format\":1,\"id\":\"abc\",\"javaVersion\":\"21\","
+                + "\"javaHome\":\"C:/jdk\",\"production\":false,\"sources\":[]}")) {
+            Files.writeString(file, invalid);
+            assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
+        }
     }
 }

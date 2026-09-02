@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.fonts.inter.FlatInterFont;
 import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
@@ -22,7 +26,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTargets;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
@@ -49,6 +53,7 @@ import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
+import javax.swing.JOptionPane;
 import javax.swing.ToolTipManager;
 import java.awt.Window;
 import java.io.IOException;
@@ -60,16 +65,13 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermission;
 import java.security.SecureRandom;
 import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
@@ -83,6 +85,7 @@ public final class CompanionApp {
     private static CompanionLaunchConfiguration launchConfiguration;
     private static volatile CompanionProfile profile;
     private static volatile CompanionDecompilationService decompilationService;
+    private static volatile InstanceState instanceState = InstanceState.inMemory();
     private static volatile ReferenceSearchService referenceSearchService;
     private static volatile CodeInsightService codeInsightService;
     private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
@@ -101,7 +104,31 @@ public final class CompanionApp {
     }
 
     public static void main(String[] args) {
-        System.exit(run(args, System.getenv(), CompanionTimeouts.DEFAULT));
+        int result = 1;
+        try {
+            var configuration = CompanionLaunchConfiguration.parse(args, System.getenv());
+            var paths = configuration.paths();
+            Path executable = Path.of(CompanionApp.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            try (var executablePin = com.github.minecraft_ta.totaldebug.storage.LaunchCache.pinRunning(paths, executable)) {
+                String requestedLog = System.getProperty(com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.LOG_PROPERTY);
+                var reservation = requestedLog == null
+                        ? com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.reserve(paths) : null;
+                try (reservation;
+                     var output = com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.open(paths,
+                             reservation == null ? Path.of(requestedLog) : reservation.log());
+                     var print = new java.io.PrintStream(output, true, StandardCharsets.UTF_8)) {
+                    // Release the inherited handles before rotating their bootstrap log on Windows.
+                    System.out.close();
+                    System.err.close();
+                    System.setOut(print);
+                    System.setErr(print);
+                    result = run(args, System.getenv(), CompanionTimeouts.DEFAULT);
+                }
+            }
+        } catch (Exception exception) {
+            exception.printStackTrace(System.err);
+        }
+        System.exit(result);
     }
 
     static int run(String[] args, Map<String, String> environment, CompanionTimeouts timeouts) {
@@ -111,7 +138,8 @@ public final class CompanionApp {
         try {
             Objects.requireNonNull(timeouts, "timeouts");
             launchConfiguration = CompanionLaunchConfiguration.parse(args, environment);
-            Files.createDirectories(launchConfiguration.appHome());
+            Files.createDirectories(launchConfiguration.paths().run());
+            AtomicFiles.cleanupAbandonedStaging(launchConfiguration.paths().run());
             lockChannel = FileChannel.open(
                     launchConfiguration.lockFile(),
                     StandardOpenOption.CREATE,
@@ -133,12 +161,12 @@ public final class CompanionApp {
 
             GlobalConfig.getInstance().loadFrom(launchConfiguration.appHome());
             configureLookAndFeel();
-            runtimeIndexService = new RuntimeIndexService(CompanionApp::installRuntimeSnapshot);
+            runtimeIndexService = new RuntimeIndexService(CompanionApp.class, CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
             debuggerController = createDebuggerController();
             debuggerController.setExceptionBreakpoints(
-                    GlobalConfig.getInstance().breakOnCaughtExceptions(),
-                    GlobalConfig.getInstance().breakOnUncaughtExceptions()
+                    instanceState().breakOnCaughtExceptions(),
+                    instanceState().breakOnUncaughtExceptions()
             );
             restoreProfile();
 
@@ -204,7 +232,6 @@ public final class CompanionApp {
             throwable.printStackTrace(System.err);
             return 1;
         } finally {
-            GlobalConfig.getInstance().saveNow();
             closeMcpServer();
             if (session != null) {
                 session.close();
@@ -220,6 +247,12 @@ public final class CompanionApp {
             closeCodeInsightService();
             CompanionClassIndex.close();
             stopUiAfterFailure();
+            try {
+                GlobalConfig.getInstance().saveNow();
+                instanceState.close();
+            } catch (IOException exception) {
+                exception.printStackTrace(System.err);
+            }
             if (ownsInstance) {
                 cleanupPublishedInstance();
             }
@@ -264,16 +297,12 @@ public final class CompanionApp {
         ));
     }
 
-    private static void restoreProfile() {
+    private static void restoreProfile() throws IOException {
         Path profileFile = launchConfiguration.profileFile();
         if (!Files.isRegularFile(profileFile)) {
             return;
         }
-        try {
-            activateProfile(CompanionProfile.read(profileFile), false);
-        } catch (IOException | RuntimeException exception) {
-            System.err.println("Ignoring saved profile: " + exception.getMessage());
-        }
+        activateProfile(CompanionProfile.read(profileFile), false);
     }
 
     private static void activateProfile(CompanionProfile requested, boolean persist) throws IOException {
@@ -281,6 +310,17 @@ public final class CompanionApp {
         CompanionProfile current = profile;
         boolean profileChanged = !requested.equals(current);
         if (profileChanged) {
+            InstanceState replacementState = InstanceState.open(new InstancePaths(requested.dataDirectory()));
+            try {
+                instanceState.close();
+            } catch (IOException exception) {
+                replacementState.close();
+                throw exception;
+            }
+            instanceState = replacementState;
+            getDebuggerController().setBreakpointsMuted(instanceState.debuggerBreakpointsMuted()).join();
+            getDebuggerController().setExceptionBreakpoints(instanceState.breakOnCaughtExceptions(),
+                    instanceState.breakOnUncaughtExceptions()).join();
             closeDecompilationService();
             closeReferenceSearchService();
             invalidateCodeInsightService();
@@ -309,15 +349,17 @@ public final class CompanionApp {
         }
     }
 
-    private static void handleRuntimeInventory(RuntimeInventoryMessage message) {
+    private static synchronized void handleRuntimeInventory(RuntimeInventoryMessage message) {
         CompanionProfile current = profile;
         if (current == null || runtimeIndexService == null) {
             return;
         }
         switch (message.state()) {
-            case RuntimeInventoryMessage.PREPARING -> runtimeIndexService.waiting(
-                    message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail()
-            );
+            case RuntimeInventoryMessage.PREPARING -> {
+                closeDecompilationService();
+                runtimeIndexService.waiting(
+                        message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
+            }
             case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
                     current.dataDirectory(),
                     message.inventoryId(),
@@ -328,7 +370,13 @@ public final class CompanionApp {
         }
     }
 
-    private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot) {
+    private static void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot) {
+        installRuntimeSnapshot(snapshot, RuntimeSnapshotBytecodeSource.fromRuntime(snapshot.sources(), snapshot.index(),
+                snapshot.indexFile().getParent().resolve("inventory.json"), snapshot.inventoryId()));
+    }
+
+    private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot,
+                                                             RuntimeSnapshotBytecodeSource bytecodeSource) {
         CompanionProfile current = requireProfile();
         closeDecompilationService();
         CompanionDecompilationService replacement;
@@ -336,7 +384,7 @@ public final class CompanionApp {
             replacement = new CompanionDecompilationService(
                     snapshot.signature(),
                     current.dataDirectory(),
-                    RuntimeSnapshotBytecodeSource.fromIndexedSources(snapshot.sources(), snapshot.index())
+                    bytecodeSource
             );
         } catch (IOException | RuntimeException exception) {
             throw new IllegalStateException("Unable to activate the runtime class index", exception);
@@ -364,7 +412,6 @@ public final class CompanionApp {
                 restoreBreakpoints(snapshot.signature())
         ).join();
         if (uiStarted) {
-            MainWindow.INSTANCE.navigation().runtimeChanged();
             MainWindow.INSTANCE.refreshRuntimeSources();
         }
         prewarmJavaParser();
@@ -413,7 +460,7 @@ public final class CompanionApp {
                     indexFile,
                     sources,
                     index
-            ));
+            ), RuntimeSnapshotBytecodeSource.fromIndexedSources(sources, index));
         } catch (RuntimeException exception) {
             throw new IllegalStateException("Unable to configure the UI class index", exception);
         }
@@ -456,11 +503,11 @@ public final class CompanionApp {
     }
 
     static void setupDataDirectories(Path rootPath, boolean scriptExecutionEnabled) throws IOException {
-        Files.createDirectories(rootPath.resolve("decompiled-files"));
+
         if (!scriptExecutionEnabled) {
             return;
         }
-        Files.createDirectories(rootPath.resolve("scripts"));
+        Files.createDirectories(new InstancePaths(rootPath).scripts());
     }
 
     private static void prewarmJavaParser() {
@@ -482,8 +529,7 @@ public final class CompanionApp {
         CodeModeJobService jobs = new CodeModeJobService(
                 SERVER,
                 () -> hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION),
-                CompanionApp::runtimeContext,
-                launchConfiguration.appHome().resolve("mcp").resolve("artifacts")
+                CompanionApp::runtimeContext
         );
         CompanionMcpServer server = new CompanionMcpServer(launchConfiguration.appHome(), jobs);
         try {
@@ -629,6 +675,23 @@ public final class CompanionApp {
     }
 
     public static void exit() {
+        if (uiStarted) {
+            if (!SwingUtilities.isEventDispatchThread()) {
+                SwingUtilities.invokeLater(CompanionApp::exit);
+                return;
+            }
+            if (!MainWindow.INSTANCE.getEditorTabs().canCloseAll()) {
+                return;
+            }
+            try {
+                GlobalConfig.getInstance().saveNow();
+                instanceState.saveNow();
+            } catch (IOException exception) {
+                JOptionPane.showMessageDialog(MainWindow.INSTANCE, exception.getMessage(),
+                        "Unable to save state", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        }
         EXIT.countDown();
     }
 
@@ -705,6 +768,14 @@ public final class CompanionApp {
         return service == null ? null : service.loadDebugSource(binaryName);
     }
 
+    public static InstancePaths instancePaths() {
+        return new InstancePaths(requireProfile().dataDirectory());
+    }
+
+    public static InstanceState instanceState() {
+        return instanceState;
+    }
+
     public static Path getRootPath() {
         return requireProfile().dataDirectory();
     }
@@ -776,8 +847,7 @@ public final class CompanionApp {
 
     private static DebuggerSessionController createDebuggerController() {
         DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource);
-        GlobalConfig config = GlobalConfig.getInstance();
-        controller.setBreakpointsMuted(config.debuggerBreakpointsMuted()).join();
+        controller.setBreakpointsMuted(instanceState().debuggerBreakpointsMuted()).join();
         controller.addListener(new DebuggerSessionController.Listener() {
             @Override
             public void breakpointsChanged(
@@ -789,14 +859,14 @@ public final class CompanionApp {
 
             @Override
             public void breakpointsMutedChanged(boolean muted) {
-                config.setDebuggerBreakpointsMuted(muted);
+                instanceState().setDebuggerBreakpointsMuted(muted);
             }
         });
         return controller;
     }
 
     private static List<DebuggerSessionController.BreakpointDefinition> restoreBreakpoints(String runtimeSignature) {
-        return GlobalConfig.getInstance().debuggerBreakpoints(runtimeSignature).stream()
+        return instanceState().debuggerBreakpoints(runtimeSignature).stream()
                 .map(persisted -> {
                     DebugEngine.MethodTarget method = persisted.methodOwner() == null
                             ? null
@@ -827,11 +897,11 @@ public final class CompanionApp {
         if (runtimeSignature == null || runtimeSignature.isBlank()) {
             return;
         }
-        List<GlobalConfig.PersistedBreakpoint> persisted = controller.breakpointDefinitions().stream()
+        List<InstanceState.PersistedBreakpoint> persisted = controller.breakpointDefinitions().stream()
                 .map(definition -> {
                     DebugEngine.SourceBreakpoint request = definition.request();
                     DebugEngine.MethodTarget method = request.method();
-                    return new GlobalConfig.PersistedBreakpoint(
+                    return new InstanceState.PersistedBreakpoint(
                             definition.sourceUri().toString(),
                             definition.binaryName(),
                             request.line(),
@@ -845,7 +915,7 @@ public final class CompanionApp {
                     );
                 })
                 .toList();
-        GlobalConfig.getInstance().setDebuggerBreakpoints(runtimeSignature, persisted);
+        instanceState().setDebuggerBreakpoints(runtimeSignature, persisted);
     }
 
     public static RuntimeIndexService.Status getRuntimeIndexStatus() {
@@ -913,6 +983,9 @@ public final class CompanionApp {
         decompilationService = null;
         if (service != null) {
             service.close();
+            if (uiStarted) {
+                MainWindow.INSTANCE.navigation().runtimeChanged();
+            }
         }
     }
 
@@ -923,21 +996,7 @@ public final class CompanionApp {
     }
 
     private static void writeSecret(Path keyFile, String token) throws IOException {
-        Path parent = Objects.requireNonNull(keyFile.getParent(), "Key file has no parent");
-        Path staged = Files.createTempFile(parent, ".instance-key-", ".tmp");
-        try {
-            Files.writeString(staged, token, StandardCharsets.US_ASCII);
-            try {
-                Files.setPosixFilePermissions(staged, Set.of(
-                        PosixFilePermission.OWNER_READ,
-                        PosixFilePermission.OWNER_WRITE
-                ));
-            } catch (UnsupportedOperationException ignored) {
-            }
-            Files.move(staged, keyFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(staged);
-        }
+        AtomicFiles.writeSecret(keyFile, token);
     }
 
     private static void cleanupPublishedInstance() {

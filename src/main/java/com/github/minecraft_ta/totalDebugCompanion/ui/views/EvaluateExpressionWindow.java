@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMess
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExpressionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
@@ -45,10 +44,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 /** Global, history-backed Java expression evaluator for a running Minecraft session. */
@@ -81,9 +78,7 @@ public final class EvaluateExpressionWindow extends JDialog {
     public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions) {
         super(owner, "Evaluate Expression", false);
         this.executions = executions;
-        this.history = new ExpressionHistory(
-                CompanionApp.getRootPath().resolve("history").resolve("evaluate-expression.json")
-        );
+        this.history = CompanionApp.instanceState().expressionHistory();
         configureInput();
         configureResults();
         configureWindow();
@@ -320,7 +315,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                     "Invalid script name", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        Path path = CompanionApp.getRootPath().resolve("scripts").resolve(name + ScriptView.FILE_EXTENSION);
+        Path path = CompanionApp.instancePaths().scripts().resolve(name + ScriptView.FILE_EXTENSION);
         if (Files.exists(path)) {
             JOptionPane.showMessageDialog(this, "A script with that name already exists.",
                     "Script exists", JOptionPane.ERROR_MESSAGE);
@@ -333,13 +328,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         source.append("return ").append(requested).append(';').append(System.lineSeparator());
         try {
             Files.createDirectories(path.getParent());
-            Files.writeString(
-                    path,
-                    source,
-                    StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE_NEW,
-                    StandardOpenOption.WRITE
-            );
+            com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(path, source.toString());
         } catch (IOException exception) {
             JOptionPane.showMessageDialog(this, exception.getMessage(),
                     "Unable to save script", JOptionPane.ERROR_MESSAGE);

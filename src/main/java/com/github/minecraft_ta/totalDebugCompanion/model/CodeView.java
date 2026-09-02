@@ -96,7 +96,8 @@ public class CodeView implements IEditorPanel {
 
     @Override
     public String getTitle() {
-        String fullClassName = this.path.getFileName().toString().replace(".java", "");
+        String fullClassName = this.navigationTarget instanceof NavigationTarget.RuntimeClass runtime
+                ? runtime.binaryName() : this.path.getFileName().toString().replace(".java", "");
         return fullClassName.substring(fullClassName.lastIndexOf('.') + 1);
     }
 
@@ -107,7 +108,8 @@ public class CodeView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return this.path.getFileName().toString();
+        return this.navigationTarget instanceof NavigationTarget.RuntimeClass runtime
+                ? runtime.binaryName() + ".java" : this.path.getFileName().toString();
     }
 
     @Override

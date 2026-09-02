@@ -5,13 +5,10 @@ import com.google.gson.GsonBuilder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 
 record McpEndpointDescriptor(
         int schemaVersion,
@@ -38,28 +35,7 @@ record McpEndpointDescriptor(
     }
 
     void writeAtomically(Path target) throws IOException {
-        Path normalized = Objects.requireNonNull(target, "target").toAbsolutePath().normalize();
-        Path parent = normalized.getParent();
-        if (parent == null) {
-            throw new IOException("MCP endpoint descriptor has no parent: " + normalized);
-        }
-        Files.createDirectories(parent);
-        Path temporary = parent.resolve("." + normalized.getFileName() + "." + UUID.randomUUID() + ".tmp");
-        try {
-            Files.writeString(temporary, GSON.toJson(this), StandardCharsets.UTF_8);
-            try {
-                Files.move(
-                        temporary,
-                        normalized,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING
-                );
-            } catch (AtomicMoveNotSupportedException ignored) {
-                Files.move(temporary, normalized, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(temporary);
-        }
+        com.github.minecraft_ta.totaldebug.storage.AtomicFiles.writeString(target, GSON.toJson(this));
     }
 
     static McpEndpointDescriptor read(Path target) throws IOException {

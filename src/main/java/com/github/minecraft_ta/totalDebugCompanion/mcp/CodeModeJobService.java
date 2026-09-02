@@ -8,16 +8,10 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
 import com.github.tth05.scnet.Server;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +36,6 @@ public final class CodeModeJobService implements AutoCloseable {
     private final BooleanSupplier available;
     private final Transport transport;
     private final Supplier<Map<String, Object>> runtimeContext;
-    private final CodeModeArtifactStore artifacts;
     private final Clock clock;
     private final AtomicInteger nextScriptId = new AtomicInteger(-1);
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
@@ -52,8 +45,7 @@ public final class CodeModeJobService implements AutoCloseable {
     public CodeModeJobService(
             Server server,
             BooleanSupplier available,
-            Supplier<Map<String, Object>> runtimeContext,
-            Path artifactDirectory
+            Supplier<Map<String, Object>> runtimeContext
     ) {
         this(
                 Objects.requireNonNull(server, "server"),
@@ -90,7 +82,6 @@ public final class CodeModeJobService implements AutoCloseable {
                     }
                 },
                 runtimeContext,
-                new CodeModeArtifactStore(artifactDirectory),
                 Clock.systemUTC()
         );
         server.getMessageBus().listenAlways(ExecutionResultMessage.class, this, message -> {
@@ -106,17 +97,15 @@ public final class CodeModeJobService implements AutoCloseable {
     CodeModeJobService(
             BooleanSupplier available,
             Transport transport,
-            Path artifactDirectory,
             Clock clock
     ) {
-        this(available, transport, Map::of, artifactDirectory, clock);
+        this(available, transport, Map::of, clock);
     }
 
     CodeModeJobService(
             BooleanSupplier available,
             Transport transport,
             Supplier<Map<String, Object>> runtimeContext,
-            Path artifactDirectory,
             Clock clock
     ) {
         this(
@@ -125,7 +114,6 @@ public final class CodeModeJobService implements AutoCloseable {
                 available,
                 transport,
                 runtimeContext,
-                new CodeModeArtifactStore(artifactDirectory),
                 clock
         );
     }
@@ -136,7 +124,6 @@ public final class CodeModeJobService implements AutoCloseable {
             BooleanSupplier available,
             Transport transport,
             Supplier<Map<String, Object>> runtimeContext,
-            CodeModeArtifactStore artifacts,
             Clock clock
     ) {
         this.server = server;
@@ -144,7 +131,6 @@ public final class CodeModeJobService implements AutoCloseable {
         this.available = Objects.requireNonNull(available, "available");
         this.transport = Objects.requireNonNull(transport, "transport");
         this.runtimeContext = Objects.requireNonNull(runtimeContext, "runtimeContext");
-        this.artifacts = Objects.requireNonNull(artifacts, "artifacts");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -178,9 +164,7 @@ public final class CodeModeJobService implements AutoCloseable {
                 scriptId,
                 side,
                 environment,
-                generated.className(),
-                sha256(generated.source()),
-                generated.sourceBytes(),
+                generated.source(),
                 submittedAt,
                 currentRuntimeContext()
         );
@@ -188,16 +172,8 @@ public final class CodeModeJobService implements AutoCloseable {
         this.jobsByScriptId.put(scriptId, jobId);
 
         try {
-            CodeModeArtifactStore.ArtifactPaths paths = this.artifacts.create(
-                    jobId,
-                    generated.className(),
-                    generated.source(),
-                    job.snapshot().asMap()
-            );
-            job.setArtifacts(paths);
-            persist(job);
             this.transport.execute(scriptId, generated.source(), side, environment);
-        } catch (IOException | RuntimeException exception) {
+        } catch (RuntimeException exception) {
             job.finish(
                     JobState.FAILED,
                     null,
@@ -207,7 +183,6 @@ public final class CodeModeJobService implements AutoCloseable {
                     this.clock.instant()
             );
             this.jobsByScriptId.remove(scriptId, jobId);
-            persist(job);
         }
         return job.snapshot();
     }
@@ -251,7 +226,6 @@ public final class CodeModeJobService implements AutoCloseable {
         if (job == null || !job.requestCancellation(this.clock.instant())) {
             return false;
         }
-        persist(job);
         try {
             this.transport.cancel(job.scriptId());
         } catch (RuntimeException exception) {
@@ -264,14 +238,16 @@ public final class CodeModeJobService implements AutoCloseable {
                     this.clock.instant()
             );
             this.jobsByScriptId.remove(job.scriptId(), job.jobId());
-            persist(job);
         }
         return true;
     }
 
-    public String readArtifact(String jobId, String artifact) throws IOException {
-        requireJobId(jobId);
-        return this.artifacts.read(jobId, artifact);
+    public String source(String jobId) {
+        Job job = this.jobs.get(requireJobId(jobId));
+        if (job == null) {
+            throw new IllegalArgumentException("Unknown or expired job: " + jobId);
+        }
+        return job.source;
     }
 
     void acceptResult(int scriptId, ExecutionResult result) {
@@ -321,7 +297,6 @@ public final class CodeModeJobService implements AutoCloseable {
         if (job.snapshot().state().terminal()) {
             this.jobsByScriptId.remove(scriptId, jobId);
         }
-        persist(job);
     }
 
     private void evictCompletedJobs() {
@@ -331,12 +306,13 @@ public final class CodeModeJobService implements AutoCloseable {
         }
         this.jobs.values().stream()
                 .filter(job -> job.snapshot().state().terminal())
-                .sorted(Comparator.comparing(job -> job.snapshot().completedAt()))
+                .sorted(Comparator.comparing((Job job) -> job.snapshot().completedAt())
+                        .thenComparing(Comparator.comparingInt(Job::scriptId).reversed()))
                 .limit(excess)
                 .forEach(job -> this.jobs.remove(job.jobId(), job));
     }
 
-    public Map<String, Object> currentRuntimeContext() {
+    private Map<String, Object> currentRuntimeContext() {
         return Map.copyOf(Objects.requireNonNull(this.runtimeContext.get(), "runtimeContext returned null"));
     }
 
@@ -356,7 +332,6 @@ public final class CodeModeJobService implements AutoCloseable {
         for (Job job : new ArrayList<>(this.jobs.values())) {
             if (job.disconnect(now)) {
                 this.jobsByScriptId.remove(job.scriptId(), job.jobId());
-                persist(job);
             }
         }
     }
@@ -371,31 +346,9 @@ public final class CodeModeJobService implements AutoCloseable {
         return scriptId;
     }
 
-    private void persist(Job job) {
-        CodeModeArtifactStore.ArtifactPaths paths = job.artifacts();
-        if (paths == null) {
-            return;
-        }
-        try {
-            this.artifacts.update(paths, job.snapshot().asMap());
-        } catch (IOException exception) {
-            System.err.println("Unable to update code-mode artifact for " + job.jobId() + ": " + exception);
-        }
-    }
-
     private static String requireJobId(String jobId) {
         Objects.requireNonNull(jobId, "jobId");
         return UUID.fromString(jobId).toString();
-    }
-
-    private static String sha256(String source) {
-        try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(source.getBytes(StandardCharsets.UTF_8))
-            );
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
     }
 
     @Override
@@ -449,9 +402,6 @@ public final class CodeModeJobService implements AutoCloseable {
             JobState state,
             ExecutionSide side,
             ExecutionEnvironment environment,
-            String className,
-            String sourceSha256,
-            int sourceBytes,
             Instant submittedAt,
             Instant updatedAt,
             Instant completedAt,
@@ -464,7 +414,6 @@ public final class CodeModeJobService implements AutoCloseable {
             String error,
             boolean errorTruncated,
             int errorTotalCharacters,
-            Map<String, Object> artifacts,
             Map<String, Object> runtime
     ) {
         public Map<String, Object> responseMap() {
@@ -491,39 +440,7 @@ public final class CodeModeJobService implements AutoCloseable {
             return result;
         }
 
-        public Map<String, Object> asMap() {
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("job_id", this.jobId);
-            result.put("script_id", this.scriptId);
-            result.put("state", this.state.name().toLowerCase());
-            result.put("side", this.side.name().toLowerCase());
-            result.put("environment", this.environment.name().toLowerCase());
-            result.put("class_name", this.className);
-            result.put("source_sha256", this.sourceSha256);
-            result.put("source_bytes", this.sourceBytes);
-            result.put("submitted_at", this.submittedAt.toString());
-            result.put("updated_at", this.updatedAt.toString());
-            if (this.completedAt != null) {
-                result.put("completed_at", this.completedAt.toString());
-            }
-            result.put("cancellation_requested", this.cancellationRequested);
-            if (this.output != null) {
-                result.put("output", this.output);
-                result.put("output_truncated", this.outputTruncated);
-                result.put("output_total_characters", this.outputTotalCharacters);
-            }
-            if (this.resultPresent) {
-                result.put("result", this.result);
-            }
-            if (this.error != null) {
-                result.put("error", this.error);
-                result.put("error_truncated", this.errorTruncated);
-                result.put("error_total_characters", this.errorTotalCharacters);
-            }
-            result.put("artifacts", this.artifacts);
-            result.put("runtime", this.runtime);
-            return result;
-        }
+
     }
 
     interface Transport {
@@ -537,9 +454,7 @@ public final class CodeModeJobService implements AutoCloseable {
         private final int scriptId;
         private final ExecutionSide side;
         private final ExecutionEnvironment environment;
-        private final String className;
-        private final String sourceSha256;
-        private final int sourceBytes;
+        private final String source;
         private final Instant submittedAt;
         private final Map<String, Object> runtime;
         private JobState state = JobState.COMPILING;
@@ -554,16 +469,13 @@ public final class CodeModeJobService implements AutoCloseable {
         private String error;
         private boolean errorTruncated;
         private int errorTotalCharacters;
-        private CodeModeArtifactStore.ArtifactPaths artifacts;
 
         private Job(
                 String jobId,
                 int scriptId,
                 ExecutionSide side,
                 ExecutionEnvironment environment,
-                String className,
-                String sourceSha256,
-                int sourceBytes,
+                String source,
                 Instant submittedAt,
                 Map<String, Object> runtime
         ) {
@@ -571,20 +483,10 @@ public final class CodeModeJobService implements AutoCloseable {
             this.scriptId = scriptId;
             this.side = side;
             this.environment = environment;
-            this.className = className;
-            this.sourceSha256 = sourceSha256;
-            this.sourceBytes = sourceBytes;
+            this.source = source;
             this.submittedAt = submittedAt;
             this.runtime = Map.copyOf(runtime);
             this.updatedAt = submittedAt;
-        }
-
-        private synchronized void setArtifacts(CodeModeArtifactStore.ArtifactPaths artifacts) {
-            this.artifacts = Objects.requireNonNull(artifacts, "artifacts");
-        }
-
-        private synchronized CodeModeArtifactStore.ArtifactPaths artifacts() {
-            return this.artifacts;
         }
 
         private synchronized void markRunning(Instant now) {
@@ -688,16 +590,12 @@ public final class CodeModeJobService implements AutoCloseable {
         }
 
         private synchronized JobSnapshot snapshot() {
-            Map<String, Object> artifactMap = this.artifacts == null ? Map.of() : this.artifacts.asMap();
             return new JobSnapshot(
                     this.jobId,
                     this.scriptId,
                     this.state,
                     this.side,
                     this.environment,
-                    this.className,
-                    this.sourceSha256,
-                    this.sourceBytes,
                     this.submittedAt,
                     this.updatedAt,
                     this.completedAt,
@@ -710,7 +608,6 @@ public final class CodeModeJobService implements AutoCloseable {
                     this.error,
                     this.errorTruncated,
                     this.errorTotalCharacters,
-                    artifactMap,
                     this.runtime
             );
         }

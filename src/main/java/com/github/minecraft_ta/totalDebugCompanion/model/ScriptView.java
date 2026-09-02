@@ -30,12 +30,12 @@ public class ScriptView implements IEditorPanel {
         if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
             throw new IllegalStateException("Script execution was not negotiated for this session");
         }
-        this.path = CompanionApp.getRootPath().resolve("scripts").resolve(scriptName + FILE_EXTENSION);
+        this.path = CompanionApp.instancePaths().scripts().resolve(scriptName + FILE_EXTENSION);
         try {
             Files.createDirectories(this.path.getParent());
             if (!Files.exists(this.path)) {
                 this.text = initialSource(scriptName);
-                Files.writeString(this.path, this.text);
+                com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(this.path, this.text);
             } else {
                 this.text = Files.readString(this.path);
             }
@@ -50,11 +50,7 @@ public class ScriptView implements IEditorPanel {
 
     @Override
     public boolean canClose() {
-        var result = this.scriptPanel.canSave();
-        if (result)
-            CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this.scriptPanel);
-
-        return result;
+        return this.scriptPanel == null || this.scriptPanel.canSave();
     }
 
     public String getSourceText() {
@@ -131,6 +127,9 @@ public class ScriptView implements IEditorPanel {
     @Override
     public void dispose() {
         if (this.scriptPanel != null) {
+            if (CompanionApp.SERVER != null) {
+                CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this.scriptPanel);
+            }
             this.scriptPanel.dispose();
         }
     }

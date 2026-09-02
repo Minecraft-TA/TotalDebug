@@ -21,6 +21,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorTabsTest {
 
+
+    @Test
+    void selectiveClosePreservesOtherEditorsAndSelection() throws Exception {
+        EditorTabs tabs = new EditorTabs();
+        TestEditor keep = new TestEditor();
+        TestEditor first = new TestEditor();
+        TestEditor last = new TestEditor();
+        SwingUtilities.invokeAndWait(() -> {
+            tabs.openEditorTab(first);
+            tabs.openEditorTab(keep);
+            tabs.openEditorTab(last);
+            assertEquals(3, tabs.getTabCount(), "Opening on the EDT must not queue an unguarded second action");
+            tabs.closeMatching(editor -> editor != keep);
+            assertEquals(1, tabs.getTabCount());
+            assertSame(keep, tabs.getSelectedEditor());
+            assertFalse(keep.disposed);
+            assertTrue(first.disposed);
+            assertTrue(last.disposed);
+        });
+    }
+
     @Test
     void closingATabDisposesItsEditor() throws Exception {
         EditorTabs tabs = new EditorTabs();

@@ -35,7 +35,7 @@ public class CreateScriptWindow extends JFrame {
         textField.setPreferredSize(new Dimension(150, (int) textField.getPreferredSize().getHeight()));
 
         var verifyInput = (Predicate<String>) (s) -> JavaSnippetSource.isValidClassName(s)
-                && !Files.exists(CompanionApp.getRootPath().resolve("scripts")
+                && !Files.exists(CompanionApp.instancePaths().scripts()
                 .resolve(s + ScriptView.FILE_EXTENSION));
         var setIconAndVerify = (Supplier<Boolean>) () -> {
             var result = verifyInput.test(textField.getText());

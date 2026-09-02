@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.Opcodes;

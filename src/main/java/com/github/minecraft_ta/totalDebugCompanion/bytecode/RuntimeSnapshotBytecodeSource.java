@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode;
 
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory.RuntimeModule;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
+
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 
@@ -17,7 +20,7 @@ import java.util.jar.JarFile;
 import java.util.zip.ZipFile;
 
 /** Reads the class-file view described by one persisted runtime profile. */
-public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource {
+public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource, AutoCloseable {
     public record Source(int sourceId, Path path, String logicalUri, RuntimeModule module) {
         public Source {
             if (sourceId < 0) {
@@ -44,14 +47,25 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         }
     }
 
+    private final Path inventoryFile;
+    private final String inventoryId;
+    private volatile boolean closed;
     private final ClassIndex classIndex;
     private final Map<Integer, Source> sourcesById;
 
     public static RuntimeSnapshotBytecodeSource fromIndexedSources(List<Source> sources, ClassIndex classIndex) {
-        return new RuntimeSnapshotBytecodeSource(sources, classIndex);
+        return new RuntimeSnapshotBytecodeSource(sources, classIndex, null, null);
     }
 
-    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex) {
+    public static RuntimeSnapshotBytecodeSource fromRuntime(List<Source> sources, ClassIndex classIndex,
+                                                            Path inventoryFile, String inventoryId) {
+        return new RuntimeSnapshotBytecodeSource(sources, classIndex,
+                Objects.requireNonNull(inventoryFile), Objects.requireNonNull(inventoryId));
+    }
+
+    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex, Path inventoryFile, String inventoryId) {
+        this.inventoryFile = inventoryFile;
+        this.inventoryId = inventoryId;
         List<Source> requestedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
         if (requestedSources.isEmpty()) {
             throw new IllegalArgumentException("sources must not be empty");
@@ -73,7 +87,8 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
     }
 
     @Override
-    public boolean hasClass(String className) {
+    public synchronized boolean hasClass(String className) {
+        ensureOpen();
         String internalName = normalizeClassName(className);
         IndexedClass indexedClass = findIndexedClass(internalName);
         if (indexedClass == null) {
@@ -85,6 +100,23 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
 
     @Override
     public byte[] findClassBytes(String className) throws IOException {
+        if (this.inventoryFile == null) {
+            synchronized (this) {
+                ensureOpen();
+                return readClassBytes(className);
+            }
+        }
+        // Waiting for a writer must not hold the native-index lifetime lock.
+        return CacheFiles.locked(this.inventoryFile.getParent(), () -> {
+            synchronized (this) {
+                ensureOpen();
+                CacheFiles.requireIdentity(this.inventoryFile, "id", this.inventoryId);
+                return readClassBytes(className);
+            }
+        });
+    }
+
+    private byte[] readClassBytes(String className) throws IOException {
         String internalName = normalizeClassName(className);
         String resourceName = internalName + ".class";
         IndexedClass indexedClass = findIndexedClass(internalName);
@@ -103,7 +135,8 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         return bytes;
     }
 
-    public ClassOrigin findClassOrigin(String className) {
+    public synchronized ClassOrigin findClassOrigin(String className) {
+        ensureOpen();
         String internalName = normalizeClassName(className);
         String resourceName = internalName + ".class";
         IndexedClass indexedClass = findIndexedClass(internalName);
@@ -112,6 +145,25 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource 
         }
         Source source = requireIndexedSource(internalName, indexedClass);
         return new ClassOrigin(source.logicalUri(), resourceName, source.module());
+    }
+
+    /** Also validates cached decompilation results that do not need to read any class bytes. */
+    public void requireCurrent() throws IOException {
+        ensureOpen();
+        if (this.inventoryFile != null) {
+            CacheFiles.requireIdentity(this.inventoryFile, "id", this.inventoryId);
+        }
+    }
+
+    @Override
+    public synchronized void close() {
+        this.closed = true;
+    }
+
+    private void ensureOpen() {
+        if (this.closed) {
+            throw new IllegalStateException("Runtime bytecode source is closed");
+        }
     }
 
     private IndexedClass findIndexedClass(String internalName) {

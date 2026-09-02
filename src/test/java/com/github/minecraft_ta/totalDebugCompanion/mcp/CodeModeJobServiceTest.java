@@ -49,8 +49,11 @@ class CodeModeJobServiceTest {
             assertTrue(transport.executions.getFirst().source.contains("public Object run() throws Throwable"));
             assertTrue(transport.executions.getFirst().source.contains("return java.util.Map.of"));
             assertFalse(transport.executions.getFirst().source.contains("resultValue"));
-            assertEquals(64, submitted.sourceSha256().length());
-            assertTrue(Files.isRegularFile(Path.of((String) submitted.artifacts().get("source"))));
+            assertEquals(transport.executions.getFirst().source, service.source(submitted.jobId()));
+            assertFalse(service.source(submitted.jobId()).isBlank());
+            try (var files = Files.list(this.temporaryDirectory)) {
+                assertEquals(0, files.count());
+            }
 
             service.acceptResult(-1, progress());
             assertEquals(
@@ -70,8 +73,7 @@ class CodeModeJobServiceTest {
                     java.util.Map.of("values", List.of(BigInteger.ONE, BigInteger.TWO)),
                     completed.result()
             );
-            assertTrue(service.readArtifact(submitted.jobId(), "source").contains("logln"));
-            assertTrue(service.readArtifact(submitted.jobId(), "job").contains("\"state\": \"succeeded\""));
+            assertTrue(service.source(submitted.jobId()).contains("logln"));
         }
     }
 
@@ -186,7 +188,6 @@ class CodeModeJobServiceTest {
                         "profile_id", "instance-a",
                         "runtime_signature", "sha256:abc"
                 ),
-                this.temporaryDirectory.resolve("artifacts"),
                 Clock.fixed(Instant.parse("2026-08-23T12:00:00Z"), ZoneOffset.UTC)
         )) {
             CodeModeJobService.JobSnapshot submitted = service.submit(
@@ -208,7 +209,6 @@ class CodeModeJobServiceTest {
         return new CodeModeJobService(
                 () -> available,
                 transport,
-                this.temporaryDirectory.resolve("artifacts"),
                 Clock.fixed(Instant.parse("2026-08-23T12:00:00Z"), ZoneOffset.UTC)
         );
     }
@@ -237,6 +237,33 @@ class CodeModeJobServiceTest {
             assertEquals(400_000, completed.outputTotalCharacters());
             assertEquals(true, completed.responseMap().get("logs_truncated"));
             assertEquals(400_000, completed.responseMap().get("logs_total_characters"));
+        }
+    }
+
+    @Test
+    void sourceHasTheSameLifetimeAsTheRetainedJobAndActiveWorkIsNotEvicted() {
+        FakeTransport transport = new FakeTransport();
+        String expired;
+        try (CodeModeJobService service = service(transport, true)) {
+            var active = service.submit("return 0;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            var first = service.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            expired = first.jobId();
+            service.acceptResult(first.scriptId(), completed("", null));
+            for (int i = 0; i < CodeModeJobService.MAX_RETAINED_JOBS; i++) {
+                var job = service.submit("return 2;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                        CodeModeJobService.ExecutionEnvironment.THREAD);
+                service.acceptResult(job.scriptId(), completed("", null));
+            }
+            assertTrue(service.get(active.jobId()).isPresent());
+            assertFalse(service.source(active.jobId()).isBlank());
+            assertTrue(service.get(expired).isEmpty());
+            assertTrue(assertThrows(IllegalArgumentException.class, () -> service.source(expired))
+                    .getMessage().contains("Unknown or expired"));
+        }
+        try (CodeModeJobService restarted = service(new FakeTransport(), true)) {
+            assertThrows(IllegalArgumentException.class, () -> restarted.source(expired));
         }
     }
 

@@ -1,15 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.google.gson.JsonObject;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Objects;
-import java.util.Properties;
 
 public record CompanionProfile(
         String id,
@@ -17,74 +14,41 @@ public record CompanionProfile(
         Path workspaceDirectory,
         long supportedCapabilities
 ) {
-    private static final String ID = "id";
-    private static final String DATA = "data";
-    private static final String WORKSPACE = "workspace";
-    private static final String CAPABILITIES = "capabilities";
-
     public CompanionProfile {
         if (Objects.requireNonNull(id, "id").isBlank()) {
             throw new IllegalArgumentException("Profile id is blank");
         }
-        dataDirectory = normalize(dataDirectory, "dataDirectory");
-        workspaceDirectory = normalize(workspaceDirectory, "workspaceDirectory");
+        dataDirectory = Objects.requireNonNull(dataDirectory, "dataDirectory").toAbsolutePath().normalize();
+        workspaceDirectory = Objects.requireNonNull(workspaceDirectory, "workspaceDirectory").toAbsolutePath().normalize();
     }
 
     public static CompanionProfile fromHello(ClientHelloMessage hello, long capabilities) {
-        return new CompanionProfile(
-                hello.profileId(),
-                Path.of(hello.dataDirectory()),
-                Path.of(hello.workspaceDirectory()),
-                capabilities
-        );
+        return new CompanionProfile(hello.profileId(), Path.of(hello.dataDirectory()),
+                Path.of(hello.workspaceDirectory()), capabilities);
     }
 
     public void writeAtomically(Path profileFile) throws IOException {
-        Path target = profileFile.toAbsolutePath().normalize();
-        Path parent = Objects.requireNonNull(target.getParent(), "Profile file has no parent");
-        Files.createDirectories(parent);
-        Properties values = new Properties();
-        values.setProperty(ID, this.id);
-        values.setProperty(DATA, this.dataDirectory.toString());
-        values.setProperty(WORKSPACE, this.workspaceDirectory.toString());
-        values.setProperty(CAPABILITIES, Long.toUnsignedString(this.supportedCapabilities));
-        Path staged = Files.createTempFile(parent, ".profile-", ".tmp");
-        try (OutputStream output = Files.newOutputStream(staged)) {
-            values.store(output, "TotalDebug Companion profile");
-        }
-        try {
-            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(staged);
-        }
+        JsonObject json = new JsonObject();
+        json.addProperty("format", 1);
+        json.addProperty("id", id);
+        json.addProperty("instanceHome", dataDirectory.toString());
+        json.addProperty("gameDirectory", workspaceDirectory.toString());
+        json.addProperty("capabilities", Long.toUnsignedString(supportedCapabilities));
+        JsonFiles.write(profileFile, json);
     }
 
     public static CompanionProfile read(Path profileFile) throws IOException {
-        Properties values = new Properties();
-        try (InputStream input = Files.newInputStream(profileFile)) {
-            values.load(input);
-        }
         try {
-            return new CompanionProfile(
-                    required(values, ID),
-                    Path.of(required(values, DATA)),
-                    Path.of(required(values, WORKSPACE)),
-                    Long.parseUnsignedLong(required(values, CAPABILITIES))
-            );
-        } catch (IllegalArgumentException exception) {
-            throw new IOException("Invalid Companion profile", exception);
+            JsonObject json = JsonFiles.read(profileFile);
+            if (JsonFiles.integer(json, "format") != 1) {
+                throw new IllegalArgumentException("Unsupported profile format");
+            }
+            return new CompanionProfile(JsonFiles.string(json, "id"),
+                    Path.of(JsonFiles.string(json, "instanceHome")),
+                    Path.of(JsonFiles.string(json, "gameDirectory")),
+                    Long.parseUnsignedLong(JsonFiles.string(json, "capabilities")));
+        } catch (RuntimeException exception) {
+            throw new IOException("Invalid Companion profile " + profileFile + ": " + exception.getMessage(), exception);
         }
-    }
-
-    private static String required(Properties values, String key) {
-        String value = values.getProperty(key);
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Missing profile field: " + key);
-        }
-        return value;
-    }
-
-    private static Path normalize(Path path, String name) {
-        return Objects.requireNonNull(path, name).toAbsolutePath().normalize();
     }
 }

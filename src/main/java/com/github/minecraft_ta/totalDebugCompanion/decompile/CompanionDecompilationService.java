@@ -16,7 +16,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.nio.charset.StandardCharsets;
 
 public final class CompanionDecompilationService implements AutoCloseable {
     private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-5";
@@ -62,26 +61,27 @@ public final class CompanionDecompilationService implements AutoCloseable {
     public CompletableFuture<DecompiledSource> load(String binaryName) {
         ensureOpen();
         String normalizedName = requireBinaryName(binaryName);
-        Path cached = this.sourceStore.find(normalizedName);
-        if (cached != null) {
-            try {
-                return CompletableFuture.completedFuture(readStoredSource(normalizedName, cached));
-            } catch (IOException exception) {
-                return CompletableFuture.failedFuture(exception);
+        try {
+            DecompiledSource cached = readStoredSource(normalizedName);
+            if (cached != null) {
+                return CompletableFuture.completedFuture(cached);
             }
+        } catch (IOException exception) {
+            return CompletableFuture.failedFuture(exception);
         }
         synchronized (this.inFlightRequests) {
+            ensureOpen();
             CompletableFuture<DecompiledSource> existing = this.inFlightRequests.get(normalizedName);
             if (existing != null && !existing.isDone()) {
                 return existing;
             }
-            cached = this.sourceStore.find(normalizedName);
-            if (cached != null) {
-                try {
-                    return CompletableFuture.completedFuture(readStoredSource(normalizedName, cached));
-                } catch (IOException exception) {
-                    return CompletableFuture.failedFuture(exception);
+            try {
+                DecompiledSource cached = readStoredSource(normalizedName);
+                if (cached != null) {
+                    return CompletableFuture.completedFuture(cached);
                 }
+            } catch (IOException exception) {
+                return CompletableFuture.failedFuture(exception);
             }
 
             CompletableFuture<DecompiledSource> task = CompletableFuture.supplyAsync(() -> {
@@ -99,6 +99,14 @@ public final class CompanionDecompilationService implements AutoCloseable {
             });
             return task;
         }
+    }
+
+    public Path cacheDirectory() {
+        return this.sourceStore.directory();
+    }
+
+    public java.util.List<String> cachedClasses() throws IOException {
+        return this.sourceStore.cachedClasses();
     }
 
     public byte[] loadClassBytes(String binaryName) throws IOException {
@@ -137,32 +145,40 @@ public final class CompanionDecompilationService implements AutoCloseable {
         if (!result.isComplete()) {
             throw new IOException("Vineflower produced partial source for " + binaryName);
         }
-        if (this.closed) {
-            throw new IOException("Decompilation service closed before source could be stored");
+        synchronized (this.inFlightRequests) {
+            ensureOpen();
+            this.bytecodeSource.requireCurrent();
+            Path path = this.sourceStore.write(
+                    binaryName,
+                    result.source(),
+                    result.lineMap(),
+                    result.variableNames()
+            );
+            return new DecompiledSource(
+                    path,
+                    binaryName,
+                    result.source(),
+                    result.lineMap(),
+                    result.variableNames(),
+                    this.bytecodeSource.findClassOrigin(binaryName)
+            );
         }
-        Path path = this.sourceStore.write(
-                binaryName,
-                result.source(),
-                result.lineMap(),
-                result.variableNames()
-        );
-        return new DecompiledSource(
-                path,
-                binaryName,
-                result.source(),
-                result.lineMap(),
-                result.variableNames(),
-                this.bytecodeSource.findClassOrigin(binaryName)
-        );
     }
 
-    private DecompiledSource readStoredSource(String binaryName, Path path) throws IOException {
+    private DecompiledSource readStoredSource(String binaryName) throws IOException {
+        ensureOpen();
+        var stored = this.sourceStore.read(binaryName);
+        if (stored == null) {
+            return null;
+        }
+        this.bytecodeSource.requireCurrent();
+        var metadata = stored.debug();
         return new DecompiledSource(
-                path,
+                stored.path(),
                 binaryName,
-                java.nio.file.Files.readString(path, StandardCharsets.UTF_8),
-                this.sourceStore.readLineMap(binaryName),
-                this.sourceStore.readVariableNames(binaryName),
+                stored.source(),
+                metadata.lines(),
+                metadata.names(),
                 this.bytecodeSource.findClassOrigin(binaryName)
         );
     }
@@ -185,8 +201,14 @@ public final class CompanionDecompilationService implements AutoCloseable {
 
     @Override
     public void close() {
-        this.closed = true;
-        this.worker.shutdownNow();
+        synchronized (this.inFlightRequests) {
+            this.closed = true;
+            for (var task : java.util.List.copyOf(this.inFlightRequests.values())) {
+                task.cancel(false);
+            }
+            this.worker.shutdownNow();
+        }
+        this.bytecodeSource.close();
     }
 
     private void ensureOpen() {

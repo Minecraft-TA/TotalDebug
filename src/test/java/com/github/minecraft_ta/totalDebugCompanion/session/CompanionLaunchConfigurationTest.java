@@ -29,8 +29,8 @@ class CompanionLaunchConfigurationTest {
                 Map.of()
         );
         assertEquals(this.temporaryDirectory.resolve("custom").toAbsolutePath().normalize(), explicit.appHome());
-        assertEquals(explicit.appHome().resolve("instance.properties"), explicit.descriptorFile());
-        assertEquals(explicit.appHome().resolve("instance.key"), explicit.keyFile());
+        assertEquals(explicit.paths().instanceDescriptor(), explicit.descriptorFile());
+        assertEquals(explicit.paths().instanceKey(), explicit.keyFile());
     }
 
     @Test

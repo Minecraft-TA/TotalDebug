@@ -53,7 +53,7 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger) {
         this.dataDirectory = normalize(dataDirectory);
-        this.endpointDescriptor = this.dataDirectory.resolve(McpEndpointDescriptor.FILE_NAME);
+        this.endpointDescriptor = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpEndpoint();
         this.jobs = Objects.requireNonNull(jobs, "jobs");
         this.debugger = Objects.requireNonNull(debugger, "debugger");
         this.runtimeSource = new CompanionMcpRuntimeSource(CompanionApp::getDecompilationService);
@@ -89,8 +89,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 .tools(CompanionMcpToolCatalog.specifications(this::callTool))
                 .build();
 
-        Path mcpDirectory = this.dataDirectory.resolve("mcp");
-        Path tomcatDirectory = mcpDirectory.resolve("tomcat");
+        Path tomcatDirectory = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpCache();
         Files.createDirectories(tomcatDirectory);
 
         Tomcat embeddedTomcat = new Tomcat();
@@ -101,7 +100,7 @@ public final class CompanionMcpServer implements AutoCloseable {
         connector.setProperty("address", "127.0.0.1");
         embeddedTomcat.setConnector(connector);
 
-        Context context = embeddedTomcat.addContext("", mcpDirectory.toString());
+        Context context = embeddedTomcat.addContext("", tomcatDirectory.toString());
         Wrapper servlet = Tomcat.addServlet(context, "mcp", this.transportProvider);
         servlet.setAsyncSupported(true);
         servlet.setLoadOnStartup(1);
@@ -167,7 +166,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 );
                 case "job_source" -> Map.of(
                         "source",
-                        this.jobs.readArtifact(requiredString(request.arguments(), "job_id"), "source")
+                        this.jobs.source(requiredString(request.arguments(), "job_id"))
                 );
                 case "search_classes" -> this.search.searchClasses(requiredString(request.arguments(), "query"));
                 case "runtime_source" -> this.runtimeSource.source(

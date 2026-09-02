@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
+
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.AbstractMessageIncoming;

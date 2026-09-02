@@ -62,13 +62,31 @@ public class EditorTabs extends JTabbedPane {
         removeTabAt(tabIndex);
     }
 
+    public boolean canCloseAll() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("Editor close checks must run on the EDT");
+        }
+        return List.copyOf(this.editors).stream().allMatch(IEditorPanel::canClose);
+    }
+
+    public void closeMatching(Predicate<IEditorPanel> predicate) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("Editor tabs must be closed on the EDT");
+        }
+        for (int i = this.editors.size() - 1; i >= 0; i--) {
+            if (predicate.test(this.editors.get(i))) {
+                removeTabAt(i);
+            }
+        }
+    }
+
     @Override
     public void removeTabAt(int index) {
         IEditorPanel editor = this.editors.get(index);
         if (!editor.canClose())
             return;
-        super.removeTabAt(index);
         editors.remove(index);
+        super.removeTabAt(index);
         refreshTabHeaders();
         editor.dispose();
         notifySelectedEditorChanged();
@@ -76,7 +94,7 @@ public class EditorTabs extends JTabbedPane {
 
     public CompletableFuture<Void> openEditorTab(IEditorPanel editorPanel) {
         var future = new CompletableFuture<Void>();
-        SwingUtilities.invokeLater(() -> {
+        Runnable open = () -> {
             editors.add(editorPanel);
             Component component = editorPanel.getComponent();
             addTab(editorPanel.getTitle(), component);
@@ -88,7 +106,12 @@ public class EditorTabs extends JTabbedPane {
             header.refreshState();
 
             future.complete(null);
-        });
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            open.run();
+        } else {
+            SwingUtilities.invokeLater(open);
+        }
 
         return future;
     }

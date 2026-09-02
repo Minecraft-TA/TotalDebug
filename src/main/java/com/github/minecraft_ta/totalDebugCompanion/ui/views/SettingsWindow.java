@@ -59,13 +59,13 @@ public class SettingsWindow extends JDialog {
         addSection(form, row++, "Debugger");
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on caught exceptions",
-                config.breakOnCaughtExceptions(),
-                config::setBreakOnCaughtExceptions
+                CompanionApp.instanceState().breakOnCaughtExceptions(),
+                CompanionApp.instanceState()::setBreakOnCaughtExceptions
         ));
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on uncaught exceptions",
-                config.breakOnUncaughtExceptions(),
-                config::setBreakOnUncaughtExceptions
+                CompanionApp.instanceState().breakOnUncaughtExceptions(),
+                CompanionApp.instanceState()::setBreakOnUncaughtExceptions
         ));
         addWideRow(form, row++, createToggle(
                 "Show inline values while paused",
@@ -126,8 +126,8 @@ public class SettingsWindow extends JDialog {
             GlobalConfig config = GlobalConfig.getInstance();
             CompanionApp.getDebuggerController()
                     .setExceptionBreakpoints(
-                            config.breakOnCaughtExceptions(),
-                            config.breakOnUncaughtExceptions()
+                            CompanionApp.instanceState().breakOnCaughtExceptions(),
+                            CompanionApp.instanceState().breakOnUncaughtExceptions()
                     );
         });
         return toggle;

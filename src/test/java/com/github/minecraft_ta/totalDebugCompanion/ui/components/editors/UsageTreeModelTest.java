@@ -3,7 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.tth05.jindex.ReferenceKind;
 import org.junit.jupiter.api.Test;

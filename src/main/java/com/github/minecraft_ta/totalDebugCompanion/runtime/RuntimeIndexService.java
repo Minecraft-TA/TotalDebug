@@ -1,25 +1,24 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
+
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -28,11 +27,6 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public final class RuntimeIndexService implements AutoCloseable {
-    private static final String INDEX_DIRECTORY_NAME = "index";
-    private static final String INDEX_FILE_NAME = "index";
-    private static final String METADATA_FILE_NAME = "index.properties";
-    private static final String CACHE_FORMAT = "2";
-
     public enum Phase {
         WAITING,
         PREPARING,
@@ -83,6 +77,8 @@ public final class RuntimeIndexService implements AutoCloseable {
             .daemon()
             .name("Companion runtime index")
             .unstarted(task));
+    // Shares the application's profile lock so installation and profile changes cannot invert locks.
+    private final Object lifecycleLock;
     private final Consumer<ReadySnapshot> readyHandler;
     private final CopyOnWriteArrayList<Consumer<Status>> listeners = new CopyOnWriteArrayList<>();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
@@ -91,7 +87,8 @@ public final class RuntimeIndexService implements AutoCloseable {
     private long generation;
     private boolean closed;
 
-    public RuntimeIndexService(Consumer<ReadySnapshot> readyHandler) {
+    public RuntimeIndexService(Object lifecycleLock, Consumer<ReadySnapshot> readyHandler) {
+        this.lifecycleLock = Objects.requireNonNull(lifecycleLock, "lifecycleLock");
         this.readyHandler = Objects.requireNonNull(readyHandler, "readyHandler");
     }
 
@@ -105,78 +102,88 @@ public final class RuntimeIndexService implements AutoCloseable {
         checked.accept(this.status);
     }
 
-    public synchronized void waiting(String detail) {
-        update(new Status(Phase.WAITING, detail, null));
+    public void waiting(String detail) {
+        synchronized (this.lifecycleLock) {
+            this.generation++;
+            this.activeInventoryId = null;
+            this.activeDataDirectory = null;
+            update(new Status(Phase.WAITING, detail, null));
+        }
     }
 
-    public synchronized void restore(Path dataDirectory) {
-        ensureOpen();
-        this.activeInventoryId = null;
-        this.activeDataDirectory = null;
-        long requestedGeneration = ++this.generation;
-        Path root = normalizeDataDirectory(dataDirectory);
-        Path indexDirectory = root.resolve(INDEX_DIRECTORY_NAME);
-        if (!hasCompleteIndex(indexDirectory)) {
-            update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
-            return;
-        }
-        update(new Status(Phase.LOADING, "Loading the previous class index", null));
-        this.worker.execute(() -> {
-            try {
-                ReadySnapshot snapshot = loadSnapshot(indexDirectory);
-                publishReady(requestedGeneration, root, snapshot);
-            } catch (IOException | RuntimeException exception) {
-                if (isCurrent(requestedGeneration)) {
-                    update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
-                }
+    public void restore(Path dataDirectory) {
+        synchronized (this.lifecycleLock) {
+            ensureOpen();
+            this.activeInventoryId = null;
+            this.activeDataDirectory = null;
+            long requestedGeneration = ++this.generation;
+            Path root = normalizeDataDirectory(dataDirectory);
+            Path indexFile = new InstancePaths(root).index();
+            if (!Files.isRegularFile(indexFile)) {
+                update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
+                return;
             }
-        });
-    }
-
-    public synchronized void accept(Path dataDirectory, String expectedInventoryId, Path inventoryFile) {
-        ensureOpen();
-        Path root = normalizeDataDirectory(dataDirectory);
-        String inventoryId = Objects.requireNonNull(expectedInventoryId, "expectedInventoryId");
-        if (inventoryId.equals(this.activeInventoryId) && root.equals(this.activeDataDirectory)) {
-            update(new Status(Phase.READY, "Class index ready", null));
-            return;
+            update(new Status(Phase.LOADING, "Loading the previous class index", null));
+            this.worker.execute(() -> {
+                try {
+                    ReadySnapshot snapshot = CacheFiles.locked(indexFile.getParent(), () -> loadSnapshot(indexFile));
+                    publishReady(requestedGeneration, root, snapshot);
+                } catch (IOException | RuntimeException exception) {
+                    if (isCurrent(requestedGeneration)) {
+                        update(new Status(Phase.FAILED, exception.getMessage(), exception));
+                    }
+                }
+            });
         }
-        long requestedGeneration = ++this.generation;
-        update(new Status(Phase.PREPARING, "Reading runtime inventory", null));
-        this.worker.execute(() -> buildOrLoad(
-                requestedGeneration,
-                root,
-                inventoryId,
-                Objects.requireNonNull(inventoryFile, "inventoryFile").toAbsolutePath().normalize()
-        ));
     }
 
-    public synchronized void failedBeforeBuild(String detail) {
-        this.generation++;
-        update(new Status(Phase.FAILED, Objects.requireNonNullElse(detail, "Runtime inventory failed"), null));
+    public void accept(Path dataDirectory, String expectedInventoryId, Path inventoryFile) {
+        synchronized (this.lifecycleLock) {
+            ensureOpen();
+            Path root = normalizeDataDirectory(dataDirectory);
+            String inventoryId = Objects.requireNonNull(expectedInventoryId, "expectedInventoryId");
+            if (inventoryId.equals(this.activeInventoryId) && root.equals(this.activeDataDirectory)) {
+                update(new Status(Phase.READY, "Class index ready", null));
+                return;
+            }
+            long requestedGeneration = ++this.generation;
+            update(new Status(Phase.PREPARING, "Reading runtime inventory", null));
+            this.worker.execute(() -> buildOrLoad(
+                    requestedGeneration,
+                    root,
+                    inventoryId,
+                    Objects.requireNonNull(inventoryFile, "inventoryFile").toAbsolutePath().normalize()
+            ));
+        }
+    }
+
+    public void failedBeforeBuild(String detail) {
+        synchronized (this.lifecycleLock) {
+            this.generation++;
+            update(new Status(Phase.FAILED, Objects.requireNonNullElse(detail, "Runtime inventory failed"), null));
+        }
     }
 
     private void buildOrLoad(long requestedGeneration, Path root, String expectedInventoryId, Path inventoryFile) {
         try {
-            RuntimeInventory inventory = RuntimeInventory.read(inventoryFile);
-            if (!inventory.id().equals(expectedInventoryId)) {
-                throw new IOException(
-                        "Runtime inventory identity mismatch: expected " + expectedInventoryId + ", got " + inventory.id()
-                );
+            Path expectedFile = new InstancePaths(root).inventory();
+            if (!expectedFile.equals(inventoryFile)) {
+                throw new IOException("Runtime inventory must be published at " + expectedFile);
             }
             if (!isCurrent(requestedGeneration)) {
                 return;
             }
-            Path indexDirectory = root.resolve(INDEX_DIRECTORY_NAME);
-            ReadySnapshot snapshot;
-            if (matchesIndex(indexDirectory, inventory.id())) {
-                update(new Status(Phase.LOADING, "Loading cached class index", null));
-                snapshot = loadSnapshot(indexDirectory);
-            } else {
-                update(new Status(Phase.BUILDING, "Building class index", null));
-                snapshot = buildSnapshot(inventory, root, indexDirectory);
-            }
-            publishReady(requestedGeneration, root, snapshot);
+            update(new Status(Phase.BUILDING, "Preparing class index", null));
+            ReadySnapshot ready = CacheFiles.locked(expectedFile.getParent(), () -> {
+                RuntimeInventory inventory = RuntimeInventory.read(inventoryFile);
+                if (!inventory.id().equals(expectedInventoryId)) {
+                    throw new IOException("Runtime inventory identity mismatch: expected " + expectedInventoryId
+                            + ", got " + inventory.id());
+                }
+                Path indexFile = new InstancePaths(root).index();
+                return matchesIndex(indexFile, inventory.id()) ? loadSnapshot(indexFile) : buildSnapshot(inventory, indexFile);
+            });
+            publishReady(requestedGeneration, root, ready);
         } catch (IOException | RuntimeException exception) {
             if (isCurrent(requestedGeneration)) {
                 String message = exception.getMessage();
@@ -191,60 +198,45 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     private ReadySnapshot buildSnapshot(
             RuntimeInventory inventory,
-            Path dataDirectory,
-            Path indexDirectory
+            Path indexFile
     ) throws IOException {
-        Files.createDirectories(dataDirectory);
-        Path staged = Files.createTempDirectory(dataDirectory, ".runtime-index-");
-        try {
-            List<PreparedInput> prepared = prepareInputs(inventory);
-            List<IndexSource> indexSources = new ArrayList<>();
-            var publishedSourcesById = new LinkedHashMap<Integer, RuntimeSnapshotBytecodeSource.Source>();
-            for (PreparedInput input : prepared) {
-                indexSources.add(input.indexSource());
-                publishedSourcesById.putIfAbsent(
-                        input.publishedSource().sourceId(),
-                        input.publishedSource()
-                );
-            }
-            List<RuntimeSnapshotBytecodeSource.Source> publishedSources = new ArrayList<>(publishedSourcesById.values());
-            int jdkSourceId = publishedSources.stream()
-                    .mapToInt(RuntimeSnapshotBytecodeSource.Source::sourceId)
-                    .max()
-                    .orElse(-1) + 1;
-            addJdkClasses(jdkSourceId, indexSources);
-            publishedSources.add(new RuntimeSnapshotBytecodeSource.Source(
-                    jdkSourceId,
-                    Path.of(inventory.javaHome()),
-                    "jrt:/",
-                    new RuntimeInventory.RuntimeModule(
-                            "java-runtime",
-                            "Java Runtime",
-                            RuntimeInventory.ModuleKind.JAVA_RUNTIME
-                    )
-            ));
-            if (indexSources.isEmpty()) {
-                throw new IOException("Runtime inventory contains no indexable classes");
-            }
-
-            Path stagedIndex = staged.resolve(INDEX_FILE_NAME);
-            try (ClassIndex index = ClassIndex.fromSources(indexSources)) {
-                index.saveToFile(stagedIndex.toString());
-            } catch (RuntimeException exception) {
-                throw new IOException("JIndex could not build the runtime class index", exception);
-            }
-            PreparedRuntimeSources.write(staged.resolve(PreparedRuntimeSources.FILE_NAME), List.copyOf(publishedSources));
-            writeIndexMetadata(staged.resolve(METADATA_FILE_NAME), inventory.id());
-            deleteTree(indexDirectory);
-            try {
-                Files.move(staged, indexDirectory, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException exception) {
-                throw new IOException("The Companion data directory does not support atomic index updates", exception);
-            }
-            return loadSnapshot(indexDirectory);
-        } finally {
-            deleteTree(staged);
+        AtomicFiles.cleanupAbandonedStaging(indexFile.getParent());
+        List<PreparedInput> prepared = prepareInputs(inventory);
+        List<IndexSource> indexSources = new ArrayList<>();
+        var publishedSourcesById = new LinkedHashMap<Integer, RuntimeSnapshotBytecodeSource.Source>();
+        for (PreparedInput input : prepared) {
+            indexSources.add(input.indexSource());
+            publishedSourcesById.putIfAbsent(
+                    input.publishedSource().sourceId(),
+                    input.publishedSource()
+            );
         }
+        List<RuntimeSnapshotBytecodeSource.Source> publishedSources = new ArrayList<>(publishedSourcesById.values());
+        int jdkSourceId = publishedSources.stream()
+                .mapToInt(RuntimeSnapshotBytecodeSource.Source::sourceId)
+                .max()
+                .orElse(-1) + 1;
+        addJdkClasses(jdkSourceId, indexSources);
+        publishedSources.add(new RuntimeSnapshotBytecodeSource.Source(
+                jdkSourceId,
+                Path.of(inventory.javaHome()),
+                "jrt:/",
+                new RuntimeInventory.RuntimeModule(
+                        "java-runtime",
+                        "Java Runtime",
+                        RuntimeInventory.ModuleKind.JAVA_RUNTIME
+                )
+        ));
+        if (indexSources.isEmpty()) {
+            throw new IOException("Runtime inventory contains no indexable classes");
+        }
+
+        try (ClassIndex index = ClassIndex.fromSources(indexSources)) {
+            IndexCache.write(indexFile, index, new IndexCache.Manifest(inventory.id(), publishedSources));
+        } catch (RuntimeException exception) {
+            throw new IOException("JIndex could not build the runtime class index", exception);
+        }
+        return loadSnapshot(indexFile);
     }
 
     static List<PreparedInput> prepareInputs(RuntimeInventory inventory) throws IOException {
@@ -311,89 +303,43 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static ReadySnapshot openSnapshot(
-            String inventoryId,
-            Path indexFile,
-            Path sourceFile
-    ) throws IOException {
-        List<RuntimeSnapshotBytecodeSource.Source> sources = PreparedRuntimeSources.read(sourceFile);
+    private static ReadySnapshot loadSnapshot(Path indexFile) throws IOException {
+        IndexCache.Manifest manifest = IndexCache.read(indexFile);
+        CacheFiles.requireIdentity(indexFile.getParent().resolve("inventory.json"), "id", manifest.inventoryId());
         try {
-            return new ReadySnapshot(
-                    inventoryId,
-                    CACHE_FORMAT + ":" + inventoryId,
-                    indexFile,
-                    sources,
-                    ClassIndex.fromFile(indexFile.toString())
-            );
+            return new ReadySnapshot(manifest.inventoryId(), IndexCache.FORMAT + ":" + manifest.inventoryId(),
+                    indexFile, manifest.sources(), ClassIndex.fromFile(indexFile.toString()));
         } catch (RuntimeException exception) {
-            throw new IOException("Unable to load the runtime class index", exception);
+            throw new IOException("Unable to load the runtime class index: " + indexFile, exception);
         }
     }
 
-    private static ReadySnapshot loadSnapshot(Path indexDirectory) throws IOException {
-        String inventoryId = readIndexInventoryId(indexDirectory);
-        return openSnapshot(
-                inventoryId,
-                indexDirectory.resolve(INDEX_FILE_NAME),
-                indexDirectory.resolve(PreparedRuntimeSources.FILE_NAME)
-        );
+    private static boolean matchesIndex(Path indexFile, String inventoryId) throws IOException {
+        return Files.isRegularFile(indexFile) && inventoryId.equals(IndexCache.read(indexFile).inventoryId());
     }
 
-    private static boolean hasCompleteIndex(Path indexDirectory) {
-        return Files.isRegularFile(indexDirectory.resolve(INDEX_FILE_NAME))
-                && Files.isRegularFile(indexDirectory.resolve(PreparedRuntimeSources.FILE_NAME))
-                && Files.isRegularFile(indexDirectory.resolve(METADATA_FILE_NAME));
-    }
-
-    private static boolean matchesIndex(Path indexDirectory, String inventoryId) {
-        if (!hasCompleteIndex(indexDirectory)) {
-            return false;
-        }
-        try {
-            return inventoryId.equals(readIndexInventoryId(indexDirectory));
-        } catch (IOException | RuntimeException ignored) {
-            return false;
+    private void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot) {
+        synchronized (this.lifecycleLock) {
+            if (this.closed || this.generation != requestedGeneration) {
+                snapshot.close();
+                return;
+            }
+            try {
+                this.readyHandler.accept(snapshot);
+            } catch (RuntimeException exception) {
+                snapshot.close();
+                throw exception;
+            }
+            this.activeInventoryId = snapshot.inventoryId();
+            this.activeDataDirectory = root;
+            update(new Status(Phase.READY, "Class index ready", null));
         }
     }
 
-    private static String readIndexInventoryId(Path indexDirectory) throws IOException {
-        Properties properties = new Properties();
-        try (InputStream input = Files.newInputStream(indexDirectory.resolve(METADATA_FILE_NAME))) {
-            properties.load(input);
+    private boolean isCurrent(long requestedGeneration) {
+        synchronized (this.lifecycleLock) {
+            return !this.closed && this.generation == requestedGeneration;
         }
-        if (!CACHE_FORMAT.equals(required(properties, "format"))) {
-            throw new IOException("Unsupported runtime index format");
-        }
-        return required(properties, "inventory.id");
-    }
-
-    private static void writeIndexMetadata(Path file, String inventoryId) throws IOException {
-        Properties properties = new Properties();
-        properties.setProperty("format", CACHE_FORMAT);
-        properties.setProperty("inventory.id", inventoryId);
-        try (OutputStream output = Files.newOutputStream(file)) {
-            properties.store(output, "TotalDebug Companion runtime index");
-        }
-    }
-
-    private synchronized void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot) {
-        if (this.closed || this.generation != requestedGeneration) {
-            snapshot.close();
-            return;
-        }
-        try {
-            this.readyHandler.accept(snapshot);
-        } catch (RuntimeException exception) {
-            snapshot.close();
-            throw exception;
-        }
-        this.activeInventoryId = snapshot.inventoryId();
-        this.activeDataDirectory = root;
-        update(new Status(Phase.READY, "Class index ready", null));
-    }
-
-    private synchronized boolean isCurrent(long requestedGeneration) {
-        return !this.closed && this.generation == requestedGeneration;
     }
 
     private void update(Status replacement) {
@@ -403,9 +349,11 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private synchronized void ensureOpen() {
-        if (this.closed) {
-            throw new IllegalStateException("Runtime index service is closed");
+    private void ensureOpen() {
+        synchronized (this.lifecycleLock) {
+            if (this.closed) {
+                throw new IllegalStateException("Runtime index service is closed");
+            }
         }
     }
 
@@ -419,34 +367,17 @@ public final class RuntimeIndexService implements AutoCloseable {
                 && !name.endsWith("/module-info.class");
     }
 
-    private static String required(Properties properties, String key) {
-        String value = properties.getProperty(key);
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Missing active runtime field " + key);
-        }
-        return value;
-    }
-
-    private static void deleteTree(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.walk(root)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        }
-    }
-
     @Override
-    public synchronized void close() {
-        if (this.closed) {
-            return;
+    public void close() {
+        synchronized (this.lifecycleLock) {
+            if (this.closed) {
+                return;
+            }
+            this.closed = true;
+            this.activeInventoryId = null;
+            this.activeDataDirectory = null;
+            this.generation++;
+            this.worker.shutdownNow();
         }
-        this.closed = true;
-        this.activeInventoryId = null;
-        this.activeDataDirectory = null;
-        this.generation++;
-        this.worker.shutdownNow();
     }
 }

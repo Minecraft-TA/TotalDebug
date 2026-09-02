@@ -2,289 +2,259 @@ package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
+import com.github.minecraft_ta.totaldebug.storage.CacheNames;
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.google.gson.JsonObject;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.Comparator;
+import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Properties;
-import java.util.stream.Stream;
 
+/** One current runtime's readable source/debug pairs. The manifest commits each complete pair. */
 final class DecompiledSourceStore {
-    private static final int LINE_MAP_MAGIC = 0x54444C4D;
-    private static final int LINE_MAP_VERSION = 1;
-    private static final int VARIABLE_NAMES_MAGIC = 0x5444564E;
-    private static final int VARIABLE_NAMES_VERSION = 2;
-    private static final String SOURCE_DIRECTORY_NAME = "decompiled-files";
-    private static final String METADATA_DIRECTORY_NAME = "decompiled-source-metadata";
-    private static final String STATE_FILE_NAME = "state.properties";
-    private final Path sourceDirectory;
-    private final Path metadataDirectory;
+    private static final int MAGIC = 0x54444442;
+    private static final int FORMAT = 2;
+    private final Path directory;
+    private final String identity;
 
-    private DecompiledSourceStore(Path sourceDirectory, Path metadataDirectory) {
-        this.sourceDirectory = sourceDirectory;
-        this.metadataDirectory = metadataDirectory;
+    private DecompiledSourceStore(Path directory, String identity) {
+        this.directory = directory;
+        this.identity = identity;
     }
 
-    static DecompiledSourceStore open(
-            Path dataDirectory,
-            String runtimeSignature,
-            String decompilerFormat
-    ) throws IOException {
-        Path root = Objects.requireNonNull(dataDirectory, "dataDirectory").toAbsolutePath().normalize();
-        String signature = requireNonBlank(runtimeSignature, "runtimeSignature");
-        String format = requireNonBlank(decompilerFormat, "decompilerFormat");
-        Path sourceDirectory = root.resolve(SOURCE_DIRECTORY_NAME);
-        Path metadataDirectory = root.resolve("cache").resolve(METADATA_DIRECTORY_NAME);
-        Path stateFile = metadataDirectory.resolve(STATE_FILE_NAME);
-
-        Files.createDirectories(sourceDirectory);
-        Files.createDirectories(metadataDirectory);
-        if (!matches(stateFile, signature, format)) {
-            clear(sourceDirectory);
-            clear(metadataDirectory);
-            writeState(stateFile, signature, format);
+    static DecompiledSourceStore open(Path instanceHome, String runtimeSignature, String decompilerFormat) throws IOException {
+        if (Objects.requireNonNull(runtimeSignature).isBlank() || Objects.requireNonNull(decompilerFormat).isBlank()) {
+            throw new IllegalArgumentException("Runtime signature and decompiler format must not be blank");
         }
-        return new DecompiledSourceStore(sourceDirectory, metadataDirectory);
+        var store = new DecompiledSourceStore(new InstancePaths(instanceHome).decompiled(),
+                fingerprint(runtimeSignature, decompilerFormat));
+        CacheFiles.locked(store.directory, () -> {
+            AtomicFiles.cleanupAbandonedStaging(store.directory);
+            store.generatedFiles();
+            Path file = store.directory.resolve("manifest.json");
+            JsonObject manifest = Files.isRegularFile(file) ? JsonFiles.read(file) : null;
+            if (manifest != null && JsonFiles.integer(manifest, "format") != 1) {
+                throw new IOException("Unsupported decompiled cache format: " + file);
+            }
+            if (manifest == null || !store.identity.equals(JsonFiles.string(manifest, "id"))) {
+                manifest = new JsonObject();
+                manifest.addProperty("format", 1);
+                manifest.addProperty("id", store.identity);
+                manifest.add("classes", new JsonObject());
+                // Invalidate old readers before replacing any files.
+                JsonFiles.write(file, manifest);
+            }
+            store.removeUnlistedFiles(JsonFiles.object(manifest, "classes"));
+            return null;
+        });
+        return store;
     }
 
-    Path find(String binaryName) {
-        Path sourceFile = sourceFile(binaryName);
-        return Files.isRegularFile(sourceFile)
-                && Files.isRegularFile(lineMapFile(binaryName))
-                && Files.isRegularFile(variableNamesFile(binaryName))
-                ? sourceFile
-                : null;
+    Path directory() {
+        return this.directory;
     }
 
-    SourceLineMap readLineMap(String binaryName) throws IOException {
-        Path path = lineMapFile(binaryName);
-        if (!Files.isRegularFile(path)) {
-            throw new IOException("No decompiled source line map exists for " + binaryName);
-        }
-        try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-            int magic = input.readInt();
-            if (magic != LINE_MAP_MAGIC) {
-                throw new IOException("Invalid decompiled source line map magic: " + path);
+    List<String> cachedClasses() throws IOException {
+        return CacheFiles.locked(this.directory, () -> classes().keySet().stream().sorted().toList());
+    }
+
+    StoredSource read(String binaryName) throws IOException {
+        return CacheFiles.locked(this.directory, () -> {
+            String stem = stem(classes(), binaryName);
+            if (stem == null) {
+                return null;
             }
-            int version = input.readInt();
-            if (version != LINE_MAP_VERSION) {
-                throw new IOException("Unsupported decompiled source line map version " + version + ": " + path);
+            Path file = this.directory.resolve(stem + ".java");
+            String source = Files.readString(file, StandardCharsets.UTF_8);
+            return new StoredSource(file, source, readDebug(this.directory.resolve(stem + ".debug"), binaryName, source));
+        });
+    }
+
+    private static DebugMetadata readDebug(Path file, String binaryName, String source) throws IOException {
+        try (DataInputStream input = new DataInputStream(Files.newInputStream(file))) {
+            if (!readHeader(input).equals(binaryName) || !input.readUTF().equals(fingerprint(source))) {
+                throw new IOException("Decompiled source/debug pair does not match: " + file);
             }
-            int length = input.readInt();
-            if (length < 0 || length % 2 != 0) {
-                throw new IOException("Invalid decompiled source line map length " + length + ": " + path);
+            int length = readCount(input, Integer.BYTES);
+            if (length % 2 != 0) {
+                throw new IOException("Invalid line map length: " + length);
             }
             int[] mapping = new int[length];
             for (int i = 0; i < length; i++) {
                 mapping[i] = input.readInt();
             }
-            if (input.read() != -1) {
-                throw new IOException("Trailing data in decompiled source line map: " + path);
-            }
-            try {
-                return SourceLineMap.fromOriginalToDisplayed(mapping);
-            } catch (IllegalArgumentException exception) {
-                throw new IOException("Invalid decompiled source line map: " + path, exception);
-            }
-        }
-    }
-
-    SourceVariableNames readVariableNames(String binaryName) throws IOException {
-        Path path = variableNamesFile(binaryName);
-        if (!Files.isRegularFile(path)) {
-            throw new IOException("No decompiled source variable names exist for " + binaryName);
-        }
-        try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-            if (input.readInt() != VARIABLE_NAMES_MAGIC) {
-                throw new IOException("Invalid decompiled variable-name magic: " + path);
-            }
-            int version = input.readInt();
-            if (version != VARIABLE_NAMES_VERSION) {
-                throw new IOException("Unsupported decompiled variable-name version " + version + ": " + path);
-            }
-            int methodCount = input.readInt();
-            if (methodCount < 0) {
-                throw new IOException("Invalid decompiled variable-name method count " + methodCount + ": " + path);
-            }
-            Map<SourceVariableNames.MethodKey, Map<String, String>> methods = new java.util.LinkedHashMap<>(methodCount);
-            for (int methodIndex = 0; methodIndex < methodCount; methodIndex++) {
-                SourceVariableNames.MethodKey method = new SourceVariableNames.MethodKey(
-                        input.readUTF(),
-                        input.readUTF()
-                );
-                int variableCount = input.readInt();
-                if (variableCount < 0) {
-                    throw new IOException("Invalid decompiled variable-name count " + variableCount + ": " + path);
-                }
-                Map<String, String> mappings = new java.util.LinkedHashMap<>(variableCount);
-                for (int variableIndex = 0; variableIndex < variableCount; variableIndex++) {
-                    String runtimeName = input.readUTF();
-                    String previous = mappings.put(runtimeName, input.readUTF());
-                    if (previous != null) {
-                        throw new IOException("Duplicate runtime variable name " + runtimeName + ": " + path);
+            int methodCount = readCount(input, 8);
+            var methods = new LinkedHashMap<SourceVariableNames.MethodKey, Map<String, String>>();
+            for (int m = 0; m < methodCount; m++) {
+                var method = new SourceVariableNames.MethodKey(input.readUTF(), input.readUTF());
+                int variableCount = readCount(input, 4);
+                Map<String, String> variables = new LinkedHashMap<>();
+                for (int v = 0; v < variableCount; v++) {
+                    String name = input.readUTF();
+                    if (variables.put(name, input.readUTF()) != null) {
+                        throw new IOException("Duplicate runtime variable name: " + name);
                     }
                 }
-                if (methods.put(method, Map.copyOf(mappings)) != null) {
-                    throw new IOException("Duplicate method variable names for " + method + ": " + path);
+                if (methods.put(method, Map.copyOf(variables)) != null) {
+                    throw new IOException("Duplicate method variable names: " + method);
                 }
             }
             if (input.read() != -1) {
-                throw new IOException("Trailing data in decompiled variable names: " + path);
+                throw new IOException("Trailing data in decompiled debug metadata: " + file);
             }
-            try {
-                return SourceVariableNames.of(methods);
-            } catch (IllegalArgumentException exception) {
-                throw new IOException("Invalid decompiled variable names: " + path, exception);
-            }
-        }
-    }
-
-    Path write(
-            String binaryName,
-            String source,
-            SourceLineMap lineMap,
-            SourceVariableNames variableNames
-    ) throws IOException {
-        Objects.requireNonNull(lineMap, "lineMap");
-        Objects.requireNonNull(variableNames, "variableNames");
-        Path target = sourceFile(binaryName);
-        Path mappingTarget = lineMapFile(binaryName);
-        Path variableNamesTarget = variableNamesFile(binaryName);
-        Path stagedSource = Files.createTempFile(this.sourceDirectory, ".decompiled-", ".tmp");
-        Path stagedMapping = Files.createTempFile(this.metadataDirectory, ".decompiled-lines-", ".tmp");
-        Path stagedVariableNames = Files.createTempFile(this.metadataDirectory, ".decompiled-names-", ".tmp");
-        try {
-            Files.writeString(stagedSource, source, StandardCharsets.UTF_8);
-            writeLineMap(stagedMapping, lineMap);
-            writeVariableNames(stagedVariableNames, variableNames);
-            Files.move(
-                    stagedMapping,
-                    mappingTarget,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-            Files.move(
-                    stagedVariableNames,
-                    variableNamesTarget,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-            Files.move(
-                    stagedSource,
-                    target,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-        } finally {
-            Files.deleteIfExists(stagedSource);
-            Files.deleteIfExists(stagedMapping);
-            Files.deleteIfExists(stagedVariableNames);
-        }
-        return target;
-    }
-
-    private Path sourceFile(String binaryName) {
-        return resolveFile(this.sourceDirectory, binaryName, ".java");
-    }
-
-    private Path lineMapFile(String binaryName) {
-        return resolveFile(this.metadataDirectory, binaryName, ".lines");
-    }
-
-    private Path variableNamesFile(String binaryName) {
-        return resolveFile(this.metadataDirectory, binaryName, ".names");
-    }
-
-    private static Path resolveFile(Path directory, String binaryName, String extension) {
-        Path file = directory.resolve(binaryName + extension).normalize();
-        if (!file.getParent().equals(directory)) {
-            throw new IllegalArgumentException("Binary name escapes the decompiled source store: " + binaryName);
-        }
-        return file;
-    }
-
-    private static void writeLineMap(Path path, SourceLineMap lineMap) throws IOException {
-        int[] mapping = lineMap.originalToDisplayed();
-        try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
-            output.writeInt(LINE_MAP_MAGIC);
-            output.writeInt(LINE_MAP_VERSION);
-            output.writeInt(mapping.length);
-            for (int line : mapping) {
-                output.writeInt(line);
-            }
-        }
-    }
-
-    private static void writeVariableNames(Path path, SourceVariableNames variableNames) throws IOException {
-        try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
-            output.writeInt(VARIABLE_NAMES_MAGIC);
-            output.writeInt(VARIABLE_NAMES_VERSION);
-            output.writeInt(variableNames.mappings().size());
-            for (Map.Entry<SourceVariableNames.MethodKey, Map<String, String>> method
-                    : variableNames.mappings().entrySet()) {
-                output.writeUTF(method.getKey().name());
-                output.writeUTF(method.getKey().descriptor());
-                output.writeInt(method.getValue().size());
-                for (Map.Entry<String, String> mapping : method.getValue().entrySet()) {
-                    output.writeUTF(mapping.getKey());
-                    output.writeUTF(mapping.getValue());
-                }
-            }
-        }
-    }
-
-    private static boolean matches(Path stateFile, String runtimeSignature, String decompilerFormat)
-            throws IOException {
-        if (!Files.isRegularFile(stateFile)) {
-            return false;
-        }
-        Properties state = new Properties();
-        try (Reader reader = Files.newBufferedReader(stateFile, StandardCharsets.UTF_8)) {
-            state.load(reader);
+            return new DebugMetadata(SourceLineMap.fromOriginalToDisplayed(mapping), SourceVariableNames.of(methods));
         } catch (IllegalArgumentException exception) {
-            throw new IOException("Invalid decompiled source state: " + stateFile, exception);
-        }
-        return runtimeSignature.equals(state.getProperty("runtime.signature"))
-                && decompilerFormat.equals(state.getProperty("decompiler.format"));
-    }
-
-    private static void writeState(Path stateFile, String runtimeSignature, String decompilerFormat)
-            throws IOException {
-        Files.createDirectories(Objects.requireNonNull(stateFile.getParent(), "stateFile has no parent"));
-        Path staged = Files.createTempFile(stateFile.getParent(), ".decompiled-files-", ".tmp");
-        String content = "runtime.signature=" + runtimeSignature + System.lineSeparator()
-                + "decompiler.format=" + decompilerFormat + System.lineSeparator();
-        try {
-            Files.writeString(staged, content, StandardCharsets.UTF_8);
-            Files.move(staged, stateFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(staged);
+            throw new IOException("Invalid decompiled debug metadata: " + file, exception);
         }
     }
 
-    private static void clear(Path directory) throws IOException {
-        try (Stream<Path> paths = Files.walk(directory)) {
-            for (Path path : paths.filter(candidate -> !candidate.equals(directory))
-                    .sorted(Comparator.reverseOrder())
-                    .toList()) {
-                Files.delete(path);
+    Path write(String binaryName, String source, SourceLineMap lines, SourceVariableNames names) throws IOException {
+        Objects.requireNonNull(source);
+        Objects.requireNonNull(lines);
+        Objects.requireNonNull(names);
+        if (Objects.requireNonNull(binaryName).isBlank() || binaryName.contains("/") || binaryName.contains("\\")) {
+            throw new IllegalArgumentException("Expected a Java binary name: " + binaryName);
+        }
+        return CacheFiles.locked(this.directory, () -> {
+            JsonObject classes = classes();
+            String existing = stem(classes, binaryName);
+            if (existing != null) {
+                Path file = this.directory.resolve(existing + ".java");
+                readDebug(this.directory.resolve(existing + ".debug"), binaryName, Files.readString(file));
+                return file;
+            }
+            var used = new java.util.HashSet<String>();
+            classes.asMap().values().forEach(value -> used.add(value.getAsString().toLowerCase(java.util.Locale.ROOT)));
+            String stem = CacheNames.uniqueStem(binaryName, used);
+            Path file = this.directory.resolve(stem + ".java");
+            AtomicFiles.writeString(file, source);
+            AtomicFiles.replace(this.directory.resolve(stem + ".debug"), staged -> {
+                try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(staged))) {
+                    output.writeInt(MAGIC);
+                    output.writeInt(FORMAT);
+                    output.writeUTF(binaryName);
+                    output.writeUTF(fingerprint(source));
+                    int[] mapping = lines.originalToDisplayed();
+                    output.writeInt(mapping.length);
+                    for (int value : mapping) {
+                        output.writeInt(value);
+                    }
+                    output.writeInt(names.mappings().size());
+                    for (var method : names.mappings().entrySet()) {
+                        output.writeUTF(method.getKey().name());
+                        output.writeUTF(method.getKey().descriptor());
+                        output.writeInt(method.getValue().size());
+                        for (var variable : method.getValue().entrySet()) {
+                            output.writeUTF(variable.getKey());
+                            output.writeUTF(variable.getValue());
+                        }
+                    }
+                }
+            });
+            classes.addProperty(binaryName, stem);
+            JsonObject manifest = new JsonObject();
+            manifest.addProperty("format", 1);
+            manifest.addProperty("id", this.identity);
+            manifest.add("classes", classes);
+            JsonFiles.write(this.directory.resolve("manifest.json"), manifest);
+            return file;
+        });
+    }
+
+    private JsonObject classes() throws IOException {
+        Path file = this.directory.resolve("manifest.json");
+        JsonObject manifest = JsonFiles.read(file);
+        if (!this.identity.equals(JsonFiles.string(manifest, "id"))) {
+            throw new IOException("Decompiled cache belongs to a different runtime: " + file);
+        }
+        if (JsonFiles.integer(manifest, "format") != 1) {
+            throw new IOException("Unsupported decompiled cache format: " + file);
+        }
+        JsonObject classes = JsonFiles.object(manifest, "classes");
+        for (var value : classes.asMap().values()) {
+            CacheNames.requireFileName(value.getAsString());
+        }
+        return classes;
+    }
+
+    private static String stem(JsonObject classes, String binaryName) {
+        var value = classes.get(binaryName);
+        return value == null ? null : CacheNames.requireFileName(value.getAsString());
+    }
+
+    private void removeUnlistedFiles(JsonObject classes) throws IOException {
+        var retained = new java.util.HashSet<String>();
+        for (var value : classes.asMap().values()) {
+            String stem = CacheNames.requireFileName(value.getAsString());
+            retained.add(stem + ".java");
+            retained.add(stem + ".debug");
+        }
+        for (Path entry : generatedFiles()) {
+            if (!retained.contains(entry.getFileName().toString())) {
+                Files.delete(entry);
             }
         }
     }
 
-    private static String requireNonBlank(String value, String name) {
-        Objects.requireNonNull(value, name);
-        if (value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
+    private List<Path> generatedFiles() throws IOException {
+        try (var entries = Files.list(this.directory)) {
+            var generated = new java.util.ArrayList<Path>();
+            for (Path entry : entries.toList()) {
+                String name = entry.getFileName().toString();
+                if (name.equals("manifest.json") || name.equals(".lock")) {
+                    continue;
+                }
+                if (!Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                        || !(name.endsWith(".java") || name.endsWith(".debug"))) {
+                    throw new IOException("Unsupported decompiled cache entry: " + entry
+                            + ". Clear this generated cache manually before using the current layout.");
+                }
+                generated.add(entry);
+            }
+            return generated;
         }
-        return value;
     }
+
+    record StoredSource(Path path, String source, DebugMetadata debug) { }
+
+    private static String fingerprint(String... values) {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            for (String value : values) {
+                byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+                digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+                digest.update(bytes);
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new AssertionError(impossible);
+        }
+    }
+
+    private static String readHeader(DataInputStream input) throws IOException {
+        if (input.readInt() != MAGIC || input.readInt() != FORMAT) {
+            throw new IOException("Unsupported decompiled debug metadata");
+        }
+        return input.readUTF();
+    }
+
+    private static int readCount(DataInputStream input, int minimumBytesPerEntry) throws IOException {
+        int count = input.readInt();
+        if (count < 0 || count > input.available() / minimumBytesPerEntry) {
+            throw new IOException("Invalid debug metadata entry count: " + count);
+        }
+        return count;
+    }
+
+    record DebugMetadata(SourceLineMap lines, SourceVariableNames names) { }
 }

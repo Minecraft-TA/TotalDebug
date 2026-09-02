@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.tth05.jindex.ClassIndex;
 

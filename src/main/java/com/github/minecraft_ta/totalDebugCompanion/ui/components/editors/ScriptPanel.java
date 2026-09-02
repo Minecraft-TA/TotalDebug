@@ -41,7 +41,6 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyEvent;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -320,24 +319,31 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         ));
     }
 
+    private javax.swing.Timer saveTimer;
+    private String savedText;
+
     private void setupSaveBehavior() {
+        this.savedText = this.scriptView.getSourceText();
+        this.saveTimer = new javax.swing.Timer(500, event -> saveScript());
+        this.saveTimer.setRepeats(false);
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
                 CompanionApp.send(new StopScriptMessage(this.scriptId));
-                saveScript();
+                this.saveTimer.stop();
             }
         });
 
-        //TODO: Add Ctrl+S keybind
+        this.editorPane.getInputMap().put(KeyStroke.getKeyStroke("control S"), "saveScript");
+        this.editorPane.getActionMap().put("saveScript", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                saveScript();
+            }
+        });
         this.editorPane.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(FocusEvent e) {
-                CompletableFuture.runAsync(() -> {
-                    try {Thread.sleep(2000);} catch (InterruptedException ignored) {}
-                    //Save if we still don't have focus
-                    if (!editorPane.hasFocus())
-                        saveScript();
-                });
+                saveTimer.restart();
             }
         });
     }
@@ -592,6 +598,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     @Override
     public void dispose() {
+        this.saveTimer.stop();
         if (this.completionRequestor != null)
             this.completionRequestor.setCanceled(true);
         hideCompletionPopup();
@@ -599,20 +606,26 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     public boolean canSave() {
-        return true;
+        this.saveTimer.stop();
+        return saveScript();
     }
 
-    private void saveScript() {
+    private boolean saveScript() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("Script saves must capture editor text on the EDT");
+        }
+        String text = UIUtils.getText(this.editorPane);
+        if (text.equals(this.savedText)) {
+            return true;
+        }
         try {
-            //TODO: Maybe change to lastSavedHashCode or something
-            /*if (this.lastSavedVersion == CompanionApp.LSP.getDocumentVersion(this.scriptView.getURI()) || !canSave())
-                return;
-            this.lastSavedVersion = CompanionApp.LSP.getDocumentVersion(this.scriptView.getURI());*/
-            Files.writeString(this.scriptView.getPath(), UIUtils.getText(this.editorPane));
-            System.out.println("Successfully saved script " + this.scriptView.getPath());
-        } catch (IOException ex) {
-            System.err.println("Failed to save script " + this.scriptView.getPath());
-            ex.printStackTrace();
+            com.github.minecraft_ta.totaldebug.storage.AtomicFiles.writeString(this.scriptView.getPath(), text);
+            this.savedText = text;
+            return true;
+        } catch (IOException exception) {
+            JOptionPane.showMessageDialog(this, "Unable to save " + this.scriptView.getPath()
+                    + "\n" + exception.getMessage(), "Script save failed", JOptionPane.ERROR_MESSAGE);
+            return false;
         }
     }
 
