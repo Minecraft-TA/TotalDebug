@@ -96,7 +96,8 @@ public final class CompanionAppInstaller {
             Consumer<CompanionStartupProgress> progressListener
     ) throws IOException, InterruptedException {
         Files.createDirectories(jarPath.getParent());
-        Path stagedJar = Files.createTempFile(jarPath.getParent(), ".companion-", ".jar");
+        com.github.minecraft_ta.totaldebug.storage.AtomicFiles.cleanupAbandonedStaging(jarPath.getParent());
+        Path stagedJar = com.github.minecraft_ta.totaldebug.storage.AtomicFiles.temporaryFile(jarPath.getParent());
         try {
             downloadDistribution(stagedJar, progressListener);
             Files.move(

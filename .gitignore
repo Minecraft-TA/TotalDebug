@@ -11,3 +11,6 @@ run-*/
 
 legacy/1.7.10/src/
 legacy/1.12.2/src/
+# Instance-authored scripts remain trackable; local state and generated caches do not.
+/total-debug/state.json
+/total-debug/cache/

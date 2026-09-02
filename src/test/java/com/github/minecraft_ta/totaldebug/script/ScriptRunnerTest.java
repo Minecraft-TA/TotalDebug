@@ -272,7 +272,7 @@ public class ScriptRunnerTest {
         ExecutorService compilerExecutor = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
         ScheduledExecutorService stopExecutor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         return new ScriptRunner(
-                "",
+                ScriptCompilerClasspath.fromSources(java.util.List.of()),
                 ScriptRunnerTest.class.getClassLoader(),
                 tickScheduler,
                 resultSink,

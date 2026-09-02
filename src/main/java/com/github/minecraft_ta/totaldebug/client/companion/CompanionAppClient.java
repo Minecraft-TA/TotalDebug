@@ -1,5 +1,13 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
+
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
+import com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs;
+
+import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
+
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
 import com.github.minecraft_ta.totaldebug.client.companion.message.ClientHelloMessage;
@@ -26,13 +34,10 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -136,11 +141,12 @@ public final class CompanionAppClient implements AutoCloseable {
         }
 
         this.workspaceDirectory = workspace;
-        this.dataDirectory = root.resolve("data");
-        this.appDirectory = root.resolve("companion-app");
-        this.appHome = CompanionAppHome.resolve();
-        this.instanceDescriptorFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
-        this.instanceKeyFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
+        this.dataDirectory = com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(workspace).home();
+        this.appDirectory = com.github.minecraft_ta.totaldebug.storage.InstancePaths.installationDirectory(this.workspaceDirectory);
+        var appPaths = com.github.minecraft_ta.totaldebug.storage.AppPaths.defaults(System.getenv());
+        this.appHome = appPaths.home();
+        this.instanceDescriptorFile = appPaths.instanceDescriptor();
+        this.instanceKeyFile = appPaths.instanceKey();
         this.profileId = profileId(this.workspaceDirectory);
         this.installer = new CompanionAppInstaller(this.appDirectory, developmentJar);
         this.runtimeInventoryPublisher = new RuntimeInventoryPublisher(this.dataDirectory);
@@ -477,28 +483,39 @@ public final class CompanionAppClient implements AutoCloseable {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while installing the companion app", exception);
         }
-        Path launchJar = stageLaunchJar(this.appHome, installation.companionJar());
-        Path logsDirectory = this.appHome.resolve("logs");
-        Files.createDirectories(logsDirectory);
-        this.processLog = logsDirectory.resolve(
-                "companion-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH.mm.ss"))
-                        + ".log"
-        );
+        AppPaths paths = new AppPaths(this.appHome);
+        var launch = LaunchCache.stage(paths, installation.companionJar());
+        DiagnosticLogs.Reservation log;
+        try {
+            log = DiagnosticLogs.reserve(paths);
+        } catch (IOException | RuntimeException exception) {
+            launch.close();
+            throw exception;
+        }
+        this.processLog = log.log();
         Path javaExecutable = CompanionJavaRuntime.resolveCurrentExecutable();
-
-        ProcessBuilder processBuilder = new ProcessBuilder(
-                buildLaunchCommand(javaExecutable, launchJar, this.appHome)
-        );
-        processBuilder.redirectErrorStream(true);
-        processBuilder.redirectOutput(this.processLog.toFile());
-        reportProgress(CompanionStartupProgress.starting());
-        this.launchedProcess = processBuilder.start();
-        TotalDebug.LOGGER.info(
-                "Started TotalDebugCompanion from {} with Minecraft Java {}; output is written to {}",
-                launchJar,
-                javaExecutable,
-                this.processLog
-        );
+        try {
+            var command = new java.util.ArrayList<>(buildLaunchCommand(javaExecutable, launch.path(), this.appHome));
+            command.add(1, "-D" + DiagnosticLogs.LOG_PROPERTY + "=" + this.processLog);
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            processBuilder.redirectErrorStream(true);
+            processBuilder.redirectOutput(this.processLog.toFile());
+            reportProgress(CompanionStartupProgress.starting());
+            this.launchedProcess = processBuilder.start();
+        } catch (IOException | RuntimeException exception) {
+            log.close();
+            launch.close();
+            throw exception;
+        }
+        this.launchedProcess.onExit().thenRun(() -> {
+            try (launch; log) {
+                // Keep both pins until the child exits, including a slow or failed startup.
+            } catch (IOException exception) {
+                TotalDebug.LOGGER.warn("Unable to release Companion launch files", exception);
+            }
+        });
+        TotalDebug.LOGGER.info("Started TotalDebugCompanion from {}; output is written to {}",
+                launch.path(), this.processLog);
 
         return awaitDescriptor(this.instanceDescriptorFile);
     }
@@ -530,7 +547,8 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private boolean isInstanceLockHeld() throws IOException {
-        Path lockFile = this.appHome.resolve(CompanionLaunchContract.INSTANCE_LOCK_FILE_NAME);
+        Path lockFile = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.appHome).instanceLock();
+        Files.createDirectories(lockFile.getParent());
         Files.createDirectories(this.appHome);
         try (FileChannel channel = FileChannel.open(
                 lockFile,
@@ -557,36 +575,6 @@ public final class CompanionAppClient implements AutoCloseable {
             throw new IOException("Companion instance key is invalid");
         }
         return token;
-    }
-
-    static Path stageLaunchJar(Path appHome, Path sourceJar) throws IOException {
-        String hash = CompanionAppInstaller.sha256(sourceJar);
-        Path buildDirectory = appHome.toAbsolutePath().normalize().resolve("builds").resolve(hash);
-        Path launchJar = buildDirectory.resolve("TotalDebugCompanion.jar");
-        if (Files.exists(launchJar)) {
-            if (Files.isRegularFile(launchJar) && hash.equals(CompanionAppInstaller.sha256(launchJar))) {
-                return launchJar;
-            }
-            throw new IOException("Companion build cache conflicts with " + launchJar);
-        }
-        Files.createDirectories(buildDirectory);
-        Path staged = Files.createTempFile(buildDirectory, ".companion-", ".jar");
-        try {
-            Files.copy(sourceJar, staged, StandardCopyOption.REPLACE_EXISTING);
-            if (!hash.equals(CompanionAppInstaller.sha256(staged))) {
-                throw new IOException("Staged Companion checksum mismatch");
-            }
-            try {
-                Files.move(staged, launchJar, StandardCopyOption.ATOMIC_MOVE);
-            } catch (java.nio.file.FileAlreadyExistsException exception) {
-                if (!Files.isRegularFile(launchJar) || !hash.equals(CompanionAppInstaller.sha256(launchJar))) {
-                    throw exception;
-                }
-            }
-        } finally {
-            Files.deleteIfExists(staged);
-        }
-        return launchJar;
     }
 
     static List<String> buildLaunchCommand(Path javaExecutable, Path launchJar, Path appHome) {

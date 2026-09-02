@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
 import org.junit.jupiter.api.Test;
@@ -175,7 +177,7 @@ class RuntimeInventoryPublisherTest {
 
     @Test
     void treatsAnUnsupportedGeneratedInventoryAsStale(@TempDir Path directory) throws Exception {
-        Path inventory = directory.resolve(RuntimeInventory.FILE_NAME);
+        Path inventory = directory.resolve("inventory.json");
         Files.writeString(inventory, """
                 format=2
                 inventory.id=old

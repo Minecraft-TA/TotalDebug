@@ -49,7 +49,11 @@ final class ClassNameCatalog {
     }
 
     static ClassNameCatalog scanRuntime() throws IOException {
-        var sources = TotalDebug.get().runtimeSources().paths();
+        var runtime = TotalDebug.get().runtimeSources();
+        return runtime.withCurrentSources(() -> scanSources(runtime.paths()));
+    }
+
+    private static ClassNameCatalog scanSources(List<Path> sources) throws IOException {
         List<String> classNames;
         try (ScanResult scan = new ClassGraph()
                 .overrideClasspath(sources)

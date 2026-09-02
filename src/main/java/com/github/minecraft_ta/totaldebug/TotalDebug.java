@@ -77,7 +77,7 @@ public final class TotalDebug {
         if (this.runtimeSources == null) {
             this.runtimeSources = RuntimeSourceMaterializer.prepare(
                     RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class),
-                    FMLPaths.GAMEDIR.get().resolve("total-debug/data/runtime-sources")
+                    com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(FMLPaths.GAMEDIR.get()).sources()
             );
         }
         return this.runtimeSources;

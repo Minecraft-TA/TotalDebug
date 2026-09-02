@@ -110,7 +110,7 @@ public final class ServerScriptService {
 
         ScriptCompilerClasspath classpath = compilerClasspath();
         ScriptRunner created = new ScriptRunner(
-                classpath.argument(),
+                classpath,
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.SERVER, phase, task),
                 (scriptId, result) -> sendResult(server, player, scriptId, result)

@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
@@ -9,20 +13,16 @@ import net.neoforged.fml.loading.FMLLoader;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 final class RuntimeInventoryPublisher {
     private static final RuntimeInventory.RuntimeModule MINECRAFT_MODULE = new RuntimeInventory.RuntimeModule(
@@ -52,40 +52,29 @@ final class RuntimeInventoryPublisher {
 
     PublishedInventory publish() throws IOException {
         PreparedRuntimeSources prepared = TotalDebug.get().runtimeSources();
+        return prepared.withCurrentSources(() -> publish(prepared));
+    }
+
+    private PublishedInventory publish(PreparedRuntimeSources prepared) throws IOException {
         Map<Path, RuntimeInventory.RuntimeModule> runtimeModules = describeRuntimeModules(prepared);
         String id = calculateInventoryId(prepared, runtimeModules);
-        Path publishedDirectory = this.dataDirectory.resolve("runtime-inventory");
-        Path publishedFile = publishedDirectory.resolve(RuntimeInventory.FILE_NAME);
+        InstancePaths paths = new InstancePaths(this.dataDirectory);
+        Path publishedFile = paths.inventory();
         if (matchesPublishedInventory(publishedFile, id)) {
             return new PublishedInventory(id, publishedFile);
         }
 
-        Files.createDirectories(this.dataDirectory);
-        Path staged = Files.createTempDirectory(this.dataDirectory, ".runtime-inventory-");
-        try {
-            List<RuntimeInventory.Source> sources = prepareSources(
-                    prepared,
-                    runtimeModules
-            );
-            RuntimeInventory inventory = new RuntimeInventory(
-                    id,
-                    System.getProperty("java.runtime.version", "unknown"),
-                    System.getProperty("java.home", "unknown"),
-                    FMLLoader.isProduction(),
-                    sources
-            );
-            inventory.write(staged.resolve(RuntimeInventory.FILE_NAME));
-            deleteTree(publishedDirectory);
-            try {
-                Files.move(staged, publishedDirectory, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException exception) {
-                throw new IOException("The TotalDebug data directory does not support atomic runtime inventory updates", exception);
-            }
-            RuntimeInventory.read(publishedFile);
-            return new PublishedInventory(id, publishedFile);
-        } finally {
-            deleteTree(staged);
-        }
+        AtomicFiles.cleanupAbandonedStaging(paths.runtime());
+        RuntimeInventory inventory = new RuntimeInventory(
+                id,
+                System.getProperty("java.runtime.version"),
+                System.getProperty("java.home"),
+                FMLLoader.isProduction(),
+                prepareSources(prepared, runtimeModules)
+        );
+        inventory.write(publishedFile);
+        RuntimeInventory.read(publishedFile);
+        return new PublishedInventory(id, publishedFile);
     }
 
     static List<RuntimeInventory.Source> prepareSources(
@@ -280,14 +269,5 @@ final class RuntimeInventoryPublisher {
         digest.update((byte) 0);
     }
 
-    private static void deleteTree(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.walk(root)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        }
-    }
+
 }

@@ -207,7 +207,7 @@ public final class ClientScriptService implements AutoCloseable {
         );
         TotalDebug.LOGGER.debug("Live script compiler sources: {}", classpath.sources());
         this.runner = new ScriptRunner(
-                classpath.argument(),
+                classpath,
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
                 (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT)

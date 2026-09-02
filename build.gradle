@@ -87,6 +87,7 @@ neoForge {
     runs {
         client {
             client()
+            systemProperty 'totaldebug.workspaceRoot', layout.projectDirectory.asFile.absolutePath
             if (minecraftDebugPort.isPresent()) {
                 jvmArgument(
                         "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
@@ -102,6 +103,7 @@ neoForge {
 
         server {
             server()
+            systemProperty 'totaldebug.workspaceRoot', layout.projectDirectory.asFile.absolutePath
             programArgument '--nogui'
         }
     }
@@ -119,6 +121,7 @@ def buildSiblingCompanion = tasks.register('buildSiblingCompanion', Exec) {
     group = 'development'
     description = 'Builds the sibling TotalDebugCompanion JAR used by development clients.'
     onlyIf { useSiblingCompanion }
+    dependsOn ':storage:publishToMavenLocal'
     workingDir siblingCompanionDirectory.asFile
     commandLine siblingCompanionWrapper.asFile.absolutePath, 'shadowJar', '--console=plain'
 }
@@ -142,6 +145,9 @@ tasks.named('runClient').configure {
 }
 
 dependencies {
+    implementation project(':storage')
+    jarJar project(':storage')
+    additionalRuntimeClasspath project(':storage')
     compileOnly 'net.java.dev.jna:jna:5.14.0'
     compileOnly "mezz.jei:jei-1.21.1-neoforge-api:${jei_version}"
     implementation 'org.ow2.asm:asm:9.8'

@@ -29,7 +29,7 @@ public final class ScriptRunner implements AutoCloseable {
                     + "\\s+extends\\s+(?:com\\.github\\.minecraft_ta\\.totaldebug\\.script\\.)?ScriptProgram\\b"
     );
 
-    private final String classpath;
+    private final ScriptCompilerClasspath classpath;
     private final ClassLoader parentClassLoader;
     private final ScriptTickScheduler tickScheduler;
     private final ExecutionResultSink resultSink;
@@ -42,7 +42,7 @@ public final class ScriptRunner implements AutoCloseable {
     private volatile boolean moduleAccessLogged;
 
     public ScriptRunner(
-            String classpath,
+            ScriptCompilerClasspath classpath,
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
             ExecutionResultSink resultSink
@@ -66,7 +66,7 @@ public final class ScriptRunner implements AutoCloseable {
     }
 
     ScriptRunner(
-            String classpath,
+            ScriptCompilerClasspath classpath,
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
             ExecutionResultSink resultSink,
@@ -151,7 +151,7 @@ public final class ScriptRunner implements AutoCloseable {
 
         CompiledScript compiledScript;
         try {
-            Map<String, byte[]> bytecode = this.compiler.compile(run.sourceCode, className, this.classpath);
+            Map<String, byte[]> bytecode = this.classpath.compile(this.compiler, run.sourceCode, className);
             if (run.isTerminalOrCancelled()) {
                 return;
             }

@@ -71,3 +71,4 @@ To test the pinned published Companion instead, disable sibling discovery:
 ```
 
 The Companion application lives in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).
+Storage ownership, paths, retention and the development reset are documented in [docs/STORAGE.md](docs/STORAGE.md).

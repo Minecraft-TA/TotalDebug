@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,7 +48,7 @@ class RuntimeInventoryTest {
                         )
                 )
         );
-        Path file = this.temporaryDirectory.resolve(RuntimeInventory.FILE_NAME);
+        Path file = this.temporaryDirectory.resolve("inventory.json");
 
         inventory.write(file);
         RuntimeInventory restored = RuntimeInventory.read(file);
@@ -57,21 +59,12 @@ class RuntimeInventoryTest {
 
     @Test
     void rejectsAnUnavailablePublishedSource() throws Exception {
-        Path file = this.temporaryDirectory.resolve(RuntimeInventory.FILE_NAME);
-        Files.writeString(file, """
-                format=4
-                inventory.id=id
-                java.runtime.version=21
-                java.home=jdk
-                production=false
-                source.count=1
-                source.0.kind=ARCHIVE
-                source.0.path=file:///missing.jar
-                source.0.logical=logical:missing
-                source.0.module.id=missing
-                source.0.module.name=Missing
-                source.0.module.kind=LIBRARY
-                """);
+        Path file = this.temporaryDirectory.resolve("inventory.json");
+        RuntimeInventory inventory = new RuntimeInventory("missing-source", "21", System.getProperty("java.home"),
+                false, List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE,
+                this.temporaryDirectory.resolve("missing.jar"), "logical:missing",
+                new RuntimeInventory.RuntimeModule("missing", "Missing", RuntimeInventory.ModuleKind.LIBRARY))));
+        com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(file, inventory.toJson());
 
         assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
     }

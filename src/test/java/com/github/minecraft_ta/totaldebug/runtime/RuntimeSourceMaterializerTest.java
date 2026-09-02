@@ -46,6 +46,53 @@ class RuntimeSourceMaterializerTest {
     }
 
     @Test
+    void replacesOneSourceSetAndRejectsReadersFromThePreviousRuntime() throws Exception {
+        Path physical = Files.createDirectory(this.directory.resolve("classes"));
+        Path cache = this.directory.resolve("runtime/sources");
+        Path firstJar = this.directory.resolve("first.jar");
+        Path secondJar = this.directory.resolve("second.jar");
+        try (var firstFs = FileSystems.newFileSystem(firstJar, Map.of("create", "true"));
+             var secondFs = FileSystems.newFileSystem(secondJar, Map.of("create", "true"))) {
+            Path first = firstFs.getPath("/");
+            Path second = secondFs.getPath("/");
+            Files.write(first.resolve("First.class"), new byte[]{1});
+            Files.write(second.resolve("Second.class"), new byte[]{2});
+            var old = RuntimeSourceMaterializer.prepare(List.of(
+                    new RuntimeSourceInventory.Source(first, "first"),
+                    new RuntimeSourceInventory.Source(second, "second")), cache);
+            Files.writeString(cache.getParent().resolve("inventory.json"), "old inventory");
+
+            Files.write(first.resolve("First.class"), new byte[]{3, 4});
+            var current = RuntimeSourceMaterializer.prepare(List.of(
+                    new RuntimeSourceInventory.Source(first, "first")), cache);
+            assertEquals(old.paths().getFirst(), current.paths().getFirst());
+            assertTrue(!Files.exists(cache.resolve("second.jar")));
+            assertTrue(!Files.exists(cache.getParent().resolve("inventory.json")));
+            assertThrows(IOException.class, () -> old.withCurrentSources(() -> "stale"));
+            assertEquals("current", current.withCurrentSources(() -> "current"));
+            try (ZipFile zip = new ZipFile(current.paths().getFirst().toFile())) {
+                assertArrayEquals(new byte[]{3, 4}, zip.getInputStream(zip.getEntry("First.class")).readAllBytes());
+            }
+
+            RuntimeSourceMaterializer.prepare(List.of(new RuntimeSourceInventory.Source(physical, "physical")), cache);
+            try (var entries = Files.list(cache)) {
+                assertEquals(List.of("manifest.json"), entries.map(path -> path.getFileName().toString()).toList());
+            }
+        }
+    }
+
+    @Test
+    void rejectsUnknownDirectoriesWithoutMigratingOrDeletingThem() throws Exception {
+        Path physical = Files.createDirectory(this.directory.resolve("classes"));
+        Path cache = Files.createDirectories(this.directory.resolve("runtime/sources"));
+        Path unknown = Files.createDirectory(cache.resolve("old-layout"));
+        Files.writeString(unknown.resolve("keep"), "untouched");
+        assertThrows(IOException.class, () -> RuntimeSourceMaterializer.prepare(
+                List.of(new RuntimeSourceInventory.Source(physical, "physical")), cache));
+        assertEquals("untouched", Files.readString(unknown.resolve("keep")));
+    }
+
+    @Test
     void reusesPhysicalSourcesAndMaterializesVirtualRootsOnce() throws Exception {
         Path physical = Files.createDirectory(this.directory.resolve("classes"));
         Path archive = this.directory.resolve("dependency.jar");
@@ -80,7 +127,7 @@ class RuntimeSourceMaterializerTest {
             assertEquals(first, second);
             assertEquals(modified, Files.getLastModifiedTime(materialized.path()));
             try (var entries = Files.list(cache)) {
-                assertEquals(List.of(cache.resolve(first.id())), entries.toList());
+                assertEquals(List.of("dependency.jar", "manifest.json"), entries.map(path -> path.getFileName().toString()).sorted().toList());
             }
 
             Files.delete(materialized.path());

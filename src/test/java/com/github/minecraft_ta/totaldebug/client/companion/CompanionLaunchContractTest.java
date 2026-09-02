@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
+
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -36,7 +38,7 @@ class CompanionLaunchContractTest {
                         "instance.properties",
                         "instance.key",
                         "instance.lock",
-                        "profile.properties",
+                        "profile.json",
                         "protocol",
                         "port",
                         "pid",

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -24,8 +26,10 @@ class CompanionStaleDescriptorTest {
     @Test
     void discardsAStaleDescriptorAfterItsPidWasReused() throws Exception {
         Path appHome = Files.createDirectories(this.temporaryDirectory.resolve("app-home"));
-        Path descriptorFile = appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
-        Path keyFile = appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
+        var paths = new com.github.minecraft_ta.totaldebug.storage.AppPaths(appHome);
+        Files.createDirectories(paths.run());
+        Path descriptorFile = paths.instanceDescriptor();
+        Path keyFile = paths.instanceKey();
         Files.writeString(
                 descriptorFile,
                 "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\n",
@@ -60,15 +64,17 @@ class CompanionStaleDescriptorTest {
     @Test
     void keepsRejectingARealRunningCompanionWithAnotherProtocol() throws Exception {
         Path appHome = Files.createDirectories(this.temporaryDirectory.resolve("locked-app-home"));
-        Path descriptorFile = appHome.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
-        Path keyFile = appHome.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME);
+        var paths = new com.github.minecraft_ta.totaldebug.storage.AppPaths(appHome);
+        Files.createDirectories(paths.run());
+        Path descriptorFile = paths.instanceDescriptor();
+        Path keyFile = paths.instanceKey();
         Files.writeString(
                 descriptorFile,
                 "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\n",
                 StandardCharsets.UTF_8
         );
         Files.writeString(keyFile, "a".repeat(64), StandardCharsets.US_ASCII);
-        Path lockFile = appHome.resolve(CompanionLaunchContract.INSTANCE_LOCK_FILE_NAME);
+        Path lockFile = paths.instanceLock();
         Path totalDebugDirectory = Files.createDirectories(this.temporaryDirectory.resolve("locked-instance/totaldebug"));
         String previousHome = System.getProperty(CompanionLaunchContract.APP_HOME_PROPERTY);
         System.setProperty(CompanionLaunchContract.APP_HOME_PROPERTY, appHome.toString());
