@@ -58,13 +58,18 @@ public final class InMemoryJavaCompiler {
             if (!Boolean.TRUE.equals(task.call())) {
                 throw new InMemoryCompilationException(formatDiagnostics(diagnostics));
             }
-            Map<String, byte[]> bytecode = ScriptBytecodeTransformer.transform(fileManager.bytecode());
+            Map<String, byte[]> bytecode = ScriptBytecodeTransformer.transform(
+                    fileManager.bytecode(),
+                    standardFileManager
+            );
             if (!bytecode.containsKey(primaryBinaryName)) {
                 throw new InMemoryCompilationException(
                         "Compilation completed without producing the primary class " + primaryBinaryName
                 );
             }
             return bytecode;
+        } catch (ScriptBytecodeTransformer.TransformationException exception) {
+            throw new InMemoryCompilationException(exception.getMessage(), exception);
         } catch (IOException exception) {
             throw new InMemoryCompilationException("Unable to close the in-memory Java compiler", exception);
         } catch (RuntimeException exception) {

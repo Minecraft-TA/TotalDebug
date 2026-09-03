@@ -15,6 +15,22 @@ public final class ScriptAccessLinker {
     static final int INVOKE_VIRTUAL = 5;
     static final int INVOKE_STATIC = 6;
     static final int NEW_INSTANCE = 7;
+    static final int INITIALIZE_CLASS = 8;
+    static final int INVOKE_SPECIAL = 9;
+
+    private static final MethodHandle INITIALIZER;
+
+    static {
+        try {
+            INITIALIZER = MethodHandles.lookup().findStatic(
+                    ScriptAccessLinker.class,
+                    "initialize",
+                    MethodType.methodType(void.class, MethodHandles.Lookup.class, Class.class)
+            );
+        } catch (NoSuchMethodException | IllegalAccessException exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
+    }
 
     private ScriptAccessLinker() {
     }
@@ -47,13 +63,24 @@ public final class ScriptAccessLinker {
                     memberName,
                     MethodType.fromMethodDescriptorString(memberDescriptor, loader)
             );
+            case INVOKE_SPECIAL -> access.findSpecial(
+                    owner,
+                    memberName,
+                    MethodType.fromMethodDescriptorString(memberDescriptor, loader),
+                    owner
+            );
             case NEW_INSTANCE -> access.findConstructor(
                     owner,
                     MethodType.fromMethodDescriptorString(memberDescriptor, loader)
             );
+            case INITIALIZE_CLASS -> MethodHandles.insertArguments(INITIALIZER, 0, access, owner);
             default -> throw new IllegalArgumentException("Unknown script access operation: " + operation);
         };
         return new ConstantCallSite(target.asType(invokedType));
+    }
+
+    private static void initialize(MethodHandles.Lookup access, Class<?> owner) throws IllegalAccessException {
+        access.ensureInitialized(owner);
     }
 
     private static Class<?> fieldType(String descriptor, ClassLoader loader) {

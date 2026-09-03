@@ -14,13 +14,19 @@ import org.objectweb.asm.tree.InvokeDynamicInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.tree.VarInsnNode;
 
+import javax.tools.JavaFileManager;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
-/** Replaces external member instructions with lazily linked privileged call sites. */
+/** Rewrites javac-generated script classes; application classes are read only as metadata. */
 final class ScriptBytecodeTransformer {
     private static final String LINKER = Type.getInternalName(ScriptAccessLinker.class);
     private static final Handle BOOTSTRAP = new Handle(
@@ -34,24 +40,41 @@ final class ScriptBytecodeTransformer {
     private ScriptBytecodeTransformer() {
     }
 
-    static Map<String, byte[]> transform(Map<String, byte[]> classes) {
+    static Map<String, byte[]> transform(Map<String, byte[]> classes, JavaFileManager classpath) {
+        Objects.requireNonNull(classes, "classes");
+        Objects.requireNonNull(classpath, "classpath");
         Set<String> generatedOwners = classes.keySet().stream()
                 .map(name -> name.replace('.', '/'))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        ScriptTypeResolver types = new ScriptTypeResolver(classes, classpath);
         Map<String, byte[]> transformed = new LinkedHashMap<>();
-        classes.forEach((name, bytecode) -> transformed.put(name, transform(bytecode, generatedOwners)));
+        classes.forEach((name, bytecode) -> transformed.put(
+                name,
+                transform(bytecode, generatedOwners, types)
+        ));
         return Map.copyOf(transformed);
     }
 
-    private static byte[] transform(byte[] bytecode, Set<String> generatedOwners) {
+    private static byte[] transform(
+            byte[] bytecode,
+            Set<String> generatedOwners,
+            ScriptTypeResolver types
+    ) {
         ClassReader reader = new ClassReader(bytecode);
         ClassNode node = new ClassNode(Opcodes.ASM9);
         reader.accept(node, 0);
-        boolean framesChanged = node.methods.stream()
-                .map(method -> transformConstructors(method, generatedOwners))
-                .reduce(false, Boolean::logicalOr);
+        boolean framesChanged = false;
+        for (MethodNode method : node.methods) {
+            framesChanged |= transformConstructors(method, generatedOwners, types);
+        }
+        framesChanged |= transformMethodHandles(node, generatedOwners, types);
 
-        ClassWriter writer = new ClassWriter(framesChanged ? ClassWriter.COMPUTE_FRAMES : 0);
+        ClassWriter writer = new ClassWriter(framesChanged ? ClassWriter.COMPUTE_FRAMES : 0) {
+            @Override
+            protected String getCommonSuperClass(String first, String second) {
+                return types.commonSuperClass(first, second);
+            }
+        };
         node.accept(new ClassVisitor(Opcodes.ASM9, writer) {
             @Override
             public MethodVisitor visitMethod(
@@ -65,7 +88,8 @@ final class ScriptBytecodeTransformer {
                 return new MethodVisitor(Opcodes.ASM9, delegate) {
                     @Override
                     public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
-                        if (!shouldLink(owner, generatedOwners)) {
+                        String declaration = linkedOwner(owner, name, descriptor, true, generatedOwners, types);
+                        if (declaration == null) {
                             super.visitFieldInsn(opcode, owner, name, descriptor);
                             return;
                         }
@@ -80,7 +104,7 @@ final class ScriptBytecodeTransformer {
                                 name,
                                 fieldCallDescriptor(opcode, owner, descriptor),
                                 BOOTSTRAP,
-                                owner.replace('/', '.'),
+                                declaration.replace('/', '.'),
                                 name,
                                 descriptor,
                                 operation
@@ -95,19 +119,22 @@ final class ScriptBytecodeTransformer {
                             String descriptor,
                             boolean isInterface
                     ) {
-                        if (opcode == Opcodes.INVOKESPECIAL
-                                || !shouldLink(owner, generatedOwners)) {
+                        String declaration = "<init>".equals(name) ? null
+                                : linkedOwner(owner, name, descriptor, false, generatedOwners, types);
+                        if (declaration == null) {
                             super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
                             return;
                         }
-                        int operation = opcode == Opcodes.INVOKESTATIC
-                                ? ScriptAccessLinker.INVOKE_STATIC
-                                : ScriptAccessLinker.INVOKE_VIRTUAL;
+                        int operation = switch (opcode) {
+                            case Opcodes.INVOKESTATIC -> ScriptAccessLinker.INVOKE_STATIC;
+                            case Opcodes.INVOKESPECIAL -> ScriptAccessLinker.INVOKE_SPECIAL;
+                            default -> ScriptAccessLinker.INVOKE_VIRTUAL;
+                        };
                         super.visitInvokeDynamicInsn(
                                 name,
                                 methodCallDescriptor(opcode, owner, descriptor),
                                 BOOTSTRAP,
-                                owner.replace('/', '.'),
+                                declaration.replace('/', '.'),
                                 name,
                                 descriptor,
                                 operation
@@ -119,7 +146,11 @@ final class ScriptBytecodeTransformer {
         return writer.toByteArray();
     }
 
-    private static boolean transformConstructors(MethodNode method, Set<String> generatedOwners) {
+    private static boolean transformConstructors(
+            MethodNode method,
+            Set<String> generatedOwners,
+            ScriptTypeResolver types
+    ) {
         ArrayDeque<TypeInsnNode> allocations = new ArrayDeque<>();
         boolean changed = false;
         for (AbstractInsnNode instruction = method.instructions.getFirst();
@@ -135,7 +166,11 @@ final class ScriptBytecodeTransformer {
                 continue;
             }
             TypeInsnNode allocation = popAllocation(allocations, invocation.owner);
-            if (allocation == null || !shouldLink(invocation.owner, generatedOwners)) {
+            if (allocation == null) {
+                rejectInaccessibleSuperclassConstructor(invocation, generatedOwners, types);
+                continue;
+            }
+            if (!shouldLink(invocation.owner, generatedOwners)) {
                 continue;
             }
             AbstractInsnNode duplicate = nextExecutable(allocation);
@@ -151,7 +186,8 @@ final class ScriptBytecodeTransformer {
                     invocation.desc,
                     ScriptAccessLinker.NEW_INSTANCE
             );
-            method.instructions.remove(allocation);
+            // NEW initializes the class before evaluating arguments; the constructor handle runs afterward.
+            method.instructions.set(allocation, classInitialization(invocation.owner));
             method.instructions.remove(duplicate);
             method.instructions.set(invocation, replacement);
             instruction = replacement;
@@ -160,7 +196,152 @@ final class ScriptBytecodeTransformer {
         return changed;
     }
 
+    private static InvokeDynamicInsnNode classInitialization(String owner) {
+        return new InvokeDynamicInsnNode(
+                "initializeClass",
+                "()V",
+                BOOTSTRAP,
+                owner.replace('/', '.'),
+                "<clinit>",
+                "()V",
+                ScriptAccessLinker.INITIALIZE_CLASS
+        );
+    }
+
+    private static void rejectInaccessibleSuperclassConstructor(
+            MethodInsnNode invocation,
+            Set<String> generatedOwners,
+            ScriptTypeResolver types
+    ) {
+        if (!shouldLink(invocation.owner, generatedOwners)) {
+            return;
+        }
+        int access = types.constructorAccess(invocation.owner, invocation.desc);
+        if ((access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED)) == 0) {
+            String visibility = (access & Opcodes.ACC_PRIVATE) != 0 ? "private" : "package-private";
+            throw new TransformationException(
+                    "A script subclass cannot call " + visibility + " superclass constructor "
+                            + invocation.owner.replace('/', '.') + invocation.desc
+            );
+        }
+    }
+
+    private static boolean transformMethodHandles(ClassNode owner, Set<String> generatedOwners, ScriptTypeResolver types) {
+        List<MethodNode> bridges = new ArrayList<>();
+        Map<BridgeKey, Handle> replacements = new LinkedHashMap<>();
+        Set<String> methodKeys = new HashSet<>();
+        owner.methods.forEach(method -> methodKeys.add(method.name + method.desc));
+        int nextBridge = 0;
+
+        for (MethodNode method : owner.methods) {
+            for (AbstractInsnNode instruction = method.instructions.getFirst();
+                 instruction != null;
+                 instruction = instruction.getNext()) {
+                if (!(instruction instanceof InvokeDynamicInsnNode dynamic)
+                        || !dynamic.bsm.getOwner().equals("java/lang/invoke/LambdaMetafactory")) {
+                    continue;
+                }
+                for (int i = 0; i < dynamic.bsmArgs.length; i++) {
+                    if (!(dynamic.bsmArgs[i] instanceof Handle target)) {
+                        continue;
+                    }
+                    String declaration = target.getTag() == Opcodes.H_NEWINVOKESPECIAL
+                            ? (shouldLink(target.getOwner(), generatedOwners) ? target.getOwner() : null)
+                            : linkedOwner(target.getOwner(), target.getName(), target.getDesc(), false, generatedOwners, types);
+                    if (declaration == null) {
+                        continue;
+                    }
+                    String descriptor = handleCallDescriptor(target);
+                    Type[] captures = Type.getArgumentTypes(dynamic.desc);
+                    if (captures.length > 0 && (target.getTag() == Opcodes.H_INVOKEVIRTUAL
+                            || target.getTag() == Opcodes.H_INVOKEINTERFACE
+                            || target.getTag() == Opcodes.H_INVOKESPECIAL)) {
+                        // Static implementation handles require an exact match for captured receiver types.
+                        Type[] arguments = Type.getArgumentTypes(descriptor);
+                        arguments[0] = captures[0];
+                        descriptor = Type.getMethodDescriptor(Type.getReturnType(descriptor), arguments);
+                    }
+                    BridgeKey key = new BridgeKey(target, descriptor);
+                    Handle replacement = replacements.get(key);
+                    if (replacement == null) {
+                        String name;
+                        do {
+                            name = "$totalDebug$access$" + nextBridge++;
+                        } while (!methodKeys.add(name + descriptor));
+                        bridges.add(createBridge(target, declaration, name, descriptor));
+                        replacement = new Handle(
+                                Opcodes.H_INVOKESTATIC,
+                                owner.name,
+                                name,
+                                descriptor,
+                                (owner.access & Opcodes.ACC_INTERFACE) != 0
+                        );
+                        replacements.put(key, replacement);
+                    }
+                    dynamic.bsmArgs[i] = replacement;
+                }
+            }
+        }
+        owner.methods.addAll(bridges);
+        if (!bridges.isEmpty()) {
+            ScriptLambdaDeserializer.rebuild(owner);
+        }
+        return !bridges.isEmpty();
+    }
+
+    private static MethodNode createBridge(Handle target, String declaration, String name, String descriptor) {
+        MethodNode bridge = new MethodNode(
+                Opcodes.ASM9,
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC | Opcodes.ACC_SYNTHETIC,
+                name,
+                descriptor,
+                null,
+                null
+        );
+        if (target.getTag() == Opcodes.H_NEWINVOKESPECIAL) {
+            bridge.instructions.add(classInitialization(target.getOwner()));
+        }
+        Type bridgeType = Type.getMethodType(descriptor);
+        int local = 0;
+        for (Type argument : bridgeType.getArgumentTypes()) {
+            bridge.instructions.add(new VarInsnNode(argument.getOpcode(Opcodes.ILOAD), local));
+            local += argument.getSize();
+        }
+        bridge.instructions.add(new InvokeDynamicInsnNode(
+                target.getTag() == Opcodes.H_NEWINVOKESPECIAL ? "newInstance" : target.getName(),
+                descriptor,
+                BOOTSTRAP,
+                declaration.replace('/', '.'),
+                target.getName(),
+                target.getDesc(),
+                handleOperation(target.getTag())
+        ));
+        bridge.instructions.add(new InsnNode(bridgeType.getReturnType().getOpcode(Opcodes.IRETURN)));
+        return bridge;
+    }
+
+    private static int handleOperation(int tag) {
+        return switch (tag) {
+            case Opcodes.H_INVOKESTATIC -> ScriptAccessLinker.INVOKE_STATIC;
+            case Opcodes.H_INVOKESPECIAL -> ScriptAccessLinker.INVOKE_SPECIAL;
+            case Opcodes.H_INVOKEVIRTUAL, Opcodes.H_INVOKEINTERFACE -> ScriptAccessLinker.INVOKE_VIRTUAL;
+            case Opcodes.H_NEWINVOKESPECIAL -> ScriptAccessLinker.NEW_INSTANCE;
+            default -> throw new IllegalArgumentException("Unsupported method-handle tag " + tag);
+        };
+    }
+
+    private static String handleCallDescriptor(Handle target) {
+        return switch (target.getTag()) {
+            case Opcodes.H_INVOKESTATIC -> target.getDesc();
+            case Opcodes.H_INVOKESPECIAL, Opcodes.H_INVOKEVIRTUAL, Opcodes.H_INVOKEINTERFACE ->
+                    methodCallDescriptor(Opcodes.INVOKEVIRTUAL, target.getOwner(), target.getDesc());
+            case Opcodes.H_NEWINVOKESPECIAL -> constructorCallDescriptor(target.getOwner(), target.getDesc());
+            default -> throw new IllegalArgumentException("Unsupported method-handle tag " + target.getTag());
+        };
+    }
+
     private static TypeInsnNode popAllocation(ArrayDeque<TypeInsnNode> allocations, String owner) {
+        // push() and forward iteration pair the most recent same-owner allocation first.
         for (java.util.Iterator<TypeInsnNode> iterator = allocations.iterator(); iterator.hasNext();) {
             TypeInsnNode allocation = iterator.next();
             if (allocation.desc.equals(owner)) {
@@ -181,11 +362,31 @@ final class ScriptBytecodeTransformer {
 
     private static boolean shouldLink(String owner, Set<String> generatedOwners) {
         return !generatedOwners.contains(owner)
+                && isApplicationOwner(owner);
+    }
+
+    private static boolean isApplicationOwner(String owner) {
+        return !owner.startsWith("[")
                 && !owner.startsWith("java/")
                 && !owner.startsWith("javax/")
                 && !owner.startsWith("jdk/")
                 && !owner.startsWith("sun/")
                 && !owner.equals(Type.getInternalName(ScriptProgram.class));
+    }
+
+    private static String linkedOwner(
+            String owner,
+            String name,
+            String descriptor,
+            boolean field,
+            Set<String> generatedOwners,
+            ScriptTypeResolver types
+    ) {
+        if (!isApplicationOwner(owner)) {
+            return null;
+        }
+        String declaration = field ? types.fieldOwner(owner, name, descriptor) : types.methodOwner(owner, name, descriptor);
+        return shouldLink(declaration, generatedOwners) ? declaration : null;
     }
 
     private static String fieldCallDescriptor(int opcode, String owner, String fieldDescriptor) {
@@ -231,4 +432,16 @@ final class ScriptBytecodeTransformer {
         private MethodTypeDescriptors() {
         }
     }
+
+    static final class TransformationException extends RuntimeException {
+        TransformationException(String message) {
+            super(message);
+        }
+
+        TransformationException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    private record BridgeKey(Handle target, String descriptor) { }
 }
