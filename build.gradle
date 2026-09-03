@@ -167,6 +167,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.ow2.asm:asm:9.8'
     testImplementation "mezz.jei:jei-1.21.1-neoforge-api:${jei_version}"
+    testImplementation gradleTestKit()
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -196,26 +197,33 @@ if (developmentCompanionJar != null) {
         if (useSiblingCompanion) {
             dependsOn buildSiblingCompanion
         }
+        inputs.file(developmentCompanionJar).withPropertyName('companionJar').withPathSensitivity(PathSensitivity.NONE)
         from(modJar.flatMap { it.archiveFile }) {
-            into('mods')
+            rename { 'total_debug.jar' }
         }
         from(developmentCompanionJar) {
-            into('total-debug/companion-app')
+            rename { 'TotalDebugCompanion.jar' }
         }
         into(layout.buildDirectory.dir('local-bundle'))
+    }
+
+    apply from: 'gradle/local-deployment.gradle'
+    tasks.named('deployLocal').configure {
+        getDevelopmentCompanionJar().set(developmentCompanionJar)
     }
 
     tasks.register('installCodexCompanionMcp', Copy) {
         group = 'development'
         description = 'Builds and installs the current Companion MCP sidecar for Codex.'
         dependsOn localBundle
-        from(layout.buildDirectory.file('local-bundle/total-debug/companion-app/TotalDebugCompanion.jar'))
+        from(layout.buildDirectory.file('local-bundle/TotalDebugCompanion.jar'))
         into(codexHome.map { home -> new File(home, 'mcp/totaldebug-companion') })
     }
 }
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    systemProperty 'totaldebug.deploymentScript', layout.projectDirectory.file('gradle/local-deployment.gradle').asFile.absolutePath
 }
 
 tasks.withType(JavaCompile).configureEach {

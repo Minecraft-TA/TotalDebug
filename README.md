@@ -35,9 +35,21 @@ Build and collect both current artifacts for an external Minecraft instance with
 .\gradlew.bat localBundle
 ```
 
-The task mirrors the Minecraft instance layout under `build/local-bundle`. Copy the directory's contents into the instance root. TotalDebug goes to `mods`; Companion goes to `total-debug/companion-app/TotalDebugCompanion.jar`. The bundle does not link their hashes or versions. Runtime compatibility comes from the Companion protocol handshake.
+The flat `build/local-bundle` directory contains `total_debug.jar` and `TotalDebugCompanion.jar`. Building the bundle does not deploy files or run tests. Runtime compatibility still comes from the Companion protocol handshake.
 
-For an external development instance, set `companionDevelopmentJar` in `config/total_debug-client.toml` to the mutable Companion build output. Forward slashes avoid TOML escaping on Windows:
+To build and install both into an external instance, close Minecraft and run:
+
+```powershell
+.\gradlew.bat deployLocal "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
+```
+
+Save `totaldebugInstanceDir=C:/path/to/instance/minecraft` in your user `~/.gradle/gradle.properties` to use just `.\gradlew.bat deployLocal`. The target must be the actual Minecraft directory containing `mods/` and `config/`, not the launcher instance directory above it.
+
+Deployment replaces only `mods/total_debug.jar` and `total-debug/companion-app/TotalDebugCompanion.jar`, and sets `decompilation.companionDevelopmentJar` in `config/total_debug-client.toml` to the selected mutable Companion build. Other configuration values and comments are preserved. Scripts, state, caches and other mods are untouched. Version-named `total_debug-*.jar` files must be removed manually first; deployment reports them and stops without changing the instance. Each replacement is atomic, but the three files are not one transaction. A failed deployment reports which files were installed; close Minecraft and rerun to finish.
+
+Restart Minecraft after deployment. Later Companion-only changes need just a rebuild, closing Companion, and F6. Deployment does not restart processes, update the global MCP copy, or publish a release.
+
+To configure that development override manually instead, set `companionDevelopmentJar` in `config/total_debug-client.toml` to the mutable Companion build output. Forward slashes avoid TOML escaping on Windows:
 
 ```toml
 [decompilation]

@@ -17,6 +17,7 @@ import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 @Mod(TotalDebug.MOD_ID)
@@ -30,7 +31,7 @@ public final class TotalDebug {
     private final TickTaskScheduler tickTaskScheduler;
     private final TotalDebugNetwork network;
     private final ServerScriptService serverScripts;
-    private PreparedRuntimeSources runtimeSources;
+    private List<RuntimeSourceInventory.Source> runtimeSourceInputs;
 
     public TotalDebug(IEventBus modEventBus, ModContainer modContainer) {
         if (instance != null) {
@@ -74,12 +75,12 @@ public final class TotalDebug {
     }
 
     public synchronized PreparedRuntimeSources runtimeSources() throws IOException {
-        if (this.runtimeSources == null) {
-            this.runtimeSources = RuntimeSourceMaterializer.prepare(
-                    RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class),
-                    com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(FMLPaths.GAMEDIR.get()).sources()
-            );
+        if (this.runtimeSourceInputs == null) {
+            this.runtimeSourceInputs = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
         }
-        return this.runtimeSources;
+        return RuntimeSourceMaterializer.prepare(
+                this.runtimeSourceInputs,
+                com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(FMLPaths.GAMEDIR.get()).sources()
+        );
     }
 }

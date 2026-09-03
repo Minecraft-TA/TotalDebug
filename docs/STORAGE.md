@@ -40,6 +40,8 @@ Files are created when needed; an empty instance does not need every directory.
 
 The current source-set fingerprint still uses origin, runtime identity and source metadata rather than hashing every installed class byte. Offline indexes still depend on referenced JARs, directories and the Java installation being present. This layout does not make an offline capture portable.
 
+Cache reuse is optional. Startup and live inventory handling validate the current inventory first, then reuse a matching readable index or rebuild it once in place. Missing, invalid or unsupported generated source manifests and indexes are recreated, not migrated. Minecraft retains the discovered original source paths, but revalidates their generated copies when requested. Missing original runtime sources and failed rebuilds remain errors; authored files are never part of cache recovery.
+
 ## Global application files
 
 Default Windows home: `%LOCALAPPDATA%/TotalDebugCompanion`. The existing `--app-home` and `totaldebug.companionAppHome` overrides remain.
@@ -84,7 +86,7 @@ The installed executable stays at:
 {actual-game-directory}/total-debug/companion-app/TotalDebugCompanion.jar
 ```
 
-For a dev run this is beneath `run/`, even though instance-authored files use the repository workspace. A configured development JAR bypasses this installed payload. `localBundle` still produces the mod and installed Companion under `build/local-bundle`; it does not copy files into an external instance.
+For a dev run this is beneath `run/`, even though instance-authored files use the repository workspace. A configured development JAR bypasses this installed payload. `localBundle` produces a flat pair of JARs under `build/local-bundle`. `deployLocal` installs them into the explicitly configured Minecraft directory and points its client configuration at the mutable Companion build. See the README deployment instructions.
 
 NeoForge configuration, Minecraft logs/options, launcher files and other mods' files remain in their original owners' directories.
 
@@ -108,10 +110,12 @@ Script saves capture editor text on the Swing thread, use atomic replacement and
 
 Use matching freshly built TotalDebug and Companion binaries and restart Minecraft for the game-side change. Existing scripts/state/caches from the old layout are not moved, read or deleted. Keep any scripts or execution evidence you want before manually cleaning old folders. Do not delete all of `total-debug` merely to refresh generated data.
 
-This revision has not been deployed to or cleaned any real instance. The storage-only change does not solve the full cross-project UI/session switching lifecycle.
+The current binaries were deployed to ATM10 Sky with `deployLocal` and verified against the built JARs. Deployment did not clean instance data. The storage-only change does not solve the full cross-project UI/session switching lifecycle.
 
 ## Verification
 
-The full suites pass: TotalDebug 130 tests, shared storage 12, Companion 389. Replacement tests cover removed JARs/classes, one index path across runtime changes, stale readers, case-insensitive filename collisions, incomplete source/debug publication, queued decompiler cancellation, and selective editor disposal. Unknown cache directories are rejected without migration or deletion.
+The full suites passed: TotalDebug 143 tests, shared storage 12, Companion 398. Replacement tests cover removed JARs/classes, one index path across runtime changes, stale readers, case-insensitive filename collisions, incomplete source/debug publication, queued decompiler cancellation, and selective editor disposal. Recovery tests cover deleted, malformed, unsupported and truncated generated caches while preserving errors for missing original runtime sources. Unknown cache directories are rejected without migration or deletion.
+
+A packaged-artifact check using the installed ATM10 Sky mod recreated a damaged source copy, rebuilt an index referencing a removed JAR, then reused the repaired index without rewriting it. This check used a temporary cache; confirmation of the complete live pack workflow after restart remains separate.
 
 `localBundle` builds both artifacts. An isolated headless startup check loads the packaged Companion and shared storage classes, verifies launch pinning, and checks that failed startup removes its published credentials. This is packaging verification, not a live Minecraft test of this revision.

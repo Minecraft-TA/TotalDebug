@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totaldebug.runtime;
 import net.neoforged.jarjar.nio.pathfs.PathFileSystemProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -131,9 +133,60 @@ class RuntimeSourceMaterializerTest {
             }
 
             Files.delete(materialized.path());
-            IOException failure = assertThrows(IOException.class,
-                    () -> RuntimeSourceMaterializer.prepare(originals, cache));
-            assertTrue(failure.getMessage().contains("Prepared runtime source does not exist"));
+            assertEquals(first, RuntimeSourceMaterializer.prepare(originals, cache));
+            assertTrue(Files.isRegularFile(materialized.path()));
+        }
+    }
+
+    enum CacheDamage { DELETED_CACHE, INVALID_MANIFEST, UNSUPPORTED_FORMAT, TRUNCATED_JAR }
+
+    @Test
+    void missingOriginalSourceStillFailsWithoutReplacingTheCache() throws Exception {
+        Path original = Files.write(this.directory.resolve("original.jar"), new byte[]{1});
+        Path cache = this.directory.resolve("runtime/sources");
+        var inputs = List.of(new RuntimeSourceInventory.Source(original, "example"));
+        RuntimeSourceMaterializer.prepare(inputs, cache);
+        byte[] manifest = Files.readAllBytes(cache.resolve("manifest.json"));
+        Files.delete(original);
+
+        IOException failure = assertThrows(IOException.class, () -> RuntimeSourceMaterializer.prepare(inputs, cache));
+        assertTrue(failure.getMessage().contains("Runtime class source does not exist:"));
+        assertArrayEquals(manifest, Files.readAllBytes(cache.resolve("manifest.json")));
+    }
+
+    @ParameterizedTest
+    @EnumSource(CacheDamage.class)
+    void recreatesUnavailableGeneratedSourcesFromTheLoadedRuntime(CacheDamage damage) throws Exception {
+        Path archive = this.directory.resolve("original.jar");
+        Path cache = this.directory.resolve("runtime/sources");
+        try (var filesystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
+            Path root = filesystem.getPath("/");
+            Files.write(root.resolve("Example.class"), new byte[]{1, 2, 3});
+            var originals = List.of(new RuntimeSourceInventory.Source(root, "example"));
+            var first = RuntimeSourceMaterializer.prepare(originals, cache);
+            Path copy = first.paths().getFirst();
+            Path manifest = cache.resolve("manifest.json");
+            switch (damage) {
+                case DELETED_CACHE -> {
+                    Files.delete(copy);
+                    Files.delete(manifest);
+                    Files.delete(cache);
+                }
+                case INVALID_MANIFEST -> Files.writeString(manifest, "broken");
+                case UNSUPPORTED_FORMAT -> {
+                    var json = com.github.minecraft_ta.totaldebug.storage.JsonFiles.read(manifest);
+                    json.addProperty("format", 99);
+                    com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(manifest, json);
+                }
+                case TRUNCATED_JAR -> Files.writeString(copy, "truncated");
+            }
+
+            var current = RuntimeSourceMaterializer.prepare(originals, cache);
+            assertEquals(first, current);
+            assertEquals("ready", current.withCurrentSources(() -> "ready"));
+            try (ZipFile zip = new ZipFile(copy.toFile())) {
+                assertArrayEquals(new byte[]{1, 2, 3}, zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
+            }
         }
     }
 }

@@ -1,0 +1,139 @@
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+
+import com.electronwill.nightconfig.toml.TomlParser
+import com.electronwill.nightconfig.toml.TomlWriter
+
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath 'com.electronwill.night-config:toml:3.8.3' }
+}
+
+/** Installs our binaries and configures the development JAR; never syncs the instance directory. */
+@org.gradle.work.DisableCachingByDefault(because = 'Deployment updates an external Minecraft instance')
+abstract class DeployLocal extends DefaultTask {
+    @InputDirectory
+    @PathSensitive(PathSensitivity.NONE)
+    abstract DirectoryProperty getBundleDirectory()
+
+    @Input
+    @Optional
+    abstract Property<String> getInstanceDirectory()
+
+    @InputFile
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    abstract RegularFileProperty getDevelopmentCompanionJar()
+
+    @TaskAction
+    void deploy() {
+        String configured = instanceDirectory.orNull
+        if (configured == null || configured.isBlank()) {
+            throw new GradleException('Set -PtotaldebugInstanceDir=<absolute Minecraft directory>, or save totaldebugInstanceDir in your user Gradle properties.')
+        }
+        Path requested = Path.of(configured)
+        if (!requested.isAbsolute() || !Files.isDirectory(requested)) {
+            throw new GradleException("totaldebugInstanceDir must be an existing absolute Minecraft directory: ${requested}")
+        }
+        Path root = requested.toRealPath()
+        for (String directory : ['mods', 'config']) {
+            if (!Files.isDirectory(root.resolve(directory))) {
+                throw new GradleException("Minecraft directory must contain ${directory}/: ${root}")
+            }
+        }
+
+        Path bundle = bundleDirectory.get().asFile.toPath()
+        Map<Path, Path> files = [
+                (bundle.resolve('total_debug.jar')): root.resolve('mods/total_debug.jar'),
+                (bundle.resolve('TotalDebugCompanion.jar')): root.resolve('total-debug/companion-app/TotalDebugCompanion.jar'),
+        ]
+        // Check every input and destination before replacing either installed file.
+        files.each { source, destination ->
+            if (!Files.isRegularFile(source)) {
+                throw new GradleException("Missing bundle JAR: ${source}")
+            }
+            DeployLocal.validateDestination(root, destination)
+        }
+        Path developmentJar = developmentCompanionJar.get().asFile.toPath().toRealPath()
+        if (Files.mismatch(developmentJar, bundle.resolve('TotalDebugCompanion.jar')) != -1L) {
+            throw new GradleException('The Companion bundle does not match the development JAR. Rebuild localBundle before deploying.')
+        }
+        Path configFile = root.resolve('config/total_debug-client.toml')
+        DeployLocal.validateDestination(root, configFile)
+        String previousConfig = Files.exists(configFile) ? Files.readString(configFile) : ''
+        def config
+        try {
+            config = new TomlParser().parse(previousConfig)
+        } catch (com.electronwill.nightconfig.core.io.ParsingException exception) {
+            throw new GradleException("Invalid client configuration: ${configFile}", exception)
+        }
+        String developmentPath = developmentJar.toString().replace('\\', '/')
+        String updatedConfig = previousConfig
+        if (config.get('decompilation.companionDevelopmentJar') != developmentPath) {
+            config.set('decompilation.companionDevelopmentJar', developmentPath)
+            updatedConfig = new TomlWriter().writeToString(config)
+        }
+        try (var jars = Files.list(root.resolve('mods'))) {
+            def duplicates = jars.filter { path ->
+                String name = path.fileName.toString().toLowerCase(Locale.ROOT)
+                name.startsWith('total_debug-') && name.endsWith('.jar')
+            }.sorted().toList()
+            if (!duplicates.isEmpty()) {
+                throw new GradleException("Remove these version-named TotalDebug JARs manually before deploying to mods/total_debug.jar: ${duplicates}")
+            }
+        }
+
+        logger.lifecycle('Deploying TotalDebug to {}', root)
+        Map<Path, Path> staged = [:]
+        try {
+            files.each { source, destination ->
+                if (!Files.isRegularFile(destination) || Files.mismatch(source, destination) != -1L) {
+                    Files.createDirectories(destination.parent)
+                    Path temporary = Files.createTempFile(destination.parent, '.totaldebug-deploy-', '.tmp')
+                    staged[destination] = temporary
+                    Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING)
+                    if (Files.mismatch(source, temporary) != -1L) {
+                        throw new IOException("Bundle JAR changed while copying: ${source}")
+                    }
+                }
+            }
+            if (updatedConfig != previousConfig) {
+                Path temporary = Files.createTempFile(configFile.parent, '.totaldebug-deploy-', '.tmp')
+                staged[configFile] = temporary
+                Files.writeString(temporary, updatedConfig)
+            }
+            staged.each { destination, temporary ->
+                Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                logger.lifecycle('Installed {}', destination)
+            }
+        } catch (IOException exception) {
+            throw new GradleException('Deployment failed. Files already reported as installed remain updated. Close Minecraft and retry; no installed file is truncated in place.', exception)
+        } finally {
+            staged.values().each { Files.deleteIfExists(it) }
+        }
+        logger.lifecycle('Companion development JAR: {}', developmentJar)
+        logger.lifecycle('Deployment complete. Restart Minecraft for mod/config changes. Subsequent Companion-only changes need just a rebuild, closing Companion, and F6.')
+    }
+
+    private static void validateDestination(Path root, Path destination) {
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)) {
+            throw new GradleException("Deployment target must be a regular file, not a directory or symbolic link: ${destination}")
+        }
+        for (Path parent = destination.parent; parent != root; parent = parent.parent) {
+            if (Files.exists(parent, LinkOption.NOFOLLOW_LINKS)
+                    && (!Files.isDirectory(parent) || !parent.toRealPath().startsWith(root))) {
+                throw new GradleException("Deployment directory is not inside the Minecraft instance: ${parent}")
+            }
+        }
+    }
+}
+
+tasks.register('deployLocal', DeployLocal) {
+    group = 'development'
+    description = 'Builds and installs both local JARs into -PtotaldebugInstanceDir (Minecraft must be closed).'
+    dependsOn tasks.named('localBundle')
+    bundleDirectory = layout.buildDirectory.dir('local-bundle')
+    instanceDirectory = providers.gradleProperty('totaldebugInstanceDir')
+}

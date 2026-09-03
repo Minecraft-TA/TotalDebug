@@ -51,9 +51,7 @@ public final class RuntimeSourceMaterializer {
         requireCurrentLayout(cache);
         List<String> names = fileNames(inputs);
         Path manifestFile = cache.resolve(MANIFEST);
-        boolean matches = Files.isRegularFile(manifestFile)
-                && id.equals(JsonFiles.string(JsonFiles.read(manifestFile), "id"));
-        if (!matches) {
+        if (!matchesManifest(cache, id, inputs, names)) {
             Path staged = Files.createTempDirectory(cache.getParent(), ".td-" + ProcessHandle.current().pid() + "-");
             try {
                 JsonObject manifest = new JsonObject();
@@ -115,6 +113,17 @@ public final class RuntimeSourceMaterializer {
             prepared.add(new PreparedRuntimeSources.Source(source, physical));
         }
         return new PreparedRuntimeSources(id, cache, prepared);
+    }
+
+    private static boolean matchesManifest(Path cache, String id, List<RuntimeSourceInventory.Source> inputs,
+                                           List<String> names) {
+        try {
+            validateManifest(cache, id, inputs, names);
+            return true;
+        } catch (IOException ignored) {
+            // Recreate missing or invalid generated files from the loaded runtime's original sources.
+            return false;
+        }
     }
 
     private static void requireCurrentLayout(Path cache) throws IOException {
