@@ -66,7 +66,7 @@ final class IndexCache {
                     output.write(JsonFiles.GSON.toJson(toJson(manifest)).getBytes(StandardCharsets.UTF_8));
                     output.closeArchiveEntry();
                 }
-                read(staged);
+                requireSources(read(staged));
                 try (ClassIndex verified = ClassIndex.fromFile(staged.toString())) {
                     // Validate the complete archive before replacing a working index.
                 }
@@ -100,15 +100,21 @@ final class IndexCache {
                     throw new IOException("Invalid or duplicate runtime source id: " + id);
                 }
                 Path path = Path.of(URI.create(JsonFiles.string(source, "path")));
-                if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
-                    throw new IOException("Prepared runtime source is unavailable: " + path);
-                }
                 sources.add(new Source(id, path, JsonFiles.string(source, "logicalUri"),
                         RuntimeModule.fromJson(JsonFiles.object(source, "module"))));
             }
             return new Manifest(JsonFiles.string(json, "inventoryId"), sources);
         } catch (RuntimeException exception) {
             throw new IOException("Invalid runtime index " + file + ": " + exception.getMessage(), exception);
+        }
+    }
+
+    static void requireSources(Manifest manifest) throws IOException {
+        for (Source source : manifest.sources()) {
+            Path path = source.path();
+            if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
+                throw new IOException("Prepared runtime source is unavailable: " + path);
+            }
         }
     }
 

@@ -36,6 +36,9 @@ class IndexCacheTest {
             try (var children = Files.list(this.home)) {
                 assertEquals(2, children.count());
             }
+            Files.delete(archive);
+            assertEquals(manifest, IndexCache.read(file));
+            assertThrows(java.io.IOException.class, () -> IndexCache.requireSources(manifest));
         }
     }
 }

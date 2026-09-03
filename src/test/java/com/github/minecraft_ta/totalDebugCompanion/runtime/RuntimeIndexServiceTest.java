@@ -87,6 +87,7 @@ class RuntimeIndexServiceTest {
                         new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD))))
                 .write(new com.github.minecraft_ta.totaldebug.storage.InstancePaths(dataDirectory).inventory());
 
+        var cachedModified = Files.getLastModifiedTime(indexFile);
         AtomicInteger installations = new AtomicInteger();
         List<RuntimeIndexService.ReadySnapshot> snapshots = new ArrayList<>();
         CountDownLatch restored = new CountDownLatch(1);
@@ -97,6 +98,8 @@ class RuntimeIndexServiceTest {
         })) {
             service.restore(dataDirectory);
             assertTrue(restored.await(5, TimeUnit.SECONDS));
+            assertNotNull(snapshots.getFirst().index().findClass(RuntimeIndexServiceTest.class.getName()));
+            assertEquals(cachedModified, Files.getLastModifiedTime(indexFile));
 
             AtomicBoolean inventoryAccepted = new AtomicBoolean();
             CountDownLatch settled = new CountDownLatch(1);
@@ -159,13 +162,8 @@ class RuntimeIndexServiceTest {
             Files.delete(paths.inventory());
             try (RuntimeIndexService service = new RuntimeIndexService(new Object(),
                     ignored -> { throw new AssertionError("An index without its current inventory must not be restored"); })) {
-                CountDownLatch failed = new CountDownLatch(1);
-                service.addStatusListener(status -> {
-                    if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown();
-                });
                 service.restore(root);
-                assertTrue(failed.await(5, TimeUnit.SECONDS));
-                assertTrue(service.status().detail().contains("Runtime cache has changed"));
+                assertEquals(RuntimeIndexService.Phase.WAITING, service.status().phase());
             }
         } finally {
             snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);

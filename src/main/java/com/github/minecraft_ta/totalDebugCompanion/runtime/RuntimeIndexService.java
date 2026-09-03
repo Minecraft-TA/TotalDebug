@@ -118,22 +118,13 @@ public final class RuntimeIndexService implements AutoCloseable {
             this.activeDataDirectory = null;
             long requestedGeneration = ++this.generation;
             Path root = normalizeDataDirectory(dataDirectory);
-            Path indexFile = new InstancePaths(root).index();
-            if (!Files.isRegularFile(indexFile)) {
+            Path inventoryFile = new InstancePaths(root).inventory();
+            if (!Files.isRegularFile(inventoryFile)) {
                 update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
                 return;
             }
-            update(new Status(Phase.LOADING, "Loading the previous class index", null));
-            this.worker.execute(() -> {
-                try {
-                    ReadySnapshot snapshot = CacheFiles.locked(indexFile.getParent(), () -> loadSnapshot(indexFile));
-                    publishReady(requestedGeneration, root, snapshot);
-                } catch (IOException | RuntimeException exception) {
-                    if (isCurrent(requestedGeneration)) {
-                        update(new Status(Phase.FAILED, exception.getMessage(), exception));
-                    }
-                }
-            });
+            update(new Status(Phase.LOADING, "Loading the previous runtime inventory", null));
+            this.worker.execute(() -> buildOrLoad(requestedGeneration, root, null, inventoryFile));
         }
     }
 
@@ -176,12 +167,13 @@ public final class RuntimeIndexService implements AutoCloseable {
             update(new Status(Phase.BUILDING, "Preparing class index", null));
             ReadySnapshot ready = CacheFiles.locked(expectedFile.getParent(), () -> {
                 RuntimeInventory inventory = RuntimeInventory.read(inventoryFile);
-                if (!inventory.id().equals(expectedInventoryId)) {
+                if (expectedInventoryId != null && !inventory.id().equals(expectedInventoryId)) {
                     throw new IOException("Runtime inventory identity mismatch: expected " + expectedInventoryId
                             + ", got " + inventory.id());
                 }
                 Path indexFile = new InstancePaths(root).index();
-                return matchesIndex(indexFile, inventory.id()) ? loadSnapshot(indexFile) : buildSnapshot(inventory, indexFile);
+                ReadySnapshot cached = loadCachedSnapshot(indexFile, inventory.id());
+                return cached != null ? cached : buildSnapshot(inventory, indexFile);
             });
             publishReady(requestedGeneration, root, ready);
         } catch (IOException | RuntimeException exception) {
@@ -236,7 +228,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         } catch (RuntimeException exception) {
             throw new IOException("JIndex could not build the runtime class index", exception);
         }
-        return loadSnapshot(indexFile);
+        return loadSnapshot(indexFile, IndexCache.read(indexFile));
     }
 
     static List<PreparedInput> prepareInputs(RuntimeInventory inventory) throws IOException {
@@ -303,9 +295,9 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static ReadySnapshot loadSnapshot(Path indexFile) throws IOException {
-        IndexCache.Manifest manifest = IndexCache.read(indexFile);
+    private static ReadySnapshot loadSnapshot(Path indexFile, IndexCache.Manifest manifest) throws IOException {
         CacheFiles.requireIdentity(indexFile.getParent().resolve("inventory.json"), "id", manifest.inventoryId());
+        IndexCache.requireSources(manifest);
         try {
             return new ReadySnapshot(manifest.inventoryId(), IndexCache.FORMAT + ":" + manifest.inventoryId(),
                     indexFile, manifest.sources(), ClassIndex.fromFile(indexFile.toString()));
@@ -314,8 +306,20 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private static boolean matchesIndex(Path indexFile, String inventoryId) throws IOException {
-        return Files.isRegularFile(indexFile) && inventoryId.equals(IndexCache.read(indexFile).inventoryId());
+    private static ReadySnapshot loadCachedSnapshot(Path indexFile, String inventoryId) {
+        if (!Files.isRegularFile(indexFile)) {
+            return null;
+        }
+        try {
+            IndexCache.Manifest manifest = IndexCache.read(indexFile);
+            if (!inventoryId.equals(manifest.inventoryId())) {
+                return null;
+            }
+            return loadSnapshot(indexFile, manifest);
+        } catch (IOException ignored) {
+            // An unusable cache is rebuilt once from the validated inventory; rebuild failures still propagate.
+            return null;
+        }
     }
 
     private void publishReady(long requestedGeneration, Path root, ReadySnapshot snapshot) {
