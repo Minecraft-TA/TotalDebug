@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 
 /** Source lookup and exact source-line ownership for the Microsoft Java debug adapter. */
 final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
+    private static final System.Logger LOGGER = System.getLogger(MicrosoftSourceRegistry.class.getName());
+
     private final DebuggerSessionController.SourceLoader sourceLoader;
     private final Map<URI, RegisteredSource> sourcesByUri = new ConcurrentHashMap<>();
     private final Map<String, RegisteredSource> sourcesByBinaryName = new ConcurrentHashMap<>();
@@ -169,17 +171,26 @@ final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
             String fullyQualifiedName,
             String sourcePath
     ) {
+        if (fullyQualifiedName.indexOf('/') >= 0) {
+            // Hidden runtime classes have no binary name or independently loadable source.
+            return null;
+        }
         RegisteredSource source = sourceForClass(fullyQualifiedName);
         if (source == null) {
-            DebugEngine.Source loaded;
             try {
-                loaded = this.sourceLoader.load(fullyQualifiedName);
+                DebugEngine.Source loaded = this.sourceLoader.load(fullyQualifiedName);
+                if (loaded != null) {
+                    register(loaded);
+                    source = sourceForClass(fullyQualifiedName);
+                }
             } catch (Exception exception) {
-                throw new IllegalStateException("Unable to resolve debugger source for " + fullyQualifiedName, exception);
-            }
-            if (loaded != null) {
-                register(loaded);
-                source = sourceForClass(fullyQualifiedName);
+                if (exception instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                // Source is optional. A failed decompilation must not abort the adapter's entire stack trace.
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "Unable to resolve debugger source for " + fullyQualifiedName, exception);
+                return null;
             }
         }
         return source == null
@@ -233,6 +244,9 @@ final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
     }
 
     private RegisteredSource sourceForClass(String binaryName) {
+        if (binaryName.indexOf('/') >= 0) {
+            return null;
+        }
         RegisteredSource source = this.sourcesByBinaryName.get(binaryName);
         if (source != null) {
             return source;

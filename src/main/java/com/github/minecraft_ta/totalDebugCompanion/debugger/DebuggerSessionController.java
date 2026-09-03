@@ -1093,8 +1093,9 @@ public final class DebuggerSessionController implements AutoCloseable {
         this.pauseId = UUID.randomUUID().toString();
         this.pauseGeneration = this.queue.advisoryGeneration();
         this.exposedValues.clear();
+        List<DebugEngine.StackFrame> frames = List.of();
         try {
-            List<DebugEngine.StackFrame> frames = sourceEngine.stackTrace(event.threadId()).join();
+            frames = sourceEngine.stackTrace(event.threadId()).join();
             List<DebugEngine.Variable> variables = frames.isEmpty()
                     ? List.of()
                     : loadVariables(sourceEngine, frames.getFirst());
@@ -1109,7 +1110,7 @@ public final class DebuggerSessionController implements AutoCloseable {
             }
         } catch (Throwable failure) {
             Throwable cause = unwrap(failure);
-            PausedState replacement = new PausedState(event, List.of(), List.of());
+            PausedState replacement = new PausedState(event, frames, List.of());
             this.pausedState = replacement;
             updateStatus(Phase.PAUSED, "Unable to inspect paused Minecraft: " + failureMessage(cause), cause);
             for (Listener listener : this.listeners) {

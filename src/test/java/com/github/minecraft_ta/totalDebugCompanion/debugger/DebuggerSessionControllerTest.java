@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -788,6 +789,35 @@ class DebuggerSessionControllerTest {
         }
     }
 
+    @Test
+    void aVariableFailurePreservesTheFramesAndAllowsInspectionOfAnotherFrame() throws Exception {
+        RecordingEngine engine = new RecordingEngine();
+        DebugEngine.StackFrame first = new DebugEngine.StackFrame(1, "Generated.run", "", null, -1, 0);
+        DebugEngine.StackFrame caller = new DebugEngine.StackFrame(2, "Block.tick", "sample.Block",
+                URI.create("decompiled:///sample/Block.java"), 12, 1);
+        engine.frames = List.of(first, caller);
+        engine.scopes = List.of(new DebugEngine.Scope("Local", 9, false));
+        engine.variables.put(9, List.of(new DebugEngine.Variable(
+                "value", "value", "value", "42", "int", DebugEngine.VariableKind.LOCAL, 0, 0, 0, 0)));
+        engine.failedScopesFrame = first.id();
+        try (DebuggerSessionController controller = new DebuggerSessionController(
+                engine::proxy, (target, timeout) -> DebugEngine.Target.local(50_321, timeout))) {
+            controller.acceptTarget(new DebugTargetDescriptor("game", "Minecraft", 42));
+            controller.attach().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 73, true));
+            DebuggerSessionController.Status paused = awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
+
+            assertEquals(engine.frames, controller.pausedState().frames());
+            assertTrue(controller.pausedState().variables().isEmpty());
+            assertNotNull(paused.failure());
+            assertEquals("Frame variables unavailable", paused.failure().getMessage());
+            assertEquals(engine.variables.get(9), controller.variablesForFrame(caller)
+                    .get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+            controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            assertEquals(DebuggerSessionController.Phase.RUNNING, controller.status().phase());
+        }
+    }
+
     private static List<Integer> breakpointLines(RecordingEngine engine, URI sourceUri) {
         return engine.breakpoints.getOrDefault(sourceUri, List.of()).stream()
                 .map(DebugEngine.SourceBreakpoint::debuggerLine)
@@ -870,6 +900,7 @@ class DebuggerSessionControllerTest {
         private DebugEngine.State state = DebugEngine.State.NEW;
         private List<DebugEngine.StackFrame> frames = List.of();
         private List<DebugEngine.Scope> scopes = List.of();
+        private int failedScopesFrame = -1;
         private boolean started;
         private boolean disconnected;
         private boolean closed;
@@ -937,7 +968,9 @@ class DebuggerSessionControllerTest {
                             yield completed(null);
                         }
                         case "stackTrace" -> completed(this.frames);
-                        case "scopes" -> completed(this.scopes);
+                        case "scopes" -> (Integer) arguments[0] == this.failedScopesFrame
+                                ? CompletableFuture.failedFuture(new IllegalStateException("Frame variables unavailable"))
+                                : completed(this.scopes);
                         case "variables" -> {
                             this.variableCalls++;
                             List<DebugEngine.Variable> values = this.variables.getOrDefault(

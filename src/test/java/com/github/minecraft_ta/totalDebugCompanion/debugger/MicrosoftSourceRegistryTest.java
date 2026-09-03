@@ -4,12 +4,16 @@ import com.microsoft.java.debug.core.JavaBreakpointLocation;
 import com.microsoft.java.debug.core.protocol.Types;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class MicrosoftSourceRegistryTest {
     private static final URI SOURCE_URI = URI.create("decompiled:///sample/Outer.java");
@@ -94,6 +98,55 @@ class MicrosoftSourceRegistryTest {
                 new String[]{"sample.PatternSource"},
                 registry.getFullyQualifiedName(sourceUri.toString(), new int[]{5}, new int[]{1})
         );
+    }
+
+    @Test
+    void hiddenClassesHaveNoSourceEvenWhenTheirNominalOuterClassIsRegistered() {
+        MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(name -> {
+            fail("Hidden runtime class must not reach the binary-name source loader: " + name);
+            return null;
+        });
+        registry.register(new DebugEngine.Source(SOURCE_URI, "sample.Outer", SOURCE));
+        String hidden = "sample.Outer$Generated/0x0000000800080000";
+
+        assertNull(registry.getSource(hidden, "Outer.java"));
+        assertNull(registry.getSourceFileURI(hidden, "Outer.java"));
+        assertNull(registry.typeScope(hidden));
+        assertEquals("value", registry.displayedVariableName(hidden, "run", "()V", "value"));
+        assertEquals(SOURCE_URI.toString(), registry.getSource("sample.Outer$Inner", "Outer.java").getUri());
+    }
+
+    @Test
+    void aSourceLoadFailureDoesNotPreventResolvingOtherFramesOrRetrying() {
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(name -> {
+            if (attempts.getAndIncrement() == 0) throw new IOException("Damaged source cache");
+            return new DebugEngine.Source(SOURCE_URI, "sample.Outer", SOURCE);
+        });
+
+        assertNull(registry.getSource("sample.Outer", "Outer.java"));
+        assertEquals(SOURCE_URI.toString(), registry.getSource("sample.Outer", "Outer.java").getUri());
+    }
+
+    @Test
+    void unparseableSourceDoesNotPreventInspection() {
+        MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(name ->
+                new DebugEngine.Source(SOURCE_URI, "sample.Outer", "class Outer { void broken( }"));
+
+        assertNull(registry.getSource("sample.Outer", "Outer.java"));
+    }
+
+    @Test
+    void interruptedSourceLookupPreservesTheInterrupt() {
+        MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(name -> {
+            throw new InterruptedException("Source lookup interrupted");
+        });
+        try {
+            assertNull(registry.getSource("sample.Outer", "Outer.java"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     private static MicrosoftSourceRegistry registry() {
