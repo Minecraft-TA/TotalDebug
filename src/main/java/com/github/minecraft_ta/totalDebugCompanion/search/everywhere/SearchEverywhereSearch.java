@@ -147,8 +147,8 @@ public final class SearchEverywhereSearch {
         }
         if (category == Category.ALL || category == Category.SYMBOLS) {
             SymbolSearchResult[] symbols = sourceIds == null
-                    ? index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD))
-                    : index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD), sourceIds);
+                    ? index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD)).results()
+                    : index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD), sourceIds).results();
             Arrays.stream(symbols).map(SearchEverywhereSearch::symbolResult).forEach(results::add);
         }
         if (category == Category.TEXT) {

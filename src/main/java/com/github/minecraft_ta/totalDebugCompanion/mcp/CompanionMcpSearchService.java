@@ -13,6 +13,7 @@ import com.github.tth05.jindex.ReferenceSearchPage;
 import com.github.tth05.jindex.ReferenceTarget;
 import com.github.tth05.jindex.SearchOptions;
 import com.github.tth05.jindex.SymbolKind;
+import com.github.tth05.jindex.SymbolSearchPage;
 import com.github.tth05.jindex.SymbolSearchResult;
 import org.objectweb.asm.Opcodes;
 
@@ -69,15 +70,14 @@ final class CompanionMcpSearchService {
             return ownedSymbols(checkedOwner, checkedQuery);
         }
 
-        SymbolSearchResult[] matches = index().findSymbols(
+        SymbolSearchPage matches = index().findSymbols(
                 checkedQuery,
                 CONTAINS,
                 EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD)
         );
-        return boundedList("symbols", java.util.Arrays.stream(matches)
-                .limit(RESULT_LIMIT)
+        return boundedList("symbols", java.util.Arrays.stream(matches.results())
                 .map(this::describeSymbol)
-                .toList(), matches.length > RESULT_LIMIT);
+                .toList(), matches.truncated());
     }
 
     Map<String, Object> findUsages(Map<String, Object> target) {

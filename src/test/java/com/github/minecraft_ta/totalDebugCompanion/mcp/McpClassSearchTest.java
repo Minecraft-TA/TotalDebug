@@ -132,6 +132,21 @@ class McpClassSearchTest {
         return new CompanionMcpSearchService(() -> index, sourceId -> FIXTURE_MODULE);
     }
 
+    @Test
+    void symbolSearchReportsTruncationAtTheNativeLimit() {
+        var writer = new org.objectweb.asm.ClassWriter(0);
+        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "fixture/ManySymbols", null, "java/lang/Object", null);
+        for (int ordinal = 0; ordinal < CompanionMcpSearchService.RESULT_LIMIT + 1; ordinal++) {
+            writer.visitField(Opcodes.ACC_PUBLIC, "match" + ordinal, "I", null, null).visitEnd();
+        }
+        writer.visitEnd();
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(writer.toByteArray()))) {
+            Map<String, Object> response = search(index).searchSymbols("match", null);
+            assertEquals(CompanionMcpSearchService.RESULT_LIMIT, ((List<?>) response.get("symbols")).size());
+            assertEquals(true, response.get("truncated"));
+        }
+    }
+
     private static byte[] classBytes(Class<?> type) throws IOException {
         String resourceName = "/" + type.getName().replace('.', '/') + ".class";
         try (InputStream input = type.getResourceAsStream(resourceName)) {
