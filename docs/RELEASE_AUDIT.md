@@ -156,6 +156,12 @@ Fixed in JIndex `a95ac5d`. The independent ASM scan of the captured runtime corp
 
 Resolution now removes interface declarations shadowed by more specific interfaces, excludes inherited private/static methods and selects a unique concrete default where present. Snapshot format 6 rejects older saved reference tables so Companion rebuilds them. The independent oracle compares all 1,393 declared members of Block, Blocks, String and List across 178,117 selected classes, before and after save/reload. Its 168,624 sites and 249,637 occurrences match. This is targeted corpus parity, not every possible target or extraction category. See [corpus evidence](audit-evidence/2026-09-05/asm-member-corpus.json) and the progress record.
 
+### C12. A retired source tree reads the replacement runtime's cache
+
+Fixed locally in Companion `c2b3d1c`; live restart verification remains pending. The deployed startup log contained a cache-identity exception from the decompiled-source tree. A focused regression reproduces the same failure by closing the old decompilation service, opening a new runtime in the same cache directory, and then letting the old reader refresh.
+
+Cached-class listing now shares the service's close lock and returns no entries after closure. Current runtime readers retain their existing identity and integrity checks. The fix avoids stale readers without weakening cache validation or adding a compatibility path. Source lookup on the deployed build already worked; this finding concerns a late refresh during runtime replacement.
+
 ## Distribution and verification blockers
 
 ### R1. The downloaded Companion cannot connect to the current mod
