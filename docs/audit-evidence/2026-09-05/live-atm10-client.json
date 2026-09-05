@@ -1,0 +1,136 @@
+{
+  "date": "2026-09-05",
+  "scope": "ATM10 Sky multiplayer client, development override; preliminary live acceptance, not public candidate acceptance",
+  "client": {
+    "job_id": "d5b4dc87-0756-4dda-89ab-0298e1acbed0",
+    "state": "succeeded",
+    "result": {
+      "pid": 64860,
+      "java": "21.0.7",
+      "version": "1.21.1",
+      "worldLoaded": true,
+      "integratedServer": false,
+      "gameDir": "C:\\Users\\Admin\\AppData\\Roaming\\PrismLauncher\\instances\\All the Mods 10- To the Sky   ATM10SKY\\minecraft"
+    }
+  },
+  "serverRefusal": {
+    "job_id": "be3de6be-88f7-49a3-8a76-6852b468e501",
+    "state": "failed",
+    "error": "The current server does not support TotalDebug server-side scripts"
+  },
+  "navigation": {
+    "target": {
+      "kind": "field",
+      "owner": "net.minecraft.world.level.block.Blocks",
+      "name": "AIR",
+      "descriptor": "Lnet/minecraft/world/level/block/Block;"
+    },
+    "returnedUsages": 100,
+    "truncated": true,
+    "sample": [
+      {
+        "source_target": {
+          "kind": "method",
+          "owner": "com.enderio.modded_conduits.common.modules.appeng.AE2ConduitFacadeProvider",
+          "descriptor": "()Lnet/minecraft/world/level/block/Block;",
+          "name": "block"
+        },
+        "relationships": [
+          "field_read"
+        ],
+        "occurrences": 1,
+        "module": {
+          "name": "Ender IO - Modded Conduits",
+          "kind": "mod",
+          "id": "enderio_modded_conduits"
+        }
+      },
+      {
+        "source_target": {
+          "kind": "method",
+          "owner": "thedarkcolour.exdeorum.blockentity.AbstractCrucibleBlockEntity",
+          "descriptor": "(Lnet/minecraft/network/RegistryFriendlyByteBuf;)V",
+          "name": "writeVisualData"
+        },
+        "relationships": [
+          "field_read"
+        ],
+        "occurrences": 1,
+        "module": {
+          "name": "Ex Deorum",
+          "kind": "mod",
+          "id": "exdeorum"
+        }
+      },
+      {
+        "source_target": {
+          "kind": "method",
+          "owner": "thedarkcolour.exdeorum.blockentity.AbstractCrucibleBlockEntity",
+          "descriptor": "(Lnet/minecraft/network/RegistryFriendlyByteBuf;)V",
+          "name": "readVisualData"
+        },
+        "relationships": [
+          "field_read"
+        ],
+        "occurrences": 1,
+        "module": {
+          "name": "Ex Deorum",
+          "kind": "mod",
+          "id": "exdeorum"
+        }
+      }
+    ],
+    "openedSource": {
+      "target": {
+        "kind": "method",
+        "owner": "com.enderio.modded_conduits.common.modules.appeng.AE2ConduitFacadeProvider",
+        "descriptor": "()Lnet/minecraft/world/level/block/Block;",
+        "name": "block"
+      },
+      "package": "com.enderio.modded_conduits.common.modules.appeng",
+      "imports": [
+        "appeng.api.ids.AEComponents",
+        "com.enderio.enderio.api.conduits.facade.ConduitFacadeProvider",
+        "com.enderio.enderio.api.conduits.facade.FacadeType",
+        "net.minecraft.core.Holder",
+        "net.minecraft.world.item.BlockItem",
+        "net.minecraft.world.item.Item",
+        "net.minecraft.world.item.ItemStack",
+        "net.minecraft.world.level.block.Block",
+        "net.minecraft.world.level.block.Blocks",
+        "net.neoforged.neoforge.capabilities.ICapabilityProvider"
+      ],
+      "start_line": 28,
+      "source": "@Override\n   public Block block() {\n      Holder<Item> item = this.itemStack.get(AEComponents.FACADE_ITEM);\n      return item != null && item.value() instanceof BlockItem blockItem ? blockItem.getBlock() : Blocks.AIR;\n   }"
+    }
+  },
+  "debuggerAttach": {
+    "revision": 3,
+    "phase": "running",
+    "target": {
+      "name": "Minecraft Client",
+      "process_id": 64860,
+      "id": "minecraft-client"
+    }
+  },
+  "cancellation": {
+    "job_id": "304dbf5b-55c3-431a-b04e-aad4b1b3edb4",
+    "state": "cancelled",
+    "error": "Script run cancelled"
+  },
+  "installedArtifactsMatchPreparedBundle": true,
+  "companionProcessId": 38404,
+  "companionSha256": "ed59b07ca130c960f1a8ccc4eaa55de7753e69c6663939b2da74c0e0fd3ef9bc",
+  "modSha256": "e5f0ccd4796001121b0f5b7485cca27b534a5d9f18c4aa4ab1d14f9dde3606af",
+  "observations": [
+    "This task's existing stdio sidecar uses TotalDebugCompanion-0f28f21.jar and advertises the old expression evaluation API; current Companion expects source. Current HTTP evaluation succeeds, see live-http-acceptance.json.",
+    "Startup log contains a DecompiledSourcesTreeItem cache-identity warning. Current source lookup succeeds. Whether a retired tree load produced the warning remains unconfirmed."
+  ],
+  "remaining": [
+    "UI F6, usage-result navigation and Ctrl+T/U confirmation",
+    "Integrated and supported dedicated server acceptance",
+    "Offline Companion restart and cache/state acceptance",
+    "Public candidate install/update and exact release pins",
+    "Broader debugger actions, stepping, retention and soak acceptance"
+  ]
+}
