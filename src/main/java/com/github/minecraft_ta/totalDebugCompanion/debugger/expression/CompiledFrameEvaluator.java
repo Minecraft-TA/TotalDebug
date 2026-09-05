@@ -181,14 +181,14 @@ final class CompiledFrameEvaluator {
             expression = false;
         }
         List<Replacement> replacements = new ArrayList<>();
-        Set<String> declared = new HashSet<>(locals);
+        List<LexicalDeclaration> declared = new ArrayList<>();
         tree.accept(new ASTVisitor() {
             @Override public boolean visit(VariableDeclarationFragment node) {
-                declared.add(node.getName().getIdentifier());
+                declared.add(declarationScope(node));
                 return true;
             }
             @Override public boolean visit(SingleVariableDeclaration node) {
-                declared.add(node.getName().getIdentifier());
+                declared.add(declarationScope(node));
                 return true;
             }
         });
@@ -201,7 +201,8 @@ final class CompiledFrameEvaluator {
                     throw new IllegalArgumentException("Invalid Java fragment near: " + node);
                 }
                 if (node instanceof AnonymousClassDeclaration || node instanceof AbstractTypeDeclaration
-                        || node instanceof SuperMethodInvocation || node instanceof SuperFieldAccess) {
+                        || node instanceof SuperMethodInvocation || node instanceof SuperFieldAccess
+                        || node instanceof Pattern || node instanceof PatternInstanceofExpression) {
                     throw new IllegalArgumentException("Compiled frame context does not support " + node.getClass().getSimpleName());
                 }
             }
@@ -222,7 +223,8 @@ final class CompiledFrameEvaluator {
             }
             @Override public boolean visit(SimpleName node) {
                 String name = node.getIdentifier();
-                if (declared.contains(name) || node.isDeclaration()) return true;
+                if (locals.contains(name) || node.isDeclaration()
+                        || declared.stream().anyMatch(declaration -> declaration.contains(node))) return true;
                 ASTNode parent = node.getParent();
                 if (parent instanceof MethodInvocation call && call.getName() == node
                         || parent instanceof QualifiedName qualified && qualified.getName() == node
@@ -257,6 +259,43 @@ final class CompiledFrameEvaluator {
         returns.sort(Comparator.comparingInt(Replacement::start).reversed());
         for (Replacement edit : returns) rewritten.replace(edit.start(), edit.start() + edit.length(), edit.text());
         return rewritten.toString();
+    }
+
+    private static LexicalDeclaration declarationScope(VariableDeclaration declaration) {
+        ASTNode parent = declaration.getParent();
+        ASTNode scope;
+        int start = declaration.getName().getStartPosition();
+        if (parent instanceof LambdaExpression lambda) {
+            scope = lambda.getBody();
+            start = scope.getStartPosition();
+        } else if (parent instanceof EnhancedForStatement loop) {
+            scope = loop.getBody();
+            // The iterable expression is evaluated outside the loop variable's scope.
+            start = scope.getStartPosition();
+        } else if (parent instanceof CatchClause clause) {
+            scope = clause.getBody();
+        } else if (parent instanceof VariableDeclarationExpression expression
+                && expression.getParent() instanceof ForStatement loop) {
+            scope = loop;
+        } else if (parent instanceof VariableDeclarationExpression expression
+                && expression.getParent() instanceof TryStatement statement) {
+            // Resource names are visible to later resources and the try body, but not catch/finally blocks.
+            scope = statement.getBody();
+        } else if (parent instanceof VariableDeclarationStatement statement) {
+            scope = statement.getParent();
+        } else {
+            throw new IllegalArgumentException("Compiled frame context does not support declaration scope: "
+                    + parent.getClass().getSimpleName());
+        }
+        return new LexicalDeclaration(declaration.getName().getIdentifier(), start,
+                scope.getStartPosition() + scope.getLength());
+    }
+
+    private record LexicalDeclaration(String name, int start, int end) {
+        boolean contains(SimpleName reference) {
+            return this.name.equals(reference.getIdentifier())
+                    && reference.getStartPosition() >= this.start && reference.getStartPosition() < this.end;
+        }
     }
 
     private static String encode(Map<String, byte[]> classes) throws java.io.IOException {

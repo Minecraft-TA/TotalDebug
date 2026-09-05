@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.EvaluationSe
 import com.github.minecraft_ta.totalDebugCompanion.debugger.harness.DebuggerTestHarness;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.concurrent.TimeUnit;
 
@@ -36,6 +38,42 @@ class EvaluationSemanticsIntegrationTest {
         withFrame((engine, frame) -> {
             assertEquals("10", value(engine, frame, "for (int i = 0; i < 3; i++) local++; return local;"));
             assertEquals("10", value(engine, frame, "local"));
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{ int calls = 2; } return calls;",
+            "for (int calls = 0; calls < 2; calls++) { } return calls;",
+            "for (int calls : new int[] { calls }) { } return calls;",
+            "try { throw new Exception(); } catch (Exception calls) { } return calls;",
+            "java.util.function.IntUnaryOperator f = calls -> calls + 1; return calls;",
+            "java.util.function.IntUnaryOperator f = (int calls) -> calls + 1; return calls;",
+            "try (java.io.StringReader calls = new java.io.StringReader(\"x\")) { } return calls;",
+            "int before = calls; int calls = 4; return before + calls - 4;",
+            "java.util.function.IntUnaryOperator f = calls -> calls + 1; return f.applyAsInt(3) - 4 + calls;",
+            "try (java.io.StringReader calls = null) { throw new Exception(); } catch (Exception ignored) { return calls; }"
+    })
+    void compiledDeclarationsOnlyHideFrameFieldsWithinTheirScope(String source) throws Exception {
+        withFrame((engine, frame) -> assertEquals("0", value(engine, frame, source)));
+    }
+
+    @Test
+    void scopedLocalWritesSurviveTargetExceptions() throws Exception {
+        withFrame((engine, frame) -> {
+            assertThrows(Exception.class, () -> value(engine, frame,
+                    "{ int calls = 3; local = calls; } local += calls; throw new IllegalStateException(\"scope fixture\");"));
+            assertEquals("3", value(engine, frame, "local"));
+        });
+    }
+
+    @Test
+    void rejectsFlowScopedPatternsBeforeTargetSideEffects() throws Exception {
+        withFrame((engine, frame) -> {
+            Exception failure = assertThrows(Exception.class, () -> value(engine, frame,
+                    "receiver.touch(); if ((Object) receiver instanceof Object calls) { return calls; } return null;"));
+            assertTrue(failure.getCause().getMessage().contains("does not support"));
+            assertEquals("0", value(engine, frame, "calls"));
         });
     }
 
