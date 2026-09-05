@@ -1,0 +1,18 @@
+[
+  {
+    "artifact": "total_debug-2.0.0-SNAPSHOT.jar",
+    "sha256": "c832ecd4faa6d124cd2d2d323b9dee8bdbfe57d1cfc2f242b0f766d3c1815899"
+  },
+  {
+    "artifact": "TotalDebugCompanion.jar",
+    "sha256": "90be4a45bc73391a25906063c3c6073a2e4746d373c9ff214a2d52c3f2cf8094"
+  },
+  {
+    "artifact": "SCNet-2.0.0.jar",
+    "sha256": "bae4e676128360198cde95720c2c3ab7b468aaba90d2b38d449f0cf85e07f561"
+  },
+  {
+    "artifact": "jindex-1.1.0-SNAPSHOT.jar",
+    "sha256": "f5819e8eecf820dcf6686fec5671190213ca27848504f9a0f2f59b0135e04646"
+  }
+]

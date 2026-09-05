@@ -1,0 +1,37 @@
+Starting a Gradle Daemon, 1 busy and 2 incompatible and 12 stopped Daemons could not be reused, use --status for details
+> Task :compileJava UP-TO-DATE
+> Task :processResources NO-SOURCE
+> Task :classes UP-TO-DATE
+> Task :compileTestJava
+> Task :processTestResources NO-SOURCE
+> Task :testClasses
+
+> Task :test
+
+ReconnectLifecycleTest > callbackCanCloseWhileAnotherThreadWaitsForReconnect(Callback) > [1] CONNECTED FAILED
+    org.opentest4j.AssertionFailedError at ReconnectLifecycleTest.java:79
+
+ReconnectLifecycleTest > callbackCanCloseWhileAnotherThreadWaitsForReconnect(Callback) > [2] MESSAGE FAILED
+    org.opentest4j.AssertionFailedError at ReconnectLifecycleTest.java:79
+
+ReconnectLifecycleTest > callbackReconnectIsRejectedBeforeWaitingForAnotherReconnect(Callback) > [1] CONNECTED FAILED
+    org.opentest4j.AssertionFailedError at ReconnectLifecycleTest.java:79
+
+ReconnectLifecycleTest > callbackReconnectIsRejectedBeforeWaitingForAnotherReconnect(Callback) > [2] MESSAGE FAILED
+    org.opentest4j.AssertionFailedError at ReconnectLifecycleTest.java:79
+
+4 tests completed, 4 failed
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':test'.
+> There were failing tests. See the report at: file:///C:/Users/Admin/IdeaProjects/SCNet/build/reports/tests/test/index.html
+
+* Try:
+> Task :test FAILED
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 1m 29s
+3 actionable tasks: 2 executed, 1 up-to-date

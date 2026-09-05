@@ -1,0 +1,22 @@
+CONFIRMED: callback registration escapes post as java.util.ConcurrentModificationException
+CONFIRMED: reconnect monitor / transport callback deadlock
+audit-reconnect WAITING
+  java.base@21.0.12/jdk.internal.misc.Unsafe.park(Native Method)
+  java.base@21.0.12/java.util.concurrent.locks.LockSupport.park(LockSupport.java:221)
+  java.base@21.0.12/java.util.concurrent.locks.AbstractQueuedSynchronizer.acquire(AbstractQueuedSynchronizer.java:788)
+  java.base@21.0.12/java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1133)
+  java.base@21.0.12/java.util.concurrent.CountDownLatch.await(CountDownLatch.java:230)
+  app//com.github.tth05.scnet.AbstractClient.closeAndAwaitEventLoop(AbstractClient.java:385)
+  app//com.github.tth05.scnet.Client.connect(Client.java:73)
+  TransportAuditProbe.lambda$reconnectDuringCallbackClose$2(TransportAuditProbe.java:55)
+  TransportAuditProbe$$Lambda/0x0000021ad5169000.run(Unknown Source)
+SCNet Client BLOCKED
+  app//com.github.tth05.scnet.Client.close(Client.java:121)
+  TransportAuditProbe$1.onConnected(TransportAuditProbe.java:48)
+  app//com.github.tth05.scnet.AbstractClient.notifyConnected(AbstractClient.java:273)
+  app//com.github.tth05.scnet.AbstractClient.runEventLoop(AbstractClient.java:193)
+  app//com.github.tth05.scnet.AbstractClient.lambda$startEventLoop$0(AbstractClient.java:176)
+  app//com.github.tth05.scnet.AbstractClient$$Lambda/0x0000021ad5166650.run(Unknown Source)
+  java.base@21.0.12/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+  java.base@21.0.12/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+  java.base@21.0.12/java.lang.Thread.runWith(Thread.java:1596)

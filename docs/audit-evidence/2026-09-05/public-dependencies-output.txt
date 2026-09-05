@@ -1,0 +1,43 @@
+> Task :verifyPublicResolution FAILED
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Build file 'C:\Users\Admin\IdeaProjects\TotalDebug\.codex\release-audit-dependency-probe\build.gradle' line: 13
+
+* What went wrong:
+Execution failed for task ':verifyPublicResolution' (registered in build file 'build.gradle').
+> Could not resolve all files for configuration ':releaseDependencies'.
+   > Could not find com.github.tth05:SCNet:2.0.0.
+     Searched in the following locations:
+       - https://repo.maven.apache.org/maven2/com/github/tth05/SCNet/2.0.0/SCNet-2.0.0.pom
+       - https://packagecloud.io/tth05/repo/maven2/com/github/tth05/SCNet/2.0.0/SCNet-2.0.0.pom
+     Required by:
+         root project 'release-audit-dependency-probe'
+   > Could not find com.github.tth05:jindex:1.1.0-SNAPSHOT.
+     Searched in the following locations:
+       - https://packagecloud.io/tth05/repo/maven2/com/github/tth05/jindex/1.1.0-SNAPSHOT/maven-metadata.xml
+       - https://packagecloud.io/tth05/repo/maven2/com/github/tth05/jindex/1.1.0-SNAPSHOT/jindex-1.1.0-SNAPSHOT.pom
+     Required by:
+         root project 'release-audit-dependency-probe'
+   > Could not find com.github.minecraft_ta:totaldebug-storage:2.0.0-SNAPSHOT.
+     Searched in the following locations:
+       - https://packagecloud.io/tth05/repo/maven2/com/github/minecraft_ta/totaldebug-storage/2.0.0-SNAPSHOT/maven-metadata.xml
+       - https://packagecloud.io/tth05/repo/maven2/com/github/minecraft_ta/totaldebug-storage/2.0.0-SNAPSHOT/totaldebug-storage-2.0.0-SNAPSHOT.pom
+     Required by:
+         root project 'release-audit-dependency-probe'
+   > Could not find com.github.minecraft_ta:totaldebug-evaluation:2.0.0-SNAPSHOT.
+     Searched in the following locations:
+       - https://packagecloud.io/tth05/repo/maven2/com/github/minecraft_ta/totaldebug-evaluation/2.0.0-SNAPSHOT/maven-metadata.xml
+       - https://packagecloud.io/tth05/repo/maven2/com/github/minecraft_ta/totaldebug-evaluation/2.0.0-SNAPSHOT/totaldebug-evaluation-2.0.0-SNAPSHOT.pom
+     Required by:
+         root project 'release-audit-dependency-probe'
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4s
+1 actionable task: 1 executed

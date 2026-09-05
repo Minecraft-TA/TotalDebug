@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-05",
+  "status": "Local deadlock-fix verification; not a release candidate",
+  "embeddedTransport": "Mod embedded JAR and both modified Companion transport classes match the locally published SCNet build",
+  "artifacts": [
+    {
+      "path": "C:\\Users\\Admin\\IdeaProjects\\SCNet\\build\\libs\\SCNet-2.0.0.jar",
+      "sha256": "2d8628abeb136de3b39f7a801d7384382aa57ef4796ac5eb2d8aade0eb8fd651"
+    },
+    {
+      "path": "C:\\Users\\Admin\\IdeaProjects\\TotalDebug\\build\\libs\\total_debug-2.0.0-SNAPSHOT.jar",
+      "sha256": "fb723348653ddbb2a90dd31eb8cc2b75bd8c5a8670ffb71facf66ff19fd7e2de"
+    },
+    {
+      "path": "C:\\Users\\Admin\\IdeaProjects\\TotalDebugCompanion\\build\\libs\\TotalDebugCompanion.jar",
+      "sha256": "22a1cad0ae3b925262f700aba640dc3c16f34020b40951c7499c9bc5534a9caf"
+    }
+  ]
+}
