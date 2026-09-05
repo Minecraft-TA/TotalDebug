@@ -42,38 +42,61 @@ final class IndexCache {
     private IndexCache() {
     }
 
-    static void write(Path target, ClassIndex index, Manifest manifest) throws IOException {
-        AtomicFiles.replace(target, staged -> {
-            // JIndex writes a ZIP with a Zstd entry. Copy it raw, preserving its
-            // compression and position: the native reader expects index at entry zero.
-            Path nativeFile = AtomicFiles.temporaryFile(staged.getParent());
-            try {
-                index.saveToFile(nativeFile.toString());
-                try (ZipFile input = ZipFile.builder().setPath(nativeFile).get();
-                     ZipArchiveOutputStream output = new ZipArchiveOutputStream(staged)) {
-                    var entries = input.getEntries();
-                    if (!entries.hasMoreElements()) {
-                        throw new IOException("JIndex produced an empty archive");
+    /** Returns the validated, independently owned index after the file is published. */
+    static ClassIndex write(Path target, ClassIndex index, Manifest manifest) throws IOException {
+        return write(target, index, manifest, () -> { });
+    }
+
+    static ClassIndex write(Path target, ClassIndex index, Manifest manifest, Runnable checkpoint) throws IOException {
+        ClassIndex[] verified = new ClassIndex[1];
+        boolean published = false;
+        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.cache-publish")) {
+            AtomicFiles.replace(target, staged -> {
+                checkpoint.run();
+                // JIndex writes a ZIP with a Zstd entry. Copy it raw, preserving its
+                // compression and position: the native reader expects index at entry zero.
+                Path nativeFile = AtomicFiles.temporaryFile(staged.getParent());
+                try {
+                    try (var save = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.native-save")) {
+                        index.saveToFile(nativeFile.toString());
                     }
-                    ZipArchiveEntry entry = entries.nextElement();
-                    if (!entry.getName().equals("index") || entries.hasMoreElements()) {
-                        throw new IOException("JIndex produced an unexpected archive layout");
+                    checkpoint.run();
+                    try (ZipFile input = ZipFile.builder().setPath(nativeFile).get();
+                         ZipArchiveOutputStream output = new ZipArchiveOutputStream(staged)) {
+                        var entries = input.getEntries();
+                        if (!entries.hasMoreElements()) {
+                            throw new IOException("JIndex produced an empty archive");
+                        }
+                        ZipArchiveEntry entry = entries.nextElement();
+                        if (!entry.getName().equals("index") || entries.hasMoreElements()) {
+                            throw new IOException("JIndex produced an unexpected archive layout");
+                        }
+                        try (var raw = input.getRawInputStream(entry)) {
+                            output.addRawArchiveEntry(new ZipArchiveEntry(entry), raw);
+                        }
+                        output.putArchiveEntry(new ZipArchiveEntry(MANIFEST));
+                        output.write(JsonFiles.GSON.toJson(toJson(manifest)).getBytes(StandardCharsets.UTF_8));
+                        output.closeArchiveEntry();
                     }
-                    try (var raw = input.getRawInputStream(entry)) {
-                        output.addRawArchiveEntry(new ZipArchiveEntry(entry), raw);
+                    requireSources(read(staged));
+                    checkpoint.run();
+                    // Native loading consumes the archive and releases its file handle. The
+                    // validated object remains usable after the staged file is renamed.
+                    try (var validation = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.cache-validation")) {
+                        verified[0] = ClassIndex.fromFile(staged.toString());
                     }
-                    output.putArchiveEntry(new ZipArchiveEntry(MANIFEST));
-                    output.write(JsonFiles.GSON.toJson(toJson(manifest)).getBytes(StandardCharsets.UTF_8));
-                    output.closeArchiveEntry();
+                    checkpoint.run();
+                } finally {
+                    Files.deleteIfExists(nativeFile);
                 }
-                requireSources(read(staged));
-                try (ClassIndex verified = ClassIndex.fromFile(staged.toString())) {
-                    // Validate the complete archive before replacing a working index.
-                }
-            } finally {
-                Files.deleteIfExists(nativeFile);
+            });
+            published = true;
+            return verified[0];
+        } finally {
+            if (!published && verified[0] != null) {
+                verified[0].close();
             }
-        });
+        }
     }
 
     static Manifest read(Path file) throws IOException {

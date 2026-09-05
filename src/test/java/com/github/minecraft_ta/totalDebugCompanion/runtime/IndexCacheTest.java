@@ -23,7 +23,9 @@ class IndexCacheTest {
         var manifest = new IndexCache.Manifest("test", List.of(source));
         try (var input = IndexCacheTest.class.getResourceAsStream("IndexCacheTest.class");
              ClassIndex index = ClassIndex.fromBytes(List.of(input.readAllBytes()))) {
-            IndexCache.write(file, index, manifest);
+            try (ClassIndex validated = IndexCache.write(file, index, manifest)) {
+                assertNotNull(validated.findClass(IndexCacheTest.class.getName()));
+            }
             assertEquals(manifest, IndexCache.read(file));
             try (ClassIndex restored = ClassIndex.fromFile(file.toString())) {
                 assertNotNull(restored.findClass(IndexCacheTest.class.getName()));

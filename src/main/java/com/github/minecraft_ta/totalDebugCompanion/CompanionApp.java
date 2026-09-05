@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 
 import com.formdev.flatlaf.FlatLaf;
@@ -132,6 +133,7 @@ public final class CompanionApp {
     }
 
     static int run(String[] args, Map<String, String> environment, CompanionTimeouts timeouts) {
+        var startup = RuntimePhase.start("companion.startup");
         FileChannel lockChannel = null;
         FileLock instanceLock = null;
         boolean ownsInstance = false;
@@ -223,6 +225,7 @@ public final class CompanionApp {
             session.bindAndPublish(launchConfiguration);
             startOptionalMcpServer();
 
+            startup.close();
             EXIT.await();
             return 0;
         } catch (InterruptedException exception) {
@@ -232,42 +235,45 @@ public final class CompanionApp {
             throwable.printStackTrace(System.err);
             return 1;
         } finally {
-            closeMcpServer();
-            if (session != null) {
-                session.close();
-            }
-            if (runtimeIndexService != null) {
-                runtimeIndexService.close();
-            }
-            if (debuggerController != null) {
-                debuggerController.close();
-            }
-            closeDecompilationService();
-            closeReferenceSearchService();
-            closeCodeInsightService();
-            CompanionClassIndex.close();
-            stopUiAfterFailure();
-            try {
-                GlobalConfig.getInstance().saveNow();
-                instanceState.close();
-            } catch (IOException exception) {
-                exception.printStackTrace(System.err);
-            }
-            if (ownsInstance) {
-                cleanupPublishedInstance();
-            }
-            if (instanceLock != null) {
-                try {
-                    instanceLock.release();
+            startup.close();
+            try (var shutdown = RuntimePhase.start("companion.shutdown")) {
+                if (runtimeIndexService != null) {
+                    runtimeIndexService.close();
+                }
+                RuntimePhase.run("close.mcp", CompanionApp::closeMcpServer);
+                if (session != null) {
+                    RuntimePhase.run("close.session", session::close);
+                }
+                if (debuggerController != null) {
+                    RuntimePhase.run("close.debugger", debuggerController::close);
+                }
+                RuntimePhase.run("close.decompilation", CompanionApp::closeDecompilationService);
+                RuntimePhase.run("close.references", CompanionApp::closeReferenceSearchService);
+                RuntimePhase.run("close.code-insight", CompanionApp::closeCodeInsightService);
+                RuntimePhase.run("close.index", CompanionClassIndex::close);
+                RuntimePhase.run("close.ui", CompanionApp::stopUiAfterFailure);
+                try (var state = RuntimePhase.start("close.state")) {
+                    GlobalConfig.getInstance().saveNow();
+                    instanceState.close();
                 } catch (IOException exception) {
                     exception.printStackTrace(System.err);
                 }
-            }
-            if (lockChannel != null) {
-                try {
-                    lockChannel.close();
-                } catch (IOException exception) {
-                    exception.printStackTrace(System.err);
+                if (ownsInstance) {
+                    cleanupPublishedInstance();
+                }
+                if (instanceLock != null) {
+                    try {
+                        instanceLock.release();
+                    } catch (IOException exception) {
+                        exception.printStackTrace(System.err);
+                    }
+                }
+                if (lockChannel != null) {
+                    try {
+                        lockChannel.close();
+                    } catch (IOException exception) {
+                        exception.printStackTrace(System.err);
+                    }
                 }
             }
         }
@@ -356,7 +362,6 @@ public final class CompanionApp {
         }
         switch (message.state()) {
             case RuntimeInventoryMessage.PREPARING -> {
-                closeDecompilationService();
                 runtimeIndexService.waiting(
                         message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
             }
@@ -683,7 +688,7 @@ public final class CompanionApp {
             if (!MainWindow.INSTANCE.getEditorTabs().canCloseAll()) {
                 return;
             }
-            try {
+            try (var state = RuntimePhase.start("close.request-save")) {
                 GlobalConfig.getInstance().saveNow();
                 instanceState.saveNow();
             } catch (IOException exception) {

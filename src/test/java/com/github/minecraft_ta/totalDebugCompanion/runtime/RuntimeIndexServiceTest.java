@@ -79,7 +79,7 @@ class RuntimeIndexServiceTest {
         try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
             IndexCache.write(indexFile, index, new IndexCache.Manifest(inventoryId,
                     List.of(new RuntimeSnapshotBytecodeSource.Source(0, classes, classes.toUri().toASCIIString(),
-                            new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD)))));
+                            new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD))))).close();
         }
 
         new RuntimeInventory(inventoryId, "21", System.getProperty("java.home"), true,
@@ -177,6 +177,149 @@ class RuntimeIndexServiceTest {
                 throw new IllegalStateException("Missing class resource " + resource);
             }
             return input.readAllBytes();
+        }
+    }
+
+    @Test
+    void joinsLiveInventoryWhileTheSameSnapshotIsStillLoading() throws Exception {
+        Path root = this.temporaryDirectory.resolve("joining");
+        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(root);
+        Path jar = Files.write(this.temporaryDirectory.resolve("joining.jar"), archive(RuntimeIndexServiceTest.class, null));
+        var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
+        new RuntimeInventory("same", "21", System.getProperty("java.home"), true,
+                List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
+                .write(paths.inventory());
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
+            IndexCache.write(paths.index(), index, new IndexCache.Manifest("same",
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(), module)))).close();
+        }
+        CountDownLatch loading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch installed = new CountDownLatch(1);
+        AtomicInteger loads = new AtomicInteger();
+        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshot -> {
+            snapshots.add(snapshot);
+            installed.countDown();
+        }, file -> {
+            loads.incrementAndGet();
+            ClassIndex index = ClassIndex.fromFile(file);
+            loading.countDown();
+            try {
+                assertTrue(release.await(5, TimeUnit.SECONDS));
+                return index;
+            } catch (InterruptedException exception) {
+                index.close();
+                throw new RuntimeException(exception);
+            }
+        })) {
+            service.restore(root);
+            assertTrue(loading.await(5, TimeUnit.SECONDS));
+            service.waiting("Collecting runtime sources");
+            service.accept(root, "same", paths.inventory());
+            release.countDown();
+            assertTrue(installed.await(5, TimeUnit.SECONDS));
+            assertEquals(1, loads.get(), "Matching live inventory must reuse the in-flight load");
+            assertEquals(1, snapshots.size());
+        } finally {
+            release.countDown();
+            snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
+        }
+    }
+
+    @Test
+    void closingDuringNativeLoadDiscardsItsResultWithoutWaitingOrInstalling() throws Exception {
+        var paths = cachedFixture("closing");
+        var loading = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var loaded = new java.util.concurrent.atomic.AtomicReference<ClassIndex>();
+        var workerThread = new java.util.concurrent.atomic.AtomicReference<Thread>();
+        var installations = new AtomicInteger();
+        try (var service = new RuntimeIndexService(new Object(), snapshot -> installations.incrementAndGet(), file -> {
+            workerThread.set(Thread.currentThread());
+            ClassIndex index = ClassIndex.fromFile(file);
+            loaded.set(index);
+            loading.countDown();
+            awaitNativeCompletion(release);
+            return index;
+        })) {
+            service.restore(paths.home());
+            assertTrue(loading.await(5, TimeUnit.SECONDS));
+            service.close();
+            assertTrue(!loaded.get().isDestroyed(), "A native operation still running retains ownership");
+            release.countDown();
+            workerThread.get().join(5000);
+            assertTrue(!workerThread.get().isAlive());
+            assertTrue(loaded.get().isDestroyed());
+            assertEquals(0, installations.get());
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void aDifferentInstanceSupersedesTheLoadingSnapshotAndClosesIt() throws Exception {
+        var first = cachedFixture("first");
+        var second = cachedFixture("second");
+        var loading = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var installed = new CountDownLatch(1);
+        var discarded = new java.util.concurrent.atomic.AtomicReference<ClassIndex>();
+        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+            snapshots.add(snapshot);
+            installed.countDown();
+        }, file -> {
+            ClassIndex index = ClassIndex.fromFile(file);
+            if (file.equals(first.index().toString())) {
+                discarded.set(index);
+                loading.countDown();
+                awaitNativeCompletion(release);
+            }
+            return index;
+        })) {
+            service.restore(first.home());
+            assertTrue(loading.await(5, TimeUnit.SECONDS));
+            service.accept(second.home(), "second", second.inventory());
+            release.countDown();
+            assertTrue(installed.await(5, TimeUnit.SECONDS));
+            assertEquals(List.of("second"), snapshots.stream().map(RuntimeIndexService.ReadySnapshot::inventoryId).toList());
+            assertTrue(discarded.get().isDestroyed());
+        } finally {
+            release.countDown();
+            snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
+        }
+    }
+
+    private com.github.minecraft_ta.totaldebug.storage.InstancePaths cachedFixture(String id) throws Exception {
+        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(temporaryDirectory.resolve(id));
+        Path jar = Files.write(temporaryDirectory.resolve(id + ".jar"), archive(RuntimeIndexServiceTest.class, null));
+        var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
+        new RuntimeInventory(id, "21", System.getProperty("java.home"), true,
+                List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
+                .write(paths.inventory());
+        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
+            IndexCache.write(paths.index(), index, new IndexCache.Manifest(id,
+                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(), module)))).close();
+        }
+        return paths;
+    }
+
+    private static void awaitNativeCompletion(CountDownLatch release) {
+        boolean interrupted = false;
+        try {
+            while (true) {
+                try {
+                    assertTrue(release.await(5, TimeUnit.SECONDS));
+                    return;
+                } catch (InterruptedException exception) {
+                    interrupted = true; // Simulate a native call that finishes before observing Java cancellation.
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

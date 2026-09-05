@@ -91,7 +91,7 @@ class RuntimeIndexRecoveryTest {
     private static void writeCache(InstancePaths paths, String inventoryId, Path source) throws Exception {
         try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(CachedType.class)))) {
             IndexCache.write(paths.index(), index, new IndexCache.Manifest(inventoryId,
-                    List.of(new Source(0, source, source.toUri().toString(), MODULE))));
+                    List.of(new Source(0, source, source.toUri().toString(), MODULE)))).close();
         }
     }
 
