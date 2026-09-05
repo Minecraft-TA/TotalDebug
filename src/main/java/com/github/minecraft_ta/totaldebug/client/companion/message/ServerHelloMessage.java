@@ -6,14 +6,12 @@ import com.github.tth05.scnet.util.ByteBufferInputStream;
 public final class ServerHelloMessage extends AbstractMessageIncoming {
     private int protocolVersion;
     private boolean accepted;
-    private long capabilities;
     private String rejectionReason;
 
     @Override
     public void read(ByteBufferInputStream messageStream) {
         this.protocolVersion = messageStream.readInt();
         this.accepted = messageStream.readBoolean();
-        this.capabilities = messageStream.readLong();
         this.rejectionReason = messageStream.readString();
     }
 
@@ -23,10 +21,6 @@ public final class ServerHelloMessage extends AbstractMessageIncoming {
 
     public boolean accepted() {
         return this.accepted;
-    }
-
-    public long capabilities() {
-        return this.capabilities;
     }
 
     public String rejectionReason() {

@@ -41,6 +41,6 @@ The repository publication task names are `publishMavenJavaPublicationToPackagec
 
 After authorized dependency publication, build Companion with Maven Local disabled, publish its immutable candidate, and update the mod's compatible Companion pin from the actual uploaded bytes. Then build the mod with both `-PtotaldebugUseMavenLocal=false` and `-PtotaldebugUsePublishedCompanion=true`. The Windows workflows explicitly use these public dependency settings where applicable.
 
-Record commits and SHA-256 hashes for all producers and the installed pair. Resolve from an empty Maven Local directory and fresh dependency cache, compare embedded library bytes, and run the final dev-instance/ATM10 acceptance matrix in [the release audit](RELEASE_AUDIT.md). Candidate installation and stable publication remain separate steps. Current application protocol 10 and Minecraft payload protocol 2 must match the tested pair.
+Record commits and SHA-256 hashes for all producers and the installed pair. Resolve from an empty Maven Local directory and fresh dependency cache, compare embedded library bytes, and run the final dev-instance/ATM10 acceptance matrix in [the release audit](RELEASE_AUDIT.md). Candidate installation and stable publication remain separate steps. Current application protocol 11 and Minecraft payload protocol 2 must match the tested pair.
 
 The current [progress record](RELEASE_PROGRESS.md) identifies the completed local slices and remaining native, documentation, public CI and live acceptance work. No stable release has been approved by these local checks.

@@ -52,10 +52,9 @@ class CompanionHandshakeConcurrencyTest {
     }
 
     private static ServerHelloMessage acceptedServerHello() {
-        ByteBuffer bytes = ByteBuffer.allocate(Integer.BYTES + 1 + Long.BYTES + Integer.BYTES)
+        ByteBuffer bytes = ByteBuffer.allocate(Integer.BYTES + 1 + Integer.BYTES)
                 .putInt(CompanionProtocol.VERSION)
                 .put((byte) 1)
-                .putLong(CompanionProtocol.REQUESTED_CAPABILITIES)
                 .putInt(0);
         bytes.flip();
         ServerHelloMessage message = new ServerHelloMessage();

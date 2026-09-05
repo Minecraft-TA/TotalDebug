@@ -86,7 +86,6 @@ public final class CompanionAppClient implements AutoCloseable {
     private volatile Runnable sessionClosedHandler = () -> { };
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile String sessionToken;
-    private volatile long negotiatedCapabilities;
     private volatile boolean closing;
     private volatile boolean transportExpected;
     private volatile RuntimeInventoryMessage runtimeInventoryState = RuntimeInventoryMessage.preparing(
@@ -175,9 +174,9 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     public void sendExecutionResult(int scriptId, ExecutionResult result) {
-        if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+        if (!isAuthenticated()) {
             TotalDebug.LOGGER.debug(
-                    "Discarding execution result {} for script {} because script execution is not negotiated",
+                    "Discarding execution result {} for script {} because the session is not authenticated",
                     result.status(),
                     scriptId
             );
@@ -295,15 +294,15 @@ public final class CompanionAppClient implements AutoCloseable {
             this.ready.complete(null);
         });
         this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
-            if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-                failSession("Companion sent a script request without negotiating that capability", null);
+            if (!isAuthenticated()) {
+                failSession("Companion sent a script request before authentication", null);
                 return;
             }
             this.scriptRequestHandler.accept(message);
         });
         this.client.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
-            if (!hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-                failSession("Companion sent a stop-script request without negotiating that capability", null);
+            if (!isAuthenticated()) {
+                failSession("Companion sent a stop-script request before authentication", null);
                 return;
             }
             this.stopScriptHandler.accept(message.scriptId());
@@ -320,7 +319,6 @@ public final class CompanionAppClient implements AutoCloseable {
                 CompanionAppClient.this.client.getMessageProcessor().enqueueMessage(new ClientHelloMessage(
                         CompanionProtocol.VERSION,
                         token,
-                        CompanionProtocol.REQUESTED_CAPABILITIES,
                         CompanionAppClient.this.profileId,
                         CompanionAppClient.this.dataDirectory.toString(),
                         CompanionAppClient.this.workspaceDirectory.toString()
@@ -365,16 +363,6 @@ public final class CompanionAppClient implements AutoCloseable {
             failSession("Companion rejected the session handshake: " + message.rejectionReason(), null);
             return;
         }
-        if ((message.capabilities() & CompanionProtocol.CORE_CAPABILITIES) != CompanionProtocol.CORE_CAPABILITIES) {
-            failSession(
-                    "Companion is missing required core capabilities: negotiated 0x"
-                            + Long.toHexString(message.capabilities()),
-                    null
-            );
-            return;
-        }
-
-        this.negotiatedCapabilities = message.capabilities();
         this.sessionToken = null;
         authentication.complete(null);
         sendDebugTarget();
@@ -382,7 +370,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void sendDebugTarget() {
-        if (!hasCapability(CompanionProtocol.CAPABILITY_DEBUGGER) || !this.client.isConnected()) {
+        if (!isAuthenticated() || !this.client.isConnected()) {
             return;
         }
         this.client.getMessageProcessor().enqueueMessage(new DebugTargetMessage(
@@ -393,11 +381,10 @@ public final class CompanionAppClient implements AutoCloseable {
         ));
     }
 
-    private boolean hasCapability(long capability) {
+    private boolean isAuthenticated() {
         CompletableFuture<Void> authentication = this.authenticated;
         return authentication.isDone()
-                && !authentication.isCompletedExceptionally()
-                && (this.negotiatedCapabilities & capability) == capability;
+                && !authentication.isCompletedExceptionally();
     }
 
     private void ensureConnectedAndReady() throws IOException {
@@ -429,7 +416,7 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void startRuntimeInventoryPreparation(boolean force) {
         synchronized (this.runtimeInventoryLock) {
-            if (this.closing || !hasCapability(CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY)) {
+            if (this.closing || !isAuthenticated()) {
                 return;
             }
             if (!force && this.runtimeInventoryState.state() == RuntimeInventoryMessage.AVAILABLE) {
@@ -464,7 +451,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void sendRuntimeInventoryState() {
-        if (hasCapability(CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY) && this.client.isConnected()) {
+        if (isAuthenticated() && this.client.isConnected()) {
             this.client.getMessageProcessor().enqueueMessage(this.runtimeInventoryState);
         }
     }
@@ -668,7 +655,6 @@ public final class CompanionAppClient implements AutoCloseable {
         this.client.close();
         this.authenticated = new CompletableFuture<>();
         this.ready = new CompletableFuture<>();
-        this.negotiatedCapabilities = 0;
         this.sessionToken = null;
     }
 
