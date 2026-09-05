@@ -32,6 +32,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          overwrite_files: false
           files: |
             build/libs/TotalDebugCompanion.jar
             build/libs/TotalDebugCompanion.jar.sha256
