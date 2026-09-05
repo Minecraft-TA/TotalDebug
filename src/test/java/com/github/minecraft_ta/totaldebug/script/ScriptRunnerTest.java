@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
+
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import org.junit.jupiter.api.Test;
 

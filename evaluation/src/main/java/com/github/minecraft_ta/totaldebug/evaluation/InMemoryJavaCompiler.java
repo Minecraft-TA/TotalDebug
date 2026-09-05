@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -29,7 +29,7 @@ public final class InMemoryJavaCompiler {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             throw new InMemoryCompilationException(
-                    "Java compiler not found. Run Minecraft with a JDK that includes jdk.compiler. Current java.home: "
+                    "Java compiler not found. Run the application with a JDK that includes jdk.compiler. Current java.home: "
                             + System.getProperty("java.home")
             );
         }
@@ -42,6 +42,8 @@ public final class InMemoryJavaCompiler {
         ); InMemoryJavaFileManager fileManager = new InMemoryJavaFileManager(standardFileManager)) {
             List<String> options = new ArrayList<>();
             options.add("-proc:none");
+            options.add("--release");
+            options.add("21");
             options.add("-g:source,lines,vars");
             if (!classpath.isBlank()) {
                 options.add("-classpath");

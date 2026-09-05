@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import java.lang.invoke.CallSite;
 import java.lang.invoke.ConstantCallSite;

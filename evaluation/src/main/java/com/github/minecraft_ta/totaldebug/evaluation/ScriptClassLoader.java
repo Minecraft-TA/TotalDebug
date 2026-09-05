@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

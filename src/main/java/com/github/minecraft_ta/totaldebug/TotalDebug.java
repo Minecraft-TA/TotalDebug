@@ -38,6 +38,7 @@ public final class TotalDebug {
             throw new IllegalStateException("TotalDebug was initialized more than once");
         }
 
+        com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge.preload();
         instance = this;
         this.version = Objects.requireNonNull(modContainer, "modContainer")
                 .getModInfo()

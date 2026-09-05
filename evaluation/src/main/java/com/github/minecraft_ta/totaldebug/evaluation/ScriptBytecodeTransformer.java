@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -371,7 +371,7 @@ final class ScriptBytecodeTransformer {
                 && !owner.startsWith("javax/")
                 && !owner.startsWith("jdk/")
                 && !owner.startsWith("sun/")
-                && !owner.equals(Type.getInternalName(ScriptProgram.class));
+                && !owner.equals("com/github/minecraft_ta/totaldebug/script/ScriptProgram");
     }
 
     private static String linkedOwner(

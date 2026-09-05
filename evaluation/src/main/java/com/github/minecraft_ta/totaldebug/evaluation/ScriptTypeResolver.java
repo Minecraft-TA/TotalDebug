@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;

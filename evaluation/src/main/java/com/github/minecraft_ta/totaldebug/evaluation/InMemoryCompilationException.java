@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 public final class InMemoryCompilationException extends Exception {
     public InMemoryCompilationException(String message) {

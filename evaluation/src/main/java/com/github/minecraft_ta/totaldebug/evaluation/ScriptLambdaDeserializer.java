@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
 
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;

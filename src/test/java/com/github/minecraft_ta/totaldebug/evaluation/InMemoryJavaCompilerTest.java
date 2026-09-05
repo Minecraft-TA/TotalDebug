@@ -1,4 +1,7 @@
-package com.github.minecraft_ta.totaldebug.script;
+package com.github.minecraft_ta.totaldebug.evaluation;
+
+import com.github.minecraft_ta.totaldebug.script.ScriptProgram;
+import com.github.minecraft_ta.totaldebug.script.FailingAnnotationProcessor;
 
 import net.minecraft.world.level.block.Block;
 import org.junit.jupiter.api.Test;

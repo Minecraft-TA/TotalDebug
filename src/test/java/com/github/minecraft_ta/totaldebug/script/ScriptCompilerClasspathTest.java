@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
+
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceMaterializer;
 import org.junit.jupiter.api.Test;

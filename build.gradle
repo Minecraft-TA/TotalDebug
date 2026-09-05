@@ -121,7 +121,7 @@ def buildSiblingCompanion = tasks.register('buildSiblingCompanion', Exec) {
     group = 'development'
     description = 'Builds the sibling TotalDebugCompanion JAR used by development clients.'
     onlyIf { useSiblingCompanion }
-    dependsOn ':storage:publishToMavenLocal'
+    dependsOn ':storage:publishToMavenLocal', ':evaluation:publishToMavenLocal'
     workingDir siblingCompanionDirectory.asFile
     commandLine siblingCompanionWrapper.asFile.absolutePath, 'shadowJar', '--console=plain'
 }
@@ -145,6 +145,9 @@ tasks.named('runClient').configure {
 }
 
 dependencies {
+    implementation project(':evaluation')
+    jarJar project(':evaluation')
+    additionalRuntimeClasspath project(':evaluation')
     implementation project(':storage')
     jarJar project(':storage')
     additionalRuntimeClasspath project(':storage')
@@ -225,6 +228,9 @@ tasks.named('test', Test).configure {
     useJUnitPlatform()
     // Exercise NeoForge's real UnionFileSystem, which needs the same access as its launcher.
     jvmArgs '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
+    dependsOn modJar
+    inputs.file(modJar.flatMap { it.archiveFile }).withPropertyName('packagedMod')
+    systemProperty 'totaldebug.packagedMod', modJar.get().archiveFile.get().asFile.absolutePath
     systemProperty 'totaldebug.deploymentScript', layout.projectDirectory.file('gradle/local-deployment.gradle').asFile.absolutePath
 }
 

@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
+import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
+import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
+
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.minecraft.world.level.block.Block;
