@@ -1,0 +1,302 @@
+{
+  "transport": "fresh current Companion stdio sidecar forwarding to live HTTP host",
+  "jarSha256": "2ac8749d43da2e520e56f157411ba7013f7ddf6fa5c15850144477add2652c3e",
+  "installedCodexSidecarUpdated": false,
+  "checks": "breakpoint action, compiled evaluation, step over, expired pause handles",
+  "initialize": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "logging": {},
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "totaldebug-companion-sidecar",
+      "version": "2.0.0"
+    },
+    "instructions": "Resolve exact symbols before finding usages. Read the relevant source_target values with runtime_source, and request class scope only when a member does not provide enough context. Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar values directly so the result remains structured. Debugger tools control the same session as Companion's UI. Carry the current pause_id into inspections and continue/step commands; use debugger_wait to wait for state changes. Companion may start or restart after this MCP session initializes; call status again."
+  },
+  "attach": {
+    "revision": 3,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    }
+  },
+  "breakpoint": {
+    "breakpoint": {
+      "binary_name": "org.apache.commons.lang3.ThreadUtils",
+      "line": 157,
+      "state": "pending",
+      "resolved_line": 157,
+      "condition": "java.lang.Thread.currentThread().getName().equals(\"TotalDebug stdio step probe\")",
+      "action": {
+        "source": "40 + 2",
+        "completion": "stay_paused"
+      }
+    }
+  },
+  "job": {
+    "job_id": "8fa8615e-1c64-4b0d-aa8c-92733bd70b1f",
+    "state": "compiling"
+  },
+  "pauseWithAction": {
+    "revision": 9,
+    "phase": "paused",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    },
+    "pause": {
+      "id": "ce06a042-4d01-4d2c-930f-f1384006d0fa",
+      "reason": "breakpoint",
+      "thread_id": 10,
+      "all_threads_stopped": false,
+      "top_frame": {
+        "id": 1,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 157
+      }
+    },
+    "breakpoint_action": {
+      "source": "40 + 2",
+      "result": {
+        "value": "42",
+        "type": "int",
+        "scalar": {
+          "kind": "int",
+          "value": 42
+        }
+      }
+    }
+  },
+  "removeBreakpoint": {
+    "removed": true
+  },
+  "frames": {
+    "frames": [
+      {
+        "id": 1,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 157
+      },
+      {
+        "id": 2,
+        "method": "LambdaForm$DMH/0x0000000800080400.invokeStaticInit(Object,Object)"
+      },
+      {
+        "id": 3,
+        "method": "LambdaForm$MH/0x0000000808002400.linkToTargetMethod(Object,Object)"
+      },
+      {
+        "id": 4,
+        "method": "McpCodeJob3.run()",
+        "line": 6
+      },
+      {
+        "id": 5,
+        "method": "ScriptRunner$CompiledScript.execute()",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner$CompiledScript",
+        "line": 21
+      },
+      {
+        "id": 6,
+        "method": "ScriptRunner.execute(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 178
+      },
+      {
+        "id": 7,
+        "method": "ScriptRunner.lambda$compileAndSchedule$3(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 152
+      },
+      {
+        "id": 8,
+        "method": "ScriptRunner$$Lambda/0x0000000807f0d058.run()"
+      },
+      {
+        "id": 9,
+        "method": "Thread.runWith(Object,Runnable)",
+        "binary_name": "java.lang.Thread",
+        "line": 443
+      },
+      {
+        "id": 10,
+        "method": "Thread.run()",
+        "binary_name": "java.lang.Thread",
+        "line": 435
+      }
+    ]
+  },
+  "arrayEvaluation": {
+    "operation_id": "eec16bb0-4caa-4c2d-b5a4-472866dccff9",
+    "state": "succeeded",
+    "elapsed_ms": 8611,
+    "slow": true,
+    "cancellation_requested": false,
+    "result": {
+      "value": "int[3]@10928",
+      "type": "int[]",
+      "value_ref": 13,
+      "indexed_count": 3
+    }
+  },
+  "arrayExpansion": {
+    "variables": [
+      {
+        "value": "1",
+        "type": "int",
+        "name": "0",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.0"
+      },
+      {
+        "value": "2",
+        "type": "int",
+        "name": "1",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.1"
+      },
+      {
+        "value": "3",
+        "type": "int",
+        "name": "2",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.2"
+      }
+    ]
+  },
+  "stepOver": {
+    "revision": 18,
+    "phase": "paused",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    },
+    "pause": {
+      "id": "05a073f5-3dca-4f9b-beb8-15e0d1f73586",
+      "reason": "step",
+      "thread_id": 10,
+      "all_threads_stopped": false,
+      "top_frame": {
+        "id": 14,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 158
+      }
+    }
+  },
+  "afterStep": {
+    "revision": 18,
+    "phase": "paused",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    },
+    "pause": {
+      "id": "05a073f5-3dca-4f9b-beb8-15e0d1f73586",
+      "reason": "step",
+      "thread_id": 10,
+      "all_threads_stopped": false,
+      "top_frame": {
+        "id": 14,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 158
+      }
+    }
+  },
+  "expiredPauseRead": {
+    "error": "pause_id is stale; read debugger_status for the current pause"
+  },
+  "postStepFrames": {
+    "frames": [
+      {
+        "id": 14,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 158
+      },
+      {
+        "id": 15,
+        "method": "LambdaForm$DMH/0x0000000800080400.invokeStaticInit(Object,Object)"
+      },
+      {
+        "id": 16,
+        "method": "LambdaForm$MH/0x0000000808002400.linkToTargetMethod(Object,Object)"
+      },
+      {
+        "id": 17,
+        "method": "McpCodeJob3.run()",
+        "line": 6
+      },
+      {
+        "id": 18,
+        "method": "ScriptRunner$CompiledScript.execute()",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner$CompiledScript",
+        "line": 21
+      },
+      {
+        "id": 19,
+        "method": "ScriptRunner.execute(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 178
+      },
+      {
+        "id": 20,
+        "method": "ScriptRunner.lambda$compileAndSchedule$3(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 152
+      },
+      {
+        "id": 21,
+        "method": "ScriptRunner$$Lambda/0x0000000807f0d058.run()"
+      },
+      {
+        "id": 22,
+        "method": "Thread.runWith(Object,Runnable)",
+        "binary_name": "java.lang.Thread",
+        "line": 443
+      },
+      {
+        "id": 23,
+        "method": "Thread.run()",
+        "binary_name": "java.lang.Thread",
+        "line": 435
+      }
+    ]
+  },
+  "continue": {
+    "revision": 19,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    }
+  },
+  "detach": {
+    "revision": 21,
+    "phase": "detached",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 54328,
+      "name": "Minecraft Client"
+    }
+  },
+  "terminalJob": {
+    "job_id": "8fa8615e-1c64-4b0d-aa8c-92733bd70b1f",
+    "state": "succeeded",
+    "result": 42
+  },
+  "sidecarExitCode": 0
+}

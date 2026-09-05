@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-05",
+  "userConfirmedF6Reconnect": true,
+  "previousMinecraftProcessId": 63752,
+  "companionProcessId": 65748,
+  "modSha256": "e5f0ccd4796001121b0f5b7485cca27b534a5d9f18c4aa4ab1d14f9dde3606af",
+  "companionSha256": "2ac8749d43da2e520e56f157411ba7013f7ddf6fa5c15850144477add2652c3e",
+  "client": {
+    "job_id": "d29f5a05-5a61-41bc-aae1-28a600dbf647",
+    "state": "succeeded",
+    "result": {
+      "worldLoaded": true,
+      "integratedServer": false,
+      "pid": 54328,
+      "thread": "Render thread"
+    }
+  },
+  "server": {
+    "job_id": "40201277-a6bf-4aa9-a1df-cf8c24bd239c",
+    "state": "failed",
+    "error": "The current server does not support TotalDebug server-side scripts"
+  },
+  "localServerConfig": {
+    "enableScripts": true,
+    "enableScriptsOnlyForOp": true
+  },
+  "startupErrorMatchObserved": false
+}

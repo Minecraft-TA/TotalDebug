@@ -162,6 +162,12 @@ Fixed locally in Companion `c2b3d1c`; live restart verification remains pending.
 
 Cached-class listing now shares the service's close lock and returns no entries after closure. Current runtime readers retain their existing identity and integrity checks. The fix avoids stale readers without weakening cache validation or adding a compatibility path. Source lookup on the deployed build already worked; this finding concerns a late refresh during runtime replacement.
 
+### C13. Evaluated array children advertise invalid Java expressions
+
+Fixed locally in Companion `672281c`; deployment replay is pending. Live stdio inspection returned an array child address ending in `.0`, which also feeds the UI's Copy Expression action. Evaluated results created debugger variable proxies without marking arrays as indexed, so the upstream adapter used field syntax.
+
+Result proxies now carry the indexed flag. Breakpoint actions omit the parent address when no expression addresses their result. A real-JDWP regression fails on `values.1` before the fix, then verifies both the corrected `values[1]` address and its evaluated value. The 16 affected integration/resolver tests and shaded packaging pass. See the progress record for the new artifact hash and deployment status.
+
 ## Distribution and verification blockers
 
 ### R1. The downloaded Companion cannot connect to the current mod
