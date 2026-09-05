@@ -140,7 +140,7 @@ plugins {
 }
 
 group = "com.github.minecraft_ta"
-version = providers.gradleProperty('releaseVersion').orElse('2.0.0-SNAPSHOT').get()
+version = providers.gradleProperty('releaseVersion').orElse('2.0.0').get()
 
 def useMavenLocal = providers.gradleProperty('totaldebugUseMavenLocal')
         .map { value -> value.toBoolean() }.orElse(false)

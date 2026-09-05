@@ -18,13 +18,13 @@ Evaluate expressions or Java statement bodies, inspect their results, and save r
 
 The debugger provides breakpoints, stepping, stack frames, variables, watches and breakpoint actions. Paused evaluation uses the selected frame. Code that invokes methods or changes fields can affect Minecraft, and cancellation does not undo those effects.
 
-See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior.
+See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior.
 
 ## Build and run
 
 Companion requires **Windows x64 and a full JDK 21**. The application JAR contains its dependencies, but no Java runtime.
 
-For coordinated source builds, follow TotalDebug's [dependency build order](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/BUILD_RELEASE.md), then run:
+For coordinated source builds, follow TotalDebug's [dependency build order](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/BUILD_RELEASE.md), then run:
 
 ```powershell
 .\gradlew.bat build -PtotaldebugUseMavenLocal=true
@@ -45,4 +45,4 @@ Contact sheets and individual captures are written under `build/ui-screenshots`.
 
 ## Integrations and storage
 
-The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
+The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
