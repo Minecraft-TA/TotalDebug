@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.BreakpointsWindow;
@@ -380,14 +379,11 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     private void refreshActions() {
-        boolean scripts = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION);
-        boolean debugger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_DEBUGGER);
-        this.scriptMenu.setVisible(scripts);
-        this.evaluateExpressionAction.setEnabled(
-                CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)
-        );
-        this.newScriptAction.setEnabled(scripts);
-        this.debuggerState.setVisible(debugger);
+        boolean hasProfile = CompanionApp.hasProfile();
+        this.scriptMenu.setVisible(hasProfile);
+        this.evaluateExpressionAction.setEnabled(CompanionApp.isConnected());
+        this.newScriptAction.setEnabled(hasProfile);
+        this.debuggerState.setVisible(hasProfile);
     }
 
     public void setGameStatus(ServiceStatus status) {

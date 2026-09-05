@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
@@ -27,14 +26,14 @@ public class ScriptView implements IEditorPanel {
         if (!JavaSnippetSource.isValidClassName(scriptName)) {
             throw new IllegalArgumentException("Invalid script name: " + scriptName);
         }
-        if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            throw new IllegalStateException("Script execution was not negotiated for this session");
+        if (!CompanionApp.hasProfile()) {
+            throw new IllegalStateException("Open a Minecraft profile before creating scripts");
         }
         this.path = CompanionApp.instancePaths().scripts().resolve(scriptName + FILE_EXTENSION);
         try {
             Files.createDirectories(this.path.getParent());
             if (!Files.exists(this.path)) {
-                this.text = initialSource(scriptName);
+                this.text = "";
                 com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(this.path, this.text);
             } else {
                 this.text = Files.readString(this.path);
@@ -42,10 +41,6 @@ public class ScriptView implements IEditorPanel {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    static String initialSource(String scriptName) {
-        return "";
     }
 
     @Override

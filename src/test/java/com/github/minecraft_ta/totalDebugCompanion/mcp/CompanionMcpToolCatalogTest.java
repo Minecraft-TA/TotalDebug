@@ -108,111 +108,46 @@ class CompanionMcpToolCatalogTest {
     }
 
     @Test
-    void symbolSearchRequiresQueryOrOwner() {
-        Map<String, Object> schema = tool("search_symbols").inputSchema();
-
-        assertEquals(
-                List.of(
-                        Map.of("required", List.of("query")),
-                        Map.of("required", List.of("owner"))
-                ),
-                schema.get("anyOf")
-        );
-    }
-
-    @Test
-    void usageTargetsAdvertiseTheirExactIdentityRequirements() {
-        Map<?, ?> target = (Map<?, ?>) ((Map<?, ?>) tool("find_usages").inputSchema().get("properties"))
-                .get("target");
-        List<?> variants = (List<?>) target.get("oneOf");
-
-        assertEquals(3, variants.size());
-        assertEquals(List.of("kind", "owner"), ((Map<?, ?>) variants.get(0)).get("required"));
-        assertEquals(
-                List.of("kind", "owner", "name", "descriptor"),
-                ((Map<?, ?>) variants.get(1)).get("required")
-        );
-        assertEquals(
-                List.of("kind", "owner", "name", "descriptor"),
-                ((Map<?, ?>) variants.get(2)).get("required")
-        );
-    }
-
-    @Test
-    void runtimeSourceAdvertisesClassAndMemberScopes() {
-        Map<?, ?> target = (Map<?, ?>) ((Map<?, ?>) tool("runtime_source").inputSchema().get("properties"))
-                .get("target");
-        List<?> variants = (List<?>) target.get("oneOf");
-
-        assertEquals(4, variants.size());
-        assertEquals(List.of("kind", "binary_name"), ((Map<?, ?>) variants.getFirst()).get("required"));
-        for (int index = 1; index < variants.size(); index++) {
-            assertEquals(
-                    List.of("kind", "owner", "name", "descriptor"),
-                    ((Map<?, ?>) variants.get(index)).get("required")
-            );
-        }
-    }
-
-    @Test
     void handlerValidationEnforcesTheAdvertisedSchemas() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CompanionMcpToolCatalog.validateRequest(request("search_symbols", Map.of()))
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CompanionMcpToolCatalog.validateRequest(request(
-                        "client_code_execute",
-                        Map.of("code", "return 1;", "unexpected", true)
-                ))
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CompanionMcpToolCatalog.validateRequest(request(
-                        "find_usages",
-                        Map.of("target", Map.of("kind", "method", "owner", "example.Owner"))
-                ))
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CompanionMcpToolCatalog.validateRequest(request(
-                        "runtime_source",
-                        Map.of("target", Map.of("kind", "method", "owner", "example.Owner"))
-                ))
-        );
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CompanionMcpToolCatalog.validateRequest(request(
-                        "runtime_source",
-                        Map.of("target", Map.of(
-                                "kind", "class",
-                                "binary_name", "example.Owner",
-                                "owner", "example.Owner"
-                        ))
-                ))
-        );
+        for (Map<String, Object> arguments : List.of(
+                Map.<String, Object>of("query", "run"),
+                Map.<String, Object>of("owner", "example.Owner")
+        )) {
+            CompanionMcpToolCatalog.validateRequest(request("search_symbols", arguments));
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> CompanionMcpToolCatalog.validateRequest(request("search_symbols", Map.of())));
+        assertThrows(IllegalArgumentException.class,
+                () -> CompanionMcpToolCatalog.validateRequest(request("client_code_execute",
+                        Map.of("code", "return 1;", "unexpected", true))));
 
-        CompanionMcpToolCatalog.validateRequest(request(
-                "find_usages",
-                Map.of("target", Map.of("kind", "class", "owner", "example.Owner"))
-        ));
-        CompanionMcpToolCatalog.validateRequest(request(
-                "runtime_source",
-                Map.of("target", Map.of("kind", "class", "binary_name", "example.Owner"))
-        ));
+        for (String tool : List.of("find_usages", "runtime_source")) {
+            List<Map<String, Object>> targets = new java.util.ArrayList<>(List.of(
+                    Map.of("kind", "class", tool.equals("find_usages") ? "owner" : "binary_name", "example.Owner"),
+                    Map.of("kind", "field", "owner", "example.Owner", "name", "value", "descriptor", "I"),
+                    Map.of("kind", "method", "owner", "example.Owner", "name", "run", "descriptor", "()V")
+            ));
+            if (tool.equals("runtime_source")) {
+                targets.add(Map.of("kind", "record_component", "owner", "example.Owner", "name", "value", "descriptor", "I"));
+            }
+            for (Map<String, Object> target : targets) {
+                CompanionMcpToolCatalog.validateRequest(request(tool, Map.of("target", target)));
+                for (String required : target.keySet()) {
+                    var incomplete = new java.util.HashMap<>(target);
+                    incomplete.remove(required);
+                    assertThrows(IllegalArgumentException.class,
+                            () -> CompanionMcpToolCatalog.validateRequest(request(tool, Map.of("target", incomplete))),
+                            tool + " must require " + required + " for " + target.get("kind"));
+                }
+            }
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> CompanionMcpToolCatalog.validateRequest(request("runtime_source", Map.of("target",
+                        Map.of("kind", "class", "binary_name", "example.Owner", "owner", "example.Owner")))));
     }
 
     private static McpSchema.CallToolRequest request(String name, Map<String, Object> arguments) {
         return McpSchema.CallToolRequest.builder(name).arguments(arguments).build();
-    }
-
-    private static McpSchema.Tool tool(String name) {
-        return CompanionMcpToolCatalog.specifications(request -> null).stream()
-                .map(specification -> specification.tool())
-                .filter(tool -> tool.name().equals(name))
-                .findFirst()
-                .orElseThrow();
     }
 
     private static void assertValid(McpSchema.Tool tool, Map<String, Object> value) {

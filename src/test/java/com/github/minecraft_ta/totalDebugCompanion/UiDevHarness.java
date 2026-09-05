@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
@@ -63,8 +62,7 @@ import javax.tools.ToolProvider;
  * {@link CompanionApp#configureLookAndFeel()} the real startup path uses rather than re-implementing
  * it, so what you see is what the app does.
  *
- * <p>No session is negotiated, so capability-gated UI (Tools, Script menus) is absent, and
-     * Search Everywhere uses the generated sample class index. Everything else is real.
+ * <p>The UI uses an offline sample profile, and Search Everywhere uses the generated sample class index.
  *
  * <p>Press F9 for FlatLaf's component inspector, F10 for the UI defaults inspector.
  */
@@ -866,8 +864,7 @@ public final class UiDevHarness {
         CompanionProfile profile = new CompanionProfile(
                 "ui-dev",
                 root,
-                workspace,
-                CompanionProtocol.SUPPORTED_CAPABILITIES
+                workspace
         );
         CompanionApp.configureWithoutSession(profile, indexFile, List.of(sampleClasses), "ui-dev");
         writeSampleSource(sample);
@@ -980,6 +977,9 @@ public final class UiDevHarness {
                 startThemeCycling();
             }
             MainWindow.INSTANCE.setSize(1280, 720);
+            if (MainWindow.INSTANCE.isAutoRequestFocus()) {
+                throw new IllegalStateException("Showing the main window must not automatically request focus");
+            }
             boolean verifySearchEverywhere = Arrays.asList(args).contains(
                     "--verify-search-everywhere-interactions"
             );

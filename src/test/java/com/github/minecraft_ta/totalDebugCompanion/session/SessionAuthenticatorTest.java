@@ -14,28 +14,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionAuthenticatorTest {
     @Test
-    void acceptsTheExactTokenAndIntersectsCapabilities() {
-        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value", 0b0111);
+    void acceptsTheExactVersionAndToken() {
+        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value");
 
         ServerHelloMessage response = authenticator.authenticate(hello(
                 CompanionProtocol.VERSION,
-                "correct-token-value",
-                0b1111
+                "correct-token-value"
         ));
 
         assertTrue(response.accepted());
-        assertEquals(0b0111, response.capabilities());
         assertEquals("", response.rejectionReason());
     }
 
     @Test
     void rejectsAWrongTokenWithAnExactReason() {
-        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value", 0b0111);
+        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value");
 
         ServerHelloMessage response = authenticator.authenticate(hello(
                 CompanionProtocol.VERSION,
-                "wrong-token-value",
-                0b0111
+                "wrong-token-value"
         ));
 
         assertFalse(response.accepted());
@@ -44,25 +41,24 @@ class SessionAuthenticatorTest {
 
     @Test
     void rejectsAVersionMismatchWithBothVersions() {
-        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value", 0b0111);
+        SessionAuthenticator authenticator = new SessionAuthenticator("correct-token-value");
 
-        ServerHelloMessage response = authenticator.authenticate(hello(1, "correct-token-value", 0b0111));
+        ServerHelloMessage response = authenticator.authenticate(hello(1, "correct-token-value"));
 
         assertFalse(response.accepted());
         assertEquals("Unsupported protocol version: expected " + CompanionProtocol.VERSION + ", got 1", response.rejectionReason());
     }
 
-    private static ClientHelloMessage hello(int version, String token, long capabilities) {
+    private static ClientHelloMessage hello(int version, String token) {
         byte[] tokenBytes = token.getBytes(StandardCharsets.UTF_8);
         byte[] value = "x".getBytes(StandardCharsets.UTF_8);
         ByteBuffer buffer = ByteBuffer.allocate(
-                Integer.BYTES + Integer.BYTES + tokenBytes.length + Long.BYTES
+                Integer.BYTES + Integer.BYTES + tokenBytes.length
                         + 3 * (Integer.BYTES + value.length)
         );
         buffer.putInt(version);
         buffer.putInt(tokenBytes.length);
         buffer.put(tokenBytes);
-        buffer.putLong(capabilities);
         for (int index = 0; index < 3; index++) {
             buffer.putInt(value.length);
             buffer.put(value);

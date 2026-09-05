@@ -33,7 +33,6 @@ import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightSer
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -79,7 +78,6 @@ import java.util.function.Consumer;
 public final class CompanionApp {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
     private static final CountDownLatch EXIT = new CountDownLatch(1);
-    private static final Object DEBUGGER_CONTROLLER_LOCK = new Object();
 
     public static Server SERVER;
     private static CompanionSession session;
@@ -184,7 +182,7 @@ public final class CompanionApp {
                 }
 
                 @Override
-                public void connected(long capabilities) {
+                public void connected() {
                     updateGameStatus(new ServiceStatus(
                             ServiceStatus.State.AVAILABLE,
                             "Connected",
@@ -281,12 +279,11 @@ public final class CompanionApp {
     }
 
     private static synchronized void activateSessionProfile(
-            com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage hello,
-            long capabilities
+            com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage hello
     ) throws IOException {
         CompanionProfile requested;
         try {
-            requested = CompanionProfile.fromHello(hello, capabilities);
+            requested = CompanionProfile.fromHello(hello);
         } catch (IllegalArgumentException exception) {
             throw new IOException("Invalid Minecraft profile", exception);
         }
@@ -432,6 +429,7 @@ public final class CompanionApp {
     }
 
     static void configureWithoutSession(CompanionProfile developmentProfile) {
+        debuggerController = createDebuggerController();
         try {
             activateProfile(Objects.requireNonNull(developmentProfile, "developmentProfile"), false);
         } catch (IOException exception) {
@@ -506,7 +504,7 @@ public final class CompanionApp {
     private static void setupDataDirectories() throws IOException {
         setupDataDirectories(
                 getRootPath(),
-                supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)
+                hasProfile()
         );
     }
 
@@ -536,7 +534,7 @@ public final class CompanionApp {
     private static void startMcpServer() throws Exception {
         CodeModeJobService jobs = new CodeModeJobService(
                 SERVER,
-                () -> hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION),
+                () -> isConnected(),
                 CompanionApp::runtimeContext
         );
         CompanionMcpServer server = new CompanionMcpServer(launchConfiguration.appHome(), jobs);
@@ -703,15 +701,6 @@ public final class CompanionApp {
         EXIT.countDown();
     }
 
-    public static boolean hasCapability(long capability) {
-        return session != null && session.hasCapability(capability);
-    }
-
-    public static boolean supportsCapability(long capability) {
-        CompanionProfile current = profile;
-        return current != null && (current.supportedCapabilities() & capability) == capability;
-    }
-
     public static boolean isConnected() {
         return session != null && session.isConnected();
     }
@@ -814,17 +803,10 @@ public final class CompanionApp {
 
     public static DebuggerSessionController getDebuggerController() {
         DebuggerSessionController controller = debuggerController;
-        if (controller != null) {
-            return controller;
+        if (controller == null) {
+            throw new IllegalStateException("Debugger controller is not initialized");
         }
-        synchronized (DEBUGGER_CONTROLLER_LOCK) {
-            controller = debuggerController;
-            if (controller == null) {
-                controller = createDebuggerController();
-                debuggerController = controller;
-            }
-            return controller;
-        }
+        return controller;
     }
 
     public static boolean isDebuggerConnected() {

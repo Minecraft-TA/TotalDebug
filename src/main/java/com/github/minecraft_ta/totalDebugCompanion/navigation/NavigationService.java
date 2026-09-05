@@ -14,7 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -375,7 +374,7 @@ public final class NavigationService {
         Path scripts = CompanionApp.instancePaths().scripts().toAbsolutePath().normalize();
         if (path.getParent().equals(scripts)
                 && fileName.endsWith(ScriptView.FILE_EXTENSION)
-                && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                && CompanionApp.hasProfile()) {
             String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,

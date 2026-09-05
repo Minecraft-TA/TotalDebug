@@ -19,6 +19,7 @@ import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
+import com.github.tth05.scnet.message.impl.DefaultMessageBus;
 
 import javax.swing.SwingUtilities;
 import java.io.IOException;
@@ -37,14 +38,14 @@ public final class CompanionSession implements AutoCloseable {
 
     @FunctionalInterface
     public interface AttachmentHandler {
-        void attach(ClientHelloMessage hello, long capabilities) throws IOException;
+        void attach(ClientHelloMessage hello) throws IOException;
     }
 
     public interface Listener {
         default void connecting() {
         }
 
-        default void connected(long capabilities) {
+        default void connected() {
         }
 
         default void disconnected() {
@@ -62,14 +63,13 @@ public final class CompanionSession implements AutoCloseable {
     private final AttachmentHandler attachmentHandler;
     private final Listener listener;
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
-    private volatile long capabilities;
 
     public CompanionSession(String expectedToken) {
-        this(expectedToken, (hello, capabilities) -> { }, new Listener() { });
+        this(expectedToken, hello -> { }, new Listener() { });
     }
 
     public CompanionSession(String expectedToken, AttachmentHandler attachmentHandler, Listener listener) {
-        this.authenticator = new SessionAuthenticator(expectedToken, CompanionProtocol.SUPPORTED_CAPABILITIES);
+        this.authenticator = new SessionAuthenticator(expectedToken);
         this.attachmentHandler = Objects.requireNonNull(attachmentHandler, "attachmentHandler");
         this.listener = Objects.requireNonNull(listener, "listener");
         configureTransport();
@@ -97,11 +97,6 @@ public final class CompanionSession implements AutoCloseable {
         return this.server;
     }
 
-    public boolean hasCapability(long capability) {
-        return this.state.get() == State.AUTHENTICATED
-                && (this.capabilities & capability) == capability;
-    }
-
     public boolean isConnected() {
         return this.state.get() == State.AUTHENTICATED && this.server.isClientConnected();
     }
@@ -119,6 +114,16 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     private void configureTransport() {
+        this.server.setMessageBus(new DefaultMessageBus() {
+            @Override
+            public void post(AbstractMessage message) {
+                if (!(message instanceof ClientHelloMessage) && state.get() != State.AUTHENTICATED) {
+                    rejectAndClose("Session authentication is required before " + message.getClass().getSimpleName());
+                    return;
+                }
+                super.post(message);
+            }
+        });
         this.server.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE);
         this.server.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH);
     }
@@ -158,29 +163,11 @@ public final class CompanionSession implements AutoCloseable {
 
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
-        this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, message -> runFeature(
-                CompanionProtocol.CAPABILITY_RUNTIME_INVENTORY,
-                "RuntimeInventory",
-                () -> this.listener.runtimeInventory(message)
-        ));
-        this.server.getMessageBus().listenAlways(DebugTargetMessage.class, message -> runFeature(
-                CompanionProtocol.CAPABILITY_DEBUGGER,
-                "DebugTarget",
-                () -> this.listener.debugTarget(message)
-        ));
-        this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> runFeature(
-                CompanionProtocol.CAPABILITY_CODE_VIEW,
-                "OpenClass",
-                () -> OpenClassMessage.handle(message)
-        ));
-        this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message -> runFeature(
-                CompanionProtocol.CAPABILITY_FOCUS_WINDOW,
-                "FocusWindow",
-                () -> SwingUtilities.invokeLater(com.github.minecraft_ta.totalDebugCompanion.CompanionApp::focusWindow)
-        ));
-        guardFeature(RunScriptMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "RunScript");
-        guardFeature(ExecutionResultMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "ExecutionResult");
-        guardFeature(StopScriptMessage.class, CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION, "StopScript");
+        this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
+        this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
+        this.server.getMessageBus().listenAlways(OpenClassMessage.class, OpenClassMessage::handle);
+        this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
+                SwingUtilities.invokeLater(com.github.minecraft_ta.totalDebugCompanion.CompanionApp::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {
             @Override
             public void onConnected() {
@@ -194,7 +181,6 @@ public final class CompanionSession implements AutoCloseable {
                 State previous = CompanionSession.this.state.getAndUpdate(state ->
                         state == State.CLOSED ? State.CLOSED : State.WAITING_FOR_HELLO
                 );
-                CompanionSession.this.capabilities = 0;
                 if (previous != State.CLOSED) {
                     CompanionSession.this.listener.disconnected();
                 }
@@ -219,34 +205,17 @@ public final class CompanionSession implements AutoCloseable {
             return;
         }
         try {
-            this.attachmentHandler.attach(hello, response.capabilities());
+            this.attachmentHandler.attach(hello);
         } catch (IOException | RuntimeException exception) {
             String message = exception.getMessage();
             rejectAndClose(message == null || message.isBlank() ? "Profile rejected" : message);
             return;
         }
 
-        this.capabilities = response.capabilities();
         this.state.set(State.AUTHENTICATED);
         this.server.getMessageProcessor().enqueueMessage(response);
         this.server.getMessageProcessor().enqueueMessage(new ReadyMessage());
-        this.listener.connected(this.capabilities);
-    }
-
-    private void runFeature(long capability, String featureName, Runnable operation) {
-        if (!hasCapability(capability)) {
-            rejectAndClose(featureName + " is unavailable");
-            return;
-        }
-        operation.run();
-    }
-
-    private <T extends com.github.tth05.scnet.message.AbstractMessage> void guardFeature(
-            Class<T> messageClass,
-            long capability,
-            String featureName
-    ) {
-        this.server.getMessageBus().listenAlways(messageClass, message -> runFeature(capability, featureName, () -> { }));
+        this.listener.connected();
     }
 
     private void rejectAndClose(String reason) {
@@ -256,7 +225,6 @@ public final class CompanionSession implements AutoCloseable {
         }
         this.server.getMessageProcessor().enqueueMessage(ServerHelloMessage.rejected(reason));
         this.server.closeClientAfterPendingWrites().whenComplete((ignored, failure) -> {
-            this.capabilities = 0;
             this.state.compareAndSet(State.REJECTING, State.WAITING_FOR_HELLO);
         });
     }
@@ -264,7 +232,6 @@ public final class CompanionSession implements AutoCloseable {
     @Override
     public void close() {
         State previous = this.state.getAndSet(State.CLOSED);
-        this.capabilities = 0;
         this.server.close();
         if (previous == State.AUTHENTICATED) {
             this.listener.disconnected();

@@ -42,6 +42,7 @@ class ExpressionScopeAnalyzerTest {
     static void initializeClassIndex() throws IOException {
         CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
+                classBytes(String.class),
                 classBytes(ExternalCompletionType.class),
                 classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.a.Blocks.class),
                 classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks.class)
@@ -127,20 +128,7 @@ class ExpressionScopeAnalyzerTest {
     }
 
     @Test
-    void completesMembersOfAnIndexedCrossFileTypeFromAParameter() throws Exception {
-        String externalSource = """
-                package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
-                public class ExternalCompletionType {
-                    private String privateValue;
-                    public String externalMethod() { return privateValue; }
-                    public static String externalStatic() { return "static"; }
-                }
-                """;
-        ASTCache.update("external-completion-type", "ExternalCompletionType", externalSource);
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
-        while (ASTCache.getFromCache("external-completion-type") == null && System.nanoTime() < deadline) {
-            Thread.sleep(10);
-        }
+    void completesMembersOfAnIndexedCrossFileTypeFromAParameter() {
         String source = """
                 package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
                 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
@@ -158,7 +146,40 @@ class ExpressionScopeAnalyzerTest {
 
         assertTrue(names(completions).containsAll(List.of("externalMethod()", "externalStatic()")),
                 names(completions).toString());
-        ASTCache.removeFromCache("external-completion-type");
+    }
+
+    @Test
+    void ignoresUnrelatedOpenTypesWithTheSameSimpleName() throws Exception {
+        String key = "unrelated-external-completion-type";
+        var parsed = new java.util.concurrent.CompletableFuture<Void>();
+        Runnable removeListener = ASTCache.addChangeListener(key, (unit, version) -> parsed.complete(null));
+        try {
+            ASTCache.update(key, "ExternalCompletionType", """
+                    package unrelated;
+                    class ExternalCompletionType {
+                        int unrelatedField;
+                    }
+                    """);
+            parsed.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            String source = """
+                    import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
+                    class Sample {
+                        void run(ExternalCompletionType parameter) {
+                            parameter.
+                        }
+                    }
+                    """;
+            var unit = ASTCache.rawParse("Sample", source);
+            List<String> completions = names(ExpressionScopeAnalyzer.complete(
+                    unit, source.indexOf("parameter."), "parameter.", "parameter.".length()
+            ));
+
+            assertTrue(completions.containsAll(List.of("externalMethod()", "externalStatic()")), completions.toString());
+            assertFalse(completions.contains("unrelatedField"), completions.toString());
+        } finally {
+            removeListener.run();
+            ASTCache.removeFromCache(key);
+        }
     }
 
     @Test

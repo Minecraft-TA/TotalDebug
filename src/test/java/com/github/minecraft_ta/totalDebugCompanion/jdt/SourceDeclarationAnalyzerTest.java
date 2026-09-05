@@ -53,7 +53,7 @@ final class SourceDeclarationAnalyzerTest {
     static void initializeClassIndex() throws Exception {
         String resource = "/java/lang/Object.class";
         try (var stream = Objects.requireNonNull(Object.class.getResourceAsStream(resource), resource)) {
-            CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(stream.readAllBytes())));
+            CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(stream.readAllBytes())));
         }
     }
 

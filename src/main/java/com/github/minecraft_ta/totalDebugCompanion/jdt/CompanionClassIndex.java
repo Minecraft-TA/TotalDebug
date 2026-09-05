@@ -2,22 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.tth05.jindex.ClassIndex;
 
-import java.nio.file.Path;
 import java.util.Objects;
 
 public final class CompanionClassIndex {
     private static volatile ClassIndex classIndex;
 
     private CompanionClassIndex() {
-    }
-
-    public static synchronized void open(Path indexFile) {
-        ensureUninitialized();
-        classIndex = ClassIndex.fromFile(Objects.requireNonNull(indexFile, "indexFile").toString());
-    }
-
-    public static synchronized void replace(Path indexFile) {
-        replace(ClassIndex.fromFile(Objects.requireNonNull(indexFile, "indexFile").toString()));
     }
 
     public static synchronized void replace(ClassIndex replacement) {
@@ -31,11 +21,6 @@ public final class CompanionClassIndex {
 
     public static boolean isOpen() {
         return classIndex != null;
-    }
-
-    static synchronized void initialize(ClassIndex index) {
-        ensureUninitialized();
-        classIndex = Objects.requireNonNull(index, "index");
     }
 
     public static ClassIndex get() {
@@ -54,9 +39,4 @@ public final class CompanionClassIndex {
         }
     }
 
-    private static void ensureUninitialized() {
-        if (classIndex != null) {
-            throw new IllegalStateException("Companion class index is already initialized");
-        }
-    }
 }

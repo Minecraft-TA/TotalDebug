@@ -58,15 +58,11 @@ public final class SnippetExecutionService implements AutoCloseable {
     }
 
     private int nextId() {
-        while (true) {
-            int id = this.nextId.getAndDecrement();
-            if (id <= 1_000_000_000) {
-                throw new IllegalStateException("Transient snippet id space exhausted");
-            }
-            if (!this.runs.containsKey(id)) {
-                return id;
-            }
+        int id = this.nextId.getAndDecrement();
+        if (id <= 1_000_000_000) {
+            throw new IllegalStateException("Transient snippet id space exhausted");
         }
+        return id;
     }
 
     private void cancel(int id) {

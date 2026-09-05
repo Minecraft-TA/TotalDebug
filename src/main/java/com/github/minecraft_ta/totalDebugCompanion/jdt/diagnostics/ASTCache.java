@@ -42,7 +42,6 @@ public class ASTCache {
                 entry.version = finalVersion;
                 entry.unit = ast;
                 entry.contents = editorContents;
-                entry.generatedContents = source.text();
                 entry.sourceMap = source.sourceMap();
                 entry.privilegedAccess = source.privilegedAccess();
             }
@@ -123,15 +122,6 @@ public class ASTCache {
         }
     }
 
-    public static List<CompilationUnit> cachedUnits() {
-        synchronized (CACHE) {
-            return CACHE.values().stream()
-                    .map(entry -> entry.unit)
-                    .filter(Objects::nonNull)
-                    .toList();
-        }
-    }
-
     private static void notifyListeners(String key, CompilationUnit ast, int version) {
         var listeners = LISTENERS.get(key);
         if (listeners == null) {
@@ -147,7 +137,6 @@ public class ASTCache {
         public int version;
         public CompilationUnit unit;
         public String contents;
-        public String generatedContents;
         public JavaSourceMap sourceMap = JavaSourceMap.IDENTITY;
         public boolean privilegedAccess;
     }

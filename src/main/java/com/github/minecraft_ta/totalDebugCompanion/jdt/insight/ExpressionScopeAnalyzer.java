@@ -2,7 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.insight;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionRange;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -339,19 +338,7 @@ public final class ExpressionScopeAnalyzer {
 
     private static AbstractTypeDeclaration findType(ASTNode root, String name) {
         String normalized = name.replace("[]", "");
-        AbstractTypeDeclaration found = findTypeInRoot(root, normalized);
-        if (found != null) return found;
-        for (org.eclipse.jdt.core.dom.CompilationUnit cached : ASTCache.cachedUnits()) {
-            if (cached != root.getRoot()) {
-                found = findTypeInRoot(cached, normalized);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static AbstractTypeDeclaration findTypeInRoot(ASTNode root, String name) {
-        String simple = name.substring(name.lastIndexOf('.') + 1);
+        String simple = normalized.substring(normalized.lastIndexOf('.') + 1);
         final AbstractTypeDeclaration[] found = {null};
         root.accept(new ASTVisitor() {
             @Override

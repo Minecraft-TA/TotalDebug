@@ -11,8 +11,7 @@ import java.util.Objects;
 public record CompanionProfile(
         String id,
         Path dataDirectory,
-        Path workspaceDirectory,
-        long supportedCapabilities
+        Path workspaceDirectory
 ) {
     public CompanionProfile {
         if (Objects.requireNonNull(id, "id").isBlank()) {
@@ -22,9 +21,9 @@ public record CompanionProfile(
         workspaceDirectory = Objects.requireNonNull(workspaceDirectory, "workspaceDirectory").toAbsolutePath().normalize();
     }
 
-    public static CompanionProfile fromHello(ClientHelloMessage hello, long capabilities) {
+    public static CompanionProfile fromHello(ClientHelloMessage hello) {
         return new CompanionProfile(hello.profileId(), Path.of(hello.dataDirectory()),
-                Path.of(hello.workspaceDirectory()), capabilities);
+                Path.of(hello.workspaceDirectory()));
     }
 
     public void writeAtomically(Path profileFile) throws IOException {
@@ -33,7 +32,6 @@ public record CompanionProfile(
         json.addProperty("id", id);
         json.addProperty("instanceHome", dataDirectory.toString());
         json.addProperty("gameDirectory", workspaceDirectory.toString());
-        json.addProperty("capabilities", Long.toUnsignedString(supportedCapabilities));
         JsonFiles.write(profileFile, json);
     }
 
@@ -45,8 +43,7 @@ public record CompanionProfile(
             }
             return new CompanionProfile(JsonFiles.string(json, "id"),
                     Path.of(JsonFiles.string(json, "instanceHome")),
-                    Path.of(JsonFiles.string(json, "gameDirectory")),
-                    Long.parseUnsignedLong(JsonFiles.string(json, "capabilities")));
+                    Path.of(JsonFiles.string(json, "gameDirectory")));
         } catch (RuntimeException exception) {
             throw new IOException("Invalid Companion profile " + profileFile + ": " + exception.getMessage(), exception);
         }

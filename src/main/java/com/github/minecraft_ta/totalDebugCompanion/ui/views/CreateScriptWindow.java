@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
@@ -25,8 +24,8 @@ import java.util.function.Supplier;
 public class CreateScriptWindow extends JFrame {
 
     public CreateScriptWindow(EditorTabs editorTabs) {
-        if (!CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
-            throw new IllegalStateException("Script execution was not negotiated for this session");
+        if (!CompanionApp.hasProfile()) {
+            throw new IllegalStateException("Open a Minecraft profile before creating scripts");
         }
         var header = new JPanel();
         header.add(new JLabel("New Script"));

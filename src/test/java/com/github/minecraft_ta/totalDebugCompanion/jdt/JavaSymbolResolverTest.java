@@ -51,7 +51,7 @@ final class JavaSymbolResolverTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.initialize(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(List.class)

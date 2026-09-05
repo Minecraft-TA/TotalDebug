@@ -10,11 +10,9 @@ import java.util.Objects;
 
 public final class SessionAuthenticator {
     private final byte[] expectedToken;
-    private final long supportedCapabilities;
 
-    public SessionAuthenticator(String expectedToken, long supportedCapabilities) {
+    public SessionAuthenticator(String expectedToken) {
         this.expectedToken = Objects.requireNonNull(expectedToken, "expectedToken").getBytes(StandardCharsets.UTF_8);
-        this.supportedCapabilities = supportedCapabilities;
     }
 
     public synchronized ServerHelloMessage authenticate(ClientHelloMessage hello) {
@@ -32,6 +30,6 @@ public final class SessionAuthenticator {
             return ServerHelloMessage.rejected("Authentication token rejected");
         }
 
-        return ServerHelloMessage.accepted(hello.requestedCapabilities() & this.supportedCapabilities);
+        return ServerHelloMessage.accept();
     }
 }

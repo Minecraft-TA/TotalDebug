@@ -9,6 +9,9 @@ import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
+import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -16,6 +19,7 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,12 +30,34 @@ class CompanionSessionRejectionTest {
     Path temporaryDirectory;
 
     @Test
+    void unauthenticatedResultsNeverReachApplicationListeners() throws Exception {
+        String token = "correct-token-value-1234567890abcdef";
+        CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
+        AtomicInteger delivered = new AtomicInteger();
+        try (CompanionSession session = new CompanionSession(token);
+             Client client = configuredClient(null)) {
+            session.server().getMessageBus().listenAlways(ExecutionResultMessage.class,
+                    message -> delivered.incrementAndGet());
+            client.getMessageProcessor().registerMessage(CompanionProtocol.EXECUTION_RESULT, TestExecutionResult.class);
+            session.bindAndPublish(configuration);
+            CompletableFuture<TestServerHello> rejection = connect(client,
+                    CompanionSessionDescriptor.read(configuration.descriptorFile()));
+
+            client.getMessageProcessor().enqueueMessage(new TestExecutionResult());
+
+            assertFalse(rejection.get(2, TimeUnit.SECONDS).accepted);
+            awaitDisconnected(client);
+            assertEquals(0, delivered.get());
+        }
+    }
+
+    @Test
     void rejectedSendReturnsFalseWhileTheTransportEndsTheSession() throws Exception {
         String token = "correct-token-value-1234567890abcdef";
         CountDownLatch authenticated = new CountDownLatch(1);
         CountDownLatch releaseTransport = new CountDownLatch(1);
         CompanionSession.Listener listener = new CompanionSession.Listener() {
-            @Override public void connected(long capabilities) {
+            @Override public void connected() {
                 authenticated.countDown();
                 try {
                     assertTrue(releaseTransport.await(5, TimeUnit.SECONDS));
@@ -42,7 +68,7 @@ class CompanionSessionRejectionTest {
             }
         };
         CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
-        try (CompanionSession session = new CompanionSession(token, (hello, capabilities) -> { }, listener);
+        try (CompanionSession session = new CompanionSession(token, hello -> { }, listener);
              Client client = configuredClient(token)) {
             try {
                 session.bindAndPublish(configuration);
@@ -90,7 +116,7 @@ class CompanionSessionRejectionTest {
             }
         };
 
-        try (CompanionSession session = new CompanionSession(token, (hello, capabilities) -> { }, listener);
+        try (CompanionSession session = new CompanionSession(token, hello -> { }, listener);
              Client first = configuredClient(token);
              Client second = configuredClient(token)) {
             session.bindAndPublish(configuration);
@@ -142,7 +168,9 @@ class CompanionSessionRejectionTest {
         client.addConnectionListener(new IConnectionListener() {
             @Override
             public void onConnected() {
-                client.getMessageProcessor().enqueueMessage(new TestClientHello(token));
+                if (token != null) {
+                    client.getMessageProcessor().enqueueMessage(new TestClientHello(token));
+                }
             }
 
             @Override
@@ -167,6 +195,14 @@ class CompanionSessionRejectionTest {
         assertFalse(client.isConnected());
     }
 
+    public static final class TestExecutionResult extends AbstractMessageOutgoing {
+        @Override
+        public void write(ByteBufferOutputStream stream) {
+            new ExecutionResultMessage(1, new ExecutionResult(ExecutionResult.Status.RUN_COMPLETED,
+                    ExecutionText.empty(), null, ExecutionText.empty())).write(stream);
+        }
+    }
+
     public static final class TestClientHello extends AbstractMessageOutgoing {
         private final String token;
 
@@ -178,7 +214,6 @@ class CompanionSessionRejectionTest {
         public void write(ByteBufferOutputStream messageStream) {
             messageStream.writeInt(CompanionProtocol.VERSION);
             messageStream.writeString(this.token);
-            messageStream.writeLong(CompanionProtocol.CORE_CAPABILITIES);
             messageStream.writeString("profile");
             messageStream.writeString("data");
             messageStream.writeString("workspace");
@@ -193,7 +228,6 @@ class CompanionSessionRejectionTest {
         public void read(ByteBufferInputStream messageStream) {
             assertEquals(CompanionProtocol.VERSION, messageStream.readInt());
             this.accepted = messageStream.readBoolean();
-            messageStream.readLong();
             this.reason = messageStream.readString();
         }
     }

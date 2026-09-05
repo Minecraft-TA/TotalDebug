@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProtocol;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 
@@ -100,7 +99,7 @@ public class FileTreeView extends JScrollPane {
             boolean scriptFile = lowerName.endsWith(ScriptView.FILE_EXTENSION);
             if (scriptFile
                     && node.getParent().getUserObject().getName().equals("scripts")
-                    && CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+                    && CompanionApp.hasProfile()) {
                 navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
             } else {
                 navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
@@ -132,7 +131,7 @@ public class FileTreeView extends JScrollPane {
         }
 
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
-        if (CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)) {
+        if (CompanionApp.hasProfile()) {
             var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(
                     CompanionApp.instancePaths().scripts(),
                     true
