@@ -2,7 +2,7 @@
 
 Audited 2026-09-05. Status: not ready to release. This report covers the four repositories as one product, verifies the earlier audit, and defines the work needed for a clean release. It is an audit and implementation backlog, not release approval.
 
-Implementation update: C1-C4 and C7 are fixed in committed local slices; C9 passes at the completed task baseline. C10 is a new reproduced finding from the implementation follow-up. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the next choice. The original findings preserve their audit evidence; the remaining release gates are open.
+Implementation update: C1-C4, C6, C7 and C10 are fixed in local stabilization slices; C9 passes at the completed task baseline. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the agreed scope. The original findings below preserve their audit evidence; the remaining release gates are open.
 
 The immediate work is correctness, paired distribution, reproducible verification, and removal of obsolete production paths. More feature development is not needed to make this release useful.
 
@@ -154,7 +154,7 @@ Required outcome: give each execution an identity that survives client/server ro
 
 ### R1. The downloaded Companion cannot connect to the current mod
 
-[companion-release.properties](../src/main/resources/META-INF/totaldebug/companion-release.properties) still pins Companion 2.0.0 and SHA-256 `c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a`. The published release corresponds to commit `428f391`; its protocol is 2. Both current applications require protocol 9. The [published release page](https://github.com/Minecraft-TA/TotalDebugCompanion/releases/tag/v2.0.0) and checked-in tag source were verified.
+[companion-release.properties](../src/main/resources/META-INF/totaldebug/companion-release.properties) still pins Companion 2.0.0 and SHA-256 `c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a`. The published release corresponds to commit `428f391`; its protocol is 2. Both current applications require protocol 10 after the cancellation-status change, up from 9 at the original audit. The [published release page](https://github.com/Minecraft-TA/TotalDebugCompanion/releases/tag/v2.0.0) and checked-in tag source were verified.
 
 An existing installation is a second failure path. [CompanionAppInstaller:86](../src/main/java/com/github/minecraft_ta/totaldebug/client/companion/CompanionAppInstaller.java) accepts any existing regular `TotalDebugCompanion.jar` without checking its expected hash/version. Merely updating the download pin does not update that file. A corrupt or mismatched installed JAR can remain indefinitely.
 

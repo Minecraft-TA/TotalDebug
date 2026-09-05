@@ -15,19 +15,20 @@ import java.util.List;
 public class ScriptSessionIdentityProbe {
     public static void main(String[] args) {
         List<String> received = new ArrayList<>();
+        List<Integer> executions = new ArrayList<>();
         try (ClientScriptService service = new ClientScriptService(
                 (id, result) -> received.add(result.logs().text()), new TickTaskScheduler(),
                 new ServerScriptTransport() {
                     public Availability availability() { return Availability.supported(); }
-                    public void run(RunServerScriptPayload payload) { }
+                    public void run(RunServerScriptPayload payload) { executions.add(payload.scriptId()); }
                     public void stop(StopServerScriptPayload payload) { }
                 })) {
             service.handleRunRequest(request(41));
             service.close(); // The Companion session-close handler uses this method; Minecraft remains running.
             service.handleRunRequest(request(41));
-            new ForwardedExecutionResult(41, ExecutionResult.completed("old session", null))
+            new ForwardedExecutionResult(executions.getFirst(), ExecutionResult.completed("old session", null))
                     .toPayloads().forEach(service::handleForwardedPayload);
-            new ForwardedExecutionResult(41, ExecutionResult.completed("new session", null))
+            new ForwardedExecutionResult(executions.getLast(), ExecutionResult.completed("new session", null))
                     .toPayloads().forEach(service::handleForwardedPayload);
             System.out.println("Received completions after session replacement: " + received);
             if (!received.equals(List.of("new session"))) {

@@ -4,7 +4,7 @@ Updated 2026-09-05 after discussion with the user. The release will retain the c
 
 The project has a usable foundation. SCNet's reproduced lifecycle defects were repairable within its existing transport responsibilities. Shared compilation, runtime discovery and native indexing already have distinct owners. There is no evidence here that a general application rewrite would improve release readiness.
 
-The unresolved correctness problems concentrate in execution semantics and ownership. The latest [progress record](RELEASE_PROGRESS.md) has 951 passing suite tests, but the separate audit probes still reproduce C5 and C8, and now C10. Passing suites alone do not close those findings.
+The unresolved correctness problems concentrate in execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) has 960 passing suite tests. C6 and C10 are fixed; the separate audit probes still reproduce C5 and C8. Passing suites alone do not close those findings.
 
 ## Java evaluation strategy
 
@@ -21,7 +21,7 @@ Decision: keep the existing evaluator for this release. The user does not want a
 
 ## Execution identity and retained results
 
-C6 still reports a terminal script status after a Stop timeout even when target Java continues. C10 proves a stale result can settle a replacement run after Companion reconnects. C8 retains discarded result objects in Minecraft until resume/detach, with no explicit ownership from history or an open inspector.
+C6 and C10 are now fixed. Stop requests remain pending until target execution ends, and execution IDs cannot alias across Companion sessions. C8 still retains discarded result objects in Minecraft until resume/detach, with no explicit ownership from history or an open inspector.
 
 The proposed next ownership slice should provide:
 
@@ -32,7 +32,7 @@ The proposed next ownership slice should provide:
 
 Keep running-game scheduling in TotalDebug and paused JDI execution in Companion. Share small contracts where useful; do not move both execution mechanisms into a general job framework. The existing evaluation plan already assigns these responsibilities correctly.
 
-Source review also found terminal-error fallbacks when server result encoding or cancellation transport fails. Those paths need regression coverage in the ownership slice: a delivery failure must not claim that target execution ended. This is a source finding, not another reproduced target failure.
+The C6 slice also fixes terminal-error fallbacks when server result encoding or cancellation transport fails. Regression coverage now verifies that these delivery failures preserve the live operation.
 
 ## Cleanup and final testing
 

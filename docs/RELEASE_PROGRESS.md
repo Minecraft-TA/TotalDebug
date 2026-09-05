@@ -1,6 +1,6 @@
 # Release stabilization progress
 
-Updated 2026-09-05. Findings C1-C4 and C7 are fixed in committed local slices. C9's icon build failure is also resolved. The project is still not ready for stable publication; the remaining work is tracked in [the release audit](RELEASE_AUDIT.md).
+Updated 2026-09-05. Findings C1-C4, C6, C7 and C10 are fixed in committed local slices. C9's icon build failure is also resolved. The project is still not ready for stable publication; the remaining work is tracked in [the release audit](RELEASE_AUDIT.md).
 
 ## Baseline after the other task finished
 
@@ -51,7 +51,7 @@ Evidence is retained under [audit evidence](audit-evidence/2026-09-05/README.md)
 
 ## Remaining work
 
-Continue W1 with truthful script cancellation, C6, and the newly reproduced session-identity defect, C10. Evaluation semantics and target pin ownership remain C5 and C8. The cleanup, CI/publication, paired installer and live acceptance work in W3-W6 remains required.
+C6 and C10 are now resolved by the execution-ownership slices below. Evaluation semantics and target pin ownership remain C5 and C8. The cleanup, CI/publication, paired installer and live acceptance work in W3-W6 remains required.
 
 Keep Packagecloud for this release and use the upstream SCNet/JIndex repositories, as decided in the audit. Account access and public candidate publication are still pending.
 
@@ -78,3 +78,15 @@ The original Companion audit probe was rerun against these completed builds. C7 
 Pre-fix logs are `.codex/dispatch-red.log`, `.codex/server-lifecycle-red.log` and `.codex/compiled-scope-red.log`. Full build logs are `.codex/dispatch-green.log`, `.codex/server-lifecycle-build.log`, `.codex/transport-consumer-totaldebug.log` and `.codex/compiled-scope-build.log`. Probe outputs are retained in the evidence directory.
 
 The evaluator decision is recorded in [release architecture decisions](RELEASE_DECISIONS.md). The user chose to retain the existing evaluator for this release. Continue focused correctness work within that design; no compiler-only switch or broad evaluator rewrite is planned.
+
+## Execution ownership slices
+
+C10 is fixed in TotalDebug `7112d14`. Each execution receives an internal integer ID that is never reused during the Minecraft client's lifetime. Companion editor/job IDs remain separate. Closing a Companion session detaches its observers before requesting cancellation; late completions cannot settle a replacement session's runs. Exhausting the ID range requires restarting Minecraft rather than wrapping. Two service regressions and the production forwarded-result probe pass. The probe now receives only `[new session]` after deliberately delivering the old completion first.
+
+C6 is fixed in TotalDebug `5728b95` and Companion `32214c6`. `CANCELLATION_PENDING` keeps worker and tick runs registered until their code returns. Stop's grace-period expiry reports continued execution without claiming completion. UI buttons, snippets and MCP jobs wait for the real terminal result. Failed cancellation delivery keeps the job correlated and permits an explicit retry. Server encoder failures preserve whether the original status was terminal.
+
+The application protocol is now 10 on both sides; the Minecraft client/server payload negotiation version is 2. Both sides' shared hello-byte fixtures were updated. The stale public Companion pin remains R1 and cannot satisfy this protocol.
+
+Three bounded target fixtures reproduced premature completion before the fix, covering worker, pre-tick and post-tick execution that ignores interruption. They now verify pending status, repeated Stop, Close while executing, retained registration and final output after the target is released. Service, envelope and MCP tests cover cancellation transport failures and continued correlation.
+
+TotalDebug's full build passed 433 tests plus the unchanged 13 storage tests. Companion's full build passed 441 tests. Together with unchanged SCNet's 73 tests, the latest verified suite total is 960. The final wire-fixture-only adjustment in TotalDebug also passed its focused suite. JIndex is unchanged. Logs are `.codex/cancellation-*.log`; the red worker/tick failures are in `cancellation-red.log`. No candidate was published or deployed.
