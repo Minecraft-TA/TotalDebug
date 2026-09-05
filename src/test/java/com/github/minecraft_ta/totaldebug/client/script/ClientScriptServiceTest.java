@@ -43,20 +43,20 @@ class ClientScriptServiceTest {
         ClientScriptService service = service(statuses, transport);
 
         service.handleRunRequest(serverRun(-1));
+        int executionId = transport.runs.getFirst().scriptId();
         forward(service, new ForwardedExecutionResult(
-                -1,
+                executionId,
                 ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)
         ));
         service.stopScript(-1);
         forward(service, new ForwardedExecutionResult(
-                -1,
+                executionId,
                 ExecutionResult.failed("partial", null, "Script run cancelled")
         ));
         service.stopScript(-1);
 
         assertEquals(1, transport.runs.size());
-        assertEquals(-1, transport.runs.getFirst().scriptId());
-        assertEquals(List.of(new StopServerScriptPayload(-1)), transport.stops);
+        assertEquals(List.of(new StopServerScriptPayload(executionId)), transport.stops);
         assertEquals(
                 List.of(
                         new Status(-1, ExecutionResult.progress(ExecutionStatus.COMPILATION_COMPLETED)),
@@ -89,9 +89,10 @@ class ClientScriptServiceTest {
         ClientScriptService service = service(statuses, transport);
 
         service.handleRunRequest(serverRun(7));
+        int executionId = transport.runs.getFirst().scriptId();
         service.onServerDisconnect();
         forward(service, new ForwardedExecutionResult(
-                7,
+                executionId,
                 ExecutionResult.completed("stale", null)
         ));
         service.stopScript(7);
@@ -108,6 +109,43 @@ class ClientScriptServiceTest {
                 statuses
         );
         assertTrue(transport.stops.isEmpty());
+    }
+
+    @Test
+    void lateCompletionCannotSettleAReusedCompanionIdAfterSessionClose() {
+        List<Status> statuses = new ArrayList<>();
+        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
+        try (ClientScriptService service = service(statuses, transport)) {
+            service.handleRunRequest(serverRun(41));
+            int oldExecution = transport.runs.getLast().scriptId();
+            service.close();
+            service.handleRunRequest(serverRun(41));
+            int newExecution = transport.runs.getLast().scriptId();
+
+            forward(service, new ForwardedExecutionResult(oldExecution, ExecutionResult.completed("old session", null)));
+            assertTrue(statuses.isEmpty(), "Old completion reached the replacement run");
+            service.stopScript(41);
+            assertEquals(new StopServerScriptPayload(newExecution), transport.stops.getLast());
+            forward(service, new ForwardedExecutionResult(newExecution, ExecutionResult.completed("new session", null)));
+            assertEquals(List.of(new Status(41, ExecutionResult.completed("new session", null))), statuses);
+        }
+    }
+
+    @Test
+    void delayedDuplicateCannotSettleTheNextRunOfTheSameScript() {
+        List<Status> statuses = new ArrayList<>();
+        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
+        try (ClientScriptService service = service(statuses, transport)) {
+            service.handleRunRequest(serverRun(7));
+            int first = transport.runs.getLast().scriptId();
+            forward(service, new ForwardedExecutionResult(first, ExecutionResult.completed("first", null)));
+            service.handleRunRequest(serverRun(7));
+            int second = transport.runs.getLast().scriptId();
+            forward(service, new ForwardedExecutionResult(first, ExecutionResult.completed("duplicate", null)));
+            forward(service, new ForwardedExecutionResult(second, ExecutionResult.completed("second", null)));
+            assertEquals(List.of(new Status(7, ExecutionResult.completed("first", null)),
+                    new Status(7, ExecutionResult.completed("second", null))), statuses);
+        }
     }
 
     private static ClientScriptService service(List<Status> statuses, ServerScriptTransport transport) {
