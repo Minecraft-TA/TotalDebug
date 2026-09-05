@@ -88,6 +88,8 @@ The installed executable stays at:
 {actual-game-directory}/total-debug/companion-app/TotalDebugCompanion.jar
 ```
 
+TotalDebug downloads and verifies its paired Companion release only when this JAR is missing. Existing files are preserved, including manual development replacements. Updating to a new application pair requires replacing or removing the installed JAR explicitly.
+
 For a dev run this is beneath `run/`, even though instance-authored files use the repository workspace. A configured development JAR bypasses this installed payload. `localBundle` produces a flat pair of JARs under `build/local-bundle`. `deployLocal` installs them into the explicitly configured Minecraft directory and points its client configuration at the mutable Companion build. See the README deployment instructions.
 
 NeoForge configuration, Minecraft logs/options, launcher files and other mods' files remain in their original owners' directories.

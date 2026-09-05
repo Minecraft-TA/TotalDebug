@@ -91,8 +91,7 @@ public final class CompanionAppInstaller {
         }
 
         Path jarPath = this.appDirectory.resolve(this.release.artifactFileName());
-        if (!Files.isRegularFile(jarPath) || Files.size(jarPath) > this.limits.maxBytes()
-                || !this.release.sha256().equals(LaunchCache.sha256(jarPath))) {
+        if (!Files.exists(jarPath)) {
             installDistribution(jarPath, progressListener);
         }
 

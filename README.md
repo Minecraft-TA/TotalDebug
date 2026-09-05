@@ -14,7 +14,9 @@ The supported application environment is **Windows x64, Java 21, Minecraft 1.21.
 
 ## Install
 
-Place the TotalDebug mod JAR in the Minecraft instance's `mods/` directory and launch with NeoForge. On first use, TotalDebug downloads and verifies its configured Companion build, then starts the desktop app. The initial runtime index can take time to prepare on a large modpack.
+Place the TotalDebug mod JAR in the Minecraft instance's `mods/` directory and launch with NeoForge. If Companion is missing, TotalDebug downloads and verifies the Companion version paired with the mod, then starts the desktop app. An existing Companion JAR is left untouched, including manual development replacements. The initial runtime index can take time to prepare on a large modpack.
+
+Update TotalDebug and Companion together. To download the Companion paired with a newly installed mod, close Companion and delete `total-debug/companion-app/TotalDebugCompanion.jar` from the Minecraft instance before opening it again with F6. Independent Companion updates are not supported.
 
 ## Build
 

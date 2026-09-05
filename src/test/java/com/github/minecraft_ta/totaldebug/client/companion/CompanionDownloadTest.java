@@ -36,10 +36,10 @@ class CompanionDownloadTest {
     @TempDir Path directory;
 
     @Test
-    void replacesMismatchedInstalledJarWithVerifiedDownload() throws Exception {
+    void downloadsThePairedReleaseWhenMissing() throws Exception {
         byte[] expected = "current release".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         CompanionRelease release = release(expected);
-        Path installed = Files.writeString(this.directory.resolve(release.artifactFileName()), "obsolete or corrupt");
+        Path installed = this.directory.resolve(release.artifactFileName());
         DownloadClient client = new DownloadClient(new ByteArrayInputStream(expected), expected.length);
 
         new CompanionAppInstaller(this.directory, release, client).resolveOrInstall();
@@ -49,16 +49,16 @@ class CompanionDownloadTest {
     }
 
     @Test
-    void badReplacementLeavesExistingBytesIntactAndCanBeRetried() throws Exception {
+    void badDownloadLeavesNoInstallationAndCanBeRetried() throws Exception {
         byte[] expected = "current release".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         CompanionRelease release = release(expected);
-        Path installed = Files.writeString(this.directory.resolve(release.artifactFileName()), "old release");
+        Path installed = this.directory.resolve(release.artifactFileName());
         DownloadClient client = new DownloadClient(new ByteArrayInputStream(new byte[]{1, 2}), 2);
         CompanionAppInstaller installer = new CompanionAppInstaller(this.directory, release, client);
 
         IOException failure = assertThrows(IOException.class, installer::resolveOrInstall);
         assertTrue(failure.getMessage().contains("checksum mismatch"));
-        assertEquals("old release", Files.readString(installed));
+        assertEmptyDirectory();
         client.body = new ByteArrayInputStream(expected);
         client.length = expected.length;
         installer.resolveOrInstall();
@@ -69,14 +69,15 @@ class CompanionDownloadTest {
     }
 
     @Test
-    void matchingInstalledBytesNeedNoNetwork() throws Exception {
+    void manuallyReplacedJarIsPreservedWithoutNetworkOrReleaseChecksumCheck() throws Exception {
         byte[] expected = {3, 4, 5};
         CompanionRelease release = release(expected);
-        Path installed = Files.write(this.directory.resolve(release.artifactFileName()), expected);
+        Path installed = Files.writeString(this.directory.resolve(release.artifactFileName()), "development build");
         DownloadClient client = new DownloadClient(InputStream.nullInputStream(), 0);
 
         assertEquals(installed, new CompanionAppInstaller(this.directory, release, client).resolveOrInstall().companionJar());
         assertEquals(0, client.requests);
+        assertEquals("development build", Files.readString(installed));
     }
 
     @Test

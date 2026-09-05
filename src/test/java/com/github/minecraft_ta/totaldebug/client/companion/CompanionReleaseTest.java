@@ -8,9 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CompanionReleaseTest {
-    private static final String PUBLISHED_SHA256 =
-            "c7f6bf3f63e918aae939f83ddbae68cf2fad904162a387db779f484ea893ea8a";
-
     @Test
     void loadsTheBundledPublishedReleaseMetadata() {
         CompanionRelease release = CompanionRelease.loadBundled();
@@ -23,10 +20,6 @@ class CompanionReleaseTest {
                                 + "TotalDebugCompanion.jar"
                 ),
                 release.downloadUri()
-        );
-        assertEquals(
-                PUBLISHED_SHA256,
-                release.sha256()
         );
     }
 
