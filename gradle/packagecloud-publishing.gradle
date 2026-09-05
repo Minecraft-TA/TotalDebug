@@ -1,0 +1,22 @@
+// Shared by the storage and evaluation publications owned by this repository.
+publishing {
+    repositories {
+        maven {
+            name = 'packagecloud'
+            url = uri('https://packagecloud.io/tth05/repo/java/maven2/')
+            credentials {
+                username = providers.environmentVariable('PACKAGECLOUD_TOKEN').orNull
+                password = ''
+            }
+        }
+    }
+    publications.withType(MavenPublication).configureEach {
+        pom {
+            url = 'https://github.com/Minecraft-TA/TotalDebug'
+            scm {
+                url = 'https://github.com/Minecraft-TA/TotalDebug'
+                connection = 'scm:git:https://github.com/Minecraft-TA/TotalDebug.git'
+            }
+        }
+    }
+}

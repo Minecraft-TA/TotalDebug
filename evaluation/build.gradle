@@ -29,6 +29,12 @@ publishing {
         evaluation(MavenPublication) {
             artifactId = 'totaldebug-evaluation'
             from components.java
+            pom {
+                name = 'TotalDebug Evaluation'
+                description = 'Shared Java compilation and execution contracts for TotalDebug and Companion.'
+            }
         }
     }
 }
+
+apply from: rootProject.file('gradle/packagecloud-publishing.gradle')

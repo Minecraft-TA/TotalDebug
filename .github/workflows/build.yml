@@ -27,5 +27,6 @@ jobs:
         run: >-
           ./gradlew.bat clean build
           -PtotaldebugUsePublishedCompanion=true
+          -PtotaldebugUseMavenLocal=false
           "-Dmaven.repo.local=$env:RUNNER_TEMP/totaldebug-empty-maven"
           --warning-mode fail --console=plain

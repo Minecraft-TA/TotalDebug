@@ -41,6 +41,12 @@ publishing {
         storage(MavenPublication) {
             artifactId = 'totaldebug-storage'
             from components.java
+            pom {
+                name = 'TotalDebug Storage'
+                description = 'Shared profile, catalog and storage contracts for TotalDebug and Companion.'
+            }
         }
     }
 }
+
+apply from: rootProject.file('gradle/packagecloud-publishing.gradle')
