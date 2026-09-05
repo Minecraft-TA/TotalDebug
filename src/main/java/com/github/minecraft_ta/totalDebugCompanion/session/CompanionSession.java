@@ -112,8 +112,12 @@ public final class CompanionSession implements AutoCloseable {
         if (!isConnected()) {
             return false;
         }
-        this.server.getMessageProcessor().enqueueMessage(Objects.requireNonNull(message, "message"));
-        return true;
+        try {
+            this.server.getMessageProcessor().enqueueMessage(Objects.requireNonNull(message, "message"));
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException rejected) {
+            return false;
+        }
     }
 
     private void configureTransport() {

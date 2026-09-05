@@ -26,6 +26,37 @@ class CompanionSessionRejectionTest {
     Path temporaryDirectory;
 
     @Test
+    void rejectedSendReturnsFalseWhileTheTransportEndsTheSession() throws Exception {
+        String token = "correct-token-value-1234567890abcdef";
+        CountDownLatch authenticated = new CountDownLatch(1);
+        CountDownLatch releaseTransport = new CountDownLatch(1);
+        CompanionSession.Listener listener = new CompanionSession.Listener() {
+            @Override public void connected(long capabilities) {
+                authenticated.countDown();
+                try {
+                    assertTrue(releaseTransport.await(5, TimeUnit.SECONDS));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(interrupted);
+                }
+            }
+        };
+        CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
+        try (CompanionSession session = new CompanionSession(token, (hello, capabilities) -> { }, listener);
+             Client client = configuredClient(token)) {
+            try {
+                session.bindAndPublish(configuration);
+                connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile()));
+                assertTrue(authenticated.await(2, TimeUnit.SECONDS));
+                session.server().getMessageProcessor().beginOutboundDrain();
+                assertFalse(session.send(new com.github.tth05.scnet.message.impl.EmptyMessage()));
+            } finally {
+                releaseTransport.countDown();
+            }
+        }
+    }
+
+    @Test
     void wrongTokenIsRejectedWithoutStoppingTheServer() throws Exception {
         String token = "correct-token-value-1234567890abcdef";
         CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
