@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -263,6 +266,122 @@ public class ScriptRunnerTest {
 
             assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
             assertTrue(terminal.error().contains("still running"));
+        }
+    }
+
+    @Test
+    void stoppingFromTheCompilationCallbackDeliversTheTerminalResultAfterThatCallbackReturns() throws Exception {
+        List<String> events = new CopyOnWriteArrayList<>();
+        CountDownLatch terminalDelivered = new CountDownLatch(1);
+        AtomicReference<ScriptRunner> activeRunner = new AtomicReference<>();
+        try (ScriptRunner runner = runner((phase, task) -> { }, (id, result) -> {
+            if (result.status() == ExecutionStatus.COMPILATION_COMPLETED) {
+                events.add("compilation callback entered");
+                activeRunner.get().stopScript(id);
+                events.add("compilation callback returned");
+            } else {
+                events.add(result.status().name());
+                terminalDelivered.countDown();
+            }
+        }, Duration.ofMillis(50))) {
+            activeRunner.set(runner);
+            runner.runScript(41, script("ReentrantStopFixture", "return null;"), ScriptExecutionEnvironment.POST_TICK);
+
+            assertTrue(terminalDelivered.await(5, TimeUnit.SECONDS));
+            assertEquals(List.of("compilation callback entered", "compilation callback returned", "RUN_EXCEPTION"), events);
+        }
+    }
+
+    enum StopOperation {
+        STOP, DISCONNECT, CLOSE;
+
+        void apply(ScriptRunner runner) {
+            switch (this) {
+                case STOP -> runner.stopScript(41);
+                case DISCONNECT -> runner.stopAll();
+                case CLOSE -> runner.close();
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(StopOperation.class)
+    void lifecycleDoesNotWaitForCompilationCallbackHoldingTheServiceMonitor(StopOperation operation) throws Exception {
+        lifecycleDuringCallback(operation, false);
+    }
+
+    @ParameterizedTest
+    @EnumSource(StopOperation.class)
+    void lifecycleDoesNotWaitForTerminalCallbackHoldingTheServiceMonitor(StopOperation operation) throws Exception {
+        lifecycleDuringCallback(operation, true);
+    }
+
+    private void lifecycleDuringCallback(StopOperation operation, boolean terminalCallback) throws Exception {
+        // ClientScriptService enters this same caller-monitor -> runner pattern on stop/disconnect/close.
+        Object serviceMonitor = new Object();
+        CountDownLatch callbackEntered = new CountDownLatch(1);
+        CountDownLatch releaseCallback = new CountDownLatch(1);
+        CountDownLatch lifecycleFinished = new CountDownLatch(1);
+        CountDownLatch terminalDelivered = new CountDownLatch(1);
+        AtomicBoolean abortDelivery = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        List<ExecutionStatus> statuses = new CopyOnWriteArrayList<>();
+        ScriptRunner runner = runner((phase, task) -> { }, (id, result) -> {
+            boolean terminal = result.status() != ExecutionStatus.COMPILATION_COMPLETED;
+            if (terminal == terminalCallback) {
+                callbackEntered.countDown();
+                awaitUninterruptibly(releaseCallback);
+            }
+            if (abortDelivery.get()) return;
+            synchronized (serviceMonitor) {
+                statuses.add(result.status());
+                if (terminal) terminalDelivered.countDown();
+            }
+        }, Duration.ofMillis(50));
+        Thread stopping = daemonThread(() -> {
+            try {
+                synchronized (serviceMonitor) {
+                    operation.apply(runner);
+                }
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                lifecycleFinished.countDown();
+            }
+        });
+        try {
+            runner.runScript(41, script("LifecycleFixture", "return null;"),
+                    terminalCallback ? ScriptExecutionEnvironment.THREAD : ScriptExecutionEnvironment.POST_TICK);
+            assertTrue(callbackEntered.await(5, TimeUnit.SECONDS), "Result callback did not start");
+            stopping.start();
+            assertTrue(lifecycleFinished.await(3, TimeUnit.SECONDS), "Lifecycle waited for a result callback under the run lock");
+            assertNull(failure.get());
+            releaseCallback.countDown();
+            assertTrue(terminalDelivered.await(3, TimeUnit.SECONDS));
+            assertEquals(List.of(ExecutionStatus.COMPILATION_COMPLETED,
+                    terminalCallback ? ExecutionStatus.RUN_COMPLETED : ExecutionStatus.RUN_EXCEPTION), statuses);
+        } finally {
+            // A red test skips entering the caller monitor so its fixture threads can still exit.
+            abortDelivery.set(true);
+            releaseCallback.countDown();
+            stopping.join(3000);
+            runner.close();
+        }
+    }
+
+    private static void awaitUninterruptibly(CountDownLatch latch) {
+        boolean interrupted = false;
+        try {
+            for (;;) {
+                try {
+                    if (!latch.await(10, TimeUnit.SECONDS)) throw new AssertionError("Callback release timed out");
+                    return;
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 

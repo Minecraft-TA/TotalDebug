@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.Block;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -357,6 +358,7 @@ public final class ScriptRunner implements AutoCloseable {
 
     private final class ScriptRun {
         private final Object lock = new Object();
+        private final ArrayDeque<ExecutionResult> pendingResults = new ArrayDeque<>();
         private final int scriptId;
         private final String sourceCode;
         private final ScriptExecutionEnvironment environment;
@@ -365,6 +367,7 @@ public final class ScriptRunner implements AutoCloseable {
         private boolean executionStarted;
         private boolean cancellationRequested;
         private boolean terminal;
+        private boolean deliveringResults;
 
         private ScriptRun(int scriptId, String sourceCode, ScriptExecutionEnvironment environment) {
             this.scriptId = scriptId;
@@ -387,9 +390,10 @@ public final class ScriptRunner implements AutoCloseable {
                     return false;
                 }
                 schedulingAction.run();
-                sendResult(this.scriptId, ExecutionStatus.COMPILATION_COMPLETED, "");
-                return true;
+                this.pendingResults.add(ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_COMPLETED, ""));
             }
+            drainResults();
+            return true;
         }
 
         private boolean beginExecution(Thread thread) {
@@ -488,9 +492,42 @@ public final class ScriptRunner implements AutoCloseable {
                     return;
                 }
                 this.terminal = true;
-                sendResult(this.scriptId, status);
+                this.pendingResults.add(status);
             }
-            runs.remove(this.scriptId, this);
+            drainResults();
+        }
+
+        private void drainResults() {
+            synchronized (this.lock) {
+                if (this.deliveringResults) {
+                    return;
+                }
+                this.deliveringResults = true;
+            }
+            // Serialize progress and terminal delivery without entering the service callback under the run lock.
+            // A callback may itself stop the run; its terminal result stays queued until that callback returns.
+            while (true) {
+                ExecutionResult result;
+                synchronized (this.lock) {
+                    result = this.pendingResults.poll();
+                    if (result == null) {
+                        this.deliveringResults = false;
+                        return;
+                    }
+                }
+                try {
+                    sendResult(this.scriptId, result);
+                } catch (Error error) {
+                    synchronized (this.lock) {
+                        this.deliveringResults = false;
+                    }
+                    throw error;
+                } finally {
+                    if (result.status() != ExecutionStatus.COMPILATION_COMPLETED) {
+                        runs.remove(this.scriptId, this);
+                    }
+                }
+            }
         }
     }
 
