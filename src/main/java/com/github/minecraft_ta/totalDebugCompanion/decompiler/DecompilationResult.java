@@ -27,15 +27,6 @@ public record DecompilationResult(
     public DecompilationResult(
             String source,
             Status status,
-            List<DecompilerDiagnostic> diagnostics,
-            SourceLineMap lineMap
-    ) {
-        this(source, status, diagnostics, lineMap, SourceVariableNames.empty());
-    }
-
-    public DecompilationResult(
-            String source,
-            Status status,
             List<DecompilerDiagnostic> diagnostics
     ) {
         this(source, status, diagnostics, SourceLineMap.empty(), SourceVariableNames.empty());

@@ -213,12 +213,6 @@ public final class InstanceState implements AutoCloseable {
             boolean enabled,
             com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction action
     ) {
-        public PersistedBreakpoint(String sourceUri, String binaryName, int line, int debuggerLine,
-                                   String methodOwner, String methodName, String methodDescriptor,
-                                   String condition, String hitCondition, boolean enabled) {
-            this(sourceUri, binaryName, line, debuggerLine, methodOwner, methodName, methodDescriptor,
-                    condition, hitCondition, enabled, null);
-        }
         public PersistedBreakpoint {
             if (sourceUri == null || sourceUri.isBlank()) {
                 throw new IllegalArgumentException("Breakpoint source URI must not be blank");

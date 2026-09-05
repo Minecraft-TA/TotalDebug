@@ -20,14 +20,6 @@ public final class ReferenceSearchService implements AutoCloseable {
     private final RuntimeSourceCatalog sourceCatalog;
     private SearchOperation activeSearch;
 
-    public ReferenceSearchService(ClassIndex index) {
-        this(singleIndex(index));
-    }
-
-    public ReferenceSearchService(Supplier<ClassIndex> indexSupplier) {
-        this(indexSupplier, RuntimeSourceCatalog.empty());
-    }
-
     public ReferenceSearchService(
             Supplier<ClassIndex> indexSupplier,
             RuntimeSourceCatalog sourceCatalog
@@ -162,8 +154,4 @@ public final class ReferenceSearchService implements AutoCloseable {
                 .unstarted(runnable));
     }
 
-    private static Supplier<ClassIndex> singleIndex(ClassIndex index) {
-        Objects.requireNonNull(index, "index");
-        return () -> index;
-    }
 }

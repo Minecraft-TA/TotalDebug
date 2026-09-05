@@ -52,10 +52,6 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final RichJavaExpressionEngine expressionEngine;
     private final IDebugAdapter adapter;
 
-    public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader) {
-        this(sourceLoader, () -> null);
-    }
-
     public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader,
                                     java.util.function.Supplier<String> classpath) {
         configureInitialCoreSettings();

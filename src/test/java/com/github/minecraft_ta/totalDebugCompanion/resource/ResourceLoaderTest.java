@@ -86,11 +86,6 @@ class ResourceLoaderTest {
             }
 
             @Override
-            public long declaredSize() {
-                return bytes.length;
-            }
-
-            @Override
             public byte[] read(int maximumBytes) throws ResourceTooLargeException {
                 if (bytes.length > maximumBytes) {
                     throw new ResourceTooLargeException(name, maximumBytes);

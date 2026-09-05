@@ -38,11 +38,6 @@ public final class ArchiveEntrySource implements ContentSource {
     }
 
     @Override
-    public long declaredSize() {
-        return this.declaredSize;
-    }
-
-    @Override
     public byte[] read(int maximumBytes) throws IOException {
         if (this.declaredSize > maximumBytes) {
             throw new ResourceTooLargeException(displayName(), maximumBytes);

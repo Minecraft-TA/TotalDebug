@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -33,35 +32,6 @@ public final class DebuggerWindow extends JFrame {
         }
     };
     private boolean disposed;
-
-    public DebuggerWindow(
-            Window owner,
-            DebuggerSessionController controller,
-            DebuggerActions debuggerActions,
-            DebuggerShortcuts debuggerShortcuts
-    ) {
-        this(owner, controller, debuggerActions, debuggerShortcuts, () -> {
-        });
-    }
-
-    public DebuggerWindow(
-            Window owner,
-            DebuggerSessionController controller,
-            DebuggerActions debuggerActions,
-            DebuggerShortcuts debuggerShortcuts,
-            Runnable showBreakpoints
-    ) {
-        this(
-                owner,
-                controller,
-                debuggerActions,
-                debuggerShortcuts,
-                (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor),
-                showBreakpoints,
-                target -> {
-                }
-        );
-    }
 
     public DebuggerWindow(
             Window owner,

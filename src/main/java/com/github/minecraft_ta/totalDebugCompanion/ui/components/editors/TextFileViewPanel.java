@@ -7,10 +7,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomIn
 /** Read-only syntax-highlighted text without JDT parsing or Java navigation actions. */
 public final class TextFileViewPanel extends AbstractTextViewPanel {
 
-    public TextFileViewPanel(LoadedResource.Text content, ResourceFileType fileType) {
-        this(content, fileType, new BottomInformationBar());
-    }
-
     TextFileViewPanel(
             LoadedResource.Text content,
             ResourceFileType fileType,

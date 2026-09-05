@@ -92,16 +92,6 @@ public final class DebuggerPanel extends JPanel {
             DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation,
-            Runnable showBreakpoints
-    ) {
-        this(controller, debuggerActions, frameNavigation, showBreakpoints, target -> {
-        });
-    }
-
-    DebuggerPanel(
-            DebuggerSessionController controller,
-            DebuggerActions debuggerActions,
-            FrameNavigation frameNavigation,
             Runnable showBreakpoints,
             Consumer<NavigationTarget> navigation
     ) {

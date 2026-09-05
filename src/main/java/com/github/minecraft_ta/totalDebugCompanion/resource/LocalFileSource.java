@@ -31,15 +31,6 @@ public final class LocalFileSource implements ContentSource {
     }
 
     @Override
-    public long declaredSize() {
-        try {
-            return Files.size(this.path);
-        } catch (IOException exception) {
-            return -1;
-        }
-    }
-
-    @Override
     public byte[] read(int maximumBytes) throws IOException {
         long size = Files.size(this.path);
         if (size > maximumBytes) {

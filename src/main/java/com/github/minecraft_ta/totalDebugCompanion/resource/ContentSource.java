@@ -11,7 +11,5 @@ public interface ContentSource {
 
     String tooltip();
 
-    long declaredSize();
-
     byte[] read(int maximumBytes) throws IOException;
 }
