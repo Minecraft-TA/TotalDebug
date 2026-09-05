@@ -24,7 +24,7 @@ public record ExecutionText(String text, int totalCharacters, boolean truncated)
     }
 
     public ExecutionText retain(int characters) {
-        int retained = Math.max(0, Math.min(characters, this.text.length()));
+        int retained = Math.clamp(characters, 0, this.text.length());
         if (retained > 0 && retained < this.text.length()
                 && Character.isHighSurrogate(this.text.charAt(retained - 1))
                 && Character.isLowSurrogate(this.text.charAt(retained))) {

@@ -468,7 +468,7 @@ public final class ExecutionValueCapture {
             return ExecutionText.empty();
         }
         int end = Math.min(value.length(), MAX_PREVIEW_CHARACTERS);
-        if (end > 0 && end < value.length()
+        if (end < value.length()
                 && Character.isHighSurrogate(value.charAt(end - 1))
                 && Character.isLowSurrogate(value.charAt(end))) {
             end--;

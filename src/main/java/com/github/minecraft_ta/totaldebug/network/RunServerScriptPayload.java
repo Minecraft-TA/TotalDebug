@@ -40,7 +40,7 @@ public record RunServerScriptPayload(
 
     public RunServerScriptPayload {
         sourceCode = Objects.requireNonNull(sourceCode, "sourceCode");
-        environment = Objects.requireNonNull(environment, "environment");
+        Objects.requireNonNull(environment, "environment");
         int sourceBytes = sourceCode.getBytes(StandardCharsets.UTF_8).length;
         if (sourceBytes > MAX_SOURCE_BYTES) {
             throw new IllegalArgumentException(

@@ -31,7 +31,7 @@ public record ForwardedExecutionResult(int scriptId, ExecutionResult result) {
             / MAX_CHUNK_BYTES;
 
     public ForwardedExecutionResult {
-        result = Objects.requireNonNull(result, "result");
+        Objects.requireNonNull(result, "result");
     }
 
     public List<ForwardedCompanionPayload> toPayloads() {
@@ -94,7 +94,7 @@ public record ForwardedExecutionResult(int scriptId, ExecutionResult result) {
             byte[] content
     ) {
         public Chunk {
-            transferId = Objects.requireNonNull(transferId, "transferId");
+            Objects.requireNonNull(transferId, "transferId");
             content = Arrays.copyOf(Objects.requireNonNull(content, "content"), content.length);
             if (chunkCount < 1 || chunkCount > MAX_CHUNKS
                     || chunkIndex < 0 || chunkIndex >= chunkCount) {

@@ -30,7 +30,7 @@ final class ExecutionTextBuffer {
             return;
         }
         int end = Math.min(text.length(), remaining);
-        if (end > 0 && end < text.length()
+        if (end < text.length()
                 && Character.isHighSurrogate(text.charAt(end - 1))
                 && Character.isLowSurrogate(text.charAt(end))) {
             end--;

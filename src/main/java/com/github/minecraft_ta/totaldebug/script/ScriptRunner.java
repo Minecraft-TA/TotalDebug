@@ -570,15 +570,10 @@ public final class ScriptRunner implements AutoCloseable {
                 try {
                     value = ExecutionValueCapture.capture(result);
                 } catch (Throwable captureFailure) {
-                    if (failure == null) {
-                        failure = new IllegalArgumentException(
-                                "Unable to capture the structured script result",
-                                captureFailure
-                        );
-                    } else {
-                        failure.addSuppressed(captureFailure);
-                    }
-                    value = null;
+                    failure = new IllegalArgumentException(
+                            "Unable to capture the structured script result",
+                            captureFailure
+                    );
                 }
             }
             return new ScriptExecutionOutcome(output, value, failure);

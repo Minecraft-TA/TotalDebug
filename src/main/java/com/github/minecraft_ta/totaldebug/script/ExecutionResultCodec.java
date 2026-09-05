@@ -403,7 +403,7 @@ public final class ExecutionResultCodec {
 
     public record Encoded(ExecutionResult result, String json, int utf8Bytes) {
         public Encoded {
-            result = Objects.requireNonNull(result, "result");
+            Objects.requireNonNull(result, "result");
             json = Objects.requireNonNull(json, "json");
             if (utf8Bytes < 0) {
                 throw new IllegalArgumentException("utf8Bytes must not be negative");

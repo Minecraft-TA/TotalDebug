@@ -10,9 +10,9 @@ public record ExecutionResult(
         ExecutionText error
 ) {
     public ExecutionResult {
-        status = Objects.requireNonNull(status, "status");
-        logs = Objects.requireNonNull(logs, "logs");
-        error = Objects.requireNonNull(error, "error");
+        Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(logs, "logs");
+        Objects.requireNonNull(error, "error");
     }
 
     public static ExecutionResult progress(ExecutionStatus status) {

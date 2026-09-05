@@ -50,7 +50,7 @@ public record CompanionStartupProgress(
             return 0.0F;
         }
         float fraction = (float) this.completedBytes / (float) this.totalBytes;
-        return Math.max(0.0F, Math.min(1.0F, fraction));
+        return Math.clamp(fraction, 0.0F, 1.0F);
     }
 
     public int percentage() {

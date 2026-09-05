@@ -15,8 +15,8 @@ final class DownloadDeadline implements AutoCloseable {
     private volatile String failure;
 
     DownloadDeadline(InputStream body, CompanionAppInstaller.DownloadLimits limits) {
-        long period = Math.max(1, Math.min(TimeUnit.SECONDS.toNanos(1),
-                Math.min(limits.idle().toNanos(), limits.total().toNanos()) / 4));
+        long period = Math.clamp(Math.min(limits.idle().toNanos(), limits.total().toNanos()) / 4,
+                1, TimeUnit.SECONDS.toNanos(1));
         this.timer.scheduleAtFixedRate(() -> {
             long now = System.nanoTime();
             if (now - this.started >= limits.total().toNanos()) {

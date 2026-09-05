@@ -15,10 +15,10 @@ public record ExecutionValue(
         List<Child> children
 ) {
     public ExecutionValue {
-        type = Objects.requireNonNull(type, "type");
-        value = Objects.requireNonNull(value, "value");
-        preview = Objects.requireNonNull(preview, "preview");
-        kind = Objects.requireNonNull(kind, "kind");
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(preview, "preview");
+        Objects.requireNonNull(kind, "kind");
         children = List.copyOf(Objects.requireNonNull(children, "children"));
         if (identity < 0 || totalChildren < children.size()
                 || truncated != (totalChildren > children.size())) {
@@ -77,9 +77,9 @@ public record ExecutionValue(
 
     public record Child(ExecutionText name, ChildKind kind, ExecutionValue key, ExecutionValue value) {
         public Child {
-            name = Objects.requireNonNull(name, "name");
-            kind = Objects.requireNonNull(kind, "kind");
-            value = Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(value, "value");
             if ((kind == ChildKind.MAP_ENTRY) != (key != null)) {
                 throw new IllegalArgumentException("Only map entries carry a structured key");
             }

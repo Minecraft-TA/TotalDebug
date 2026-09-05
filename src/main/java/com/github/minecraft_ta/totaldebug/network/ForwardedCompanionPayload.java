@@ -31,7 +31,7 @@ public record ForwardedCompanionPayload(ResourceLocation messageId, byte[] body)
     );
 
     public ForwardedCompanionPayload {
-        messageId = Objects.requireNonNull(messageId, "messageId");
+        Objects.requireNonNull(messageId, "messageId");
         body = Arrays.copyOf(Objects.requireNonNull(body, "body"), body.length);
         if (body.length > MAX_BODY_BYTES) {
             throw new IllegalArgumentException(
