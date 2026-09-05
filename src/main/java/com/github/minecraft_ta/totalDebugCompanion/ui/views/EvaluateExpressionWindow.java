@@ -377,7 +377,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         if (entries.isEmpty()) {
             return;
         }
-        this.historyIndex = Math.max(-1, Math.min(entries.size() - 1, this.historyIndex + direction));
+        this.historyIndex = Math.clamp(this.historyIndex + direction, -1, entries.size() - 1);
         if (this.historyIndex < 0) {
             this.expression.setText("");
             this.expressionSupport.setImports(List.of());

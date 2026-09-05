@@ -123,7 +123,6 @@ public class SettingsWindow extends JDialog {
         JCheckBox toggle = new JCheckBox(label, selected);
         toggle.addActionListener(event -> {
             setter.accept(toggle.isSelected());
-            GlobalConfig config = GlobalConfig.getInstance();
             CompanionApp.getDebuggerController()
                     .setExceptionBreakpoints(
                             CompanionApp.instanceState().breakOnCaughtExceptions(),

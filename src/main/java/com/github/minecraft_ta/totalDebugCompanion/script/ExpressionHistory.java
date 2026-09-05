@@ -41,8 +41,8 @@ public final class ExpressionHistory {
             if (Objects.requireNonNull(expression).isBlank()) {
                 throw new IllegalArgumentException("expression must not be blank");
             }
-            side = Objects.requireNonNull(side);
-            mode = Objects.requireNonNull(mode);
+            Objects.requireNonNull(side);
+            Objects.requireNonNull(mode);
             imports = List.copyOf(imports);
         }
     }

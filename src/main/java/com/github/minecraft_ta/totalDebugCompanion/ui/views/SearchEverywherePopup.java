@@ -419,7 +419,7 @@ public class SearchEverywherePopup extends JFrame {
             return;
         }
         int selected = this.resultList.getSelectedIndex();
-        this.resultList.setSelectedIndex(Math.max(0, Math.min(size - 1, selected + delta)));
+        this.resultList.setSelectedIndex(Math.clamp(selected + delta, 0, size - 1));
     }
 
     private void refreshResults() {

@@ -6,7 +6,7 @@ import java.util.Objects;
 public record JavaEditorSource(String text, JavaSourceMap sourceMap, boolean privilegedAccess) {
     public JavaEditorSource {
         text = Objects.requireNonNull(text, "text");
-        sourceMap = Objects.requireNonNull(sourceMap, "sourceMap");
+        Objects.requireNonNull(sourceMap, "sourceMap");
     }
 
     public static JavaEditorSource identity(String text) {

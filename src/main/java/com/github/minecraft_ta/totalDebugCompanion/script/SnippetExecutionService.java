@@ -118,8 +118,8 @@ public final class SnippetExecutionService implements AutoCloseable {
 
     public record Execution(int id, CompletableFuture<ExecutionResult> completion, Runnable cancel) {
         public Execution {
-            completion = Objects.requireNonNull(completion, "completion");
-            cancel = Objects.requireNonNull(cancel, "cancel");
+            Objects.requireNonNull(completion, "completion");
+            Objects.requireNonNull(cancel, "cancel");
         }
     }
 

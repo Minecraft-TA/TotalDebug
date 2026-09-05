@@ -241,7 +241,7 @@ public final class HierarchyPreviewPopup extends JWindow {
         this.rows.revalidate();
         this.rows.repaint();
         pack();
-        int width = Math.max(360, Math.min(760, getWidth()));
+        int width = Math.clamp(getWidth(), 360, 760);
         setSize(width, getHeight());
 
         PopupChrome.placeAdjacent(this, this.invoker, this.sourceLine);

@@ -242,7 +242,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.list.setSelectedIndex(0);
         int renderedWidth = this.list.getPreferredSize().width + 20;
         int width = Math.max(this.field.getWidth(),
-                Math.max(MINIMUM_WIDTH, Math.min(MAXIMUM_CONTENT_WIDTH, renderedWidth)));
+                Math.clamp(renderedWidth, MINIMUM_WIDTH, MAXIMUM_CONTENT_WIDTH));
         int height = Math.min(8, matches.size()) * ROW_HEIGHT + 2;
         JWindow completionWindow = popupForFieldOwner();
         completionWindow.setSize(new Dimension(width, height));

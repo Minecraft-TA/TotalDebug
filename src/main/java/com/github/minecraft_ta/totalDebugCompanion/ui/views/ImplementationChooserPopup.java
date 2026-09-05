@@ -387,7 +387,7 @@ public final class ImplementationChooserPopup extends BasePopup {
     }
 
     private void resizeForResults(int count) {
-        int rows = Math.max(2, Math.min(10, count));
+        int rows = Math.clamp(count, 2, 10);
         this.cards.setPreferredSize(new Dimension(760, rows * this.list.getFixedCellHeight() + 4));
         pack();
         if (isVisible() && this.invoker != null && this.sourceLine != null) {

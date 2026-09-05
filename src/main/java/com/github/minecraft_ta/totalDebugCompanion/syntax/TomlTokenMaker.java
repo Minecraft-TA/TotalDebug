@@ -63,7 +63,6 @@ public final class TomlTokenMaker extends AbstractTokenMaker {
             }
             if (current == '#') {
                 add(text, cursor, end - 1, TokenTypes.COMMENT_EOL, startOffset);
-                cursor = end;
                 break;
             }
             if ((current == '"' || current == '\'') && hasTriple(text.array, cursor, end, current)) {

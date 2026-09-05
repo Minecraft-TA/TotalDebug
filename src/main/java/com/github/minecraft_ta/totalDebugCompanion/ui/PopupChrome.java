@@ -74,8 +74,8 @@ public final class PopupChrome {
         int maximumX = Math.max(screen.x, screen.x + screen.width - size.width);
         int maximumY = Math.max(screen.y, screen.y + screen.height - size.height);
         return new Point(
-                Math.max(screen.x, Math.min(desired.x, maximumX)),
-                Math.max(screen.y, Math.min(desired.y, maximumY))
+                Math.clamp(desired.x, screen.x, maximumX),
+                Math.clamp(desired.y, screen.y, maximumY)
         );
     }
 

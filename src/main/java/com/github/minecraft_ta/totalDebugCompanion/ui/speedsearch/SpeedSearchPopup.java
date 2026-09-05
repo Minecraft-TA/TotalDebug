@@ -92,7 +92,7 @@ final class SpeedSearchPopup extends JPanel {
 
     private Dimension preferredSize(String query) {
         int contentWidth = this.field.getFontMetrics(this.field.getFont()).stringWidth(query) + 54;
-        int width = Math.max(MINIMUM_WIDTH, Math.min(MAXIMUM_WIDTH, contentWidth));
+        int width = Math.clamp(contentWidth, MINIMUM_WIDTH, MAXIMUM_WIDTH);
         Dimension preferred = super.getPreferredSize();
         return new Dimension(width, preferred.height);
     }

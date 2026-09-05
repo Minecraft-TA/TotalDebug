@@ -62,7 +62,6 @@ class SearchableEnvironmentImpl extends SearchableEnvironment {
         if (resolveDocumentName)
             throw new UnsupportedOperationException();
 
-        var matchPrefix = (SearchPattern.R_PREFIX_MATCH & matchRule) != 0;
         var matchSubstring = (SearchPattern.R_SUBSTRING_MATCH & matchRule) != 0;
 
         var types = new ArrayList<IType>();

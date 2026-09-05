@@ -214,7 +214,7 @@ public final class GlobalConfig {
         if (!Float.isFinite(value)) {
             throw new IllegalArgumentException("Font size must be finite");
         }
-        return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value));
+        return Math.clamp(value, MIN_FONT_SIZE, MAX_FONT_SIZE);
     }
 
     private synchronized void scheduleSave() {

@@ -373,7 +373,7 @@ final class SpeedSearchTargets {
         int maximumY = Math.max(0, component.getHeight() - scrollHeight);
         component.scrollRectToVisible(new Rectangle(
                 visible.x,
-                Math.max(0, Math.min(centeredY, maximumY)),
+                Math.clamp(centeredY, 0, maximumY),
                 Math.max(1, visible.width),
                 scrollHeight
         ));
