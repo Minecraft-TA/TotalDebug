@@ -1,0 +1,81 @@
+{
+  "transport": "fresh current Companion stdio sidecar forwarding to live HTTP host",
+  "jarSha256": "2ac8749d43da2e520e56f157411ba7013f7ddf6fa5c15850144477add2652c3e",
+  "installedCodexSidecarUpdated": false,
+  "initialize": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "logging": {},
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "totaldebug-companion-sidecar",
+      "version": "2.0.0"
+    },
+    "instructions": "Resolve exact symbols before finding usages. Read the relevant source_target values with runtime_source, and request class scope only when a member does not provide enough context. Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar values directly so the result remains structured. Debugger tools control the same session as Companion's UI. Carry the current pause_id into inspections and continue/step commands; use debugger_wait to wait for state changes. Companion may start or restart after this MCP session initializes; call status again."
+  },
+  "toolCount": 23,
+  "evaluationInputSchema": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "description": "Java expression or code fragment.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "pause_id": {
+        "description": "Exact current pause ID from debugger_status or a control result.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "frame_id": {
+        "type": "integer",
+        "description": "Frame identifier.",
+        "minimum": 1,
+        "maximum": 2147483647
+      },
+      "wait_ms": {
+        "type": "integer",
+        "description": "Maximum wait in milliseconds.",
+        "minimum": 0,
+        "maximum": 120000
+      }
+    },
+    "required": [
+      "pause_id",
+      "frame_id",
+      "source"
+    ],
+    "additionalProperties": false
+  },
+  "status": {
+    "companion_available": true,
+    "debugger_connected": false,
+    "minecraft_connected": true
+  },
+  "clientExecution": {
+    "job_id": "84ef170f-b5d1-4606-83fb-64c897bc0c0e",
+    "state": "succeeded",
+    "result": 42
+  },
+  "classResolution": {
+    "classes": [
+      {
+        "binary_name": "java.util.List",
+        "kind": "interface",
+        "modifiers": [
+          "public",
+          "abstract"
+        ],
+        "module": {
+          "id": "java-runtime",
+          "kind": "java_runtime",
+          "name": "Java Runtime"
+        }
+      }
+    ]
+  },
+  "sidecarExitCode": 0
+}
