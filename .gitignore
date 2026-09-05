@@ -8,6 +8,8 @@ logs/
 run/
 run-*/
 .claude/
+.codex/
+.codex-remote-attachments/
 
 legacy/1.7.10/src/
 legacy/1.12.2/src/

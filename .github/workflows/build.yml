@@ -2,9 +2,13 @@ name: Build
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -19,4 +23,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build
-        run: ./gradlew clean build --warning-mode fail
+        shell: pwsh
+        run: >-
+          ./gradlew.bat clean build
+          -PtotaldebugUsePublishedCompanion=true
+          "-Dmaven.repo.local=$env:RUNNER_TEMP/totaldebug-empty-maven"
+          --warning-mode fail --console=plain
