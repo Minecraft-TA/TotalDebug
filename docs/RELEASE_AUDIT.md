@@ -217,6 +217,8 @@ The old claim that storage has never been deployed is false. [STORAGE.md](STORAG
 
 [PORTING.md](../PORTING.md) still leaves S21 Find Usages, S22 offline restart and S24 hierarchy navigation live gates open. The final candidate needs one dated, repeatable acceptance run across the dev instance and ATM10, using the hashes actually intended for publication.
 
+Live acceptance update, 2026-09-05: the user verified F6, member usages/result-open and Ctrl+T/U navigation. Integrated-server execution, bounded cancellation and supported breakpoint evaluation passed on the recorded development artifacts. Offline Companion restart now restores search, usages and member source with Minecraft closed; execution reports the expected refusal. [The progress record](RELEASE_PROGRESS.md) links exact artifacts and results. The complete navigation matrix, dedicated-server/non-operator checks, broader debugger/soak coverage and final public candidate installation remain open.
+
 ## Repository cleanup for a full clean release
 
 These items belong in the release work, even where they are not independently crash bugs. A clean release means current production paths, accurate user-facing behavior, reproducible artifacts and no accidental development debris. It does not require rewriting every large class.
