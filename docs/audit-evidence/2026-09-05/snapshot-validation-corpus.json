@@ -1,0 +1,131 @@
+{
+  "schema": "jindex-runtime-baseline-v1",
+  "recordedAt": "2026-09-05T17:21:17.627878800Z",
+  "commit": "7621c9dd09d0cb98db4b045b727c7053ad3862e0",
+  "javaVersion": "21.0.12",
+  "javaHome": "C:\\Users\\Admin\\.jdks\\temurin-21.0.12",
+  "processors": 12,
+  "manifest": "C:\\Users\\Admin\\IdeaProjects\\TotalDebug\\.codex\\snapshot-corpus-sources.txt",
+  "manifestSha256": "517a29261a4e6fe5ae75ede2253a443819c90f434501bbd4e085bb9e1af6723a",
+  "archiveSourceCount": 538,
+  "archiveSourceBytes": 702432905,
+  "archiveClassFileCount": 150386,
+  "archiveClassFileBytes": 663068094,
+  "jdkClassFileCount": 27837,
+  "jdkClassFileBytes": 132811113,
+  "classInputCount": 178223,
+  "inventoryNanos": 364245400,
+  "sourcePreparationNanos": 578627100,
+  "buildNanos": 12250770000,
+  "nativeClassReadingMillis": 3214,
+  "nativeIndexingMillis": 8316,
+  "selectedClassCount": 178117,
+  "fieldCount": 605326,
+  "methodCount": 1299709,
+  "referenceSiteCount": 14880319,
+  "referenceOccurrenceCount": 39482977,
+  "singleOccurrenceReferenceSiteCount": 8163305,
+  "referenceCountOver255SiteCount": 3249,
+  "referenceCountOver65535SiteCount": 0,
+  "maximumReferenceOccurrenceCount": 10002,
+  "literalCount": 609254,
+  "literalOccurrenceCount": 2047531,
+  "saveNanos": 1846708599,
+  "persistedBytes": 85625841,
+  "firstLoadNanos": 1406962101,
+  "warmLoadP50Nanos": 1300907900,
+  "warmLoadP95Nanos": 1312900800,
+  "firstLoadReadMillis": 10,
+  "firstLoadDeserializeMillis": 1396,
+  "queries": {
+    "exactClass": {
+      "samples": 1000,
+      "minNanos": 2100,
+      "p50Nanos": 2800,
+      "p95Nanos": 5301,
+      "maxNanos": 48699
+    },
+    "prefixClasses": {
+      "samples": 200,
+      "minNanos": 94701,
+      "p50Nanos": 113700,
+      "p95Nanos": 226000,
+      "maxNanos": 280701
+    },
+    "containsClasses": {
+      "samples": 200,
+      "minNanos": 181900,
+      "p50Nanos": 188900,
+      "p95Nanos": 295900,
+      "maxNanos": 469300
+    },
+    "exactMethod": {
+      "samples": 500,
+      "minNanos": 24399,
+      "p50Nanos": 25600,
+      "p95Nanos": 59000,
+      "maxNanos": 127400
+    },
+    "prefixSymbols": {
+      "samples": 200,
+      "minNanos": 281299,
+      "p50Nanos": 320500,
+      "p95Nanos": 512800,
+      "maxNanos": 6761201
+    },
+    "containsSymbols": {
+      "samples": 200,
+      "minNanos": 61864400,
+      "p50Nanos": 68648100,
+      "p95Nanos": 80712100,
+      "maxNanos": 134449800
+    },
+    "classReferences": {
+      "resultCount": 43358,
+      "latency": {
+        "samples": 200,
+        "minNanos": 223200,
+        "p50Nanos": 246600,
+        "p95Nanos": 475799,
+        "maxNanos": 611400
+      }
+    },
+    "fieldReferences": {
+      "resultCount": 966,
+      "latency": {
+        "samples": 200,
+        "minNanos": 307000,
+        "p50Nanos": 559800,
+        "p95Nanos": 1201899,
+        "maxNanos": 4131000
+      }
+    },
+    "methodReferences": {
+      "resultCount": 4513,
+      "latency": {
+        "samples": 200,
+        "minNanos": 297300,
+        "p50Nanos": 362000,
+        "p95Nanos": 600099,
+        "maxNanos": 675400
+      }
+    },
+    "literalReferences": {
+      "resultCount": 356,
+      "latency": {
+        "samples": 200,
+        "minNanos": 279901,
+        "p50Nanos": 309400,
+        "p95Nanos": 569000,
+        "maxNanos": 3187400
+      }
+    },
+    "containsLiterals": {
+      "samples": 200,
+      "minNanos": 7026900,
+      "p50Nanos": 10065300,
+      "p95Nanos": 14051400,
+      "maxNanos": 94709101
+    }
+  }
+}
