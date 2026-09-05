@@ -1,6 +1,67 @@
+import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
+import java.nio.file.Files
+import java.security.MessageDigest
 import java.util.zip.ZipFile
+
+abstract class GenerateThirdPartyNotices extends DefaultTask {
+    @InputFiles
+    @PathSensitive(PathSensitivity.NONE)
+    abstract ConfigurableFileCollection getDependencyArchives()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @Inject
+    abstract FileSystemOperations getFileOperations()
+
+    @TaskAction
+    void generate() {
+        def staged = Files.createTempDirectory(temporaryDir.toPath(), 'notices-')
+        try {
+            def inventory = []
+            def names = new HashSet<String>()
+            dependencyArchives.files.findAll { it.name.endsWith('.jar') }.sort { it.name }.each { archive ->
+                if (!names.add(archive.name)) {
+                    throw new GradleException("Cannot namespace duplicate dependency filename: ${archive.name}")
+                }
+                def entries = []
+                def namespace = staged.resolve(archive.name)
+                new ZipFile(archive).withCloseable { zip ->
+                    zip.entries().each { entry ->
+                        def lower = entry.name.toLowerCase(Locale.ROOT)
+                        def filename = lower.substring(lower.lastIndexOf('/') + 1)
+                        if (!entry.directory && !lower.endsWith('.class')
+                                && (filename.contains('license') || filename.contains('notice')
+                                || filename.startsWith('copying') || filename.startsWith('copyright')
+                                || filename == 'about.html' || lower.startsWith('about_files/')
+                                || lower.contains('/licenses/') || lower.contains('/legal/'))) {
+                            def target = namespace.resolve(entry.name).normalize()
+                            if (!target.startsWith(namespace)) {
+                                throw new GradleException("Invalid notice path in ${archive.name}: ${entry.name}")
+                            }
+                            Files.createDirectories(target.parent)
+                            zip.getInputStream(entry).withCloseable { input ->
+                                Files.copy(input, target)
+                            }
+                            entries.add(entry.name)
+                        }
+                    }
+                }
+                inventory.add([archive: archive.name,
+                               sha256: HexFormat.of().formatHex(MessageDigest.getInstance('SHA-256').digest(archive.bytes)),
+                               notices: entries.sort()])
+            }
+            Files.writeString(staged.resolve('INDEX.json'),
+                    JsonOutput.prettyPrint(JsonOutput.toJson(inventory)) + '\n')
+            fileOperations.sync { from staged; into outputDirectory }
+            logger.lifecycle("Preserved notices from ${inventory.size()} dependency archives")
+        } finally {
+            fileOperations.delete { delete staged }
+        }
+    }
+}
 
 abstract class GenerateParchmentParameterIndex extends DefaultTask {
     private static final int MAGIC = 0x5444504E
@@ -190,6 +251,18 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('jar') {
     archiveClassifier = 'plain'
+}
+
+def thirdPartyNotices = tasks.register('generateThirdPartyNotices', GenerateThirdPartyNotices) {
+    dependencyArchives.from(configurations.runtimeClasspath)
+    outputDirectory = layout.buildDirectory.dir('generated-resources/third-party-notices')
+}
+
+tasks.named('processResources') {
+    from(thirdPartyNotices) { into 'META-INF/third-party' }
+    from('src/main/java/com/github/minecraft_ta/totalDebugCompanion/jdt/completion/jdtLs/LICENSE') {
+        into 'META-INF/third-party/vendored-jdt-ls'
+    }
 }
 
 tasks.named('shadowJar') {
