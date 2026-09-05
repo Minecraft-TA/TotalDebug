@@ -81,6 +81,9 @@ plugins {
 group = "com.github.minecraft_ta"
 version = providers.gradleProperty('releaseVersion').orElse('2.0.0-SNAPSHOT').get()
 
+def useMavenLocal = providers.gradleProperty('totaldebugUseMavenLocal')
+        .map { value -> value.toBoolean() }.orElse(false)
+
 repositories {
     mavenCentral()
     maven {
@@ -90,10 +93,24 @@ repositories {
             includeGroup 'org.parchmentmc.data'
         }
     }
-    maven { url = uri('https://packagecloud.io/tth05/repo/maven2') }
-    // SCNet and JIndex stable releases are published here during local development.
-    // Keep this last so the remote release repository remains authoritative.
-    mavenLocal()
+    maven {
+        url = uri('https://packagecloud.io/tth05/repo/maven2')
+        content {
+            includeGroup 'com.github.tth05'
+            includeModule 'com.github.minecraft_ta', 'totaldebug-storage'
+            includeModule 'com.github.minecraft_ta', 'totaldebug-evaluation'
+        }
+    }
+    if (useMavenLocal.get()) {
+        exclusiveContent {
+            forRepository { mavenLocal() }
+            filter {
+                includeGroup 'com.github.tth05'
+                includeModule 'com.github.minecraft_ta', 'totaldebug-storage'
+                includeModule 'com.github.minecraft_ta', 'totaldebug-evaluation'
+            }
+        }
+    }
 }
 
 configurations {
@@ -102,7 +119,7 @@ configurations {
 
 dependencies {
     implementation("com.github.minecraft_ta:totaldebug-storage:" + storage_version)
-    implementation("com.github.minecraft_ta:totaldebug-evaluation:" + storage_version)
+    implementation("com.github.minecraft_ta:totaldebug-evaluation:" + evaluation_version)
     parchmentData("org.parchmentmc.data:parchment-${parchment_minecraft_version}:${parchment_mappings_version}")
 
     implementation platform('io.modelcontextprotocol.sdk:mcp-bom:2.0.1')

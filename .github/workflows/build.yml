@@ -23,5 +23,6 @@ jobs:
         shell: pwsh
         run: >-
           ./gradlew.bat clean build
+          -PtotaldebugUseMavenLocal=false
           "-Dmaven.repo.local=$env:RUNNER_TEMP/companion-empty-maven"
           --warning-mode fail --console=plain
