@@ -162,6 +162,8 @@ Required outcome: produce an immutable paired candidate, publish its exact Compa
 
 Installer cleanup should add finite connect/download progress deadlines, a download byte ceiling, and retryable failure handling. The current request and stream copy have no such bounds. Test stalled responses, bad hashes, truncated/corrupt files, denied writes and offline launch with a valid installed artifact.
 
+Implementation update: TotalDebug `ce390ac` fixes managed-file hash validation, atomic replacement, transfer deadlines and size bounds, with retry/offline and real HTTP stall coverage. The final matching public artifact and pin are still missing. See the progress record for exact limits and tests.
+
 ### R2. Public builds still depend on this machine
 
 The current dependency graph requires SCNet 2.0.0, JIndex 1.1.0-SNAPSHOT, totaldebug-storage 2.0.0-SNAPSHOT, and totaldebug-evaluation 2.0.0-SNAPSHOT. Public resolution without Maven Local failed for all four, including fresh Packagecloud checks. [Captured Gradle failure](audit-evidence/2026-09-05/public-dependencies-output.txt).
@@ -184,6 +186,8 @@ Make local dependency resolution and automatic sibling builds explicit developme
 Use Windows as the required release lane. Linux-only library tests can remain useful, but Linux product support is not required. Split slow/integration/UI checks only if needed for reliable CI; tagging every test is not itself an acceptance criterion. Child-JVM and Swing checks must still run somewhere required.
 
 The coordinated lane must test consumer builds against the exact candidate dependencies, verify the packaged mod's embedded modules, smoke-load the shaded Companion, compare duplicated wire contracts, and verify installation of the paired artifacts. Publish/tag jobs alone are not a substitute for branch verification.
+
+Implementation update: all four repositories now have Windows push/PR build workflows; SCNet also retains Linux. Application workflows use empty Maven Local directories. These changes are committed locally and their YAML is validated, but no GitHub run or branch-protection change has occurred. Public dependency availability and a coordinated candidate lane remain open.
 
 ### R4. Native and evaluator acceptance is incomplete
 

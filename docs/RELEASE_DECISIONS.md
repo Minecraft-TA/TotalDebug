@@ -4,7 +4,7 @@ Updated 2026-09-05 after discussion with the user. The release will retain the c
 
 The project has a usable foundation. SCNet's reproduced lifecycle defects were repairable within its existing transport responsibilities. Shared compilation, runtime discovery and native indexing already have distinct owners. There is no evidence here that a general application rewrite would improve release readiness.
 
-The unresolved correctness problems concentrate in execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) has 960 passing suite tests. C6 and C10 are fixed; the separate audit probes still reproduce C5 and C8. Passing suites alone do not close those findings.
+The unresolved correctness problems concentrate in execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) has 1,011 Java tests and 46 Rust tests passing, with one existing native test ignored. C6 and C10 are fixed; the separate audit probes still reproduce C5 and C8. Passing suites alone do not close those findings.
 
 ## Java evaluation strategy
 
@@ -39,3 +39,5 @@ The C6 slice also fixes terminal-error fallbacks when server result encoding or 
 After agreeing the evaluation and ownership direction, return to the audit's cleanup inventory. Remove obsolete production features and no-op APIs, reconcile documentation and test claims, and fix repository metadata and required Windows CI. Preserve working feature paths unless the supported release scope explicitly excludes them. Larger class splits should follow an actual ownership problem, not a file-size threshold.
 
 Keep Packagecloud and the upstream SCNet/JIndex repositories for this release. Account access remains pending. Public dependency resolution, paired installer changes, final artifact pins and the live dev-instance/ATM10 acceptance matrix remain open. Nothing in these local fixes constitutes stable release approval.
+
+Follow-up: managed installer verification and bounds, Windows branch workflows, and the dormant-feature/API cleanup are committed and verified locally. The user deferred the upstream license choice for now; leave license files and license metadata unchanged until that choice is supplied. Packagecloud access and actual public/CI/live candidate verification remain pending.
