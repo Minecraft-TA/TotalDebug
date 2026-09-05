@@ -59,8 +59,9 @@ public final class LaunchCache {
         Path normalized = jar.toAbsolutePath().normalize();
         Path root = paths.launchCache();
         if (!normalized.getFileName().toString().equals(JAR) || normalized.getParent() == null
-                || !root.equals(normalized.getParent().getParent())
-                || !normalized.getParent().getFileName().toString().matches("[a-f0-9]{64}")) {
+                || !normalized.getParent().getFileName().toString().matches("[a-f0-9]{64}")
+                || !Files.isDirectory(root)
+                || !Files.isSameFile(root, normalized.getParent().getParent())) {
             return null; // A development/classes launch or an executable outside our owned cache.
         }
         try (var channel = FileChannel.open(root.resolve(".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
