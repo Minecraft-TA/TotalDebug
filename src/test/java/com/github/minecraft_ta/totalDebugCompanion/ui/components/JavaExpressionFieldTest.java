@@ -24,7 +24,7 @@ class JavaExpressionFieldTest {
             assertTrue(field.getText().endsWith("\n"));
             assertEquals(1, evaluations.get());
             press(field, "TAB");
-            assertTrue(field.getText().substring(field.getText().indexOf('\n') + 1).length() > 0);
+            assertTrue(!field.getText().substring(field.getText().indexOf('\n') + 1).isEmpty());
             press(field, "ctrl ENTER");
             assertEquals(2, evaluations.get());
         });

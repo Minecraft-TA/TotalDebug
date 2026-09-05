@@ -302,7 +302,7 @@ public final class NavigationService {
         if (requested.equals(editorTarget)) {
             return true;
         }
-        if (!(editorTarget instanceof NavigationTarget.RuntimeClass editorClass)) {
+        if (!(editorTarget instanceof NavigationTarget.RuntimeClass(String binaryName))) {
             return false;
         }
         String requestedClass = switch (requested) {
@@ -312,7 +312,7 @@ public final class NavigationService {
             case NavigationTarget.UsageSite site -> site.usage().location().className();
             default -> null;
         };
-        return editorClass.binaryName().equals(requestedClass);
+        return binaryName.equals(requestedClass);
     }
 
     private void reportFailure(CompletableFuture<Void> navigation, NavigationTarget target) {

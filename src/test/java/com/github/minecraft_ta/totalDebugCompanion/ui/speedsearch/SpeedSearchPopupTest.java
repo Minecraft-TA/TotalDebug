@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
 
-import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JRootPane;
 import javax.swing.SwingUtilities;

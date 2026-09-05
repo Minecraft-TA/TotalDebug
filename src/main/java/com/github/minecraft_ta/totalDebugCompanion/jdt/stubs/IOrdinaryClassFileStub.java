@@ -14,27 +14,27 @@ public interface IOrdinaryClassFileStub extends IOrdinaryClassFile {
     }
 
     @Override
-    default ICompilationUnit becomeWorkingCopy(IProblemRequestor problemRequestor, WorkingCopyOwner owner, IProgressMonitor monitor) throws JavaModelException {
+    default ICompilationUnit becomeWorkingCopy(IProblemRequestor problemRequestor, WorkingCopyOwner owner, IProgressMonitor monitor) {
         return null;
     }
 
     @Override
-    default byte[] getBytes() throws JavaModelException {
+    default byte[] getBytes() {
         return new byte[0];
     }
 
     @Override
-    default IJavaElement getWorkingCopy(IProgressMonitor monitor, IBufferFactory factory) throws JavaModelException {
+    default IJavaElement getWorkingCopy(IProgressMonitor monitor, IBufferFactory factory) {
         return null;
     }
 
     @Override
-    default boolean isClass() throws JavaModelException {
+    default boolean isClass() {
         return false;
     }
 
     @Override
-    default boolean isInterface() throws JavaModelException {
+    default boolean isInterface() {
         return false;
     }
 
@@ -44,57 +44,57 @@ public interface IOrdinaryClassFileStub extends IOrdinaryClassFile {
     }
 
     @Override
-    default IJavaElement getElementAt(int position) throws JavaModelException {
+    default IJavaElement getElementAt(int position) {
         return null;
     }
 
     @Override
-    default ICompilationUnit getWorkingCopy(WorkingCopyOwner owner, IProgressMonitor monitor) throws JavaModelException {
+    default ICompilationUnit getWorkingCopy(WorkingCopyOwner owner, IProgressMonitor monitor) {
         return null;
     }
 
     @Override
-    default void codeComplete(int offset, ICodeCompletionRequestor requestor) throws JavaModelException {
+    default void codeComplete(int offset, ICodeCompletionRequestor requestor) {
 
     }
 
     @Override
-    default void codeComplete(int offset, ICompletionRequestor requestor) throws JavaModelException {
+    default void codeComplete(int offset, ICompletionRequestor requestor) {
 
     }
 
     @Override
-    default void codeComplete(int offset, CompletionRequestor requestor) throws JavaModelException {
+    default void codeComplete(int offset, CompletionRequestor requestor) {
 
     }
 
     @Override
-    default void codeComplete(int offset, CompletionRequestor requestor, IProgressMonitor monitor) throws JavaModelException {
+    default void codeComplete(int offset, CompletionRequestor requestor, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void codeComplete(int offset, ICompletionRequestor requestor, WorkingCopyOwner owner) throws JavaModelException {
+    default void codeComplete(int offset, ICompletionRequestor requestor, WorkingCopyOwner owner) {
 
     }
 
     @Override
-    default void codeComplete(int offset, CompletionRequestor requestor, WorkingCopyOwner owner) throws JavaModelException {
+    default void codeComplete(int offset, CompletionRequestor requestor, WorkingCopyOwner owner) {
 
     }
 
     @Override
-    default void codeComplete(int offset, CompletionRequestor requestor, WorkingCopyOwner owner, IProgressMonitor monitor) throws JavaModelException {
+    default void codeComplete(int offset, CompletionRequestor requestor, WorkingCopyOwner owner, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IJavaElement[] codeSelect(int offset, int length) throws JavaModelException {
+    default IJavaElement[] codeSelect(int offset, int length) {
         return new IJavaElement[0];
     }
 
     @Override
-    default IJavaElement[] codeSelect(int offset, int length, WorkingCopyOwner owner) throws JavaModelException {
+    default IJavaElement[] codeSelect(int offset, int length, WorkingCopyOwner owner) {
         return new IJavaElement[0];
     }
 
@@ -249,17 +249,17 @@ public interface IOrdinaryClassFileStub extends IOrdinaryClassFile {
     }
 
     @Override
-    default String getSource() throws JavaModelException {
+    default String getSource() {
         return null;
     }
 
     @Override
-    default ISourceRange getSourceRange() throws JavaModelException {
+    default ISourceRange getSourceRange() {
         return null;
     }
 
     @Override
-    default ISourceRange getNameRange() throws JavaModelException {
+    default ISourceRange getNameRange() {
         return null;
     }
 }

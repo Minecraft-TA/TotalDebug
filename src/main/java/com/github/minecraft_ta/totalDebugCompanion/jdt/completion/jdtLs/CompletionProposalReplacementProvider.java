@@ -547,7 +547,7 @@ public class CompletionProposalReplacementProvider {
         };
         parser.createASTs(new ICompilationUnit[0], keys, requestor, null);
 
-        if (bindings.size() > 0) {
+        if (!bindings.isEmpty()) {
             return (ITypeBinding) bindings.get(keys[0]);
         }
 
@@ -580,7 +580,7 @@ public class CompletionProposalReplacementProvider {
             return qualifiedTypeName;
         }
 
-        if (qualifiedTypeName.indexOf('.') == -1 && replacement.length() > 0) {
+        if (qualifiedTypeName.indexOf('.') == -1 && !replacement.isEmpty()) {
             // default package - no imports needed
             return qualifiedTypeName;
         }

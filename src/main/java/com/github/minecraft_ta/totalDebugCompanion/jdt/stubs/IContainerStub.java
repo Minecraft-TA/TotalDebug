@@ -33,12 +33,12 @@ public interface IContainerStub extends IContainer, IResourceStub {
     }
 
     @Override
-    default String getDefaultCharset() throws CoreException {
+    default String getDefaultCharset() {
         return null;
     }
 
     @Override
-    default String getDefaultCharset(boolean checkImplicit) throws CoreException {
+    default String getDefaultCharset(boolean checkImplicit) {
         return null;
     }
 
@@ -53,42 +53,42 @@ public interface IContainerStub extends IContainer, IResourceStub {
     }
 
     @Override
-    default IResource[] members() throws CoreException {
+    default IResource[] members() {
         return new IResource[0];
     }
 
     @Override
-    default IResource[] members(boolean includePhantoms) throws CoreException {
+    default IResource[] members(boolean includePhantoms) {
         return new IResource[0];
     }
 
     @Override
-    default IResource[] members(int memberFlags) throws CoreException {
+    default IResource[] members(int memberFlags) {
         return new IResource[0];
     }
 
     @Override
-    default IFile[] findDeletedMembersWithHistory(int depth, IProgressMonitor monitor) throws CoreException {
+    default IFile[] findDeletedMembersWithHistory(int depth, IProgressMonitor monitor) {
         return new IFile[0];
     }
 
     @Override
-    default void setDefaultCharset(String charset) throws CoreException {
+    default void setDefaultCharset(String charset) {
 
     }
 
     @Override
-    default void setDefaultCharset(String charset, IProgressMonitor monitor) throws CoreException {
+    default void setDefaultCharset(String charset, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IResourceFilterDescription createFilter(int type, FileInfoMatcherDescription matcherDescription, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default IResourceFilterDescription createFilter(int type, FileInfoMatcherDescription matcherDescription, int updateFlags, IProgressMonitor monitor) {
         return null;
     }
 
     @Override
-    default IResourceFilterDescription[] getFilters() throws CoreException {
+    default IResourceFilterDescription[] getFilters() {
         return new IResourceFilterDescription[0];
     }
 }

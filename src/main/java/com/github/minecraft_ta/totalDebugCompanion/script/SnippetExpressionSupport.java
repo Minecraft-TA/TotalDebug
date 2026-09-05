@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomCompletionRequestor;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import org.eclipse.core.runtime.OperationCanceledException;

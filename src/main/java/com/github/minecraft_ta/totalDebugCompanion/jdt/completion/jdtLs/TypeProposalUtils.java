@@ -167,11 +167,11 @@ public class TypeProposalUtils {
 
     private static String concatenateName(String name1, String name2) {
         StringBuilder buf = new StringBuilder();
-        if (name1 != null && name1.length() > 0) {
+        if (name1 != null && !name1.isEmpty()) {
             buf.append(name1);
         }
-        if (name2 != null && name2.length() > 0) {
-            if (buf.length() > 0) {
+        if (name2 != null && !name2.isEmpty()) {
+            if (!buf.isEmpty()) {
                 buf.append('.');
             }
             buf.append(name2);

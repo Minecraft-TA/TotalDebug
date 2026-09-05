@@ -140,7 +140,7 @@ public class CompletionProposalDescriptionProvider {
 
         if (methodProposal.getRequiredProposals() != null) {
             String qualifier = Signature.getQualifier(declaringType);
-            if (qualifier.length() > 0) {
+            if (!qualifier.isEmpty()) {
                 typeInfo.append(qualifier);
                 typeInfo.append('.');
             }
@@ -149,7 +149,7 @@ public class CompletionProposalDescriptionProvider {
         declaringType = Signature.getSimpleName(declaringType);
         typeInfo.append(declaringType);
         StringBuilder detail = new StringBuilder();
-        if (typeInfo.length() > 0) {
+        if (!typeInfo.isEmpty()) {
             detail.append(typeInfo);
             detail.append('.');
         }
@@ -250,7 +250,7 @@ public class CompletionProposalDescriptionProvider {
                 if (proposal.getRequiredProposals() != null) {
                     String declaringType = extractDeclaringTypeFQN(proposal);
                     String qualifier = Signature.getQualifier(declaringType);
-                    if (qualifier.length() > 0) {
+                    if (!qualifier.isEmpty()) {
                         detailBuf.append(qualifier);
                         detailBuf.append('.');
                     }
@@ -258,7 +258,7 @@ public class CompletionProposalDescriptionProvider {
                 detailBuf.append(declaration);
             }
         }
-        if (detailBuf.length() > 0) {
+        if (!detailBuf.isEmpty()) {
             detailBuf.append('.');
         }
         detailBuf.append(buf);

@@ -13,57 +13,57 @@ import java.util.Map;
 public interface IResourceStub extends IResource {
 
     @Override
-    default void accept(IResourceProxyVisitor visitor, int memberFlags) throws CoreException {
+    default void accept(IResourceProxyVisitor visitor, int memberFlags) {
 
     }
 
     @Override
-    default void accept(IResourceProxyVisitor visitor, int depth, int memberFlags) throws CoreException {
+    default void accept(IResourceProxyVisitor visitor, int depth, int memberFlags) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor) throws CoreException {
+    default void accept(IResourceVisitor visitor) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor, int depth, boolean includePhantoms) throws CoreException {
+    default void accept(IResourceVisitor visitor, int depth, boolean includePhantoms) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor, int depth, int memberFlags) throws CoreException {
+    default void accept(IResourceVisitor visitor, int depth, int memberFlags) {
 
     }
 
     @Override
-    default void clearHistory(IProgressMonitor monitor) throws CoreException {
+    default void clearHistory(IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IPath destination, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void copy(IPath destination, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IPath destination, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void copy(IPath destination, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IProjectDescription description, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void copy(IProjectDescription description, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void copy(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IMarker createMarker(String type) throws CoreException {
+    default IMarker createMarker(String type) {
         return null;
     }
 
@@ -73,17 +73,17 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default void delete(boolean force, IProgressMonitor monitor) throws CoreException {
+    default void delete(boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void delete(int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void delete(int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void deleteMarkers(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default void deleteMarkers(String type, boolean includeSubtypes, int depth) {
 
     }
 
@@ -93,17 +93,17 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default IMarker findMarker(long id) throws CoreException {
+    default IMarker findMarker(long id) {
         return null;
     }
 
     @Override
-    default IMarker[] findMarkers(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default IMarker[] findMarkers(String type, boolean includeSubtypes, int depth) {
         return new IMarker[0];
     }
 
     @Override
-    default int findMaxProblemSeverity(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default int findMaxProblemSeverity(String type, boolean includeSubtypes, int depth) {
         return 0;
     }
 
@@ -158,12 +158,12 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default Map<QualifiedName, String> getPersistentProperties() throws CoreException {
+    default Map<QualifiedName, String> getPersistentProperties() {
         return null;
     }
 
     @Override
-    default String getPersistentProperty(QualifiedName key) throws CoreException {
+    default String getPersistentProperty(QualifiedName key) {
         return null;
     }
 
@@ -193,12 +193,12 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default Map<QualifiedName, Object> getSessionProperties() throws CoreException {
+    default Map<QualifiedName, Object> getSessionProperties() {
         return null;
     }
 
     @Override
-    default Object getSessionProperty(QualifiedName key) throws CoreException {
+    default Object getSessionProperty(QualifiedName key) {
         return null;
     }
 
@@ -283,62 +283,62 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default void move(IPath destination, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void move(IPath destination, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IPath destination, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void move(IPath destination, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IProjectDescription description, boolean force, boolean keepHistory, IProgressMonitor monitor) throws CoreException {
+    default void move(IProjectDescription description, boolean force, boolean keepHistory, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void move(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void refreshLocal(int depth, IProgressMonitor monitor) throws CoreException {
+    default void refreshLocal(int depth, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void revertModificationStamp(long value) throws CoreException {
+    default void revertModificationStamp(long value) {
 
     }
 
     @Override
-    default void setDerived(boolean isDerived) throws CoreException {
+    default void setDerived(boolean isDerived) {
 
     }
 
     @Override
-    default void setDerived(boolean isDerived, IProgressMonitor monitor) throws CoreException {
+    default void setDerived(boolean isDerived, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void setHidden(boolean isHidden) throws CoreException {
+    default void setHidden(boolean isHidden) {
 
     }
 
     @Override
-    default void setLocal(boolean flag, int depth, IProgressMonitor monitor) throws CoreException {
+    default void setLocal(boolean flag, int depth, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default long setLocalTimeStamp(long value) throws CoreException {
+    default long setLocalTimeStamp(long value) {
         return 0;
     }
 
     @Override
-    default void setPersistentProperty(QualifiedName key, String value) throws CoreException {
+    default void setPersistentProperty(QualifiedName key, String value) {
 
     }
 
@@ -348,22 +348,22 @@ public interface IResourceStub extends IResource {
     }
 
     @Override
-    default void setResourceAttributes(ResourceAttributes attributes) throws CoreException {
+    default void setResourceAttributes(ResourceAttributes attributes) {
 
     }
 
     @Override
-    default void setSessionProperty(QualifiedName key, Object value) throws CoreException {
+    default void setSessionProperty(QualifiedName key, Object value) {
 
     }
 
     @Override
-    default void setTeamPrivateMember(boolean isTeamPrivate) throws CoreException {
+    default void setTeamPrivateMember(boolean isTeamPrivate) {
 
     }
 
     @Override
-    default void touch(IProgressMonitor monitor) throws CoreException {
+    default void touch(IProgressMonitor monitor) {
 
     }
 

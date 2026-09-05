@@ -265,26 +265,24 @@ final class CompiledFrameEvaluator {
         ASTNode parent = declaration.getParent();
         ASTNode scope;
         int start = declaration.getName().getStartPosition();
-        if (parent instanceof LambdaExpression lambda) {
-            scope = lambda.getBody();
-            start = scope.getStartPosition();
-        } else if (parent instanceof EnhancedForStatement loop) {
-            scope = loop.getBody();
-            // The iterable expression is evaluated outside the loop variable's scope.
-            start = scope.getStartPosition();
-        } else if (parent instanceof CatchClause clause) {
-            scope = clause.getBody();
-        } else if (parent instanceof VariableDeclarationExpression expression
-                && expression.getParent() instanceof ForStatement loop) {
-            scope = loop;
-        } else if (parent instanceof VariableDeclarationExpression expression
-                && expression.getParent() instanceof TryStatement statement) {
-            // Resource names are visible to later resources and the try body, but not catch/finally blocks.
-            scope = statement.getBody();
-        } else if (parent instanceof VariableDeclarationStatement statement) {
-            scope = statement.getParent();
-        } else {
-            throw new IllegalArgumentException("Compiled frame context does not support declaration scope: "
+        switch (parent) {
+            case LambdaExpression lambda -> {
+                scope = lambda.getBody();
+                start = scope.getStartPosition();
+            }
+            case EnhancedForStatement loop -> {
+                scope = loop.getBody();
+                // The iterable expression is evaluated outside the loop variable's scope.
+                start = scope.getStartPosition();
+            }
+            case CatchClause clause -> scope = clause.getBody();
+            case VariableDeclarationExpression expression when expression.getParent() instanceof ForStatement loop ->
+                    scope = loop;
+            case VariableDeclarationExpression expression when expression.getParent() instanceof TryStatement statement ->
+                // Resource names are visible to later resources and the try body, but not catch/finally blocks.
+                    scope = statement.getBody();
+            case VariableDeclarationStatement statement -> scope = statement.getParent();
+            default -> throw new IllegalArgumentException("Compiled frame context does not support declaration scope: "
                     + parent.getClass().getSimpleName());
         }
         return new LexicalDeclaration(declaration.getName().getIdentifier(), start,

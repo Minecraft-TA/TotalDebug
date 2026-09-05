@@ -14,72 +14,72 @@ import java.util.Map;
 public interface IProjectStub extends IProject {
 
     @Override
-    default String getDefaultLineSeparator() throws CoreException {
+    default String getDefaultLineSeparator() {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    default void build(int kind, String builderName, Map<String, String> args, IProgressMonitor monitor) throws CoreException {
+    default void build(int kind, String builderName, Map<String, String> args, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void build(int kind, IProgressMonitor monitor) throws CoreException {
+    default void build(int kind, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void build(IBuildConfiguration config, int kind, IProgressMonitor monitor) throws CoreException {
+    default void build(IBuildConfiguration config, int kind, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void close(IProgressMonitor monitor) throws CoreException {
+    default void close(IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void create(IProjectDescription description, IProgressMonitor monitor) throws CoreException {
+    default void create(IProjectDescription description, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void create(IProgressMonitor monitor) throws CoreException {
+    default void create(IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void create(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void create(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void delete(boolean deleteContent, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void delete(boolean deleteContent, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IBuildConfiguration getActiveBuildConfig() throws CoreException {
+    default IBuildConfiguration getActiveBuildConfig() {
         return null;
     }
 
     @Override
-    default IBuildConfiguration getBuildConfig(String configName) throws CoreException {
+    default IBuildConfiguration getBuildConfig(String configName) {
         return null;
     }
 
     @Override
-    default IBuildConfiguration[] getBuildConfigs() throws CoreException {
+    default IBuildConfiguration[] getBuildConfigs() {
         return new IBuildConfiguration[0];
     }
 
     @Override
-    default IContentTypeMatcher getContentTypeMatcher() throws CoreException {
+    default IContentTypeMatcher getContentTypeMatcher() {
         return null;
     }
 
     @Override
-    default IProjectDescription getDescription() throws CoreException {
+    default IProjectDescription getDescription() {
         return null;
     }
 
@@ -94,7 +94,7 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default IProjectNature getNature(String natureId) throws CoreException {
+    default IProjectNature getNature(String natureId) {
         return null;
     }
 
@@ -104,7 +104,7 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default IProject[] getReferencedProjects() throws CoreException {
+    default IProject[] getReferencedProjects() {
         return new IProject[0];
     }
 
@@ -119,22 +119,22 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default IBuildConfiguration[] getReferencedBuildConfigs(String configName, boolean includeMissing) throws CoreException {
+    default IBuildConfiguration[] getReferencedBuildConfigs(String configName, boolean includeMissing) {
         return new IBuildConfiguration[0];
     }
 
     @Override
-    default boolean hasBuildConfig(String configName) throws CoreException {
+    default boolean hasBuildConfig(String configName) {
         return false;
     }
 
     @Override
-    default boolean hasNature(String natureId) throws CoreException {
+    default boolean hasNature(String natureId) {
         return false;
     }
 
     @Override
-    default boolean isNatureEnabled(String natureId) throws CoreException {
+    default boolean isNatureEnabled(String natureId) {
         return false;
     }
 
@@ -144,37 +144,37 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default void loadSnapshot(int options, URI snapshotLocation, IProgressMonitor monitor) throws CoreException {
+    default void loadSnapshot(int options, URI snapshotLocation, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IProjectDescription description, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void move(IProjectDescription description, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void open(int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void open(int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void open(IProgressMonitor monitor) throws CoreException {
+    default void open(IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void saveSnapshot(int options, URI snapshotLocation, IProgressMonitor monitor) throws CoreException {
+    default void saveSnapshot(int options, URI snapshotLocation, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void setDescription(IProjectDescription description, IProgressMonitor monitor) throws CoreException {
+    default void setDescription(IProjectDescription description, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void setDescription(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void setDescription(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
@@ -204,12 +204,12 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default String getDefaultCharset() throws CoreException {
+    default String getDefaultCharset() {
         return null;
     }
 
     @Override
-    default String getDefaultCharset(boolean checkImplicit) throws CoreException {
+    default String getDefaultCharset(boolean checkImplicit) {
         return null;
     }
 
@@ -224,97 +224,97 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default IResource[] members() throws CoreException {
+    default IResource[] members() {
         return new IResource[0];
     }
 
     @Override
-    default IResource[] members(boolean includePhantoms) throws CoreException {
+    default IResource[] members(boolean includePhantoms) {
         return new IResource[0];
     }
 
     @Override
-    default IResource[] members(int memberFlags) throws CoreException {
+    default IResource[] members(int memberFlags) {
         return new IResource[0];
     }
 
     @Override
-    default IFile[] findDeletedMembersWithHistory(int depth, IProgressMonitor monitor) throws CoreException {
+    default IFile[] findDeletedMembersWithHistory(int depth, IProgressMonitor monitor) {
         return new IFile[0];
     }
 
     @Override
-    default void setDefaultCharset(String charset) throws CoreException {
+    default void setDefaultCharset(String charset) {
 
     }
 
     @Override
-    default void setDefaultCharset(String charset, IProgressMonitor monitor) throws CoreException {
+    default void setDefaultCharset(String charset, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IResourceFilterDescription createFilter(int type, FileInfoMatcherDescription matcherDescription, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default IResourceFilterDescription createFilter(int type, FileInfoMatcherDescription matcherDescription, int updateFlags, IProgressMonitor monitor) {
         return null;
     }
 
     @Override
-    default IResourceFilterDescription[] getFilters() throws CoreException {
+    default IResourceFilterDescription[] getFilters() {
         return new IResourceFilterDescription[0];
     }
 
     @Override
-    default void accept(IResourceProxyVisitor visitor, int memberFlags) throws CoreException {
+    default void accept(IResourceProxyVisitor visitor, int memberFlags) {
 
     }
 
     @Override
-    default void accept(IResourceProxyVisitor visitor, int depth, int memberFlags) throws CoreException {
+    default void accept(IResourceProxyVisitor visitor, int depth, int memberFlags) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor) throws CoreException {
+    default void accept(IResourceVisitor visitor) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor, int depth, boolean includePhantoms) throws CoreException {
+    default void accept(IResourceVisitor visitor, int depth, boolean includePhantoms) {
 
     }
 
     @Override
-    default void accept(IResourceVisitor visitor, int depth, int memberFlags) throws CoreException {
+    default void accept(IResourceVisitor visitor, int depth, int memberFlags) {
 
     }
 
     @Override
-    default void clearHistory(IProgressMonitor monitor) throws CoreException {
+    default void clearHistory(IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IPath destination, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void copy(IPath destination, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IPath destination, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void copy(IPath destination, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IProjectDescription description, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void copy(IProjectDescription description, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void copy(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void copy(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default IMarker createMarker(String type) throws CoreException {
+    default IMarker createMarker(String type) {
         return null;
     }
 
@@ -324,17 +324,17 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default void delete(boolean force, IProgressMonitor monitor) throws CoreException {
+    default void delete(boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void delete(int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void delete(int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void deleteMarkers(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default void deleteMarkers(String type, boolean includeSubtypes, int depth) {
 
     }
 
@@ -344,17 +344,17 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default IMarker findMarker(long id) throws CoreException {
+    default IMarker findMarker(long id) {
         return null;
     }
 
     @Override
-    default IMarker[] findMarkers(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default IMarker[] findMarkers(String type, boolean includeSubtypes, int depth) {
         return new IMarker[0];
     }
 
     @Override
-    default int findMaxProblemSeverity(String type, boolean includeSubtypes, int depth) throws CoreException {
+    default int findMaxProblemSeverity(String type, boolean includeSubtypes, int depth) {
         return 0;
     }
 
@@ -409,12 +409,12 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default Map<QualifiedName, String> getPersistentProperties() throws CoreException {
+    default Map<QualifiedName, String> getPersistentProperties() {
         return null;
     }
 
     @Override
-    default String getPersistentProperty(QualifiedName key) throws CoreException {
+    default String getPersistentProperty(QualifiedName key) {
         return null;
     }
 
@@ -444,12 +444,12 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default Map<QualifiedName, Object> getSessionProperties() throws CoreException {
+    default Map<QualifiedName, Object> getSessionProperties() {
         return null;
     }
 
     @Override
-    default Object getSessionProperty(QualifiedName key) throws CoreException {
+    default Object getSessionProperty(QualifiedName key) {
         return null;
     }
 
@@ -534,62 +534,62 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default void move(IPath destination, boolean force, IProgressMonitor monitor) throws CoreException {
+    default void move(IPath destination, boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IPath destination, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void move(IPath destination, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IProjectDescription description, boolean force, boolean keepHistory, IProgressMonitor monitor) throws CoreException {
+    default void move(IProjectDescription description, boolean force, boolean keepHistory, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IProjectDescription description, int updateFlags, IProgressMonitor monitor) throws CoreException {
+    default void move(IProjectDescription description, int updateFlags, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void refreshLocal(int depth, IProgressMonitor monitor) throws CoreException {
+    default void refreshLocal(int depth, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void revertModificationStamp(long value) throws CoreException {
+    default void revertModificationStamp(long value) {
 
     }
 
     @Override
-    default void setDerived(boolean isDerived) throws CoreException {
+    default void setDerived(boolean isDerived) {
 
     }
 
     @Override
-    default void setDerived(boolean isDerived, IProgressMonitor monitor) throws CoreException {
+    default void setDerived(boolean isDerived, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void setHidden(boolean isHidden) throws CoreException {
+    default void setHidden(boolean isHidden) {
 
     }
 
     @Override
-    default void setLocal(boolean flag, int depth, IProgressMonitor monitor) throws CoreException {
+    default void setLocal(boolean flag, int depth, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default long setLocalTimeStamp(long value) throws CoreException {
+    default long setLocalTimeStamp(long value) {
         return 0;
     }
 
     @Override
-    default void setPersistentProperty(QualifiedName key, String value) throws CoreException {
+    default void setPersistentProperty(QualifiedName key, String value) {
 
     }
 
@@ -599,22 +599,22 @@ public interface IProjectStub extends IProject {
     }
 
     @Override
-    default void setResourceAttributes(ResourceAttributes attributes) throws CoreException {
+    default void setResourceAttributes(ResourceAttributes attributes) {
 
     }
 
     @Override
-    default void setSessionProperty(QualifiedName key, Object value) throws CoreException {
+    default void setSessionProperty(QualifiedName key, Object value) {
 
     }
 
     @Override
-    default void setTeamPrivateMember(boolean isTeamPrivate) throws CoreException {
+    default void setTeamPrivateMember(boolean isTeamPrivate) {
 
     }
 
     @Override
-    default void touch(IProgressMonitor monitor) throws CoreException {
+    default void touch(IProgressMonitor monitor) {
 
     }
 

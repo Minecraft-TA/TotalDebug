@@ -27,7 +27,7 @@ public class AnimatedFlatSVGIcon implements Icon {
             i++;
         }
 
-        if (icons.size() < 1)
+        if (icons.isEmpty())
             throw new IllegalArgumentException();
 
         this.icons = icons.toArray(new FlatSVGIcon[0]);

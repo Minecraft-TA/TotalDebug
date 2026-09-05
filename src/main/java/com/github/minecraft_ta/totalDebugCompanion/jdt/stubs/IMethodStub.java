@@ -9,7 +9,7 @@ import org.eclipse.jdt.core.*;
 public interface IMethodStub extends IMethod {
 
     @Override
-    default IMemberValuePair getDefaultValue() throws JavaModelException {
+    default IMemberValuePair getDefaultValue() {
         return null;
     }
 
@@ -19,17 +19,17 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default String[] getExceptionTypes() throws JavaModelException {
+    default String[] getExceptionTypes() {
         return new String[0];
     }
 
     @Override
-    default String[] getTypeParameterSignatures() throws JavaModelException {
+    default String[] getTypeParameterSignatures() {
         return new String[0];
     }
 
     @Override
-    default ITypeParameter[] getTypeParameters() throws JavaModelException {
+    default ITypeParameter[] getTypeParameters() {
         return new ITypeParameter[0];
     }
 
@@ -39,7 +39,7 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default ILocalVariable[] getParameters() throws JavaModelException {
+    default ILocalVariable[] getParameters() {
         return new ILocalVariable[0];
     }
 
@@ -49,7 +49,7 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default String[] getParameterNames() throws JavaModelException {
+    default String[] getParameterNames() {
         return new String[0];
     }
 
@@ -59,17 +59,17 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default String[] getRawParameterNames() throws JavaModelException {
+    default String[] getRawParameterNames() {
         return new String[0];
     }
 
     @Override
-    default String getReturnType() throws JavaModelException {
+    default String getReturnType() {
         return null;
     }
 
     @Override
-    default String getSignature() throws JavaModelException {
+    default String getSignature() {
         return null;
     }
 
@@ -79,17 +79,17 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default boolean isConstructor() throws JavaModelException {
+    default boolean isConstructor() {
         return false;
     }
 
     @Override
-    default boolean isMainMethod() throws JavaModelException {
+    default boolean isMainMethod() {
         return false;
     }
 
     @Override
-    default boolean isMainMethodCandidate() throws JavaModelException {
+    default boolean isMainMethodCandidate() {
         return false;
     }
 
@@ -114,12 +114,12 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default IAnnotation[] getAnnotations() throws JavaModelException {
+    default IAnnotation[] getAnnotations() {
         return new IAnnotation[0];
     }
 
     @Override
-    default String[] getCategories() throws JavaModelException {
+    default String[] getCategories() {
         return new String[0];
     }
 
@@ -139,12 +139,12 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default int getFlags() throws JavaModelException {
+    default int getFlags() {
         return 0;
     }
 
     @Override
-    default ISourceRange getJavadocRange() throws JavaModelException {
+    default ISourceRange getJavadocRange() {
         return null;
     }
 
@@ -179,12 +179,12 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default String getAttachedJavadoc(IProgressMonitor monitor) throws JavaModelException {
+    default String getAttachedJavadoc(IProgressMonitor monitor) {
         return null;
     }
 
     @Override
-    default IResource getCorrespondingResource() throws JavaModelException {
+    default IResource getCorrespondingResource() {
         return null;
     }
 
@@ -239,7 +239,7 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default IResource getUnderlyingResource() throws JavaModelException {
+    default IResource getUnderlyingResource() {
         return null;
     }
 
@@ -249,7 +249,7 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default boolean isStructureKnown() throws JavaModelException {
+    default boolean isStructureKnown() {
         return false;
     }
 
@@ -259,47 +259,47 @@ public interface IMethodStub extends IMethod {
     }
 
     @Override
-    default IJavaElement[] getChildren() throws JavaModelException {
+    default IJavaElement[] getChildren() {
         return new IJavaElement[0];
     }
 
     @Override
-    default boolean hasChildren() throws JavaModelException {
+    default boolean hasChildren() {
         return false;
     }
 
     @Override
-    default void copy(IJavaElement container, IJavaElement sibling, String rename, boolean replace, IProgressMonitor monitor) throws JavaModelException {
+    default void copy(IJavaElement container, IJavaElement sibling, String rename, boolean replace, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void delete(boolean force, IProgressMonitor monitor) throws JavaModelException {
+    default void delete(boolean force, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void move(IJavaElement container, IJavaElement sibling, String rename, boolean replace, IProgressMonitor monitor) throws JavaModelException {
+    default void move(IJavaElement container, IJavaElement sibling, String rename, boolean replace, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default void rename(String name, boolean replace, IProgressMonitor monitor) throws JavaModelException {
+    default void rename(String name, boolean replace, IProgressMonitor monitor) {
 
     }
 
     @Override
-    default String getSource() throws JavaModelException {
+    default String getSource() {
         return null;
     }
 
     @Override
-    default ISourceRange getSourceRange() throws JavaModelException {
+    default ISourceRange getSourceRange() {
         return null;
     }
 
     @Override
-    default ISourceRange getNameRange() throws JavaModelException {
+    default ISourceRange getNameRange() {
         return null;
     }
 }

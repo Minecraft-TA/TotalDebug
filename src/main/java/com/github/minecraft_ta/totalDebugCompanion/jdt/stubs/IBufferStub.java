@@ -95,7 +95,7 @@ public interface IBufferStub extends IBuffer {
     }
 
     @Override
-    default void save(IProgressMonitor progress, boolean force) throws JavaModelException {
+    default void save(IProgressMonitor progress, boolean force) {
 
     }
 

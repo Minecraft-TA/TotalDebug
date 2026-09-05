@@ -20,37 +20,37 @@ public interface BundleStub extends Bundle {
     }
 
     @Override
-    default void start(int options) throws BundleException {
+    default void start(int options) {
 
     }
 
     @Override
-    default void start() throws BundleException {
+    default void start() {
 
     }
 
     @Override
-    default void stop(int options) throws BundleException {
+    default void stop(int options) {
 
     }
 
     @Override
-    default void stop() throws BundleException {
+    default void stop() {
 
     }
 
     @Override
-    default void update(InputStream input) throws BundleException {
+    default void update(InputStream input) {
 
     }
 
     @Override
-    default void update() throws BundleException {
+    default void update() {
 
     }
 
     @Override
-    default void uninstall() throws BundleException {
+    default void uninstall() {
 
     }
 

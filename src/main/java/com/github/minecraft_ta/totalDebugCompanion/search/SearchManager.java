@@ -5,7 +5,6 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultHighlighter;
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;

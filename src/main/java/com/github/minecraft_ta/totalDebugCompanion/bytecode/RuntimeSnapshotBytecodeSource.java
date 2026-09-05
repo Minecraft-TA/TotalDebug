@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode;
 
-import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule;

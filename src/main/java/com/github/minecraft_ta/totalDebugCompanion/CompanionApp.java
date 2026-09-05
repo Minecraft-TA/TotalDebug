@@ -403,7 +403,7 @@ public final class CompanionApp {
                 .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
         CodeInsightService currentInsightService = codeInsightService;
         if (currentInsightService != null) {
-            currentInsightService.rebind(() -> snapshot.index(), sourceCatalog);
+            currentInsightService.rebind(snapshot::index, sourceCatalog);
         }
         CompanionClassIndex.replace(snapshot.index());
         decompilationService = replacement;
@@ -412,7 +412,7 @@ public final class CompanionApp {
                 sourceCatalog
         );
         if (currentInsightService == null) {
-            codeInsightService = new CodeInsightService(() -> snapshot.index(), sourceCatalog);
+            codeInsightService = new CodeInsightService(snapshot::index, sourceCatalog);
         }
         activeIndexFile = snapshot.indexFile();
         activeRuntimeSignature = snapshot.signature();

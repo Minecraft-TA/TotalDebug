@@ -20,12 +20,12 @@ public interface BundleContextStub extends BundleContext {
     }
 
     @Override
-    default Bundle installBundle(String location, InputStream input) throws BundleException {
+    default Bundle installBundle(String location, InputStream input) {
         return null;
     }
 
     @Override
-    default Bundle installBundle(String location) throws BundleException {
+    default Bundle installBundle(String location) {
         return null;
     }
 
@@ -40,7 +40,7 @@ public interface BundleContextStub extends BundleContext {
     }
 
     @Override
-    default void addServiceListener(ServiceListener listener, String filter) throws InvalidSyntaxException {
+    default void addServiceListener(ServiceListener listener, String filter) {
 
     }
 
@@ -95,12 +95,12 @@ public interface BundleContextStub extends BundleContext {
     }
 
     @Override
-    default ServiceReference<?>[] getServiceReferences(String clazz, String filter) throws InvalidSyntaxException {
+    default ServiceReference<?>[] getServiceReferences(String clazz, String filter) {
         return null;
     }
 
     @Override
-    default ServiceReference<?>[] getAllServiceReferences(String clazz, String filter) throws InvalidSyntaxException {
+    default ServiceReference<?>[] getAllServiceReferences(String clazz, String filter) {
         return null;
     }
 
@@ -115,7 +115,7 @@ public interface BundleContextStub extends BundleContext {
     }
 
     @Override
-    default <S> Collection<ServiceReference<S>> getServiceReferences(Class<S> clazz, String filter) throws InvalidSyntaxException {
+    default <S> Collection<ServiceReference<S>> getServiceReferences(Class<S> clazz, String filter) {
         return null;
     }
 
@@ -140,7 +140,7 @@ public interface BundleContextStub extends BundleContext {
     }
 
     @Override
-    default Filter createFilter(String filter) throws InvalidSyntaxException {
+    default Filter createFilter(String filter) {
         return null;
     }
 

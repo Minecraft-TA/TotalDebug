@@ -44,7 +44,7 @@ public class SignatureHelper {
             return signature;
 
         String qualifier = Signature.getSignatureQualifier(signature);
-        if (qualifier.length() > 0)
+        if (!qualifier.isEmpty())
             return signature;
 
         String elementType = Signature.getElementType(signature);
@@ -62,7 +62,7 @@ public class SignatureHelper {
             // ignore - not found
         }
 
-        if (qualifier.length() == 0)
+        if (qualifier.isEmpty())
             return signature;
 
         String qualifiedType = Signature.toQualifiedName(new String[]{qualifier, genericSimpleName});

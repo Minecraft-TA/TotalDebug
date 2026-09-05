@@ -78,13 +78,6 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         final CompletionItem item = new CompletionItem(this);
         item.setRelevance(mapRelevance(proposal));
         item.setKind(mapKind(proposal));
-        /*if (Flags.isDeprecated(proposal.getFlags())) {
-            if (preferenceManager.getClientPreferences().isCompletionItemTagSupported()) {
-                $.setTags(List.of(CompletionItemTag.Deprecated));
-            } else {
-                $.setDeprecated(true);
-            }
-        }*/
 
         if (!this.descriptionProvider.updateDescription(proposal, item))
             return null;
@@ -95,8 +88,8 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
             return null;
 
         //Fix first completion
-        var mainEditRange = item.getTextEdits().get(0).getRange();
-        if (mainEditRange.getEndOffset() > this.offset && !item.getTextEdits().get(0).getNewText().endsWith(";"))
+        var mainEditRange = item.getTextEdits().getFirst().getRange();
+        if (mainEditRange.getEndOffset() > this.offset && !item.getTextEdits().getFirst().getNewText().endsWith(";"))
             mainEditRange.setLength(mainEditRange.getLength() - (mainEditRange.getEndOffset() - this.offset));
         return item;
     }
@@ -143,7 +136,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 item.addTextEdit(new CustomTextEdit(declarationReplacementRange, declarationText));
                 addAllImportsForType(variableType, item);
 
-                items.add(0, item);
+                items.addFirst(item);
             } catch (Throwable ignored) {}
         }
     }
