@@ -140,14 +140,14 @@ public final class ClientScriptService implements AutoCloseable {
         }
         ServerScriptTransport.Availability availability = this.serverTransport.availability();
         if (!availability.available()) {
-            acceptResult(run.executionId(), ExecutionResult.failed("", null, availability.unavailableReason()),
+            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING, availability.unavailableReason()),
                     ExecutionSide.SERVER);
             return;
         }
         try {
             this.serverTransport.stop(new StopServerScriptPayload(run.executionId()));
         } catch (RuntimeException exception) {
-            acceptResult(run.executionId(), ExecutionResult.failed("", null,
+            acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING,
                     "Unable to stop the server script: " + exception.getMessage()), ExecutionSide.SERVER);
         }
     }
@@ -259,7 +259,7 @@ public final class ClientScriptService implements AutoCloseable {
     }
 
     private static boolean isTerminal(ExecutionStatus type) {
-        return type != ExecutionStatus.COMPILATION_COMPLETED;
+        return type.terminal();
     }
 
     @Override

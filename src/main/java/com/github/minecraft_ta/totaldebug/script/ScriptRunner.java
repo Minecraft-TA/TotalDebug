@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -438,7 +439,7 @@ public final class ScriptRunner implements AutoCloseable {
             boolean cancelBeforeStart = false;
             boolean cannotStopTickThread = false;
             synchronized (this.lock) {
-                if (this.terminal) {
+                if (this.terminal || this.cancellationRequested) {
                     return;
                 }
                 this.cancellationRequested = true;
@@ -459,27 +460,41 @@ public final class ScriptRunner implements AutoCloseable {
                 return;
             }
             if (cannotStopTickThread) {
-                finish(
-                        ExecutionStatus.RUN_EXCEPTION,
-                        "The script is already running on the game thread and cannot be stopped safely"
-                );
+                reportCancellationPending("Stop requested; the script is still running on the game thread and must end cooperatively");
                 return;
             }
             if (threadToInterrupt == null) {
-                finish(ExecutionStatus.RUN_EXCEPTION, "Script run cancelled");
+                // Execution has returned and is preparing its final result, including captured output.
                 return;
             }
 
             Thread executingThread = threadToInterrupt;
+            reportCancellationPending("Stop requested; waiting for the script to finish");
             executingThread.interrupt();
-            stopExecutor.schedule(() -> {
-                if (executingThread.isAlive()) {
-                    finish(
-                            ExecutionStatus.RUN_EXCEPTION,
-                            "Stop timed out; the script is still running and can only end cooperatively or when Minecraft exits"
-                    );
+            try {
+                stopExecutor.schedule(() -> {
+                    if (executingThread.isAlive()) {
+                        reportCancellationPending(
+                                "Stop timed out; the script is still running and can only end cooperatively or when Minecraft exits"
+                        );
+                    }
+                }, stopGrace.toNanos(), TimeUnit.NANOSECONDS);
+            } catch (RejectedExecutionException exception) {
+                // Close can shut down the optional grace-period reporter after Stop has already interrupted the run.
+                if (!closed) {
+                    throw exception;
                 }
-            }, stopGrace.toNanos(), TimeUnit.NANOSECONDS);
+            }
+        }
+
+        private void reportCancellationPending(String message) {
+            synchronized (this.lock) {
+                if (this.terminal) {
+                    return;
+                }
+                this.pendingResults.add(ExecutionResult.fromStatus(ExecutionStatus.CANCELLATION_PENDING, message));
+            }
+            drainResults();
         }
 
         private void finish(ExecutionStatus type, String message) {
@@ -523,7 +538,7 @@ public final class ScriptRunner implements AutoCloseable {
                     }
                     throw error;
                 } finally {
-                    if (result.status() != ExecutionStatus.COMPILATION_COMPLETED) {
+                    if (result.status().terminal()) {
                         runs.remove(this.scriptId, this);
                     }
                 }

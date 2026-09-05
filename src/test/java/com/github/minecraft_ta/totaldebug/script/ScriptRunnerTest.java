@@ -248,28 +248,6 @@ public class ScriptRunnerTest {
     }
 
     @Test
-    void uninterruptibleThreadReportsThatItIsStillRunningAfterTheGracePeriod() throws Exception {
-        StatusRecorder statuses = new StatusRecorder();
-        String body = """
-                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(400);
-                while (System.nanoTime() < deadline) {
-                    Thread.interrupted();
-                }
-                """;
-        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(25))) {
-            runner.runScript(4, script("StubbornFixture", body), ScriptExecutionEnvironment.THREAD);
-            statuses.awaitCompilation();
-            awaitExecutionStart(runner, 4);
-
-            runner.stopScript(4);
-            Status terminal = statuses.awaitTerminal();
-
-            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
-            assertTrue(terminal.error().contains("still running"));
-        }
-    }
-
-    @Test
     void stoppingFromTheCompilationCallbackDeliversTheTerminalResultAfterThatCallbackReturns() throws Exception {
         List<String> events = new CopyOnWriteArrayList<>();
         CountDownLatch terminalDelivered = new CountDownLatch(1);
@@ -289,6 +267,57 @@ public class ScriptRunnerTest {
 
             assertTrue(terminalDelivered.await(5, TimeUnit.SECONDS));
             assertEquals(List.of("compilation callback entered", "compilation callback returned", "RUN_EXCEPTION"), events);
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(ScriptExecutionEnvironment.class)
+    void cancellationRemainsPendingUntilTargetCodeActuallyEnds(ScriptExecutionEnvironment environment) throws Exception {
+        CancellationFixture.entered = new CountDownLatch(1);
+        CancellationFixture.release = new CountDownLatch(1);
+        StatusRecorder statuses = new StatusRecorder();
+        AtomicReference<Runnable> scheduled = new AtomicReference<>();
+        Thread tick = null;
+        try (ScriptRunner runner = runner((phase, task) -> scheduled.set(task), statuses, Duration.ofMillis(25))) {
+            runner.runScript(61, script("CancellationFixtureScript",
+                    "com.github.minecraft_ta.totaldebug.script.ScriptRunnerTest.CancellationFixture.waitForRelease(); log(\"ended\");"), environment);
+            statuses.awaitCompilation();
+            if (environment != ScriptExecutionEnvironment.THREAD) {
+                tick = daemonThread(scheduled.get());
+                tick.start();
+            }
+            assertTrue(CancellationFixture.entered.await(5, TimeUnit.SECONDS));
+            runner.stopScript(61);
+            runner.stopScript(61);
+            assertFalse(statuses.terminal.await(150, TimeUnit.MILLISECONDS), "Stop reported completion while target code was still running");
+            assertTrue(runner.isExecutionStarted(61), "The running execution lost its identity");
+            assertTrue(statuses.types().contains(ExecutionStatus.CANCELLATION_PENDING));
+            if (environment == ScriptExecutionEnvironment.THREAD) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                while (statuses.statuses.stream().noneMatch(status -> status.error().contains("Stop timed out"))) {
+                    assertTrue(System.nanoTime() < deadline, "Missing nonterminal timeout report");
+                    Thread.sleep(1);
+                }
+            }
+            runner.close();
+            assertFalse(statuses.terminal.await(25, TimeUnit.MILLISECONDS));
+            CancellationFixture.release.countDown();
+            Status terminal = statuses.awaitTerminal();
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertEquals("ended", terminal.output());
+        } finally {
+            CancellationFixture.release.countDown();
+            if (tick != null) tick.join(3000);
+        }
+    }
+
+    public static final class CancellationFixture {
+        static CountDownLatch entered;
+        static CountDownLatch release;
+
+        public static void waitForRelease() {
+            entered.countDown();
+            awaitUninterruptibly(release);
         }
     }
 
@@ -327,7 +356,7 @@ public class ScriptRunnerTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         List<ExecutionStatus> statuses = new CopyOnWriteArrayList<>();
         ScriptRunner runner = runner((phase, task) -> { }, (id, result) -> {
-            boolean terminal = result.status() != ExecutionStatus.COMPILATION_COMPLETED;
+            boolean terminal = result.status().terminal();
             if (terminal == terminalCallback) {
                 callbackEntered.countDown();
                 awaitUninterruptibly(releaseCallback);
@@ -525,7 +554,7 @@ public class ScriptRunnerTest {
             this.statuses.add(new Status(scriptId, status));
             if (status.status() == ExecutionStatus.COMPILATION_COMPLETED) {
                 this.compilation.countDown();
-            } else {
+            } else if (status.status().terminal()) {
                 this.terminal.countDown();
             }
         }

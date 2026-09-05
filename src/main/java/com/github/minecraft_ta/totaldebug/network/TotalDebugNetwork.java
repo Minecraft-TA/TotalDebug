@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class TotalDebugNetwork {
-    public static final String PROTOCOL_VERSION = "1";
+    public static final String PROTOCOL_VERSION = "2";
 
     private final ForwardedCompanionPayloadSink forwardedCompanionPayloads = new ForwardedCompanionPayloadSink();
 

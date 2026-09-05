@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion.message;
 
+import com.github.minecraft_ta.totaldebug.client.companion.CompanionProtocol;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
@@ -16,25 +17,25 @@ class SessionProtocolCodecTest {
 
     @Test
     void clientHelloMatchesTheSharedGoldenBytes() {
-        ClientHelloMessage message = new ClientHelloMessage(9, "abc", 7, "p", "d", "w");
+        ClientHelloMessage message = new ClientHelloMessage(CompanionProtocol.VERSION, "abc", 7, "p", "d", "w");
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
         message.write(output);
 
         assertArrayEquals(
-                HEX.parseHex("00000009000000036162630000000000000007000000017000000001640000000177"),
+                HEX.parseHex("0000000a000000036162630000000000000007000000017000000001640000000177"),
                 writtenBytes(output)
         );
     }
 
     @Test
     void serverHelloReadsTheSharedGoldenBytes() {
-        byte[] golden = HEX.parseHex("0000000901000000000000000700000000");
+        byte[] golden = HEX.parseHex("0000000a01000000000000000700000000");
         ServerHelloMessage message = new ServerHelloMessage();
 
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
-        assertEquals(9, message.protocolVersion());
+        assertEquals(CompanionProtocol.VERSION, message.protocolVersion());
         assertTrue(message.accepted());
         assertEquals(7, message.capabilities());
         assertEquals("", message.rejectionReason());

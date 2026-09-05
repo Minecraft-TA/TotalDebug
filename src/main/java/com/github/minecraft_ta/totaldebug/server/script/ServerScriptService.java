@@ -159,7 +159,7 @@ public final class ServerScriptService {
                     sessionPlayer,
                     new ForwardedExecutionResult(
                             scriptId,
-                            ExecutionResult.failed("", null, "The server result encoder is overloaded")
+                            result.deliveryFailure("The server result encoder is overloaded")
                     ).toPayloads()
             );
         }
@@ -178,7 +178,7 @@ public final class ServerScriptService {
             TotalDebug.LOGGER.error("Unable to encode execution result for script {}", scriptId, exception);
             payloads = new ForwardedExecutionResult(
                     scriptId,
-                    ExecutionResult.failed("", null, "Unable to encode the server execution result")
+                    result.deliveryFailure("Unable to encode the server execution result")
             ).toPayloads();
         }
         sendPayloads(server, sessionPlayer, payloads);

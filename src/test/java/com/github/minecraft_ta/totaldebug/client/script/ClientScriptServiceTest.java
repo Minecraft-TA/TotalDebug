@@ -148,6 +148,23 @@ class ClientScriptServiceTest {
         }
     }
 
+    @Test
+    void aFailedStopRequestKeepsTheRunAvailableForItsActualResult() {
+        List<Status> statuses = new ArrayList<>();
+        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
+        try (ClientScriptService service = service(statuses, transport)) {
+            service.handleRunRequest(serverRun(41));
+            int executionId = transport.runs.getLast().scriptId();
+            transport.stopFailure = new IllegalStateException("fixture");
+            service.stopScript(41);
+            assertEquals(ExecutionStatus.CANCELLATION_PENDING, statuses.getLast().status().status());
+            transport.stopFailure = null;
+            service.stopScript(41);
+            forward(service, new ForwardedExecutionResult(executionId, ExecutionResult.completed("actual result", null)));
+            assertEquals(new Status(41, ExecutionResult.completed("actual result", null)), statuses.getLast());
+        }
+    }
+
     private static ClientScriptService service(List<Status> statuses, ServerScriptTransport transport) {
         return new ClientScriptService(
                 (scriptId, status) -> statuses.add(new Status(scriptId, status)),
@@ -181,6 +198,7 @@ class ClientScriptServiceTest {
         private final Availability availability;
         private final List<RunServerScriptPayload> runs = new ArrayList<>();
         private final List<StopServerScriptPayload> stops = new ArrayList<>();
+        private RuntimeException stopFailure;
 
         private FakeServerTransport(Availability availability) {
             this.availability = availability;
@@ -198,6 +216,7 @@ class ClientScriptServiceTest {
 
         @Override
         public void stop(StopServerScriptPayload payload) {
+            if (this.stopFailure != null) throw this.stopFailure;
             this.stops.add(payload);
         }
     }

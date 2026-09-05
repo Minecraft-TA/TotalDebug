@@ -11,6 +11,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutionResultCodecTest {
     @Test
+    void deliveryFailuresPreserveWhetherTheTargetActuallyFinished() {
+        for (ExecutionStatus status : ExecutionStatus.values()) {
+            ExecutionResult original = ExecutionResult.fromStatus(status, "fixture");
+            ExecutionResult decoded = ExecutionResultCodec.decode(
+                    ExecutionResultCodec.encode(original.deliveryFailure("encoder overloaded")).json());
+            assertEquals(status.terminal(), decoded.status().terminal());
+            assertEquals("encoder overloaded", decoded.error().text());
+        }
+    }
+
+    @Test
     void boundsScriptLogsBeforeTransportEncoding() {
         ExecutionTextBuffer output = new ExecutionTextBuffer(5);
         output.append("abc");
