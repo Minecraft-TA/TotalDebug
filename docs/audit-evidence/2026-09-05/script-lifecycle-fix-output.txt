@@ -1,6 +1,0 @@
-SLF4J(W): Class path contains multiple SLF4J providers.
-SLF4J(W): Found provider [org.gradle.internal.logging.slf4j.StaticLoggerProvider@923b714]
-SLF4J(W): Found provider [org.apache.logging.slf4j.SLF4JServiceProvider@58a809]
-SLF4J(W): See https://www.slf4j.org/codes.html#multiple_bindings for an explanation.
-SLF4J(I): Actual provider is of type [org.gradle.internal.logging.slf4j.StaticLoggerProvider@923b714]
-PASS: production ClientScriptService Stop returned, terminal result delivered, no JVM lock cycle

@@ -1,6 +1,6 @@
-# Current storage layout
+# Storage and caches
 
-Implemented storage layout for TotalDebug and Companion, 2026-09-02. Project selection and reconnect are separate work. There are no migrations, old-format readers, or automatic legacy-data cleanup.
+TotalDebug keeps instance-authored files with the Minecraft workspace and application settings in Companion's global home. Generated caches are replaceable; scripts and debugger state are user data.
 
 ## Instance files
 
@@ -30,7 +30,7 @@ total-debug/
 Files are created when needed; an empty instance does not need every directory.
 
 - `scripts` contains authored methodless Java scripts.
-- `state.json` holds watches, breakpoint definitions, mute/exception choices and the last 50 distinct evaluator inputs with imports and execution side. One instance-state owner writes the whole file. The existing runtime-signature partition for breakpoint resolution remains; re-resolving breakpoint intent across pack updates belongs to the project lifecycle work.
+- `state.json` holds watches, breakpoint definitions, mute/exception choices and the last 50 distinct evaluator inputs with imports and execution side. One instance-state owner writes the whole file. Breakpoint resolution is partitioned by runtime signature.
 - The one replaceable inventory describes the Java runtime, production mode, ordered physical class sources, logical origins and module ownership. Game and Companion use the same Java record, JSON format and validator.
 - The format-2 source manifest lists generated JAR names, effective-content fingerprints, sizes and output SHA-256 hashes. Physical directories and JARs are referenced in place. A virtual root reuses its original archive only after its class entries and manifest match the effective loader view. Nested archives are copied as bytes; filtered or merged views are packed with buffered, compressed ZIP output. Filenames use the artifact or Java module name; collisions receive a numeric suffix. Only changed or damaged files are regenerated, and obsolete generated JARs are removed.
 - `index.jindex` is the only index file. Its ZIP contains the native Zstd `index` entry first, followed by `manifest.json` with inventory identity and source-id mappings. There is no index directory, generation selector or `current.json`.
@@ -46,7 +46,7 @@ Matching live inventory announcements join a pending restore. A cold build retai
 
 ## Global application files
 
-Default Windows home: `%LOCALAPPDATA%/TotalDebugCompanion`. The existing `--app-home` and `totaldebug.companionAppHome` overrides remain.
+Default Windows home: `%LOCALAPPDATA%/TotalDebugCompanion`. Override it with `--app-home` or `totaldebug.companionAppHome`.
 
 ```text
 TotalDebugCompanion/
@@ -74,7 +74,7 @@ TotalDebugCompanion/
 ```
 
 - `settings.json` contains appearance, fonts, debugger window geometry and presentation preferences. It contains no watches, breakpoints or expression history.
-- `profile.json` remembers the current instance home and actual game directory. It is not a project catalog. No placeholder `project.json`, `projects.json` or game reconnect records are created.
+- `profile.json` remembers the current instance home and actual game directory. Companion reopens this profile on standalone startup.
 - The `run/companion` files coordinate the existing single Companion process. Credentials are published with user-only POSIX permissions or Windows ACLs. Lock ownership, not the existence of a lock file, determines liveness.
 - Immutable launch copies retain the three most recently used builds, plus any older build still pinned by a launching or running process. Publishers and pruning share a cache lock; the launcher pins the JAR through process exit, and Companion also pins its running copy. Authored scripts and installed executables are outside this cleanup scope.
 - The MCP directory is Tomcat's reconstructible work area, not an execution store.
@@ -96,7 +96,7 @@ NeoForge configuration, Minecraft logs/options, launcher files and other mods' f
 
 MCP jobs keep generated source, status, logs, structured values and runtime context in memory. `job_source` reads the same retained record. Completed jobs are evicted oldest-first on submission when the 256-record retention target is exceeded; active jobs are never evicted. Companion exit discards all records.
 
-There is no `history/executions`, MCP artifact directory, stored wrapper source or per-job JSON. The evaluator's small input-recall list belongs in `state.json`. Save useful code explicitly as a script.
+The evaluator's input-recall list belongs in `state.json`. Save useful code explicitly as a script.
 
 ## Ownership and publication
 
@@ -108,16 +108,6 @@ Writes use same-directory staging named `.td-<pid>-<random>`. File replacement r
 
 Script saves capture editor text on the Swing thread, use atomic replacement and do not mark a failed save successful. Tab close and application exit flush pending authored state; save failure keeps the UI open. Settings/state background writes coalesce snapshots and retain failed writes for an explicit retry/flush. Invalid persistent state fails with its path rather than being overwritten with defaults.
 
-## Development reset
+## Cache management
 
-Use matching freshly built TotalDebug and Companion binaries and restart Minecraft for the game-side change. Existing scripts/state/caches from the old layout are not moved, read or deleted. Keep any scripts or execution evidence you want before manually cleaning old folders. Do not delete all of `total-debug` merely to refresh generated data.
-
-The current binaries were deployed to ATM10 Sky with `deployLocal` and verified against the built JARs. Deployment did not clean instance data. The storage-only change does not solve the full cross-project UI/session switching lifecycle.
-
-## Verification
-
-The full suites passed: TotalDebug 143 tests, shared storage 12, Companion 398. Replacement tests cover removed JARs/classes, one index path across runtime changes, stale readers, case-insensitive filename collisions, incomplete source/debug publication, queued decompiler cancellation, and selective editor disposal. Recovery tests cover deleted, malformed, unsupported and truncated generated caches while preserving errors for missing original runtime sources. Unknown cache directories are rejected without migration or deletion.
-
-A packaged-artifact check using the installed ATM10 Sky mod recreated a damaged source copy, rebuilt an index referencing a removed JAR, then reused the repaired index without rewriting it. This check used a temporary cache; confirmation of the complete live pack workflow after restart remains separate.
-
-`localBundle` builds both artifacts. An isolated headless startup check loads the packaged Companion and shared storage classes, verifies launch pinning, and checks that failed startup removes its published credentials. This is packaging verification, not a live Minecraft test of this revision.
+Close Minecraft and Companion before manually removing generated caches. Preserve `scripts/` and `state.json`; do not delete all of `total-debug` to refresh generated data. Missing or invalid generated caches are rebuilt from the referenced runtime sources. Missing original archives remain errors.

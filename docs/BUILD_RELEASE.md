@@ -1,28 +1,30 @@
-# Coordinated builds and release publication
+# Builds and publication
 
-All four repositories require Java 21. Use each repository's checked-in Gradle wrapper. Packagecloud remains the publication destination; the library sources are the upstream `tth05/SCNet` and `tth05/JIndex` repositories. Local commits and generated publication metadata are not public releases.
+Use Java 21 and each repository's checked-in Gradle wrapper. The application consists of TotalDebug and TotalDebugCompanion, with SCNet for transport and JIndex for indexing. TotalDebug also produces the shared storage and evaluation libraries.
 
-## Local development
+## Coordinated local builds
 
-Application builds use public repositories by default. Pass `-PtotaldebugUseMavenLocal=true` when verifying coordinated local changes. In that mode, SCNet/JIndex and Companion's shared storage/evaluation dependencies resolve exclusively from Maven Local. A missing local library fails instead of selecting different public bytes. Other dependencies still use their normal repositories.
-
-Run the following in the named repository, in order. The versions below are the current development coordinates, not an approved immutable release set.
+Place the four repositories alongside each other and run these commands in order:
 
 | Repository | Command |
 | --- | --- |
-| SCNet | `.\gradlew.bat build publishToMavenLocal -PscnetVersion=2.0.0 --warning-mode fail` |
+| SCNet | `.\gradlew.bat build publishToMavenLocal '-PscnetVersion=2.0.0' --warning-mode fail` |
 | JIndex | `.\gradlew.bat build publishToMavenLocal --warning-mode fail` |
 | TotalDebug | `.\gradlew.bat :storage:publishToMavenLocal :evaluation:publishToMavenLocal --warning-mode fail` |
 | TotalDebugCompanion | `.\gradlew.bat build -PtotaldebugUseMavenLocal=true --warning-mode fail` |
 | TotalDebug | `.\gradlew.bat build -PtotaldebugUseMavenLocal=true -PtotaldebugUsePublishedCompanion=true --warning-mode fail` |
 
-The last command verifies the mod without invoking another Companion build. When deliberately using the sibling Companion build, omit `-PtotaldebugUsePublishedCompanion=true`; the root task forwards the Maven Local option and publishes the shared modules first. Use the same Maven Local option for development `localBundle` or `deployLocal` tasks. Deployment still requires closing Minecraft and selecting the intended instance as described in the workspace instructions.
+Application builds use public repositories by default. `-PtotaldebugUseMavenLocal=true` resolves the coordinated libraries exclusively from Maven Local, so a missing local dependency fails instead of selecting different published bytes. Other dependencies keep their normal repositories.
 
-## Publication configuration
+The last command verifies the mod without building Companion again. Omit `-PtotaldebugUsePublishedCompanion=true` to use the sibling Companion checkout; the root task forwards the local dependency option and publishes the shared modules first.
 
-The four Maven publications use `https://packagecloud.io/tth05/repo/java/maven2/`. Their publishing credentials read `PACKAGECLOUD_TOKEN` from the environment and use an empty password, following [Packagecloud's Maven Publish configuration](https://packagecloud.io/docs#gradle_maven_publish_deploy). Public consumers use `https://packagecloud.io/tth05/repo/maven2`. No token belongs in a checked-in file or command argument.
+Use the same local dependency option with `localBundle`, `deployLocal`, `runClient` and `runServer`. See [local deployment](../README.md#deploy-locally) for instance paths and restart instructions.
 
-Storage and evaluation share the root `mod_version`. Companion's storage and evaluation dependencies have separate `storage_version` and `evaluation_version` properties. Both currently select `2.0.0-SNAPSHOT`.
+## Maven publication
+
+SCNet and JIndex are published from their upstream repositories, `tth05/SCNet` and `tth05/JIndex`. The four library publications use `https://packagecloud.io/tth05/repo/java/maven2/`. Public consumers use `https://packagecloud.io/tth05/repo/maven2`.
+
+Publishing credentials read `PACKAGECLOUD_TOKEN` from the environment with an empty password. Keep credentials out of repository files and command arguments.
 
 | Artifact | Producer version property | Consumer version property |
 | --- | --- | --- |
@@ -30,17 +32,31 @@ Storage and evaluation share the root `mod_version`. Companion's storage and eva
 | `com.github.tth05:jindex` | JIndex `jindexVersion` | Companion `jindex_version` |
 | `com.github.minecraft_ta:totaldebug-storage` | TotalDebug `mod_version` | Companion `storage_version` |
 | `com.github.minecraft_ta:totaldebug-evaluation` | TotalDebug `mod_version` | Companion `evaluation_version` |
-| Companion JAR | Companion `releaseVersion` | Mod's compatible immutable download URL and SHA-256 pin |
-| TotalDebug mod | TotalDebug `mod_version` | Installed candidate JAR |
+| Companion JAR | Companion `releaseVersion` | Mod's immutable download URL and SHA-256 pin |
+| TotalDebug mod | TotalDebug `mod_version` | Installed mod JAR |
 
-Before public publication, choose one fixed candidate version set and build it from recorded commits. Generate the POMs locally with `generatePomFileForMavenJavaPublication` in SCNet/JIndex and `:storage:generatePomFileForStoragePublication :evaluation:generatePomFileForEvaluationPublication` in TotalDebug. Review their coordinates, dependencies and source URLs. The owners' deferred license choice has not been filled in.
+Generate and inspect publication metadata with `generatePomFileForMavenJavaPublication` in SCNet/JIndex and `:storage:generatePomFileForStoragePublication :evaluation:generatePomFileForEvaluationPublication` in TotalDebug.
 
-The repository publication task names are `publishMavenJavaPublicationToPackagecloudRepository` in SCNet/JIndex and `:storage:publishStoragePublicationToPackagecloudRepository :evaluation:publishEvaluationPublicationToPackagecloudRepository` in TotalDebug. These upload artifacts and require separate publication authorization and account access. They have not been executed as part of local metadata verification.
+Publish using `publishMavenJavaPublicationToPackagecloudRepository` in SCNet/JIndex and `:storage:publishStoragePublicationToPackagecloudRepository :evaluation:publishEvaluationPublicationToPackagecloudRepository` in TotalDebug.
 
-## Candidate acceptance
+## Publish a matching application pair
 
-After authorized dependency publication, build Companion with Maven Local disabled, publish its immutable candidate, and update the mod's compatible Companion pin from the actual uploaded bytes. Then build the mod with both `-PtotaldebugUseMavenLocal=false` and `-PtotaldebugUsePublishedCompanion=true`. The Windows workflows explicitly use these public dependency settings where applicable.
+1. Select immutable library versions, update consumer properties and publish the libraries.
+2. Build Companion with `-PtotaldebugUseMavenLocal=false`, then publish its application JAR.
+3. Set the mod's Companion URL and SHA-256 pin to those uploaded bytes.
+4. Build TotalDebug with `-PtotaldebugUseMavenLocal=false -PtotaldebugUsePublishedCompanion=true`.
+5. Verify public dependency resolution using a fresh Gradle dependency cache, then install and exercise the resulting pair.
 
-Record commits and SHA-256 hashes for all producers and the installed pair. Resolve from an empty Maven Local directory and fresh dependency cache, compare embedded library bytes, and run the final dev-instance/ATM10 acceptance matrix in [the release audit](RELEASE_AUDIT.md). Candidate installation and stable publication remain separate steps. Current application protocol 11 and Minecraft payload protocol 2 must match the tested pair.
+Verify F6 navigation, search, usages, hierarchy, scripts, debugger evaluation, disconnect/reconnect and offline reopening on the pair intended for distribution. Include the applicable client/server permission checks. Record the artifact hashes with the release.
 
-The current [progress record](RELEASE_PROGRESS.md) identifies the completed local slices and remaining native, documentation, public CI and live acceptance work. No stable release has been approved by these local checks.
+Both peers require the same application protocol. Changing the handshake or message layout requires coordinated changes and a protocol version increment.
+
+## MCP sidecar installation
+
+To install Companion at a stable path for Codex's local MCP integration:
+
+```powershell
+.\gradlew.bat installCodexCompanionMcp -PtotaldebugUseMavenLocal=true
+```
+
+The task copies the application JAR to `%USERPROFILE%/.codex/mcp/totaldebug-companion/TotalDebugCompanion.jar`. Override the directory with `-PcodexHome=C:/path/to/.codex` or `CODEX_HOME`. Rebuilding Companion does not update that copy; rerun the install task after MCP changes. See [Companion's MCP documentation](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/MCP.md) for connection setup.
