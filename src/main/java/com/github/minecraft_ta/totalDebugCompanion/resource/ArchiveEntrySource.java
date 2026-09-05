@@ -42,7 +42,7 @@ public final class ArchiveEntrySource implements ContentSource {
         if (this.declaredSize > maximumBytes) {
             throw new ResourceTooLargeException(displayName(), maximumBytes);
         }
-        try (ZipFile archive = new ZipFile(this.archivePath.toFile())) {
+        try (ZipFile archive = ZipFile.builder().setPath(this.archivePath).get()) {
             var entry = archive.getEntry(this.entryName);
             if (entry == null || entry.isDirectory()) {
                 throw new FileNotFoundException("Archive entry not found: " + this.entryName);

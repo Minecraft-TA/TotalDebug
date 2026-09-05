@@ -43,7 +43,7 @@ public class ZipFileRootItem extends DirectoryTreeItem {
     }
 
     private void indexZipFile(Path path) {
-        try (ZipFile file = new ZipFile(path.toFile())) {
+        try (ZipFile file = ZipFile.builder().setPath(path).get()) {
             var enumeration = file.getEntries();
             ZipArchiveEntry el;
             while (enumeration.hasMoreElements()) {

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -45,11 +46,14 @@ class MicrosoftSourceRegistryTest {
 
         assertArrayEquals(
                 new String[]{"sample.Outer", "sample.Outer$Inner", "sample.Secondary"},
-                registry.getFullyQualifiedName(
+                Arrays.stream(registry.getBreakpointLocations(
                         SOURCE_URI.toString(),
-                        new int[]{line("outer"), line("nested"), line("secondary")},
-                        new int[]{1, 1, 1}
-                )
+                        new Types.SourceBreakpoint[]{
+                                new Types.SourceBreakpoint(line("outer"), null, null),
+                                new Types.SourceBreakpoint(line("nested"), null, null),
+                                new Types.SourceBreakpoint(line("secondary"), null, null)
+                        }
+                )).map(JavaBreakpointLocation::className).toArray(String[]::new)
         );
     }
 
@@ -94,10 +98,11 @@ class MicrosoftSourceRegistryTest {
         assertDoesNotThrow(() -> registry.register(
                 new DebugEngine.Source(sourceUri, "sample.PatternSource", source)
         ));
-        assertArrayEquals(
-                new String[]{"sample.PatternSource"},
-                registry.getFullyQualifiedName(sourceUri.toString(), new int[]{5}, new int[]{1})
+        JavaBreakpointLocation[] locations = registry.getBreakpointLocations(
+                sourceUri.toString(), new Types.SourceBreakpoint[]{new Types.SourceBreakpoint(5, null, null)}
         );
+        assertEquals(1, locations.length);
+        assertEquals("sample.PatternSource", locations[0].className());
     }
 
     @Test
@@ -110,7 +115,6 @@ class MicrosoftSourceRegistryTest {
         String hidden = "sample.Outer$Generated/0x0000000800080000";
 
         assertNull(registry.getSource(hidden, "Outer.java"));
-        assertNull(registry.getSourceFileURI(hidden, "Outer.java"));
         assertNull(registry.typeScope(hidden));
         assertEquals("value", registry.displayedVariableName(hidden, "run", "()V", "value"));
         assertEquals(SOURCE_URI.toString(), registry.getSource("sample.Outer$Inner", "Outer.java").getUri());
