@@ -4,7 +4,7 @@ Updated 2026-09-05 after discussion with the user. The release will retain the c
 
 The project has a usable foundation. SCNet's reproduced lifecycle defects were repairable within its existing transport responsibilities. Shared compilation, runtime discovery and native indexing already have distinct owners. There is no evidence here that a general application rewrite would improve release readiness.
 
-All ten original reproduced findings are now resolved, including execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) records 1,071 Java tests and 50 Rust tests passing, with one existing native test ignored. Independent native corpus parity, broader malformed-input checks, release dependency verification and live candidate acceptance remain open. Passing local suites do not establish release readiness.
+All ten original reproduced findings and the later inherited-interface finding C11 are now resolved, including execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) records 1,071 Java tests and 51 Rust tests passing, with one existing native test ignored. The independent native corpus comparison passes for all members declared by four selected target classes. Exhaustive extraction parity, hostile snapshot allocation bounds, release dependency verification and live candidate acceptance remain open. Passing local suites do not establish release readiness.
 
 ## Java evaluation strategy
 

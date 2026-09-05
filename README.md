@@ -17,14 +17,14 @@ Local searchable snapshots of the old implementations may live under `legacy/`; 
 Build with:
 
 ```powershell
-.\gradlew.bat build
+.\gradlew.bat build -PtotaldebugUseMavenLocal=true
 ```
 
 Run a development client or dedicated server with:
 
 ```powershell
-.\gradlew.bat runClient
-.\gradlew.bat runServer
+.\gradlew.bat runClient -PtotaldebugUseMavenLocal=true
+.\gradlew.bat runServer -PtotaldebugUseMavenLocal=true
 ```
 
 When `../TotalDebugCompanion` exists, `build` and `runClient` build its `shadowJar`. The development client reads that mutable JAR whenever it starts Companion. Rebuild Companion while Minecraft is running, close Companion, then press F6 to launch the new build. TotalDebug stages each launch by content hash, so the running process never locks the mutable development JAR.
@@ -32,7 +32,7 @@ When `../TotalDebugCompanion` exists, `build` and `runClient` build its `shadowJ
 Build and collect both current artifacts for an external Minecraft instance with:
 
 ```powershell
-.\gradlew.bat localBundle
+.\gradlew.bat localBundle -PtotaldebugUseMavenLocal=true
 ```
 
 The flat `build/local-bundle` directory contains `total_debug.jar` and `TotalDebugCompanion.jar`. Building the bundle does not deploy files or run tests. Runtime compatibility still comes from the Companion protocol handshake.
@@ -40,10 +40,10 @@ The flat `build/local-bundle` directory contains `total_debug.jar` and `TotalDeb
 To build and install both into an external instance, close Minecraft and run:
 
 ```powershell
-.\gradlew.bat deployLocal "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
+.\gradlew.bat deployLocal -PtotaldebugUseMavenLocal=true "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
 ```
 
-Save `totaldebugInstanceDir=C:/path/to/instance/minecraft` in your user `~/.gradle/gradle.properties` to use just `.\gradlew.bat deployLocal`. The target must be the actual Minecraft directory containing `mods/` and `config/`, not the launcher instance directory above it.
+Save `totaldebugInstanceDir=C:/path/to/instance/minecraft` in your user `~/.gradle/gradle.properties` to use `.\gradlew.bat deployLocal -PtotaldebugUseMavenLocal=true`. The target must be the actual Minecraft directory containing `mods/` and `config/`, not the launcher instance directory above it. The local dependency flag selects the coordinated libraries published to Maven Local; see [build and release instructions](docs/BUILD_RELEASE.md) for their build order.
 
 Deployment replaces only `mods/total_debug.jar` and `total-debug/companion-app/TotalDebugCompanion.jar`, and sets `decompilation.companionDevelopmentJar` in `config/total_debug-client.toml` to the selected mutable Companion build. Other configuration values and comments are preserved. Scripts, state, caches and other mods are untouched. Version-named `total_debug-*.jar` files must be removed manually first; deployment reports them and stops without changing the instance. Each replacement is atomic, but the three files are not one transaction. A failed deployment reports which files were installed; close Minecraft and rerun to finish.
 
@@ -58,7 +58,7 @@ companionDevelopmentJar = "C:/Users/Admin/IdeaProjects/TotalDebugCompanion/build
 
 Build Companion normally. After it closes, the next F6 reads and launches the current bytes at that path without restarting Minecraft.
 
-You can also replace `total-debug/companion-app/TotalDebugCompanion.jar` directly. TotalDebug verifies JARs while downloading them, then leaves the installed file alone. Close Companion and press F6 to launch the replacement. Delete the file to restore the published release on the next launch.
+Use the development override for mutable Companion builds. The managed installer checks its installed JAR against the configured release hash and replaces mismatches with verified release bytes.
 
 Install that verified Companion build as the MCP sidecar used by new Codex tasks with:
 

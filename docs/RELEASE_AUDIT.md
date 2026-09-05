@@ -4,7 +4,7 @@ Audited 2026-09-05. Status: not ready to release. This report covers the four re
 
 Implementation update: all ten original reproduced findings are resolved in local stabilization slices or the completed task baseline. C5's original probes now pass within the retained evaluator; this does not establish full Java binding parity. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the agreed scope. The original findings below preserve their audit evidence; the remaining release gates are open.
 
-The immediate work is correctness, paired distribution, reproducible verification, and removal of obsolete production paths. More feature development is not needed to make this release useful.
+The later corpus check found and fixed C11 below. Current tested behavior and limits are recorded in [release scope](RELEASE_SCOPE.md). The immediate remaining work is paired distribution, public build verification and live acceptance. Broader native hardening remains an explicit scope decision. More feature development is not needed to make this release useful.
 
 ## Scope and baseline
 
@@ -150,6 +150,12 @@ Evidence: [probe](audit-evidence/2026-09-05/ScriptSessionIdentityProbe.java), [c
 
 Required outcome: give each execution an identity that survives client/server routing and cannot alias across Companion sessions. Reject stale completions by that identity. Retain knowledge of still-running target work across UI/session loss, while accurately separating a lost observer from actual execution termination. Coordinate this with C6, rather than changing only one local map key.
 
+### C11. Find Usages includes a shadowed interface declaration
+
+Fixed in JIndex `a95ac5d`. The independent ASM scan of the captured runtime corpus exposed incorrect inherited-interface resolution. A class implementing a child interface that overrides a parent's default method could report the call under the parent declaration too. A small compiled fixture reproduced this independently of Minecraft.
+
+Resolution now removes interface declarations shadowed by more specific interfaces, excludes inherited private/static methods and selects a unique concrete default where present. Snapshot format 6 rejects older saved reference tables so Companion rebuilds them. The independent oracle compares all 1,393 declared members of Block, Blocks, String and List across 178,117 selected classes, before and after save/reload. Its 168,624 sites and 249,637 occurrences match. This is targeted corpus parity, not every possible target or extraction category. See [corpus evidence](audit-evidence/2026-09-05/asm-member-corpus.json) and the progress record.
+
 ## Distribution and verification blockers
 
 ### R1. The downloaded Companion cannot connect to the current mod
@@ -196,6 +202,8 @@ JIndex now has useful native lifetime, parsing, signature, CRC, snapshot and que
 Before release, compare normalized targets, sites, kinds and counts against an independent test-only scanner on fixtures and a fixed runtime corpus. Add bounded malformed class/signature/snapshot/query tests, including valid ZIP CRCs with invalid internal offsets/counts. Deserialized cross-section ranges and ordering are not comprehensively validated today. This is a missing integrity gate, not a reproduced corrupt-index crash or proof that every native query is unsafe.
 
 For shared evaluation, complete the [evaluation plan](EVALUATION_PLAN.md)'s supported/rejected context matrix: declared-type semantics, missing local metadata, private/nested/unnamed types, named modules, loader identity, helper compatibility, paused compilation, simultaneous stops, local writeback after errors and bounded retained references. Explicit unsupported contexts can remain unsupported. Tests must prove the exact refusal before side effects. Set Value currently uses Microsoft formatter semantics; document its actual input contract or finish the planned evaluator integration.
+
+Implementation update: snapshot cross-section validation, bounded raw/serialized signature nesting, independent ASM fixtures and the targeted full-corpus member comparison now pass. The original evaluator defects and result ownership issues are fixed within the retained design. [Release scope](RELEASE_SCOPE.md) records its actual limits and Set Value contract. General hostile snapshot allocation and exhaustive native extraction parity remain incomplete; they are not covered by these passing checks. Final live evaluation acceptance remains open.
 
 ### R5. Final live acceptance is still open
 
