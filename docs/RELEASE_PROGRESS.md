@@ -77,4 +77,4 @@ The original Companion audit probe was rerun against these completed builds. C7 
 
 Pre-fix logs are `.codex/dispatch-red.log`, `.codex/server-lifecycle-red.log` and `.codex/compiled-scope-red.log`. Full build logs are `.codex/dispatch-green.log`, `.codex/server-lifecycle-build.log`, `.codex/transport-consumer-totaldebug.log` and `.codex/compiled-scope-build.log`. Probe outputs are retained in the evidence directory.
 
-The next decision is documented in [release architecture decisions](RELEASE_DECISIONS.md). No cancellation/wire-format redesign or evaluator backend replacement has been started while that choice is pending.
+The evaluator decision is recorded in [release architecture decisions](RELEASE_DECISIONS.md). The user chose to retain the existing evaluator for this release. Continue focused correctness work within that design; no compiler-only switch or broad evaluator rewrite is planned.

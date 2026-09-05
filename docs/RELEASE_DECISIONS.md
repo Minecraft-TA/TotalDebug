@@ -1,6 +1,6 @@
 # Decisions before the next release slice
 
-Prepared 2026-09-05 after the C1-C4 and C7 fixes. This records proposals for discussion, not an accepted architecture decision.
+Updated 2026-09-05 after discussion with the user. The release will retain the current interpreter and compiler paths. Replacing the evaluator or making all execution compiler-backed is outside this release.
 
 The project has a usable foundation. SCNet's reproduced lifecycle defects were repairable within its existing transport responsibilities. Shared compilation, runtime discovery and native indexing already have distinct owners. There is no evidence here that a general application rewrite would improve release readiness.
 
@@ -17,7 +17,7 @@ The compiler path already validates entire fragments before invocation and now h
 | Make the compiler authoritative for executable Java; keep ordinary value inspection through JDI | One Java language authority for overloads, conversions and diagnostics. Reuses the existing compiler and access transformer. | Some paused frames must report an explicit unsupported-context error until their binding support is added. Compilation adds work to explicit evaluation. |
 | Retain broad interpreted evaluation and add proper compile-time binding before execution | Preserve more of the existing paused-frame reach while fixing declared-type behavior. | Requires a larger semantic planning/type-binding implementation and parity matrix. It is more than patching the five current examples. |
 
-Recommendation: use the compiler for executable Java and keep direct debugger value inspection. First agree whether the existing unsupported frame contexts are acceptable release limitations. If they are not, resolve the specific private/unnamed type, loader and metadata contexts before removing interpreted execution. Do not quietly fall back to an evaluator that can select a different mutating method.
+Decision: keep the existing evaluator for this release. The user does not want a backend replacement before release. The options above record the discussion, not planned implementation. Address concrete reproduced defects within the current design, preserve working frame support, and record any remaining semantic limitations accurately. A broader type-binding or compiler-only redesign is deferred.
 
 ## Execution identity and retained results
 
