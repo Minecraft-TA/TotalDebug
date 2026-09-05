@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.sun.jdi.ClassType;
+import com.sun.jdi.ArrayType;
 import com.sun.jdi.Field;
 import com.sun.jdi.InterfaceType;
 import com.sun.jdi.Method;
@@ -76,6 +77,16 @@ final class DebuggerJdiMembers {
     }
 
     static boolean isAssignableName(String source, String target, VirtualMachine vm) {
+        if (source.equals(target)) return true;
+        if (source.endsWith("[]")) {
+            if (target.equals("java.lang.Object") || target.equals("java.lang.Cloneable")
+                    || target.equals("java.io.Serializable")) return true;
+            if (!target.endsWith("[]")) return false;
+            String sourceComponent = source.substring(0, source.length() - 2);
+            String targetComponent = target.substring(0, target.length() - 2);
+            if (isPrimitive(sourceComponent) || isPrimitive(targetComponent)) return sourceComponent.equals(targetComponent);
+            return isAssignableName(sourceComponent, targetComponent, vm);
+        }
         ReferenceType sourceType = resolveType(source, vm);
         ReferenceType targetType = resolveType(target, vm);
         return isAssignable(sourceType, targetType);
@@ -84,6 +95,8 @@ final class DebuggerJdiMembers {
     static boolean isAssignable(ReferenceType source, ReferenceType target) {
         if (source == null || target == null) return false;
         if (source.equals(target)) return true;
+        if (target.name().equals("java.lang.Object")) return true;
+        if (source instanceof ArrayType) return isAssignableName(source.name(), target.name(), source.virtualMachine());
         if (source instanceof ClassType classType) {
             if (isAssignable(classType.superclass(), target)) return true;
             return classType.interfaces().stream().anyMatch(iface -> isAssignable(iface, target));

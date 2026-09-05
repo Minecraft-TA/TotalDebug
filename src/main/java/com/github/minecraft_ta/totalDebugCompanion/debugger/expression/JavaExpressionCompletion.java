@@ -182,12 +182,12 @@ final class JavaExpressionCompletion {
                     typeLiteral.getType().toString(), context), true, false);
         }
         if (expression instanceof CastExpression cast) {
-            return new CompletionOwner(JavaExpressionEvaluator.resolveType(
-                    cast.getType().toString(), context), false, false);
+            return declaredOwner(cast.getType().toString(), context);
         }
         if (expression instanceof ArrayAccess access) {
             CompletionOwner array = resolveCompletionOwner(access.getArray(), context);
-            return array != null && array.array() ? new CompletionOwner(null, false, true) : null;
+            return array != null && array.typeName() != null && array.typeName().endsWith("[]")
+                    ? declaredOwner(array.typeName().substring(0, array.typeName().length() - 2), context) : null;
         }
         if (expression instanceof SimpleName name) {
             return resolveSimpleCompletionOwner(name.getIdentifier(), context);
@@ -236,15 +236,12 @@ final class JavaExpressionCompletion {
                     method.signature(),
                     local.name()
             ).equals(name)) {
-                ReferenceType type = JavaExpressionEvaluator.resolveType(local.typeName(), context);
-                return type == null && local.typeName().endsWith("[]")
-                        ? new CompletionOwner(null, false, true)
-                        : new CompletionOwner(type, false, false);
+                return declaredOwner(local.typeName(), context);
             }
         }
         Field field = findField(frame.location().declaringType(), name, false);
         if (field != null) {
-            return new CompletionOwner(JavaExpressionEvaluator.resolveType(field.typeName(), context), false, false);
+            return declaredOwner(field.typeName(), context);
         }
         ReferenceType type = JavaExpressionEvaluator.resolveType(name, context);
         return type == null ? null : new CompletionOwner(type, true, false);
@@ -255,12 +252,12 @@ final class JavaExpressionCompletion {
             String name,
             JavaExpressionEvaluator.Context context
     ) {
+        if (owner != null && owner.array() && name.equals("length")) return declaredOwner("int", context);
         if (owner == null || owner.array() || owner.type() == null) {
             return null;
         }
         Field field = findField(owner.type(), name, owner.typeLiteral());
-        return field == null ? null : new CompletionOwner(
-                JavaExpressionEvaluator.resolveType(field.typeName(), context), false, false);
+        return field == null ? null : declaredOwner(field.typeName(), context);
     }
 
     private static CompletionOwner methodCompletionOwner(
@@ -295,8 +292,7 @@ final class JavaExpressionCompletion {
                                 other.method(), candidate.method(), context.vm())))
                 .toList();
         Method method = mostSpecific.size() == 1 ? mostSpecific.getFirst().method() : null;
-        return method == null ? null : new CompletionOwner(
-                JavaExpressionEvaluator.resolveType(method.returnTypeName(), context), false, false);
+        return method == null ? null : declaredOwner(method.returnTypeName(), context);
     }
 
     private static int staticCompatibility(
@@ -367,7 +363,7 @@ final class JavaExpressionCompletion {
         return source.equals(target) ? 0 : isAssignableName(source, target, context.vm()) ? 2 : -1;
     }
 
-    private static String staticTypeName(Expression expression, JavaExpressionEvaluator.Context context) {
+    static String staticTypeName(Expression expression, JavaExpressionEvaluator.Context context) {
         if (expression instanceof ParenthesizedExpression parenthesized) {
             return staticTypeName(parenthesized.getExpression(), context);
         }
@@ -397,11 +393,40 @@ final class JavaExpressionCompletion {
             return "<null>";
         }
         if (expression instanceof CastExpression cast) {
-            return cast.getType().toString();
+            return declaredOwner(cast.getType().toString(), context).typeName();
         }
         try {
+            if (expression instanceof org.eclipse.jdt.core.dom.ConditionalExpression conditional) {
+                return DebuggerConditionalType.resolve(conditional, context);
+            }
+            if (expression instanceof org.eclipse.jdt.core.dom.PrefixExpression prefix) {
+                if (prefix.getOperator() == org.eclipse.jdt.core.dom.PrefixExpression.Operator.NOT) return "boolean";
+                var kind = DebuggerPrimitiveKind.fromTypeName(staticTypeName(prefix.getOperand(), context));
+                return kind == null ? null : DebuggerConditionalType.promote(kind, DebuggerPrimitiveKind.INT);
+            }
+            if (expression instanceof org.eclipse.jdt.core.dom.InfixExpression infix) {
+                String left = staticTypeName(infix.getLeftOperand(), context);
+                List<Expression> operands = new ArrayList<>();
+                operands.add(infix.getRightOperand());
+                infix.extendedOperands().forEach(operand -> operands.add((Expression) operand));
+                for (Expression operand : operands) {
+                    String right = staticTypeName(operand, context);
+                    String operator = infix.getOperator().toString();
+                    if (List.of("==", "!=", "<", "<=", ">", ">=", "&&", "||").contains(operator)) left = "boolean";
+                    else if (operator.equals("+") && ("java.lang.String".equals(left) || "java.lang.String".equals(right))) left = "java.lang.String";
+                    else {
+                        var a = DebuggerPrimitiveKind.fromTypeName(left);
+                        var b = DebuggerPrimitiveKind.fromTypeName(right);
+                        if (a == null || b == null) return null;
+                        if (a == DebuggerPrimitiveKind.BOOLEAN && b == a) left = "boolean";
+                        else left = DebuggerConditionalType.promote(a,
+                                List.of("<<", ">>", ">>>").contains(operator) ? DebuggerPrimitiveKind.INT : b);
+                    }
+                }
+                return left;
+            }
             CompletionOwner resolved = resolveCompletionOwner(expression, context);
-            return resolved == null || resolved.type() == null ? null : resolved.type().name();
+            return resolved == null ? null : resolved.typeName();
         } catch (Exception ignored) {
             return null;
         }
@@ -490,7 +515,15 @@ final class JavaExpressionCompletion {
         return "(" + String.join(", ", method.argumentTypeNames()) + ")";
     }
 
-    record CompletionOwner(ReferenceType type, boolean typeLiteral, boolean array) {
+    private static CompletionOwner declaredOwner(String name, JavaExpressionEvaluator.Context context) {
+        ReferenceType type = JavaExpressionEvaluator.resolveType(name, context);
+        return new CompletionOwner(type, false, name.endsWith("[]"), type == null ? name : type.name());
+    }
+
+    record CompletionOwner(ReferenceType type, boolean typeLiteral, boolean array, String typeName) {
+        CompletionOwner(ReferenceType type, boolean typeLiteral, boolean array) {
+            this(type, typeLiteral, array, type == null ? null : type.name());
+        }
     }
 
     private record ScoredMethod(Method method, int score) {

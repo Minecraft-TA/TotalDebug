@@ -156,14 +156,14 @@ final class JavaExpressionEvaluator {
             if (superField == null) {
                 throw new IllegalArgumentException("Unknown superclass field " + access.getName());
             }
-            return value(context.thisObject().getValue(superField));
+            return value(context.thisObject().getValue(superField), resolveType(superField.typeName(), context));
         }
         if (expression instanceof ArrayAccess access) {
             EvalValue arrayValue = evaluate(access.getArray(), context);
             if (!(arrayValue.value() instanceof ArrayReference array)) {
                 throw new IllegalArgumentException("Array access requires an array value");
             }
-            int index = toNumber(evaluate(access.getIndex(), context).value()).intValue();
+            int index = toNumber(unbox(evaluate(access.getIndex(), context), context).value()).intValue();
             Type componentType = ((ArrayType) array.referenceType()).componentType();
             return value(array.getValue(index), componentType instanceof ReferenceType referenceType ? referenceType : null);
         }
@@ -174,9 +174,13 @@ final class JavaExpressionEvaluator {
             return infix(infix, context);
         }
         if (expression instanceof ConditionalExpression conditional) {
-            return toBoolean(evaluate(conditional.getExpression(), context).value())
+            String targetType = DebuggerConditionalType.resolve(conditional, context);
+            EvalValue selected = toBoolean(unbox(evaluate(conditional.getExpression(), context), context).value())
                     ? evaluate(conditional.getThenExpression(), context)
                     : evaluate(conditional.getElseExpression(), context);
+            if (targetType.equals("<null>")) return selected;
+            return value(DebuggerOverloadResolver.convertValue(selected.value(), targetType, context),
+                    resolveType(targetType, context));
         }
         if (expression instanceof MethodInvocation invocation) {
             return methodInvocation(invocation, context);
@@ -295,17 +299,17 @@ final class JavaExpressionEvaluator {
         } else {
             receiver = evaluate(invocation.getExpression(), context);
         }
-        List<Value> arguments = new ArrayList<>();
+        List<EvalValue> arguments = new ArrayList<>();
         for (Object argument : invocation.arguments()) {
-            arguments.add(evaluate((Expression) argument, context).value());
+            arguments.add(evaluate((Expression) argument, context));
         }
         return invoke(receiver, invocation.getName().getIdentifier(), arguments, context, false, null);
     }
 
     private static EvalValue superMethodInvocation(SuperMethodInvocation invocation, Context context) throws Exception {
-        List<Value> arguments = new ArrayList<>();
+        List<EvalValue> arguments = new ArrayList<>();
         for (Object argument : invocation.arguments()) {
-            arguments.add(evaluate((Expression) argument, context).value());
+            arguments.add(evaluate((Expression) argument, context));
         }
         return invoke(value(context.thisObject()), invocation.getName().getIdentifier(), arguments, context, true,
                 JavaExpressionCompletion.lexicalSuperclass(context));
@@ -314,7 +318,7 @@ final class JavaExpressionEvaluator {
     private static EvalValue invoke(
             EvalValue receiver,
             String name,
-            List<Value> arguments,
+            List<EvalValue> arguments,
             Context context,
             boolean invokeSuper,
             ReferenceType lookupType
@@ -371,7 +375,7 @@ final class JavaExpressionEvaluator {
             Context context,
             boolean invokeSuper
     ) throws Exception {
-        List<Value> converted = DebuggerOverloadResolver.convertArguments(arguments, method, context);
+        List<Value> converted = DebuggerOverloadResolver.convertArguments(arguments.stream().map(JavaExpressionEvaluator::value).toList(), method, context);
         DebuggerEvaluationRunner.checkpoint();
         try {
             return receiver.invokeMethod(context.thread(), method, converted,
@@ -408,7 +412,7 @@ final class JavaExpressionEvaluator {
         return new TargetEvaluationException(description, exception);
     }
 
-    private static EvalValue cast(EvalValue value, String target, Context context) {
+    private static EvalValue cast(EvalValue value, String target, Context context) throws Exception {
         if (!isPrimitive(target)) {
             ReferenceType type = resolveType(target, context);
             if (type == null) {
@@ -422,11 +426,8 @@ final class JavaExpressionEvaluator {
             }
             return new EvalValue(value.value(), type, false);
         }
-        if (value.value() == null) {
-            return value;
-        }
         return new EvalValue(DebuggerOverloadResolver.mirrorPrimitive(
-                context.vm(), value.value(), DebuggerPrimitiveKind.fromPrimitiveName(target)), null, false);
+                context.vm(), unbox(value, context).value(), DebuggerPrimitiveKind.fromPrimitiveName(target)), null, false);
     }
 
     private static EvalValue prefix(PrefixExpression prefix, Context context) throws Exception {
@@ -435,7 +436,7 @@ final class JavaExpressionEvaluator {
             if (token.equals("2147483648")) return value(context.vm().mirrorOf(Integer.MIN_VALUE));
             if (token.equalsIgnoreCase("9223372036854775808L")) return value(context.vm().mirrorOf(Long.MIN_VALUE));
         }
-        Value operand = evaluate(prefix.getOperand(), context).value();
+        Value operand = unbox(evaluate(prefix.getOperand(), context), context).value();
         PrefixExpression.Operator operator = prefix.getOperator();
         if (operator == PrefixExpression.Operator.NOT) {
             return value(context.vm().mirrorOf(!toBoolean(operand)));
@@ -466,6 +467,13 @@ final class JavaExpressionEvaluator {
             remaining.add((Expression) operand);
         }
         for (Expression operand : remaining) {
+            boolean equality = operator == InfixExpression.Operator.EQUALS || operator == InfixExpression.Operator.NOT_EQUALS;
+            String rightType = JavaExpressionCompletion.staticTypeName(operand, context);
+            boolean concatenation = operator == InfixExpression.Operator.PLUS
+                    && (isString(result) || "java.lang.String".equals(rightType));
+            if (!concatenation && (!equality || isPrimitive(result.typeName()) || isPrimitive(rightType))) {
+                result = unbox(result, context);
+            }
             if (operator == InfixExpression.Operator.CONDITIONAL_AND && !toBoolean(result.value())) {
                 return value(context.vm().mirrorOf(false));
             }
@@ -482,8 +490,16 @@ final class JavaExpressionEvaluator {
             InfixExpression.Operator operator,
             EvalValue right,
             Context context
-    ) {
+    ) throws Exception {
         VirtualMachine vm = context.vm();
+        if (operator == InfixExpression.Operator.PLUS && (isString(left) || isString(right))) {
+            return value(vm.mirrorOf(stringValue(left.value(), context) + stringValue(right.value(), context)));
+        }
+        boolean equality = operator == InfixExpression.Operator.EQUALS || operator == InfixExpression.Operator.NOT_EQUALS;
+        if (!equality || left.value() instanceof PrimitiveValue || right.value() instanceof PrimitiveValue) {
+            left = unbox(left, context);
+            right = unbox(right, context);
+        }
         if (operator == InfixExpression.Operator.CONDITIONAL_AND) {
             return value(vm.mirrorOf(toBoolean(left.value()) && toBoolean(right.value())));
         }
@@ -495,9 +511,6 @@ final class JavaExpressionEvaluator {
         }
         if (operator == InfixExpression.Operator.NOT_EQUALS) {
             return value(vm.mirrorOf(!equalsValue(left.value(), right.value())));
-        }
-        if (operator == InfixExpression.Operator.PLUS && (isString(left.value()) || isString(right.value()))) {
-            return value(vm.mirrorOf(stringValue(left.value()) + stringValue(right.value())));
         }
         if (operator == InfixExpression.Operator.AND || operator == InfixExpression.Operator.OR
                 || operator == InfixExpression.Operator.XOR || operator == InfixExpression.Operator.LEFT_SHIFT
@@ -580,15 +593,49 @@ final class JavaExpressionEvaluator {
         return value(vm.mirrorOf((int) result));
     }
 
-    private static boolean isString(Value value) {
-        return value instanceof StringReference
-                || value != null && value.type().name().equals("java.lang.String");
+    private static boolean isString(EvalValue value) {
+        return "java.lang.String".equals(value.typeName());
     }
 
-    private static String stringValue(Value value) {
+    private static String stringValue(Value value, Context context) throws Exception {
         if (value == null) return "null";
         if (value instanceof StringReference string) return string.value();
+        if (value instanceof CharValue character) return String.valueOf(character.charValue());
+        if (value instanceof ObjectReference object) {
+            Method toString = findMethod(object.referenceType(), "toString", "()Ljava/lang/String;", false);
+            if (toString == null) throw new IllegalArgumentException("No toString method on " + object.referenceType().name());
+            Value rendered = invoke(object, toString, List.of(), context, false);
+            return rendered == null ? "null" : ((StringReference) rendered).value();
+        }
         return value.toString();
+    }
+
+    private static EvalValue unbox(EvalValue value, Context context) throws Exception {
+        if (value.value() instanceof PrimitiveValue) return value;
+        DebuggerPrimitiveKind kind = DebuggerPrimitiveKind.fromTypeName(value.typeName());
+        if (kind == null) throw new IllegalArgumentException("Primitive or wrapper value required: " + value.typeName());
+        DebuggerEvaluationRunner.checkpoint();
+        return value(DebuggerOverloadResolver.convertValue(value.value(), kind.primitiveName(), context));
+    }
+
+    static Integer constantInt(Expression expression, Context context) throws Exception {
+        boolean[] literalOnly = {true};
+        expression.accept(new org.eclipse.jdt.core.dom.ASTVisitor() {
+            @Override public void preVisit(ASTNode node) {
+                if (node instanceof Expression && !(node instanceof NumberLiteral || node instanceof CharacterLiteral
+                        || node instanceof BooleanLiteral || node instanceof ParenthesizedExpression
+                        || node instanceof PrefixExpression || node instanceof InfixExpression || node instanceof CastExpression)) {
+                    literalOnly[0] = false;
+                }
+            }
+        });
+        if (!literalOnly[0]) return null;
+        try {
+            Value constant = evaluate(expression, context).value();
+            return constant instanceof IntegerValue integer ? integer.intValue() : null;
+        } catch (ArithmeticException invalidConstant) {
+            return null;
+        }
     }
 
     private static boolean equalsValue(Value left, Value right) {
@@ -708,7 +755,10 @@ final class JavaExpressionEvaluator {
         return scope == null ? null : scope.resolve(name, declaringType, context.vm());
     }
 
-    private record EvalValue(Value value, ReferenceType type, boolean typeLiteral) {
+    record EvalValue(Value value, ReferenceType type, boolean typeLiteral) {
+        String typeName() {
+            return type != null ? type.name() : value == null ? null : value.type().name();
+        }
     }
 
     static final class Context {

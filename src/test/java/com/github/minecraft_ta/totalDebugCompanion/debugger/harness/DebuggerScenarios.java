@@ -339,7 +339,7 @@ public final class DebuggerScenarios {
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Subtraction with a string operand unexpectedly succeeded");
             } catch (java.util.concurrent.ExecutionException expected) {
-                check(expected.toString().contains("Numeric expression required"),
+                check(expected.toString().contains("Primitive or wrapper value required: java.lang.String"),
                         "String operand failure was not explicit: " + expected);
             }
             try {

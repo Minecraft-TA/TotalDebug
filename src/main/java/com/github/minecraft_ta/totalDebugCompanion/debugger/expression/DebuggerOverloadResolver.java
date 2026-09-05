@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.expression.JavaExpressionEvaluator.EvalValue;
 
 import static com.github.minecraft_ta.totalDebugCompanion.debugger.expression.DebuggerJdiMembers.isAssignableName;
 import static com.github.minecraft_ta.totalDebugCompanion.debugger.expression.DebuggerJdiMembers.isPrimitive;
@@ -27,7 +28,7 @@ final class DebuggerOverloadResolver {
     private DebuggerOverloadResolver() {
     }
 
-    static Method selectMethod(ReferenceType type, String name, List<Value> args, boolean staticOnly) {
+    static Method selectMethod(ReferenceType type, String name, List<EvalValue> args, boolean staticOnly) {
         Map<String, ScoredMethod> uniqueMethods = new LinkedHashMap<>();
         methods(type).stream()
                 .filter(method -> method.name().equals(name))
@@ -94,31 +95,34 @@ final class DebuggerOverloadResolver {
         return isAssignableName(source, target, vm);
     }
 
-    private static ScoredMethod compatibility(Method method, List<Value> args) {
+    private static ScoredMethod compatibility(Method method, List<EvalValue> args) {
         List<String> parameters = method.argumentTypeNames();
         if (!method.isVarArgs() && parameters.size() != args.size()) return new ScoredMethod(method, -1, false);
         if (method.isVarArgs() && args.size() < parameters.size() - 1) return new ScoredMethod(method, -1, false);
         boolean directArray = method.isVarArgs() && args.size() == parameters.size()
-                && valueCompatibility(args.getLast(), parameters.getLast()) >= 0;
+                && valueCompatibility(args.getLast(), parameters.getLast(), method.virtualMachine()) >= 0;
         int score = method.isVarArgs() && !directArray ? 100 : 0;
         for (int i = 0; i < args.size(); i++) {
             String parameter = parameters.get(Math.min(i, parameters.size() - 1));
             if (method.isVarArgs() && !directArray && i >= parameters.size() - 1) {
                 parameter = parameter.substring(0, parameter.length() - 2);
             }
-            int current = valueCompatibility(args.get(i), parameter);
+            int current = valueCompatibility(args.get(i), parameter, method.virtualMachine());
             if (current < 0) return new ScoredMethod(method, -1, directArray);
             score += current;
         }
         return new ScoredMethod(method, score, directArray);
     }
 
-    private static int valueCompatibility(Value value, String target) {
-        if (value == null) return isPrimitive(target) ? -1 : 20;
-        DebuggerPrimitiveKind sourceKind = DebuggerPrimitiveKind.fromValue(value);
+    private static int valueCompatibility(EvalValue argument, String target, VirtualMachine vm) {
+        if (argument.typeLiteral()) return -1;
+        String source = argument.typeName();
+        if (source == null) return isPrimitive(target) ? -1 : 20;
+        DebuggerPrimitiveKind sourceKind = DebuggerPrimitiveKind.fromTypeName(source);
+        boolean primitive = isPrimitive(source);
         DebuggerPrimitiveKind targetKind = DebuggerPrimitiveKind.fromPrimitiveName(target);
         if (targetKind != null) {
-            if (value instanceof PrimitiveValue) {
+            if (primitive) {
                 return sourceKind == null ? -1 : sourceKind.wideningCostTo(targetKind);
             }
             if (sourceKind != null) {
@@ -127,29 +131,29 @@ final class DebuggerOverloadResolver {
             }
             return -1;
         }
-        if (sourceKind != null && value instanceof PrimitiveValue) {
+        if (sourceKind != null && primitive) {
             String boxed = sourceKind.boxedName();
             if (boxed.equals(target)) return 10;
-            return isAssignableName(boxed, target, value.virtualMachine()) ? 12 : -1;
+            return isAssignableName(boxed, target, vm) ? 12 : -1;
         }
-        String source = value.type().name();
-        return source.equals(target) ? 0 : isAssignableName(source, target, value.virtualMachine()) ? 2 : -1;
+        return source.equals(target) ? 0 : isAssignableName(source, target, vm) ? 2 : -1;
     }
 
-    static List<Value> convertArguments(List<Value> args, Method method, JavaExpressionEvaluator.Context context) throws Exception {
+    static List<Value> convertArguments(List<EvalValue> args, Method method, JavaExpressionEvaluator.Context context) throws Exception {
         List<Value> converted = new ArrayList<>();
         List<String> parameters = method.argumentTypeNames();
         for (int i = 0; i < args.size(); i++) {
             if (method.isVarArgs() && i >= parameters.size() - 1) break;
-            converted.add(convertValue(args.get(i), parameters.get(i), context));
+            converted.add(convertValue(args.get(i).value(), parameters.get(i), context));
         }
         if (method.isVarArgs()) {
             String arrayType = parameters.getLast();
             if (args.size() == parameters.size()
-                    && (args.getLast() == null || valueCompatibility(args.getLast(), arrayType) >= 0)) {
-                converted.add(convertValue(args.getLast(), arrayType, context));
+                    && valueCompatibility(args.getLast(), arrayType, context.vm()) >= 0) {
+                converted.add(convertValue(args.getLast().value(), arrayType, context));
             } else {
-                converted.add(makeVarargs(args.subList(parameters.size() - 1, args.size()), arrayType, context));
+                converted.add(makeVarargs(args.subList(parameters.size() - 1, args.size()).stream()
+                        .map(EvalValue::value).toList(), arrayType, context));
             }
         }
         return converted;
@@ -169,7 +173,10 @@ final class DebuggerOverloadResolver {
 
     static Value convertValue(Value value, String target,
                                JavaExpressionEvaluator.Context context) throws Exception {
-        if (value == null) return null;
+        if (value == null) {
+            if (isPrimitive(target)) throw new NullPointerException("Cannot unbox null as " + target);
+            return null;
+        }
         DebuggerPrimitiveKind targetPrimitive = DebuggerPrimitiveKind.fromPrimitiveName(target);
         DebuggerPrimitiveKind sourceKind = DebuggerPrimitiveKind.fromValue(value);
         if (targetPrimitive != null) {
