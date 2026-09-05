@@ -1,0 +1,249 @@
+{
+  "transport": "current Companion HTTP MCP",
+  "endpoint": "http://127.0.0.1:32123/mcp",
+  "initialize": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "logging": {},
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "totaldebug-companion",
+      "version": "2.0.0"
+    },
+    "instructions": "Resolve exact symbols before finding usages. Read the relevant source_target values with runtime_source, and request class scope only when a member does not provide enough context. Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar values directly so the result remains structured. Debugger tools control the same session as Companion's UI. Carry the current pause_id into inspections and continue/step commands; use debugger_wait to wait for state changes."
+  },
+  "evaluationInputSchema": {
+    "type": "object",
+    "properties": {
+      "wait_ms": {
+        "maximum": 120000,
+        "type": "integer",
+        "description": "Maximum wait in milliseconds.",
+        "minimum": 0
+      },
+      "source": {
+        "type": "string",
+        "description": "Java expression or code fragment.",
+        "minLength": 1
+      },
+      "pause_id": {
+        "type": "string",
+        "description": "Exact current pause ID from debugger_status or a control result.",
+        "minLength": 1
+      },
+      "frame_id": {
+        "maximum": 2147483647,
+        "type": "integer",
+        "description": "Frame identifier.",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "pause_id",
+      "frame_id",
+      "source"
+    ],
+    "additionalProperties": false
+  },
+  "job": {
+    "job_id": "f86694f0-1075-4762-9bf1-4e1fb36af0ac",
+    "state": "compiling"
+  },
+  "attach": {
+    "revision": 85,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "pause": {
+    "revision": 86,
+    "phase": "paused",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    },
+    "pause": {
+      "id": "044e4d90-de79-4ced-9a26-722b557db497",
+      "reason": "pause",
+      "thread_id": 117,
+      "all_threads_stopped": false,
+      "top_frame": {
+        "id": 1,
+        "method": "Thread.sleep0(long)[native method]",
+        "binary_name": "java.lang.Thread"
+      }
+    }
+  },
+  "frames": {
+    "frames": [
+      {
+        "id": 1,
+        "method": "Thread.sleep0(long)[native method]",
+        "binary_name": "java.lang.Thread"
+      },
+      {
+        "id": 2,
+        "method": "Thread.sleep(long,int)",
+        "binary_name": "java.lang.Thread",
+        "line": 192
+      },
+      {
+        "id": 3,
+        "method": "ThreadUtils$$Lambda/0x000000080828e758.accept(Object,Object)"
+      },
+      {
+        "id": 4,
+        "method": "DurationUtils.accept(FailableBiConsumer,Duration)",
+        "binary_name": "org.apache.commons.lang3.time.DurationUtils",
+        "line": 21
+      },
+      {
+        "id": 5,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 157
+      },
+      {
+        "id": 6,
+        "method": "LambdaForm$DMH/0x0000000800080000.invokeStatic(Object,Object)"
+      },
+      {
+        "id": 7,
+        "method": "LambdaForm$MH/0x00000008083d0c00.linkToTargetMethod(Object,Object)"
+      },
+      {
+        "id": 8,
+        "method": "McpCodeJob21.run()",
+        "line": 6
+      },
+      {
+        "id": 9,
+        "method": "ScriptRunner$CompiledScript.execute()",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner$CompiledScript",
+        "line": 21
+      },
+      {
+        "id": 10,
+        "method": "ScriptRunner.execute(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 178
+      },
+      {
+        "id": 11,
+        "method": "ScriptRunner.lambda$compileAndSchedule$3(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 152
+      },
+      {
+        "id": 12,
+        "method": "ScriptRunner$$Lambda/0x00000008082c6310.run()"
+      },
+      {
+        "id": 13,
+        "method": "Thread.runWith(Object,Runnable)",
+        "binary_name": "java.lang.Thread",
+        "line": 443
+      },
+      {
+        "id": 14,
+        "method": "Thread.run()",
+        "binary_name": "java.lang.Thread",
+        "line": 435
+      }
+    ]
+  },
+  "evaluation": {
+    "operation_id": "277244c4-98d4-47d2-9cbe-f1fb32691c6a",
+    "state": "succeeded",
+    "elapsed_ms": 1,
+    "slow": false,
+    "cancellation_requested": false,
+    "result": {
+      "value": "2",
+      "type": "int",
+      "scalar": {
+        "kind": "int",
+        "value": 2
+      }
+    }
+  },
+  "additionalEvaluations": [
+    {
+      "case": "numericConditional",
+      "source": "true ? 1 : 2L",
+      "result": {
+        "operation_id": "01ca0400-f043-4372-9c29-6ae2629753bd",
+        "state": "succeeded",
+        "elapsed_ms": 1,
+        "slow": false,
+        "cancellation_requested": false,
+        "result": {
+          "value": "1",
+          "type": "long",
+          "scalar": {
+            "kind": "long",
+            "value": "1"
+          }
+        }
+      }
+    },
+    {
+      "case": "compiledFragment",
+      "source": "int doubled = 41 * 2; return doubled;",
+      "result": {
+        "operation_id": "460643cd-4058-40ed-8031-f1ae08527999",
+        "state": "failed",
+        "elapsed_ms": 3966,
+        "slow": false,
+        "cancellation_requested": false,
+        "error": "com.sun.jdi.IncompatibleThreadStateException"
+      }
+    },
+    {
+      "case": "arrayResult",
+      "source": "new int[]{1, 2, 3}",
+      "result": {
+        "operation_id": "7e507737-77d2-40bc-a67a-2a84b1d47714",
+        "state": "failed",
+        "elapsed_ms": 4979,
+        "slow": false,
+        "cancellation_requested": false,
+        "error": "com.sun.jdi.IncompatibleThreadStateException"
+      }
+    }
+  ],
+  "continue": {
+    "revision": 103,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "detach": {
+    "revision": 105,
+    "phase": "detached",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "cancel": {
+    "job_id": "f86694f0-1075-4762-9bf1-4e1fb36af0ac",
+    "cancellation_requested": true
+  },
+  "terminalJob": {
+    "job_id": "f86694f0-1075-4762-9bf1-4e1fb36af0ac",
+    "state": "cancelled",
+    "error": "Script run cancelled"
+  }
+}

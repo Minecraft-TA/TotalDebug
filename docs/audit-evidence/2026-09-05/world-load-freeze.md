@@ -14,3 +14,7 @@ The strongest current explanation is WorldEdit state-table expansion on this lar
 Companion was launched at the user's request from the verified `2ac8749...` artifact as PID 60480. It is available but the stalled Minecraft JVM has not connected. A temporary attach helper was prepared to invoke the existing public TotalDebug Companion-open action. It blocked in `VirtualMachine.getAgentProperties` / native `connectPipe` before loading the agent. The helper was stopped; no diagnostic agent was loaded by this attempt. The game was left running and unmodified.
 
 Raw heap, histogram, GC, thread and installed-bytecode captures are retained in `.codex/world-load-freeze/`. Next step: restart Minecraft, connect Companion with F6 at the main menu, attach the debugger, then repeat world loading. Do not claim successful integrated-server release acceptance from this run.
+
+## Retry result
+
+The user disabled WorldEdit and reported that single-player loading works again. The subsequent live check confirms Minecraft PID 63752 in an integrated-server world, with `worldedit-mod-7.3.8.jar.disabled` on disk. TotalDebug and Companion still match the tested artifact hashes. Server scripts later succeed on worker/pre-tick/post-tick paths. The new heap sample reports 6,802,859 KiB used out of 8,388,608 KiB; it is a point-in-time observation, not a retained-memory baseline. This retry strongly supports WorldEdit's state expansion as the cause of the prior freeze. It does not establish an accumulating leak or exhaustively exclude other memory costs.

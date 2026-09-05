@@ -16,6 +16,8 @@ The class index describes the selected runtime archives and prepared class files
 
 Debugger attachment requires a reachable JDWP listener. Compiled evaluation also needs usable frame/type metadata and the prepared target helper. Missing local metadata, inaccessible or unnamed binding types, ambiguous loader definitions and unsupported lexical contexts can require an explicit refusal before execution. Flow-scoped patterns remain unsupported in compiled frame adaptation.
 
+Target method invocation requires a thread suspended by a debugger event, such as a breakpoint. A manually suspended thread can support plain value evaluation while method invocation fails with `IncompatibleThreadStateException`. Compiled evaluation requires an application class loader, so bootstrap-loaded JDK frames are rejected. Generated script frames can also fail compilation when their generated receiver class is absent from the prepared classpath. The first two restrictions and a successful public-library breakpoint evaluation were checked live; these are limits of the current release, not plans for a compiler rewrite.
+
 Interpreted evaluation covers the tested declared-type overloads, numeric/boolean unboxing, string conversion and conditional promotion. It is not a complete Java compile-time binder. Generic/poly overload binding, constant-field folding and unrelated reference-conditional type inference remain outside the verified parity matrix. Code mode remains available where its frame requirements can be met.
 
 Set Value uses the debugger adapter's typed value parser. It is not an arbitrary Java expression assignment field. Use evaluation or Code mode for executable Java within their supported contexts.

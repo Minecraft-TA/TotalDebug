@@ -1,0 +1,132 @@
+{
+  "date": "2026-09-05",
+  "minecraftPid": 63752,
+  "companionPid": 60480,
+  "modSha256": "e5f0ccd4796001121b0f5b7485cca27b534a5d9f18c4aa4ab1d14f9dde3606af",
+  "companionSha256": "2ac8749d43da2e520e56f157411ba7013f7ddf6fa5c15850144477add2652c3e",
+  "worldedit": "worldedit-mod-7.3.8.jar.disabled; user reports single-player loading works after disabling it",
+  "disabledServerPolicy": [
+    {
+      "environment": "thread",
+      "job_id": "5a8ed709-9c12-4d3c-8b39-40aa77cb938d",
+      "state": "failed",
+      "error": "Server-side scripts are disabled by the server configuration"
+    },
+    {
+      "environment": "pre_tick",
+      "job_id": "b9edff3f-6396-4bd3-b9b9-807954013b43",
+      "state": "failed",
+      "error": "Server-side scripts are disabled by the server configuration"
+    },
+    {
+      "environment": "post_tick",
+      "job_id": "8ce60e10-4675-4e25-846b-acf81364ebb8",
+      "state": "failed",
+      "error": "Server-side scripts are disabled by the server configuration"
+    }
+  ],
+  "enabledServerPolicy": {
+    "job_id": "4fdeb116-711a-43c8-a3c1-622f7fb93e45",
+    "state": "succeeded",
+    "result": {
+      "operatorOnly": true,
+      "enabled": true,
+      "dedicated": false
+    }
+  },
+  "userDecision": "Enable server scripts and keep them enabled; operator-only restriction stays enabled",
+  "serverWorker": {
+    "job_id": "f9dfafc3-4537-4519-b660-485bdd18157a",
+    "state": "succeeded",
+    "result": {
+      "tickCount": 5618,
+      "pid": 63752,
+      "thread": "TotalDebug script 10",
+      "dedicated": false
+    }
+  },
+  "serverTickRoutes": [
+    {
+      "environment": "pre_tick",
+      "job_id": "39415339-ce8b-4cc6-97ec-1350c4cfdf96",
+      "state": "succeeded",
+      "result": {
+        "tickCount": 5895,
+        "pid": 63752,
+        "thread": "Server thread",
+        "dedicated": false
+      }
+    },
+    {
+      "environment": "post_tick",
+      "job_id": "bdd4b225-c903-412b-82e2-85f2f3a7b2d6",
+      "state": "succeeded",
+      "result": {
+        "tickCount": 5959,
+        "pid": 63752,
+        "thread": "Server thread",
+        "dedicated": false
+      }
+    }
+  ],
+  "clientPostTick": {
+    "job_id": "25604890-ec35-450a-a67a-b21a5d1d6ee1",
+    "state": "succeeded",
+    "result": {
+      "thread": "Render thread",
+      "integer": 42,
+      "boolean": true,
+      "null": null,
+      "array": [
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  "clientCompilerDiagnostic": {
+    "job_id": "2107896b-1490-495c-85ea-44d4edbfca2c",
+    "state": "failed",
+    "error": "line 6: cannot find symbol\n  symbol:   variable totaldebugReleaseMissingSymbol\n  location: class McpCodeJob7"
+  },
+  "clientTargetException": {
+    "job_id": "bb1ff050-b675-48e0-8bc6-1b31961de59f",
+    "state": "failed",
+    "error": "java.lang.IllegalArgumentException: release acceptance expected exception\r\n\tat McpCodeJob8.run(McpCodeJob8.java:6)\r\n"
+  },
+  "clientCancellation": {
+    "before": {
+      "job_id": "896b24d0-ef26-4a52-adf1-d414d078e3f4",
+      "state": "running"
+    },
+    "during": {
+      "job_id": "896b24d0-ef26-4a52-adf1-d414d078e3f4",
+      "state": "cancelling",
+      "error": "Stop timed out; the script is still running and can only end cooperatively or when Minecraft exits"
+    },
+    "after": {
+      "job_id": "896b24d0-ef26-4a52-adf1-d414d078e3f4",
+      "state": "cancelled",
+      "result": "finished",
+      "error": "Script run cancelled"
+    }
+  },
+  "serverCancellation": {
+    "before": {
+      "job_id": "f6be27e8-9698-46b0-97e4-9fde5ea789f9",
+      "state": "running"
+    },
+    "during": {
+      "job_id": "f6be27e8-9698-46b0-97e4-9fde5ea789f9",
+      "state": "cancelling",
+      "error": "Stop timed out; the script is still running and can only end cooperatively or when Minecraft exits"
+    },
+    "after": {
+      "job_id": "f6be27e8-9698-46b0-97e4-9fde5ea789f9",
+      "state": "cancelled",
+      "result": "server finished",
+      "error": "Script run cancelled"
+    }
+  },
+  "scope": "Integrated server only. No claim of dedicated-server, non-operator or offline acceptance."
+}

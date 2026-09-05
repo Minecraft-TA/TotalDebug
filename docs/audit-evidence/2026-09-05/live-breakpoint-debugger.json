@@ -1,0 +1,226 @@
+{
+  "transport": "current Companion HTTP MCP",
+  "pauseKind": "real breakpoint",
+  "initialize": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "logging": {},
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "serverInfo": {
+      "name": "totaldebug-companion",
+      "version": "2.0.0"
+    },
+    "instructions": "Resolve exact symbols before finding usages. Read the relevant source_target values with runtime_source, and request class scope only when a member does not provide enough context. Use client_code_execute for client runtime facts and server_code_execute for server runtime facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar values directly so the result remains structured. Debugger tools control the same session as Companion's UI. Carry the current pause_id into inspections and continue/step commands; use debugger_wait to wait for state changes."
+  },
+  "attach": {
+    "revision": 107,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "breakpoint": {
+    "breakpoint": {
+      "binary_name": "org.apache.commons.lang3.ThreadUtils",
+      "line": 157,
+      "state": "bound",
+      "resolved_line": 157,
+      "condition": "java.lang.Thread.currentThread().getName().equals(\"TotalDebug breakpoint acceptance probe\")"
+    }
+  },
+  "job": {
+    "job_id": "a4cf229b-9b34-4e9d-871a-f013d9b523e3",
+    "state": "compiling"
+  },
+  "pause": {
+    "revision": 114,
+    "phase": "paused",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    },
+    "pause": {
+      "id": "ac819eb4-d36a-4416-b83e-a29e1925a66d",
+      "reason": "breakpoint",
+      "thread_id": 2,
+      "all_threads_stopped": false,
+      "top_frame": {
+        "id": 1,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 157
+      }
+    }
+  },
+  "removeBreakpoint": {
+    "removed": true
+  },
+  "frames": {
+    "frames": [
+      {
+        "id": 1,
+        "method": "ThreadUtils.sleep(Duration)",
+        "binary_name": "org.apache.commons.lang3.ThreadUtils",
+        "line": 157
+      },
+      {
+        "id": 2,
+        "method": "LambdaForm$DMH/0x0000000800080000.invokeStatic(Object,Object)"
+      },
+      {
+        "id": 3,
+        "method": "LambdaForm$MH/0x00000008083d0c00.linkToTargetMethod(Object,Object)"
+      },
+      {
+        "id": 4,
+        "method": "McpCodeJob22.run()",
+        "line": 6
+      },
+      {
+        "id": 5,
+        "method": "ScriptRunner$CompiledScript.execute()",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner$CompiledScript",
+        "line": 21
+      },
+      {
+        "id": 6,
+        "method": "ScriptRunner.execute(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 178
+      },
+      {
+        "id": 7,
+        "method": "ScriptRunner.lambda$compileAndSchedule$3(ScriptRunner$ScriptRun,ScriptRunner$CompiledScript)",
+        "binary_name": "com.github.minecraft_ta.totaldebug.script.ScriptRunner",
+        "line": 152
+      },
+      {
+        "id": 8,
+        "method": "ScriptRunner$$Lambda/0x00000008082c6310.run()"
+      },
+      {
+        "id": 9,
+        "method": "Thread.runWith(Object,Runnable)",
+        "binary_name": "java.lang.Thread",
+        "line": 443
+      },
+      {
+        "id": 10,
+        "method": "Thread.run()",
+        "binary_name": "java.lang.Thread",
+        "line": 435
+      }
+    ]
+  },
+  "evaluations": [
+    {
+      "case": "compiledFragment",
+      "source": "int doubled = 41 * 2; return doubled;",
+      "result": {
+        "operation_id": "3741777b-2e63-4c48-935d-1246a26e3249",
+        "state": "succeeded",
+        "elapsed_ms": 4290,
+        "slow": false,
+        "cancellation_requested": false,
+        "result": {
+          "value": "82",
+          "type": "int",
+          "scalar": {
+            "kind": "int",
+            "value": 82
+          }
+        }
+      }
+    },
+    {
+      "case": "durationValue",
+      "source": "duration.toMillis() + 1",
+      "result": {
+        "operation_id": "9c661eef-1cde-46bf-b9f3-8caa8bdd20da",
+        "state": "succeeded",
+        "elapsed_ms": 143,
+        "slow": false,
+        "cancellation_requested": false,
+        "result": {
+          "value": "38",
+          "type": "long",
+          "scalar": {
+            "kind": "long",
+            "value": "38"
+          }
+        }
+      }
+    },
+    {
+      "case": "array",
+      "source": "new int[]{1, 2, 3}",
+      "result": {
+        "operation_id": "0f2609d6-dd5d-498c-aba6-cf0c4722bca9",
+        "state": "succeeded",
+        "elapsed_ms": 4145,
+        "slow": false,
+        "cancellation_requested": false,
+        "result": {
+          "value": "int[3]@11225",
+          "type": "int[]",
+          "value_ref": 13,
+          "indexed_count": 3
+        }
+      }
+    }
+  ],
+  "arrayExpansion": {
+    "variables": [
+      {
+        "value": "1",
+        "type": "int",
+        "name": "0",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.0"
+      },
+      {
+        "value": "2",
+        "type": "int",
+        "name": "1",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.1"
+      },
+      {
+        "value": "3",
+        "type": "int",
+        "name": "2",
+        "kind": "array_element",
+        "evaluate_name": "new int[]{1, 2, 3}.2"
+      }
+    ]
+  },
+  "continue": {
+    "revision": 129,
+    "phase": "running",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "detach": {
+    "revision": 131,
+    "phase": "detached",
+    "target": {
+      "id": "minecraft-client",
+      "process_id": 63752,
+      "name": "Minecraft Client"
+    }
+  },
+  "terminalJob": {
+    "job_id": "a4cf229b-9b34-4e9d-871a-f013d9b523e3",
+    "state": "succeeded",
+    "result": 42
+  }
+}
