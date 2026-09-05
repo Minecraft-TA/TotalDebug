@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-05",
+  "companionCommit": "c2b3d1c",
+  "companionProcessId": 57892,
+  "companionSha256": "2ac8749d43da2e520e56f157411ba7013f7ddf6fa5c15850144477add2652c3e",
+  "minecraftProcessId": 64860,
+  "minecraftConnected": true,
+  "worldLoaded": true,
+  "integratedServer": false,
+  "startupLog": "C:/Users/Admin/AppData/Local/TotalDebugCompanion/logs/2026-09-05T18-56-00.756380300Z-1bb80d10-92d3-4617-bb70-a87e2991086a/companion.log",
+  "cacheIdentityWarningObserved": false,
+  "classResolution": {
+    "classes": [
+      {
+        "binary_name": "java.util.List",
+        "kind": "interface",
+        "modifiers": [
+          "public",
+          "abstract"
+        ],
+        "module": {
+          "name": "Java Runtime",
+          "kind": "java_runtime",
+          "id": "java-runtime"
+        }
+      }
+    ]
+  },
+  "methodResolution": {
+    "symbols": [
+      {
+        "kind": "method",
+        "owner": "java.util.List",
+        "name": "spliterator",
+        "descriptor": "()Ljava/util/Spliterator;",
+        "modifiers": [
+          "public"
+        ],
+        "module": {
+          "name": "Java Runtime",
+          "kind": "java_runtime",
+          "id": "java-runtime"
+        }
+      }
+    ]
+  },
+  "reopenedSource": {
+    "target": {
+      "descriptor": "()Lnet/minecraft/world/level/block/Block;",
+      "name": "block",
+      "kind": "method",
+      "owner": "com.enderio.modded_conduits.common.modules.appeng.AE2ConduitFacadeProvider"
+    },
+    "package": "com.enderio.modded_conduits.common.modules.appeng",
+    "imports": [
+      "appeng.api.ids.AEComponents",
+      "com.enderio.enderio.api.conduits.facade.ConduitFacadeProvider",
+      "com.enderio.enderio.api.conduits.facade.FacadeType",
+      "net.minecraft.core.Holder",
+      "net.minecraft.world.item.BlockItem",
+      "net.minecraft.world.item.Item",
+      "net.minecraft.world.item.ItemStack",
+      "net.minecraft.world.level.block.Block",
+      "net.minecraft.world.level.block.Blocks",
+      "net.neoforged.neoforge.capabilities.ICapabilityProvider"
+    ],
+    "start_line": 28,
+    "source": "@Override\n   public Block block() {\n      Holder<Item> item = this.itemStack.get(AEComponents.FACADE_ITEM);\n      return item != null && item.value() instanceof BlockItem blockItem ? blockItem.getBlock() : Blocks.AIR;\n   }"
+  },
+  "classUsages": {
+    "returned": 100,
+    "truncated": true
+  },
+  "methodUsages": {
+    "target": {
+      "owner": "java.util.List",
+      "name": "spliterator",
+      "descriptor": "()Ljava/util/Spliterator;"
+    },
+    "returned": 14,
+    "truncated": false
+  },
+  "limitation": "Online Companion restart passed. This does not establish offline restart, integrated-server acceptance or reproduction of the original runtime-replacement interleaving."
+}
