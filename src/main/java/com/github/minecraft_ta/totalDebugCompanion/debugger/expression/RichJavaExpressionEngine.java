@@ -93,7 +93,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
             if (value instanceof ObjectReference object) {
                 reference = this.retainedValues.register(generation, DebuggerEvaluationRunner.currentId(), object,
                         () -> this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
-                                new VariableProxy(thread, "eval", value, null, expression)));
+                                valueProxy(thread, "eval", value, expression)));
                 if (value instanceof com.sun.jdi.ArrayReference array) indexed = array.length();
             }
             return new DebugEngine.EvaluationResult(value instanceof com.sun.jdi.VoidValue ? "" : formatter.valueToString(value, options),
@@ -101,6 +101,12 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                     reference, indexed, scalar(value));
         });
     }
+    private static VariableProxy valueProxy(ThreadReference thread, String scope, Value value, String expression) {
+        var proxy = new VariableProxy(thread, scope, value, null, expression);
+        proxy.setIndexedVariable(value instanceof com.sun.jdi.ArrayReference);
+        return proxy;
+    }
+
     private static DebugEngine.ScalarValue scalar(Value value) {
         if (value == null) return new DebugEngine.ScalarValue("null", null);
         if (value instanceof com.sun.jdi.VoidValue) return new DebugEngine.ScalarValue("void", null);
@@ -266,7 +272,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                     if (result instanceof ObjectReference object && (!action.continueOnSuccess() || captured == null)) {
                         reference = this.retainedValues.register(generation, DebuggerEvaluationRunner.currentId(), object,
                                 () -> this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
-                                        new VariableProxy(thread, "breakpoint action", result, null, "")));
+                                        valueProxy(thread, "breakpoint action", result, null)));
                     }
                     var formatter = this.debugContext.getVariableFormatter();
                     String display = result instanceof com.sun.jdi.VoidValue ? ""

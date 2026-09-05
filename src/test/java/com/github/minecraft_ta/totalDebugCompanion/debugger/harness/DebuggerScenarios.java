@@ -127,6 +127,13 @@ public final class DebuggerScenarios {
             Map<String, DebugEngine.Variable> values = harness.children(valuesVariable);
             equal("3", variable(values, "0").value(), "array index 0");
             equal("4", variable(values, "1").value(), "array index 1");
+            var evaluatedArray = harness.engine().evaluate("values", breakpointFrame.id())
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            var evaluatedElement = harness.engine().variables(evaluatedArray.variablesReference(), 1, 1)
+                    .get(TIMEOUT_SECONDS, TimeUnit.SECONDS).getFirst();
+            equal("values[1]", evaluatedElement.evaluateName(), "evaluated array element expression");
+            equal("4", value(harness.engine().evaluate(evaluatedElement.evaluateName(), breakpointFrame.id())),
+                    "copied array element expression result");
             equal(
                     "true",
                     harness.engine().evaluate(
