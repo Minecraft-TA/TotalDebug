@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IFileStub;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jdt.core.IBuffer;
 
 import java.io.ByteArrayInputStream;
@@ -24,7 +23,7 @@ public class FileImpl implements IFileStub {
     }
 
     @Override
-    public InputStream getContents() throws CoreException {
+    public InputStream getContents() {
         return getContents(false);
     }
 

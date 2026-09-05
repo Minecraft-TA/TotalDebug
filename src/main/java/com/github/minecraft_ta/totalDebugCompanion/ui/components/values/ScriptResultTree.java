@@ -14,7 +14,6 @@ import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.ExpandVetoException;
 import java.awt.Component;
 
 /** Lazy Swing tree for the immutable result graph captured by a live snippet. */
@@ -35,7 +34,7 @@ public final class ScriptResultTree extends JTree {
         setCellRenderer(new Renderer());
         addTreeWillExpandListener(new TreeWillExpandListener() {
             @Override
-            public void treeWillExpand(TreeExpansionEvent event) throws ExpandVetoException {
+            public void treeWillExpand(TreeExpansionEvent event) {
                 Object value = event.getPath().getLastPathComponent();
                 if (value instanceof SnapshotNode node) {
                     load(node);
@@ -232,8 +231,8 @@ public final class ScriptResultTree extends JTree {
                         : type + (detail.isBlank() ? "" : "  " + detail));
                 return this.valueLabel;
             }
-            if (node.getUserObject() instanceof TruncatedValue truncated) {
-                setText(truncated.text());
+            if (node.getUserObject() instanceof TruncatedValue(String text)) {
+                setText(text);
                 setIcon(Icons.WARNING);
             } else if (node.getUserObject() == Placeholder.INSTANCE) {
                 setText("Loading…");

@@ -76,7 +76,7 @@ public final class BreakpointsWindow extends JDialog {
                 URI sourceUri,
                 List<DebuggerSessionController.Breakpoint> breakpoints
         ) {
-            SwingUtilities.invokeLater(() -> reload(null, -1));
+            SwingUtilities.invokeLater(BreakpointsWindow.this::reload);
         }
 
         @Override
@@ -174,7 +174,7 @@ public final class BreakpointsWindow extends JDialog {
         setLocationRelativeTo(owner);
 
         this.controller.addListener(this.listener);
-        reload(null, -1);
+        reload();
     }
 
     public void showWindow() {
@@ -244,10 +244,10 @@ public final class BreakpointsWindow extends JDialog {
         this.details.add(field, fieldConstraints);
     }
 
-    private void reload(URI preferredUri, int preferredLine) {
+    private void reload() {
         DebuggerSessionController.BreakpointEntry selected = this.list.getSelectedValue();
-        URI sourceUri = preferredUri != null ? preferredUri : selected == null ? null : selected.sourceUri();
-        int line = preferredLine > 0 ? preferredLine : selected == null ? -1 : selected.breakpoint().line();
+        URI sourceUri = selected == null ? null : selected.sourceUri();
+        int line = selected == null ? -1 : selected.breakpoint().line();
         this.loading = true;
         try {
             this.model.clear();

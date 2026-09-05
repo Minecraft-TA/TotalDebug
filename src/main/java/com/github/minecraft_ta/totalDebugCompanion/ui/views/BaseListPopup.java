@@ -41,7 +41,8 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
             var cursorRect = invoker.modelToView2D(invoker.getCaretPosition());
             show(invoker, (int) cursorRect.getX(), (int) (cursorRect.getY() + cursorRect.getHeight()), alignment);
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            System.getLogger(BaseListPopup.class.getName()).log(
+                    System.Logger.Level.WARNING, "Unable to position popup at the caret", e);
         }
     }
 
@@ -111,8 +112,8 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         this.list.setSelectedIndex(0);
         this.scrollPane.getVerticalScrollBar().setValue(0);
 
-        var longestItemLength = items.isEmpty() ? 0 : this.list.getFontMetrics(this.list.getFont()).stringWidth(
-                "9".repeat(items.stream().mapToInt(ListItem::getLabelLength).max().getAsInt())
+        var longestItemLength = this.list.getFontMetrics(this.list.getFont()).stringWidth(
+                "9".repeat(items.stream().mapToInt(ListItem::getLabelLength).max().orElse(0))
         );
         var preferredSize = new Dimension(Math.min(MAXIMUM_LIST_WIDTH, longestItemLength) + 35, Math.min(MINIMUM_LIST_WIDTH, this.list.getPreferredSize().height));
         this.scrollPane.setPreferredSize(preferredSize);

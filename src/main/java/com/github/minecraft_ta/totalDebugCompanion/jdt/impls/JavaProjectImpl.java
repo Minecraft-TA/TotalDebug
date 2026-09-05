@@ -33,7 +33,7 @@ public class JavaProjectImpl extends JavaProject {
     }
 
     @Override
-    public NameLookup newNameLookup(ICompilationUnit[] workingCopies, boolean excludeTestCode) throws JavaModelException {
+    public NameLookup newNameLookup(ICompilationUnit[] workingCopies, boolean excludeTestCode) {
         return new NameLookupImpl(this);
     }
 
@@ -43,7 +43,7 @@ public class JavaProjectImpl extends JavaProject {
     }
 
     @Override
-    public IModuleDescription getModuleDescription() throws JavaModelException {
+    public IModuleDescription getModuleDescription() {
         return null;
     }
 
@@ -63,12 +63,12 @@ public class JavaProjectImpl extends JavaProject {
     }
 
     @Override
-    public IClasspathEntry[] getResolvedClasspath() throws JavaModelException {
+    public IClasspathEntry[] getResolvedClasspath() {
         return new IClasspathEntry[0];
     }
 
     @Override
-    public IClasspathEntry[] getRawClasspath() throws JavaModelException {
+    public IClasspathEntry[] getRawClasspath() {
         return new IClasspathEntry[0];
     }
 

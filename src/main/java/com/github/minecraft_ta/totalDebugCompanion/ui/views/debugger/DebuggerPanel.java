@@ -11,7 +11,6 @@ import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -110,9 +109,9 @@ public final class DebuggerPanel extends JPanel {
         this.detach = toolbarButton(debuggerActions.detach());
         this.cancelEvaluation.addActionListener(event -> this.controller.cancelActiveEvaluation());
         this.cancelEvaluation.setVisible(false);
-        this.viewBreakpoints = toolbarButton(Icons.VIEW_BREAKPOINTS, "View breakpoints");
+        this.viewBreakpoints = createViewBreakpointsButton();
         this.viewBreakpoints.addActionListener(event -> showBreakpoints.run());
-        this.muteBreakpoints = toolbarToggle(Icons.MUTE_BREAKPOINTS, "Mute breakpoints");
+        this.muteBreakpoints = createMuteBreakpointsButton();
         this.muteBreakpoints.setSelected(controller.breakpointsMuted());
         this.muteBreakpoints.addActionListener(event ->
                 controller.setBreakpointsMuted(this.muteBreakpoints.isSelected()));
@@ -255,7 +254,7 @@ public final class DebuggerPanel extends JPanel {
             }
             if (failure != null) {
                 if (!isCancellation(failure)) {
-                    this.inspector.showStatus(frame, failureMessage(failure, "Unable to load variables"));
+                    this.inspector.showStatus(frame, failureMessage(failure));
                 }
                 return;
             }
@@ -296,14 +295,14 @@ public final class DebuggerPanel extends JPanel {
         return current instanceof CancellationException;
     }
 
-    private static String failureMessage(Throwable failure, String fallback) {
+    private static String failureMessage(Throwable failure) {
         Throwable current = failure;
         while ((current instanceof CompletionException || current instanceof ExecutionException)
                 && current.getCause() != null) {
             current = current.getCause();
         }
         String detail = current.getMessage();
-        return detail == null || detail.isBlank() ? fallback : detail;
+        return detail == null || detail.isBlank() ? "Unable to load variables" : detail;
     }
 
     public void dispose() {
@@ -324,10 +323,10 @@ public final class DebuggerPanel extends JPanel {
         return separator;
     }
 
-    private static JButton toolbarButton(Icon icon, String tooltip) {
-        JButton button = new JButton(icon);
+    private static JButton createViewBreakpointsButton() {
+        JButton button = new JButton(Icons.VIEW_BREAKPOINTS);
         button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setToolTipText(tooltip);
+        button.setToolTipText("View breakpoints");
         button.setFocusable(false);
         button.setMargin(new Insets(4, 6, 4, 6));
         return button;
@@ -342,10 +341,10 @@ public final class DebuggerPanel extends JPanel {
         return button;
     }
 
-    private static JToggleButton toolbarToggle(Icon icon, String tooltip) {
-        JToggleButton button = new JToggleButton(icon);
+    private static JToggleButton createMuteBreakpointsButton() {
+        JToggleButton button = new JToggleButton(Icons.MUTE_BREAKPOINTS);
         button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setToolTipText(tooltip);
+        button.setToolTipText("Mute breakpoints");
         button.setFocusable(false);
         button.setMargin(new Insets(4, 6, 4, 6));
         return button;

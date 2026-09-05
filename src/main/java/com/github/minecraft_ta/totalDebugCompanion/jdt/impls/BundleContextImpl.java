@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.BundleContextStub;
-import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceReference;
 
 public class BundleContextImpl implements BundleContextStub {
@@ -14,7 +13,7 @@ public class BundleContextImpl implements BundleContextStub {
     }
 
     @Override
-    public ServiceReference<?>[] getAllServiceReferences(String clazz, String filter) throws InvalidSyntaxException {
+    public ServiceReference<?>[] getAllServiceReferences(String clazz, String filter) {
         return new ServiceReference[]{CONTENT_MANAGER_SERVICE_REFERENCE};
     }
 

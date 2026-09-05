@@ -74,11 +74,11 @@ public class JDTHacks {
         }
     }
 
-    public static <T> T invokeMethod(Object obj, String methodName, Class<?>[] argClasses, Object... args) {
+    public static void invokeMethod(Object obj, String methodName, Class<?>[] argClasses, Object... args) {
         try {
             var method = obj.getClass().getDeclaredMethod(methodName, argClasses);
             method.setAccessible(true);
-            return (T) method.invoke(obj, args);
+            method.invoke(obj, args);
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }

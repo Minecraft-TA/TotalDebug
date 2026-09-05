@@ -80,6 +80,8 @@ public class LazyFileJTree extends JTree {
                 if (pathForRow == null)
                     return;
                 var bounds = getPathBounds(pathForRow);
+                if (bounds == null)
+                    return;
                 //We only care about the vertical bounds check
                 bounds.setSize(10000, (int) bounds.getHeight());
                 if (!bounds.contains(e.getX(), e.getY()))

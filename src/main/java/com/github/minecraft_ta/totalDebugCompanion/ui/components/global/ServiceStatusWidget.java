@@ -19,7 +19,6 @@ import java.util.Objects;
 /** Compact status-bar widget backed entirely by a published service status. */
 final class ServiceStatusWidget extends JButton {
     private final String serviceName;
-    private final StatusDotIcon stateDot = new StatusDotIcon();
     private ServiceStatus status;
 
     ServiceStatusWidget(String serviceName, ServiceStatus initialStatus) {
@@ -32,7 +31,7 @@ final class ServiceStatusWidget extends JButton {
         setBorderPainted(false);
         setFocusable(false);
         setRolloverEnabled(true);
-        setIcon(this.stateDot);
+        setIcon(new StatusDotIcon());
         setIconTextGap(5);
         applyStatus(initialStatus);
         addActionListener(event -> showStatusPopup());

@@ -48,6 +48,7 @@ import java.util.Objects;
 
 /** Async implementation and base-declaration chooser shared by code vision, gutter markers and Ctrl+T/U. */
 public final class ImplementationChooserPopup extends BasePopup {
+    private static final System.Logger LOGGER = System.getLogger(ImplementationChooserPopup.class.getName());
     private static final int RESULT_LIMIT = 1_000;
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
@@ -163,7 +164,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         showCard(MESSAGE_CARD);
         updateTitle(null);
         packForLoading();
-        failure.printStackTrace(System.err);
+        LOGGER.log(System.Logger.Level.WARNING, "Unable to look up hierarchy for " + query, failure);
         showAtAnchor(editor, offset);
     }
 
@@ -296,7 +297,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         this.message.setText("Hierarchy lookup failed: " + failure.getClass().getSimpleName());
         showCard(MESSAGE_CARD);
         packForLoading();
-        failure.printStackTrace(System.err);
+        LOGGER.log(System.Logger.Level.WARNING, "Unable to look up hierarchy for " + this.query, failure);
     }
 
     private void updateTitle(HierarchyPage page) {

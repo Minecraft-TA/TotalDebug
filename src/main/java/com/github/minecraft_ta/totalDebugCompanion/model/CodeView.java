@@ -49,7 +49,7 @@ public class CodeView implements IEditorPanel {
         setCode(source.contents(), offset);
     }
 
-    public CompletableFuture<Void> reload(int offset) {
+    public void reload(int offset) {
         CompletableFuture<Void> task = CompletableFuture
                 .supplyAsync(() -> readCode(this.path))
                 .thenAcceptAsync(code -> {
@@ -61,18 +61,16 @@ public class CodeView implements IEditorPanel {
             failure.printStackTrace();
             return null;
         });
-        return task;
     }
 
     private void setCode(String code, int offset) {
-        CompletableFuture<Void> task = CompletableFuture.runAsync(
+        this.ready = CompletableFuture.runAsync(
                 () -> {
                     this.codeViewPanel.setCode(code);
                     this.codeViewPanel.navigateToOffset(offset);
                 },
                 SwingUtilities::invokeLater
         );
-        this.ready = task;
     }
 
     @Override

@@ -170,7 +170,7 @@ public final class JavaSymbolResolver {
         };
     }
 
-    private static Resolution resolvedType(IType type) throws JavaModelException {
+    private static Resolution resolvedType(IType type) {
         String binaryName = type.getFullyQualifiedName('$');
         if (binaryName.isBlank()) {
             return Resolution.unavailable("JDT could not determine the runtime class name");

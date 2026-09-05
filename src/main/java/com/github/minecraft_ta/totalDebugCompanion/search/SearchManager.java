@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 public class SearchManager {
+    private static final System.Logger LOGGER = System.getLogger(SearchManager.class.getName());
 
     /**
      * Rebuilt per use rather than cached in a static field: a highlight painter captures its colour
@@ -186,7 +187,7 @@ public class SearchManager {
             var matchPos = this.highlights.get(this.focusedMatchIndex);
             this.focusedMatchReference = textPane.getHighlighter().addHighlight(matchPos.start, matchPos.end, focusedHighlightPainter());
         } catch (BadLocationException ex) {
-            ex.printStackTrace();
+            LOGGER.log(System.Logger.Level.WARNING, "Unable to focus search match " + this.focusedMatchIndex, ex);
         }
     }
 
@@ -196,7 +197,8 @@ public class SearchManager {
             try {
                 p.highlightReference = textPane.getHighlighter().addHighlight(p.start, p.end, highlightPainter());
             } catch (BadLocationException e) {
-                e.printStackTrace();
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "Unable to highlight search match at " + p.start + ".." + p.end, e);
             }
         });
 

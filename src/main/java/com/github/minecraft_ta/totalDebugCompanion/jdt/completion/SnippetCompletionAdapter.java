@@ -256,9 +256,11 @@ public class SnippetCompletionAdapter {
                     if (h == p || h.n != p.n)
                         return;
 
+                    boolean wasUpdatingClonedHighlights = this.updatingClonedHighlights;
+                    boolean wasIgnoringDocumentChanges = this.ignoreDocumentChanges;
+                    this.updatingClonedHighlights = true;
+                    this.ignoreDocumentChanges = true;
                     try {
-                        this.updatingClonedHighlights = true;
-                        this.ignoreDocumentChanges = true;
                         //Fix the cursor position by diffing the change
                         if (h.reference.getEndOffset() < p.reference.getStartOffset())
                             caretPos[0] += text.length() - (h.reference.getEndOffset() - h.reference.getStartOffset() - 1);
@@ -268,10 +270,11 @@ public class SnippetCompletionAdapter {
                                 h.reference.getEndOffset() - h.reference.getStartOffset() - 1,
                                 text, null
                         );
-                        this.ignoreDocumentChanges = false;
-                        this.updatingClonedHighlights = false;
                     } catch (BadLocationException e) {
                         e.printStackTrace();
+                    } finally {
+                        this.ignoreDocumentChanges = wasIgnoringDocumentChanges;
+                        this.updatingClonedHighlights = wasUpdatingClonedHighlights;
                     }
                 });
                 textComponent.setCaretPosition(caretPos[0]);

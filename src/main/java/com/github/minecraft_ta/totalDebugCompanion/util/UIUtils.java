@@ -9,6 +9,7 @@ import javax.swing.text.*;
 import java.awt.*;
 
 public class UIUtils {
+    private static final System.Logger LOGGER = System.getLogger(UIUtils.class.getName());
     private static final double NAVIGATION_TARGET_VERTICAL_POSITION = 1.0 / 3.0;
 
     public static int getFontWidth(JComponent component, String s) {
@@ -62,7 +63,8 @@ public class UIUtils {
             viewport.setViewPosition(new Point(x, y));
             scrollPane.getTextArea().setCaretPosition(offsetStart);
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Unable to navigate to editor range " + offsetStart + ".." + offsetEnd, e);
         }
     }
 }

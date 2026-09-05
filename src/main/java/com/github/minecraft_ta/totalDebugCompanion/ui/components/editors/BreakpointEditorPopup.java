@@ -21,7 +21,6 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
 import java.util.Objects;
-import java.util.List;
 
 /** Compact editor for the breakpoint at one source line. */
 final class BreakpointEditorPopup {
@@ -152,7 +151,7 @@ final class BreakpointEditorPopup {
                     throw new NumberFormatException();
                 }
             } catch (NumberFormatException exception) {
-                showValidation("Hit count must be a positive integer");
+                showInvalidHitCount();
                 return;
             }
         }
@@ -161,8 +160,8 @@ final class BreakpointEditorPopup {
         this.handler.save(this.displayedLine, this.condition.getText(), hitCountText);
     }
 
-    private void showValidation(String message) {
-        this.validation.setText(message);
+    private void showInvalidHitCount() {
+        this.validation.setText("Hit count must be a positive integer");
         this.validation.putClientProperty("FlatLaf.styleClass", "error");
         this.hitCount.putClientProperty("JComponent.outline", "error");
         this.hitCount.requestFocusInWindow();

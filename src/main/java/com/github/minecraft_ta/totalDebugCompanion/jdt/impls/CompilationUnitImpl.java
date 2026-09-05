@@ -32,7 +32,7 @@ public class CompilationUnitImpl extends CompilationUnit {
     }
 
     @Override
-    protected IBuffer openBuffer(IProgressMonitor pm, IElementInfo info) throws JavaModelException {
+    protected IBuffer openBuffer(IProgressMonitor pm, IElementInfo info) {
         return getBuffer();
     }
 

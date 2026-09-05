@@ -151,7 +151,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
                         metrics,
                         entry,
                         Action.USAGES,
-                        formatCount(entry.insight().usageCount(), "usage", "usages"),
+                        formatUsageCount(entry.insight().usageCount()),
                         x,
                         baseline
                 );
@@ -285,7 +285,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         CodeVisionTarget target = new CodeVisionTarget(bounds, entry, action);
         Color color = target.equals(this.hovered)
                 ? ThemeColors.accent()
-                : blend(ThemeColors.mutedText(), ThemeColors.text(), 0.35f);
+                : blend(ThemeColors.mutedText(), ThemeColors.text());
         draw.setColor(color);
         draw.drawString(text, x, baseline);
         if (target.equals(this.hovered)) {
@@ -355,11 +355,12 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         return null;
     }
 
-    private static String formatCount(long count, String singular, String plural) {
-        return count + " " + (count == 1 ? singular : plural);
+    private static String formatUsageCount(long count) {
+        return count + (count == 1 ? " usage" : " usages");
     }
 
-    private static Color blend(Color from, Color to, float amount) {
+    private static Color blend(Color from, Color to) {
+        float amount = 0.35f;
         float inverse = 1f - amount;
         return new Color(
                 Math.round(from.getRed() * inverse + to.getRed() * amount),

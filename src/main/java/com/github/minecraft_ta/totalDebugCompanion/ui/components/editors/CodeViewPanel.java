@@ -61,7 +61,6 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private final CodeInsightService insightService;
     private final CodeVisionLayerUI codeVisionLayerUI;
     private final JLayer<JComponent> codeVisionLayer;
-    private final HierarchyGutterMarkers gutterMarkers;
     private final CodeVisionController codeVisionController;
     private final DebugEngine.Source debugSource;
     private final BreakpointGutterMarkers breakpointMarkers;
@@ -121,7 +120,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 this.editorPane,
                 ThemeManager.palette()
         );
-        this.gutterMarkers = new HierarchyGutterMarkers(
+        HierarchyGutterMarkers gutterMarkers = new HierarchyGutterMarkers(
                 editorGutter,
                 new HierarchyGutterMarkers.Handler() {
                     @Override
@@ -178,7 +177,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 this.insightService,
                 this.codeVisionLayerUI,
                 this.codeVisionLayer,
-                this.gutterMarkers
+                gutterMarkers
         );
 
         this.debugSource = codeView.getDebugSource().orElse(null);
@@ -434,7 +433,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     displayedLine
             );
             request = existing == null
-                    ? breakpointRequestAtLine(displayedLine, null, null)
+                    ? breakpointRequestAtLine(displayedLine)
                     : Optional.of(existing.request());
         } catch (RuntimeException exception) {
             this.bottomInformationBar.setFailureInfoText(exception.getMessage());
@@ -478,7 +477,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         Optional<DebugEngine.SourceBreakpoint> current;
         try {
             current = managed == null
-                    ? breakpointRequestAtLine(displayedLine, null, null)
+                    ? breakpointRequestAtLine(displayedLine)
                     : Optional.of(managed.request());
         } catch (RuntimeException exception) {
             this.bottomInformationBar.setFailureInfoText(exception.getMessage());
@@ -553,17 +552,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 }));
     }
 
-    private Optional<DebugEngine.SourceBreakpoint> breakpointRequestAtLine(
-            int displayedLine,
-            String condition,
-            String hitCount
-    ) {
+    private Optional<DebugEngine.SourceBreakpoint> breakpointRequestAtLine(int displayedLine) {
         var unit = ASTCache.getFromCache(this.identifier);
         if (unit == null) {
             throw new IllegalStateException("Source analysis is still loading");
         }
         return DebuggerBreakpointResolver.resolve(
-                this.debugSource, unit, displayedLine, condition, hitCount);
+                this.debugSource, unit, displayedLine, null, null);
     }
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {

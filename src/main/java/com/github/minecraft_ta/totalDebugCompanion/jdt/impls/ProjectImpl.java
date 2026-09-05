@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IProjectStub;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 
@@ -29,7 +28,7 @@ public class ProjectImpl implements IProjectStub {
     }
 
     @Override
-    public boolean hasNature(String natureId) throws CoreException {
+    public boolean hasNature(String natureId) {
         return true;
     }
 

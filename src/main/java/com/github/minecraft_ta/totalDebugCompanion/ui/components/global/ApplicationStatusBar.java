@@ -13,7 +13,6 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
@@ -37,7 +36,6 @@ public final class ApplicationStatusBar extends JPanel {
     private final BreadcrumbBar breadcrumbs;
     private final JLabel editorStatusLabel = new JLabel();
     private final JLabel taskLabel = new JLabel();
-    private final JProgressBar taskProgress = new JProgressBar();
     private final JButton taskState = new JButton();
     private final JPanel taskCards = new JPanel(new java.awt.CardLayout());
     private final ServiceStatusWidget gameStatus = new ServiceStatusWidget(
@@ -58,7 +56,6 @@ public final class ApplicationStatusBar extends JPanel {
     );
     private final AnimatedFlatSVGIcon processIcon = new AnimatedFlatSVGIcon("icons/process");
     private final Consumer<BottomInformationBar.State> editorStatusListener = this::setEditorStatus;
-    private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
     private final Timer memberDebounce;
 
     private BottomInformationBar selectedEditorStatus;
@@ -88,21 +85,22 @@ public final class ApplicationStatusBar extends JPanel {
         add(this.editorStatusLabel);
         add(Box.createHorizontalGlue());
 
-        this.taskProgress.setIndeterminate(true);
-        this.taskProgress.setStringPainted(false);
-        this.taskProgress.setBorderPainted(false);
+        JProgressBar taskProgress = new JProgressBar();
+        taskProgress.setIndeterminate(true);
+        taskProgress.setStringPainted(false);
+        taskProgress.setBorderPainted(false);
         Dimension progressSize = new Dimension(88, 3);
-        this.taskProgress.setMinimumSize(progressSize);
-        this.taskProgress.setPreferredSize(progressSize);
-        this.taskProgress.setMaximumSize(progressSize);
-        this.taskProgress.setAlignmentY(Component.CENTER_ALIGNMENT);
+        taskProgress.setMinimumSize(progressSize);
+        taskProgress.setPreferredSize(progressSize);
+        taskProgress.setMaximumSize(progressSize);
+        taskProgress.setAlignmentY(Component.CENTER_ALIGNMENT);
         this.taskLabel.setAlignmentY(Component.CENTER_ALIGNMENT);
         JPanel activity = new JPanel();
         activity.setOpaque(false);
         activity.setLayout(new BoxLayout(activity, BoxLayout.LINE_AXIS));
         activity.add(this.taskLabel);
         activity.add(Box.createHorizontalStrut(8));
-        activity.add(this.taskProgress);
+        activity.add(taskProgress);
         activity.setAlignmentY(Component.CENTER_ALIGNMENT);
         this.taskCards.add(activity, "progress");
         this.taskCards.setOpaque(false);
@@ -118,7 +116,7 @@ public final class ApplicationStatusBar extends JPanel {
         add(this.mcpStatus);
         add(this.taskCards);
         applyTheme();
-        ThemeManager.addThemeChangeListener(this.themeListener);
+        ThemeManager.addThemeChangeListener(theme -> applyTheme());
         setRuntimeStatus(this.runtimeStatus);
     }
 

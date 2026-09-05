@@ -106,7 +106,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private final JTree tree = DebuggerValueTree.create(this.model);
     private final JavaExpressionField expression = new JavaExpressionField();
     private final ExpressionCompletionSupport expressionCompletion = new ExpressionCompletionSupport(this.expression);
-    private final JButton addWatch = toolbarButton(Icons.ADD_TO_WATCH, "Add Watch (Shift+Enter)");
+    private final JButton addWatch = createAddWatchButton();
     private final DebuggerExpressionModel expressions = new DebuggerExpressionModel();
     private final Map<Key, DefaultMutableTreeNode> expressionNodes = new LinkedHashMap<>();
     private final PropertyChangeListener previewSettingsListener = event -> onEventThread(this::refreshPreviewMode);
@@ -888,10 +888,10 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         GlobalConfig.getInstance().removeAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
     }
 
-    private static JButton toolbarButton(Icon icon, String tooltip) {
-        JButton button = new JButton(icon);
+    private static JButton createAddWatchButton() {
+        JButton button = new JButton(Icons.ADD_TO_WATCH);
         button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setToolTipText(tooltip);
+        button.setToolTipText("Add Watch (Shift+Enter)");
         button.setFocusable(false);
         button.setMargin(new Insets(4, 6, 4, 6));
         return button;

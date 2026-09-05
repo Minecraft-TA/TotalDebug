@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class ScriptPanel extends AbstractCodeViewPanel {
+    private static final System.Logger LOGGER = System.getLogger(ScriptPanel.class.getName());
 
     private static int SCRIPT_ID = 0;
     private final int scriptId = SCRIPT_ID++;
@@ -494,9 +495,11 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 if (e.getCause() instanceof OperationCanceledException)
                     return;
 
-                e.printStackTrace();
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "Unable to complete script " + this.scriptView.getScriptName(), e);
             } catch (Throwable e) {
-                e.printStackTrace();
+                LOGGER.log(System.Logger.Level.WARNING,
+                        "Unable to complete script " + this.scriptView.getScriptName(), e);
             }
         });
     }
@@ -610,12 +613,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private void applyTextEdit(CustomTextEdit edit) {
         var range = edit.getRange();
 
+        this.snippetCompletionAdapter.beginIgnoredDocumentChange();
         try {
-            this.snippetCompletionAdapter.beginIgnoredDocumentChange();
             ((RSyntaxDocument) this.editorPane.getDocument()).replace(range.getOffset(), range.getLength(), edit.getNewText(), null);
-            this.snippetCompletionAdapter.endIgnoredDocumentChange();
         } catch (BadLocationException e) {
-            e.printStackTrace();
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "Unable to apply completion edit to script " + this.scriptView.getScriptName(), e);
+        } finally {
+            this.snippetCompletionAdapter.endIgnoredDocumentChange();
         }
     }
 

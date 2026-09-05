@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IMethodStub;
-import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.internal.compiler.classfmt.JavaBinaryNames;
 
@@ -28,7 +27,7 @@ public class JIndexResolvedBinaryMethod implements IMethodStub {
     }
 
     @Override
-    public String getSignature() throws JavaModelException {
+    public String getSignature() {
         return this.descriptor;
     }
 
@@ -38,12 +37,12 @@ public class JIndexResolvedBinaryMethod implements IMethodStub {
     }
 
     @Override
-    public int getFlags() throws JavaModelException {
+    public int getFlags() {
         return this.binaryMethod.getModifiers();
     }
 
     @Override
-    public boolean isConstructor() throws JavaModelException {
+    public boolean isConstructor() {
         return JavaBinaryNames.isConstructor(this.binaryMethod.getSelector());
     }
 }

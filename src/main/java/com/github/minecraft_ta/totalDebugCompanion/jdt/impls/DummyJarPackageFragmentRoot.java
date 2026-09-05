@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.impls;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.Path;
-import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.internal.core.JarPackageFragmentRoot;
 import org.eclipse.jdt.internal.core.OpenableElementInfo;
@@ -18,7 +17,7 @@ public class DummyJarPackageFragmentRoot extends JarPackageFragmentRoot {
     }
 
     @Override
-    protected boolean computeChildren(OpenableElementInfo info, IResource underlyingResource) throws JavaModelException {
+    protected boolean computeChildren(OpenableElementInfo info, IResource underlyingResource) {
         try {
             var packageContentType = Class.forName("org.eclipse.jdt.internal.core.JarPackageFragmentRootInfo$PackageContent");
             var emptyPackage = JDTHacks.createInstance(packageContentType, new Class[0]);
