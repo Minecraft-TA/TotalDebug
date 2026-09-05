@@ -1,38 +1,48 @@
-# TotalDebugCompanion
-The companion app for the [TotalDebug](https://github.com/Minecraft-TA/TotalDebug) mod.
+# TotalDebug Companion
 
-## Development
+A desktop source browser, Java scratchpad and debugger for [TotalDebug](https://github.com/Minecraft-TA/TotalDebug). Inspect the classes in your Minecraft instance, follow their references and experiment with the running game.
 
-The project requires JDK 21. For coordinated local development, first publish the shared storage and evaluation modules from the sibling TotalDebug checkout with `./gradlew :storage:publishToMavenLocal :evaluation:publishToMavenLocal`. Then build and test Companion with:
+![Companion source editor with breakpoints, debugger frames and expanded evaluation results](images/main.png)
 
-```shell
-./gradlew clean build
-```
+Minecraft source with an illustrated debugger pause and a nested Java evaluation result.
 
-The mod-facing artifact is `build/libs/TotalDebugCompanion.jar`. It is a self-contained application jar, but it does not include a Java runtime. TotalDebug launches it with the same Java 21 runtime as Minecraft.
+## Explore the runtime
 
-The JAR can also be launched directly:
+Open a block, entity or item from Minecraft with F6, then navigate its decompiled source. Companion includes class and member search, Find Usages, type hierarchies, editor completion and archive resource previews.
 
-```shell
+The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Live tools reconnect when TotalDebug starts again.
+
+## Evaluate and debug
+
+Evaluate expressions or Java statement bodies, inspect their results, and save reusable code as scripts. Run scripts on the client or server according to the server's execution policy.
+
+The debugger provides breakpoints, stepping, stack frames, variables, watches and breakpoint actions. Paused evaluation uses the selected frame. Code that invokes methods or changes fields can affect Minecraft, and cancellation does not undo those effects.
+
+See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior.
+
+## Build and run
+
+Companion requires **Windows x64 and a full JDK 21**. The application JAR contains its dependencies, but no Java runtime.
+
+For coordinated source builds, follow TotalDebug's [dependency build order](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/BUILD_RELEASE.md), then run:
+
+```powershell
+.\gradlew.bat build -PtotaldebugUseMavenLocal=true
 java -jar build/libs/TotalDebugCompanion.jar
 ```
 
-### Visual verification
+TotalDebug can launch the same JAR from Minecraft. Standalone startup reopens the last profile when one is available.
 
-The UI harness renders named application states without a Minecraft session or control of the real mouse:
+For UI changes, the test harness renders named states without a game session:
 
-```shell
-./gradlew uiHarness --args="--theme=islands-dark --scenario=search-results"
-./gradlew uiHarness --args="--list-scenarios"
-./gradlew uiContactSheet
+```powershell
+.\gradlew.bat uiHarness -PtotaldebugUseMavenLocal=true '--args=--theme=islands-dark --scenario=search-results'
+.\gradlew.bat uiHarness -PtotaldebugUseMavenLocal=true '--args=--list-scenarios'
+.\gradlew.bat uiContactSheet -PtotaldebugUseMavenLocal=true
 ```
 
-`uiContactSheet` renders every registered state in a fresh process for both themes. It writes individual PNGs, `contact-sheet.png`, and `manifest.json` under `build/ui-screenshots` by default. Pass `--args="--output=<directory>"` to choose another output directory.
-Use `--assemble-only` with an existing capture directory to rebuild the sheets without rerendering the states.
+Contact sheets and individual captures are written under `build/ui-screenshots`.
 
-Companion keeps one workspace open at a time. Cached sources, scripts, class search, and reference search remain available Offline. Live tools reconnect when a compatible TotalDebug client starts. Closing Minecraft does not close Companion; closing the Companion window exits it.
+## Integrations and storage
 
-## Screenshots
-
-![Main View](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/images/main.png?raw=true)
-The current storage layout and manual development reset are documented in the sibling TotalDebug repository's `docs/STORAGE.md`. The current instance state format is 2, including breakpoint actions and Expression/Code history. Existing format-1 development state must be reset before using this build. No legacy files are migrated automatically.
+The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](https://github.com/Minecraft-TA/TotalDebug/blob/master/docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.

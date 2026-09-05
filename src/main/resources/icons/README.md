@@ -1,8 +1,7 @@
 # Icons
 
-JetBrains' **New UI** (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0
-(see `INTELLIJ_LICENSE.txt`). They replaced the pre-New-UI 2021 icons this project previously
-vendored, which had colours baked in for a dark background only.
+JetBrains' New UI (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0.
+See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
 
 Each icon ships as a light/dark pair, `<name>.svg` and `<name>_dark.svg`. That is FlatLaf's
 convention: a single `FlatSVGIcon` resolves the `_dark` sibling on its own when the active look and
@@ -28,30 +27,26 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | enum | `nodes/enum` | | close | `general/closeSmall` |
 | interface | `nodes/interface` | | closeHovered | `general/closeSmallHovered` |
 | constructor | `nodes/constructor` | | delete | `general/delete` |
-| constant | `nodes/constant` | | download | `general/download` |
+| constant | `nodes/constant` | | | |
 | property | `nodes/property` | | copy | `general/copy` |
 | variable | `nodes/variable` | | information | `status/info` |
 | javaFile | `fileTypes/java` | | success | `status/success` |
-| classFile | `fileTypes/javaClass` | | warning | `status/warning` |
+| | | | warning | `status/warning` |
 | jar | `fileTypes/archive` | | error | `status/error` |
 | text | `fileTypes/text` | | primitive | `debugger/dbPrimitive` |
 | run | `run/run` | | value | `debugger/value` |
 | stop | `run/stop` | | array | `json/array` |
-| pause | `run/pause` | | clock | `general/history` |
 | debug | `run/debug` | | resume | `run/resume` |
 | stepOver | `run/stepOver` | | stepInto | `run/stepInto` |
 | stepOut | `run/stepOut` | | breakpoint | `breakpoints/breakpoint` |
 | breakpointValid | `breakpoints/breakpointValid` | | breakpointInvalid | `breakpoints/breakpointInvalid` |
 | breakpointMethod | `breakpoints/breakpointMethod` | | breakpointMethodValid | `breakpoints/breakpointMethodValid` |
 | questionBadge | `breakpoints/questionBadge` | | detach | `CidrDebuggerIcons/icons/expui/detach` |
-| clear | `actions/clearCash` | | upDown | `diff/arrowLeftRight` |
-| runServer | `actions/deploy` | | overlayMode | `general/layout` |
-| arrow_right | `general/chevronRight` | | arrow_down | `general/chevronDown` |
+| runServer | `actions/deploy` | | | |
+| | | | arrow_down | `general/chevronDown` |
 | previousOccurrence | `general/chevronUp` | | nextOccurrence | `general/chevronDown` |
-| target | `general/locate` | | decompile | `actions/preview` |
-| block | `general/remove` | | | |
 
-The file-tree polish set uses the following additional New UI assets:
+File-tree and navigation assets:
 
 | here | expui | | here | expui |
 |---|---|---|---|---|
@@ -68,9 +63,6 @@ The file-tree polish set uses the following additional New UI assets:
 | settings | `general/settings` | | filter | `general/filter` |
 | implementedMethod | `gutter/implementedMethod` | | implementingMethod | `gutter/implementingMethod` |
 | overriddenMethod | `gutter/overridenMethod` | | overridingMethod | `gutter/overridingMethod` |
-
-`decompile` and `block` have no exact New UI counterpart; those two are judgement calls and are the
-first place to look if an icon reads wrong.
 
 `process/step_1..8.svg` is the spinner driven by `AnimatedFlatSVGIcon`. It is still the older
 JetBrains asset and has no dark variant.
