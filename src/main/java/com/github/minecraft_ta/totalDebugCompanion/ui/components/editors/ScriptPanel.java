@@ -159,11 +159,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             } else if (status == ExecutionResult.Status.RUN_EXCEPTION) {
                 showRunResult(m);
                 this.bottomInformationBar.setFailureInfoText("Run failed!");
+            } else if (status == ExecutionResult.Status.CANCELLATION_PENDING) {
+                this.bottomInformationBar.setProcessInfoText(m.getResult().error().text());
             } else {
                 this.bottomInformationBar.setProcessInfoText("Running...");
             }
 
-            if (status != ExecutionResult.Status.COMPILATION_COMPLETED)
+            if (status.terminal())
                 setRunButtonsState(true);
         });
     }

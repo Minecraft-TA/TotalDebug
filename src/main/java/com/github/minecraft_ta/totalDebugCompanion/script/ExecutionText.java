@@ -11,6 +11,14 @@ public record ExecutionText(String text, int totalCharacters, boolean truncated)
         }
     }
 
+    public static ExecutionText empty() {
+        return complete("");
+    }
+
+    public static ExecutionText complete(String text) {
+        return new ExecutionText(text, text.length(), false);
+    }
+
     public String displayText() {
         if (!this.truncated) {
             return this.text;

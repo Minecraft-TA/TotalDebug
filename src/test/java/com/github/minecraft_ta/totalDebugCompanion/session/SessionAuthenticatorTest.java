@@ -49,7 +49,7 @@ class SessionAuthenticatorTest {
         ServerHelloMessage response = authenticator.authenticate(hello(1, "correct-token-value", 0b0111));
 
         assertFalse(response.accepted());
-        assertEquals("Unsupported protocol version: expected 9, got 1", response.rejectionReason());
+        assertEquals("Unsupported protocol version: expected " + CompanionProtocol.VERSION + ", got 1", response.rejectionReason());
     }
 
     private static ClientHelloMessage hello(int version, String token, long capabilities) {

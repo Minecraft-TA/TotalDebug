@@ -17,6 +17,19 @@ class ScriptProtocolCodecTest {
     private static final HexFormat HEX = HexFormat.of();
 
     @Test
+    void cancellationPendingSurvivesTheResultEnvelopeWithoutBecomingTerminal() {
+        ExecutionResult result = new ExecutionResult(ExecutionResult.Status.CANCELLATION_PENDING,
+                ExecutionText.empty(), null, ExecutionText.complete("Stop requested; script is still running"));
+        ExecutionResultMessage written = new ExecutionResultMessage(7, result);
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+        written.write(output);
+        ExecutionResultMessage read = new ExecutionResultMessage();
+        read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
+        assertEquals(result, read.getResult());
+        assertEquals(false, read.getResult().status().terminal());
+    }
+
+    @Test
     void runScriptMatchesTheSharedGoldenBytes() {
         RunScriptMessage message = new RunScriptMessage(
                 7,

@@ -229,15 +229,8 @@ public final class CodeModeJobService implements AutoCloseable {
         try {
             this.transport.cancel(job.scriptId());
         } catch (RuntimeException exception) {
-            job.finish(
-                    JobState.FAILED,
-                    null,
-                    false,
-                    null,
-                    "Unable to request cancellation: " + exception,
-                    this.clock.instant()
-            );
-            this.jobsByScriptId.remove(job.scriptId(), job.jobId());
+            job.markCancellationPending(ExecutionText.complete(
+                    "Unable to request cancellation; the target may still be running: " + exception), this.clock.instant());
         }
         return true;
     }
@@ -269,6 +262,7 @@ public final class CodeModeJobService implements AutoCloseable {
         Object value = valuePresent ? result.value().toJsonValue() : null;
         switch (result.status()) {
             case COMPILATION_COMPLETED -> job.markRunning(now);
+            case CANCELLATION_PENDING -> job.markCancellationPending(result.error(), now);
             case COMPILATION_FAILED -> job.finish(
                     JobState.FAILED,
                     result.logs(),
@@ -498,13 +492,23 @@ public final class CodeModeJobService implements AutoCloseable {
         }
 
         private synchronized boolean requestCancellation(Instant now) {
-            if (this.state.terminal() || this.state == JobState.CANCELLING) {
+            if (this.state.terminal()) {
                 return false;
             }
             this.cancellationRequested = true;
             this.state = JobState.CANCELLING;
             this.updatedAt = now;
             return true;
+        }
+
+        private synchronized void markCancellationPending(ExecutionText message, Instant now) {
+            if (this.state.terminal()) return;
+            this.cancellationRequested = true;
+            this.state = JobState.CANCELLING;
+            this.error = message.text();
+            this.errorTruncated = message.truncated();
+            this.errorTotalCharacters = message.totalCharacters();
+            this.updatedAt = now;
         }
 
         private synchronized void finish(

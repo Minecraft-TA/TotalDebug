@@ -77,7 +77,7 @@ public final class SnippetExecutionService implements AutoCloseable {
 
     private void acceptResult(ExecutionResultMessage message) {
         ExecutionResult result = message.getResult();
-        if (result.status() == ExecutionResult.Status.COMPILATION_COMPLETED) {
+        if (!result.status().terminal()) {
             return;
         }
         CompletableFuture<ExecutionResult> completion = this.runs.remove(message.getScriptId());

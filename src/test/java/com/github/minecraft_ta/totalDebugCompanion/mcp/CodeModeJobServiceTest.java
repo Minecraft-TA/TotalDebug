@@ -205,6 +205,43 @@ class CodeModeJobServiceTest {
         }
     }
 
+    @Test
+    void pendingCancellationKeepsWaitingForActualCompletion() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            service.acceptResult(submitted.scriptId(), new ExecutionResult(ExecutionResult.Status.CANCELLATION_PENDING,
+                    ExecutionText.empty(), null, ExecutionText.complete("Stop timed out; script is still running")));
+            var pending = service.waitFor(submitted.jobId(), 1);
+            assertEquals(CodeModeJobService.JobState.CANCELLING, pending.state());
+            assertEquals(null, pending.completedAt());
+            assertTrue(pending.error().contains("still running"));
+            service.acceptResult(submitted.scriptId(), failed("final output", null, "Script run cancelled"));
+            var completed = service.get(submitted.jobId()).orElseThrow();
+            assertEquals(CodeModeJobService.JobState.CANCELLED, completed.state());
+            assertEquals("final output", completed.output());
+        }
+    }
+
+    @Test
+    void cancellationTransportFailureDoesNotLoseTheLiveJob() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            transport.cancelFailure = new IllegalStateException("fixture transport failure");
+            assertTrue(service.cancel(submitted.jobId()));
+            var pending = service.waitFor(submitted.jobId(), 1);
+            assertEquals(CodeModeJobService.JobState.CANCELLING, pending.state());
+            assertEquals(null, pending.completedAt());
+            transport.cancelFailure = null;
+            assertTrue(service.cancel(submitted.jobId()), "An explicit retry must remain possible");
+            service.acceptResult(submitted.scriptId(), completed("completed despite stop", number("42")));
+            assertEquals(CodeModeJobService.JobState.SUCCEEDED, service.get(submitted.jobId()).orElseThrow().state());
+        }
+    }
+
     private CodeModeJobService service(FakeTransport transport, boolean available) {
         return new CodeModeJobService(
                 () -> available,
@@ -354,6 +391,7 @@ class CodeModeJobServiceTest {
     private static final class FakeTransport implements CodeModeJobService.Transport {
         private final List<Execution> executions = new ArrayList<>();
         private final List<Integer> cancelledScriptIds = new ArrayList<>();
+        private RuntimeException cancelFailure;
 
         @Override
         public void execute(
@@ -367,6 +405,7 @@ class CodeModeJobServiceTest {
 
         @Override
         public void cancel(int scriptId) {
+            if (this.cancelFailure != null) throw this.cancelFailure;
             this.cancelledScriptIds.add(scriptId);
         }
     }

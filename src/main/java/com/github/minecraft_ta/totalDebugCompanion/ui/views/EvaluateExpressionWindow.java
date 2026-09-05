@@ -340,7 +340,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         }
         if (this.activeExecution != null) {
             this.activeExecution.cancel().run();
-            this.status.setText("Stopping…");
+            this.status.setText("Cancellation requested; waiting for the script to finish");
         }
     }
 
