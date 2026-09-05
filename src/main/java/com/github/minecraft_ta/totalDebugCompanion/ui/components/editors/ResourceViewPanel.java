@@ -98,12 +98,28 @@ public final class ResourceViewPanel extends JPanel {
     }
 
     private void replaceActiveView(Component replacement) {
+        Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        boolean hadFocus = focusOwner == this
+                || (focusOwner != null && SwingUtilities.isDescendingFrom(focusOwner, this));
         disposeActiveView();
         removeAll();
         this.activeView = replacement;
         add(replacement, BorderLayout.CENTER);
         revalidate();
         repaint();
+        if (hadFocus) {
+            SwingUtilities.invokeLater(() -> {
+                if (isShowing()) {
+                    requestFocusInWindow();
+                }
+            });
+        }
+    }
+
+    @Override
+    public boolean requestFocusInWindow() {
+        return this.activeView instanceof AbstractTextViewPanel textView
+                ? textView.requestFocusInWindow() : super.requestFocusInWindow();
     }
 
     private void disposeActiveView() {

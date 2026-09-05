@@ -104,6 +104,7 @@ public class EditorTabs extends JTabbedPane {
             setTabComponentAt(index, header);
             setSelectedIndex(index);
             header.refreshState();
+            focusEditor(component);
 
             future.complete(null);
         };
@@ -120,6 +121,7 @@ public class EditorTabs extends JTabbedPane {
         for (IEditorPanel editor : editors) {
             if (clazz.isAssignableFrom(editor.getClass()) && filter.test((T) editor)) {
                 setSelectedIndex(this.editors.indexOf(editor));
+                focusEditor(editor.getComponent());
                 T matchingEditor = (T) editor;
                 return matchingEditor.ready().thenApply(ignored -> matchingEditor);
             }
@@ -136,6 +138,14 @@ public class EditorTabs extends JTabbedPane {
             return null;
 
         return editors.get(getSelectedIndex());
+    }
+
+    private void focusEditor(Component component) {
+        SwingUtilities.invokeLater(() -> {
+            if (getSelectedComponent() == component) {
+                component.requestFocusInWindow();
+            }
+        });
     }
 
     public void addSelectedEditorListener(Consumer<IEditorPanel> listener) {

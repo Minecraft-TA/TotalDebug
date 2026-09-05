@@ -21,9 +21,10 @@ import java.nio.file.Files;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-public class CreateScriptWindow extends JFrame {
+public class CreateScriptWindow extends JDialog {
 
     public CreateScriptWindow(EditorTabs editorTabs) {
+        super(SwingUtilities.getWindowAncestor(editorTabs));
         if (!CompanionApp.hasProfile()) {
             throw new IllegalStateException("Open a Minecraft profile before creating scripts");
         }

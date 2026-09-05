@@ -196,6 +196,11 @@ public abstract class AbstractTextViewPanel extends JPanel {
         SwingUtilities.invokeLater(() -> UIUtils.positionViewportOnRange(this.editorScrollPane, offset, offset));
     }
 
+    @Override
+    public boolean requestFocusInWindow() {
+        return this.editorPane.requestFocusInWindow();
+    }
+
     public NavigationViewState captureNavigationViewState() {
         Point viewport = this.editorScrollPane.getViewport().getViewPosition();
         return new NavigationViewState(this.editorPane.getCaretPosition(), viewport.x, viewport.y);

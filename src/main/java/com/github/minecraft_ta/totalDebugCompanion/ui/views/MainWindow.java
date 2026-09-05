@@ -96,7 +96,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
             public void actionPerformed(ActionEvent e) {
                 var window = new CreateScriptWindow(editorTabs);
                 window.setVisible(true);
-                UIUtils.centerJFrame(window);
+                window.setLocationRelativeTo(MainWindow.this);
             }
         };
         this.scriptMenu.add(this.newScriptAction);
