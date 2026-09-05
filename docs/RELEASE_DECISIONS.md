@@ -4,11 +4,11 @@ Updated 2026-09-05 after discussion with the user. The release will retain the c
 
 The project has a usable foundation. SCNet's reproduced lifecycle defects were repairable within its existing transport responsibilities. Shared compilation, runtime discovery and native indexing already have distinct owners. There is no evidence here that a general application rewrite would improve release readiness.
 
-The unresolved correctness problems concentrate in execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) has 1,011 Java tests and 46 Rust tests passing, with one existing native test ignored. C6 and C10 are fixed; the separate audit probes still reproduce C5 and C8. Passing suites alone do not close those findings.
+All ten original reproduced findings are now resolved, including execution semantics and retained values. The latest [progress record](RELEASE_PROGRESS.md) records 1,071 Java tests and 50 Rust tests passing, with one existing native test ignored. Independent native corpus parity, broader malformed-input checks, release dependency verification and live candidate acceptance remain open. Passing local suites do not establish release readiness.
 
 ## Java evaluation strategy
 
-The interpreter currently selects methods from evaluated runtime values. It cannot distinguish `(Object) null` from a null intended for a more specific overload. Its syntax preflight also permits expressions with incorrect numeric promotion, unboxing and string conversion. The completed-task recheck reproduced all of those cases.
+At the audit baseline, the interpreter selected methods from evaluated runtime values and lost the declared type of `(Object) null`. Numeric promotion, unboxing and string conversion also differed from Java. Companion `95a9ede` fixes the reproduced cases within the retained interpreter, with 39 real JDWP comparisons against compiled Java. This does not implement a complete Java compile-time binder. Generic/poly overload binding, constant-field folding and unrelated reference-conditional least-upper-bound types remain outside the verified parity matrix.
 
 The compiler path already validates entire fragments before invocation and now handles the tested lexical scopes correctly. It requires prepared classpath bytes, local-variable metadata, a preloaded helper and representable frame types. It currently refuses inaccessible/unnamed types, ambiguous loader definitions and several lexical contexts. Flow-scoped patterns are now explicitly refused as well. Making the compiler authoritative would expose those limitations in some frames where the interpreter currently runs.
 
@@ -21,9 +21,9 @@ Decision: keep the existing evaluator for this release. The user does not want a
 
 ## Execution identity and retained results
 
-C6 and C10 are now fixed. Stop requests remain pending until target execution ends, and execution IDs cannot alias across Companion sessions. C8 still retains discarded result objects in Minecraft until resume/detach, with no explicit ownership from history or an open inspector.
+C6 and C10 are fixed. Stop requests remain pending until target execution ends, and execution IDs cannot alias across Companion sessions. Companion `251d90a` fixes C8 through explicit result ownership. History eviction releases its ownership while an open inspector retains its own lease. Resume/detach invalidates the pause's references. The original probe now retains 128 pins for 128 history entries after 140 evaluations.
 
-The proposed next ownership slice should provide:
+The implemented ownership rules are:
 
 - Unique execution identity carried through Companion, Minecraft and server result routing, with a session identity where needed.
 - Separate states for cancellation requested, an observer ending its wait or disconnecting, and actual target completion. Keep the target operation recorded until it ends or the target itself is lost.
@@ -36,7 +36,7 @@ The C6 slice also fixes terminal-error fallbacks when server result encoding or 
 
 ## Cleanup and final testing
 
-After agreeing the evaluation and ownership direction, return to the audit's cleanup inventory. Remove obsolete production features and no-op APIs, reconcile documentation and test claims, and fix repository metadata and required Windows CI. Preserve working feature paths unless the supported release scope explicitly excludes them. Larger class splits should follow an actual ownership problem, not a file-size threshold.
+The obsolete feature/API cleanup, managed installer repair and Windows workflows are committed. Continue reconciling documentation and metadata with shipped behavior and verifying the remaining audit gates. Preserve working feature paths unless the supported release scope explicitly excludes them. Larger class splits should follow an actual ownership problem, not a file-size threshold.
 
 Keep Packagecloud and the upstream SCNet/JIndex repositories for this release. Account access remains pending. Public dependency resolution, paired installer changes, final artifact pins and the live dev-instance/ATM10 acceptance matrix remain open. Nothing in these local fixes constitutes stable release approval.
 
