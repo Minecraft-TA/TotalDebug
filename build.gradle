@@ -223,6 +223,8 @@ if (developmentCompanionJar != null) {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    // Exercise NeoForge's real UnionFileSystem, which needs the same access as its launcher.
+    jvmArgs '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
     systemProperty 'totaldebug.deploymentScript', layout.projectDirectory.file('gradle/local-deployment.gradle').asFile.absolutePath
 }
 

@@ -29,6 +29,108 @@ class RuntimeSourceMaterializerTest {
     Path directory;
 
     @Test
+    void reusesAProvenUnionArchiveAndKeepsTheFirstModuleOwnerAcrossProviderInstances() throws Exception {
+        Path archive = createArchive("union.jar", Map.of("Example.class", new byte[]{1},
+                "META-INF/versions/21/Example.class", new byte[]{2},
+                "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n".getBytes(),
+                "resource.txt", new byte[]{3}));
+        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        String previousId = null;
+        String previousUri = null;
+        for (int run = 0; run < 2; run++) {
+            try (var union = provider.newFileSystem(null, archive)) {
+                var original = new RuntimeSourceInventory.Source(union.getRoot(), "loader-module");
+                var prepared = RuntimeSourceMaterializer.prepare(List.of(original,
+                        new RuntimeSourceInventory.Source(archive, "classpath-module")), directory.resolve("union/sources"));
+                assertEquals(List.of(archive), prepared.paths());
+                assertEquals(original, prepared.sources().getFirst().original());
+                if (previousId != null) {
+                    assertEquals(previousId, prepared.id());
+                    assertTrue(!previousUri.equals(original.path().toUri().toString()));
+                }
+                previousId = prepared.id();
+                previousUri = original.path().toUri().toString();
+            }
+        }
+    }
+
+    @Test
+    void materializesFilteredAndOverlaidUnionViewsWithoutExposingHiddenClasses() throws Exception {
+        Path archive = createArchive("base.jar", Map.of("Example.class", new byte[]{1}, "Hidden.class", new byte[]{2}));
+        Path overlay = createArchive("overlay.jar", Map.of("Example.class", new byte[]{3}));
+        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        try (var filtered = provider.newFileSystem((name, base) -> !name.equals("Hidden.class"), archive)) {
+            var first = RuntimeSourceMaterializer.prepare(List.of(new RuntimeSourceInventory.Source(filtered.getRoot(), "filtered")),
+                    directory.resolve("filtered/sources"));
+            assertTrue(!archive.equals(first.paths().getFirst()));
+            try (var zip = new ZipFile(first.paths().getFirst().toFile())) {
+                assertNull(zip.getEntry("Hidden.class"));
+                assertArrayEquals(new byte[]{1}, zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
+            }
+        }
+        try (var merged = provider.newFileSystem(null, archive, overlay)) {
+            var prepared = RuntimeSourceMaterializer.prepare(List.of(new RuntimeSourceInventory.Source(merged.getRoot(), "merged")),
+                    directory.resolve("merged/sources"));
+            try (var zip = new ZipFile(prepared.paths().getFirst().toFile())) {
+                assertArrayEquals(Files.readAllBytes(merged.getRoot().resolve("Example.class")),
+                        zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
+                assertNotNull(zip.getEntry("Hidden.class"));
+            }
+        }
+    }
+
+    @Test
+    void contentChangesWithIdenticalSizeAndTimestampStillInvalidateTheSource() throws Exception {
+        Path cache = directory.resolve("content/sources");
+        try (var fs = FileSystems.newFileSystem(directory.resolve("content.zip"), Map.of("create", "true"))) {
+            Path file = Files.write(fs.getPath("/Example.class"), new byte[]{1});
+            var sources = List.of(new RuntimeSourceInventory.Source(fs.getPath("/"), "content"));
+            var before = RuntimeSourceMaterializer.prepare(sources, cache);
+            var stamp = Files.getLastModifiedTime(file);
+            Files.write(file, new byte[]{2});
+            Files.setLastModifiedTime(file, stamp);
+            var after = RuntimeSourceMaterializer.prepare(sources, cache);
+            assertTrue(!before.id().equals(after.id()));
+            try (var zip = new ZipFile(after.paths().getFirst().toFile())) {
+                assertArrayEquals(new byte[]{2}, zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
+            }
+        }
+    }
+
+    private Path createArchive(String name, Map<String, byte[]> entries) throws IOException {
+        Path file = directory.resolve(name);
+        try (var output = new ZipOutputStream(Files.newOutputStream(file))) {
+            for (var entry : entries.entrySet()) {
+                output.putNextEntry(new ZipEntry(entry.getKey()));
+                output.write(entry.getValue());
+                output.closeEntry();
+            }
+        }
+        return file;
+    }
+
+    @Test
+    void copiesProvenNestedUnionArchivesByteForByteAcrossProviderInstances() throws Exception {
+        Path inner = createArchive("inner.jar", Map.of("Example.class", new byte[]{1}, "resource.txt", new byte[]{2}));
+        byte[] original = Files.readAllBytes(inner);
+        Path outer = createArchive("outer.jar", Map.of("META-INF/jarjar/inner.jar", original));
+        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        String previous = null;
+        for (int run = 0; run < 2; run++) {
+            try (var container = provider.newFileSystem(null, outer);
+                 var nested = provider.newFileSystem(null, container.getPath("/META-INF/jarjar/inner.jar"))) {
+                var prepared = RuntimeSourceMaterializer.prepare(
+                        List.of(new RuntimeSourceInventory.Source(nested.getRoot(), "inner")), directory.resolve("nested/sources"));
+                assertArrayEquals(original, Files.readAllBytes(prepared.paths().getFirst()));
+                if (previous != null) {
+                    assertEquals(previous, prepared.id());
+                }
+                previous = prepared.id();
+            }
+        }
+    }
+
+    @Test
     void copiesJarInJarArchivesWithoutRequestingUnsupportedFileAttributes() throws Exception {
         Path archive = this.directory.resolve("nested.jar");
         try (var output = new ZipOutputStream(Files.newOutputStream(archive))) {
@@ -139,6 +241,31 @@ class RuntimeSourceMaterializerTest {
     }
 
     enum CacheDamage { DELETED_CACHE, INVALID_MANIFEST, UNSUPPORTED_FORMAT, TRUNCATED_JAR }
+
+    @Test
+    void changingOneVirtualSourceLeavesTheOtherPreparedFileUntouched() throws Exception {
+        Path cache = this.directory.resolve("selective/sources");
+        try (var firstFs = FileSystems.newFileSystem(this.directory.resolve("one.zip"), Map.of("create", "true"));
+             var secondFs = FileSystems.newFileSystem(this.directory.resolve("two.zip"), Map.of("create", "true"))) {
+            Path first = firstFs.getPath("/");
+            Path second = secondFs.getPath("/");
+            Files.write(first.resolve("One.class"), new byte[]{1});
+            Files.write(second.resolve("Two.class"), new byte[]{2});
+            var inputs = List.of(new RuntimeSourceInventory.Source(first, "one"),
+                    new RuntimeSourceInventory.Source(second, "two"));
+            var before = RuntimeSourceMaterializer.prepare(inputs, cache);
+            Path untouched = before.paths().get(1);
+            var stamp = java.nio.file.attribute.FileTime.fromMillis(1_234_000);
+            Files.setLastModifiedTime(untouched, stamp);
+            Files.write(first.resolve("One.class"), new byte[]{3, 4});
+            var after = RuntimeSourceMaterializer.prepare(inputs, cache);
+            assertEquals(stamp, Files.getLastModifiedTime(untouched));
+            assertTrue(!before.id().equals(after.id()));
+            Files.delete(after.paths().getFirst());
+            RuntimeSourceMaterializer.prepare(inputs, cache);
+            assertEquals(stamp, Files.getLastModifiedTime(untouched));
+        }
+    }
 
     @Test
     void missingOriginalSourceStillFailsWithoutReplacingTheCache() throws Exception {

@@ -51,8 +51,10 @@ final class RuntimeInventoryPublisher {
     }
 
     PublishedInventory publish() throws IOException {
-        PreparedRuntimeSources prepared = TotalDebug.get().runtimeSources();
-        return prepared.withCurrentSources(() -> publish(prepared));
+        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.collection")) {
+            PreparedRuntimeSources prepared = TotalDebug.get().runtimeSources();
+            return prepared.withCurrentSources(() -> publish(prepared));
+        }
     }
 
     private PublishedInventory publish(PreparedRuntimeSources prepared) throws IOException {

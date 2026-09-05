@@ -76,7 +76,9 @@ public final class TotalDebug {
 
     public synchronized PreparedRuntimeSources runtimeSources() throws IOException {
         if (this.runtimeSourceInputs == null) {
-            this.runtimeSourceInputs = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
+            try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.discovery")) {
+                this.runtimeSourceInputs = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
+            }
         }
         return RuntimeSourceMaterializer.prepare(
                 this.runtimeSourceInputs,
