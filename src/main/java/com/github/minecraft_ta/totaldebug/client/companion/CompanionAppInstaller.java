@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -10,21 +11,21 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
+    static final DownloadLimits DOWNLOAD_LIMITS = new DownloadLimits(
+            Duration.ofSeconds(30), Duration.ofSeconds(30), Duration.ofMinutes(5), 256L * 1024 * 1024);
 
     private final Path appDirectory;
     private final String configuredDevelopmentJar;
     private final CompanionRelease release;
     private final HttpClient httpClient;
+    private final DownloadLimits limits;
 
     public CompanionAppInstaller(Path appDirectory) {
         this(appDirectory, "");
@@ -36,6 +37,7 @@ public final class CompanionAppInstaller {
                 configuredDevelopmentJar,
                 CompanionRelease.loadBundled(),
                 HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(15))
                         .followRedirects(HttpClient.Redirect.NORMAL)
                         .build()
         );
@@ -51,6 +53,11 @@ public final class CompanionAppInstaller {
             CompanionRelease release,
             HttpClient httpClient
     ) {
+        this(appDirectory, configuredDevelopmentJar, release, httpClient, DOWNLOAD_LIMITS);
+    }
+
+    CompanionAppInstaller(Path appDirectory, String configuredDevelopmentJar, CompanionRelease release,
+                          HttpClient httpClient, DownloadLimits limits) {
         this.appDirectory = Objects.requireNonNull(appDirectory, "appDirectory").toAbsolutePath().normalize();
         this.configuredDevelopmentJar = Objects.requireNonNull(
                 configuredDevelopmentJar,
@@ -58,6 +65,7 @@ public final class CompanionAppInstaller {
         ).trim();
         this.release = Objects.requireNonNull(release, "release");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+        this.limits = Objects.requireNonNull(limits, "limits");
     }
 
     public CompanionInstallation resolveOrInstall() throws IOException, InterruptedException {
@@ -83,7 +91,8 @@ public final class CompanionAppInstaller {
         }
 
         Path jarPath = this.appDirectory.resolve(this.release.artifactFileName());
-        if (!Files.isRegularFile(jarPath)) {
+        if (!Files.isRegularFile(jarPath) || Files.size(jarPath) > this.limits.maxBytes()
+                || !this.release.sha256().equals(LaunchCache.sha256(jarPath))) {
             installDistribution(jarPath, progressListener);
         }
 
@@ -116,6 +125,7 @@ public final class CompanionAppInstaller {
             Consumer<CompanionStartupProgress> progressListener
     ) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(this.release.downloadUri())
+                .timeout(this.limits.headers())
                 .header("User-Agent", "TotalDebugCompanionInstaller/" + this.release.version())
                 .GET()
                 .build();
@@ -125,40 +135,50 @@ public final class CompanionAppInstaller {
             throw new IOException("Companion download returned HTTP " + response.statusCode());
         }
 
-        long totalBytes = response.headers().firstValueAsLong("Content-Length")
-                .orElse(CompanionStartupProgress.UNKNOWN_TOTAL);
-        progressListener.accept(CompanionStartupProgress.downloading(this.release.version(), 0L, totalBytes));
-        long[] lastReportedPercentage = {0L};
-        MessageDigest digest = sha256Digest();
         try (InputStream body = response.body();
-             DigestInputStream verifiedBody = new DigestInputStream(body, digest);
+             DownloadDeadline deadline = new DownloadDeadline(body, this.limits);
              OutputStream output = Files.newOutputStream(
                      destination,
                      StandardOpenOption.WRITE,
                      StandardOpenOption.TRUNCATE_EXISTING
              )) {
-            copyDownload(
-                    verifiedBody,
-                    output,
-                    downloadedBytes -> {
-                        if (totalBytes <= 0L) {
-                            return;
+            long totalBytes = response.headers().firstValueAsLong("Content-Length")
+                    .orElse(CompanionStartupProgress.UNKNOWN_TOTAL);
+            if (totalBytes > this.limits.maxBytes()) {
+                throw new IOException("Companion download exceeds " + this.limits.maxBytes() + " bytes");
+            }
+            progressListener.accept(CompanionStartupProgress.downloading(this.release.version(), 0L, totalBytes));
+            long[] lastReportedPercentage = {0L};
+            try {
+                copyDownload(
+                        body,
+                        output,
+                        this.limits.maxBytes(),
+                        downloadedBytes -> {
+                            deadline.progress();
+                            if (totalBytes <= 0L) {
+                                return;
+                            }
+                            long percentage = Math.min(100L, (long) (downloadedBytes * 100.0D / totalBytes));
+                            if (percentage <= lastReportedPercentage[0]) {
+                                return;
+                            }
+                            lastReportedPercentage[0] = percentage;
+                            progressListener.accept(CompanionStartupProgress.downloading(
+                                    this.release.version(),
+                                    downloadedBytes,
+                                    totalBytes
+                            ));
                         }
-                        long percentage = Math.min(100L, (long) (downloadedBytes * 100.0D / totalBytes));
-                        if (percentage <= lastReportedPercentage[0]) {
-                            return;
-                        }
-                        lastReportedPercentage[0] = percentage;
-                        progressListener.accept(CompanionStartupProgress.downloading(
-                                this.release.version(),
-                                downloadedBytes,
-                                totalBytes
-                        ));
-                    }
-            );
+                );
+            } catch (IOException failure) {
+                deadline.check();
+                throw failure;
+            }
+            deadline.check();
         }
 
-        String actualHash = HexFormat.of().formatHex(digest.digest());
+        String actualHash = LaunchCache.sha256(destination);
         if (!this.release.sha256().equals(actualHash)) {
             throw new IOException(
                     "Companion archive checksum mismatch: expected "
@@ -169,12 +189,15 @@ public final class CompanionAppInstaller {
         }
     }
 
-    static void copyDownload(InputStream input, OutputStream output, java.util.function.LongConsumer progress)
+    static void copyDownload(InputStream input, OutputStream output, long maxBytes, java.util.function.LongConsumer progress)
             throws IOException {
         byte[] buffer = new byte[16 * 1024];
         long downloadedBytes = 0L;
         int read;
         while ((read = input.read(buffer)) != -1) {
+            if (read > maxBytes - downloadedBytes) {
+                throw new IOException("Companion download exceeds " + maxBytes + " bytes");
+            }
             output.write(buffer, 0, read);
             downloadedBytes += read;
             progress.accept(downloadedBytes);
@@ -185,19 +208,12 @@ public final class CompanionAppInstaller {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
     }
 
-    static String sha256(Path path) throws IOException {
-        MessageDigest digest = sha256Digest();
-        try (InputStream input = Files.newInputStream(path); DigestInputStream verified = new DigestInputStream(input, digest)) {
-            verified.transferTo(java.io.OutputStream.nullOutputStream());
-        }
-        return HexFormat.of().formatHex(digest.digest());
-    }
-
-    private static MessageDigest sha256Digest() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("This JVM does not provide SHA-256", exception);
+    record DownloadLimits(Duration headers, Duration idle, Duration total, long maxBytes) {
+        DownloadLimits {
+            if (headers.isNegative() || headers.isZero() || idle.isNegative() || idle.isZero()
+                    || total.isNegative() || total.isZero() || maxBytes <= 0) {
+                throw new IllegalArgumentException("Download limits must be positive");
+            }
         }
     }
 

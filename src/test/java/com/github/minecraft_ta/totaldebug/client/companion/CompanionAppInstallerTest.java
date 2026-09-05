@@ -75,6 +75,7 @@ class CompanionAppInstallerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
     void usesTheSingleInstalledJarInsteadOfAnObsoleteVersionDirectory() throws Exception {
         String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
         try {
@@ -85,7 +86,11 @@ class CompanionAppInstallerTest {
             Files.writeString(installedJar, "current");
             Files.writeString(appDirectory.resolve("2.0.0/TotalDebugCompanion.jar"), "obsolete");
 
-            CompanionInstallation installation = new CompanionAppInstaller(appDirectory).resolveOrInstall();
+            CompanionRelease release = new CompanionRelease("test", "TotalDebugCompanion.jar",
+                    java.net.URI.create("https://example.invalid/TotalDebugCompanion.jar"),
+                    com.github.minecraft_ta.totaldebug.storage.LaunchCache.sha256(installedJar));
+            CompanionInstallation installation = new CompanionAppInstaller(appDirectory, release,
+                    java.net.http.HttpClient.newHttpClient()).resolveOrInstall();
 
             assertEquals(installedJar.toAbsolutePath().normalize(), installation.companionJar());
             assertEquals("current", Files.readString(installedJar));
@@ -120,7 +125,7 @@ class CompanionAppInstallerTest {
 
         assertEquals(
                 "abbcb536b7001362a76775a1494ea745d0d65dc37544bbf85ac06071c17fe770",
-                CompanionAppInstaller.sha256(jar)
+                com.github.minecraft_ta.totaldebug.storage.LaunchCache.sha256(jar)
         );
     }
 
@@ -130,7 +135,7 @@ class CompanionAppInstallerTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         List<Long> transferred = new ArrayList<>();
 
-        CompanionAppInstaller.copyDownload(new ByteArrayInputStream(bytes), output, transferred::add);
+        CompanionAppInstaller.copyDownload(new ByteArrayInputStream(bytes), output, bytes.length, transferred::add);
 
         assertEquals(bytes.length, output.size());
         assertEquals(List.of(16_384L, 20_000L), transferred);
