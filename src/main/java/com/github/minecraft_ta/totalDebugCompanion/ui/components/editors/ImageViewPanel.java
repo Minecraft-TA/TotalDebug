@@ -128,10 +128,6 @@ public final class ImageViewPanel extends JPanel {
         this.image.flush();
     }
 
-    public BottomInformationBar getBottomInformationBar() {
-        return this.informationBar;
-    }
-
     private static String formatBytes(long bytes) {
         if (bytes >= 1024 * 1024) {
             return "%.1f MiB".formatted(bytes / (1024d * 1024d));

@@ -21,11 +21,10 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
     }
 
-    private boolean showWhenEmpty;
     private JList<ITEM> list;
     private Component invoker;
-    private int maximumListWidth = 600;
-    private int minimumListWidth = 200;
+    private static final int MAXIMUM_LIST_WIDTH = 600;
+    private static final int MINIMUM_LIST_WIDTH = 200;
     private int boundXPos = -1;
 
     public BaseListPopup(Window owner) {
@@ -50,7 +49,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
     public void show(Component invoker, int x, int y, Alignment alignment) {
         if (!(invoker instanceof JTextComponent))
             throw new IllegalArgumentException("invoker must be a JTextComponent");
-        if (!this.showWhenEmpty && this.list.getModel().getSize() == 0)
+        if (this.list.getModel().getSize() == 0)
             return;
 
         super.show(invoker, x, y, alignment);
@@ -115,9 +114,9 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         var longestItemLength = items.isEmpty() ? 0 : this.list.getFontMetrics(this.list.getFont()).stringWidth(
                 "9".repeat(items.stream().mapToInt(ListItem::getLabelLength).max().getAsInt())
         );
-        var preferredSize = new Dimension(Math.min(this.maximumListWidth, longestItemLength) + 35, Math.min(this.minimumListWidth, this.list.getPreferredSize().height));
+        var preferredSize = new Dimension(Math.min(MAXIMUM_LIST_WIDTH, longestItemLength) + 35, Math.min(MINIMUM_LIST_WIDTH, this.list.getPreferredSize().height));
         this.scrollPane.setPreferredSize(preferredSize);
-        setMinimumSize(new Dimension(this.minimumListWidth, 20));
+        setMinimumSize(new Dimension(MINIMUM_LIST_WIDTH, 20));
         pack();
 
         if (this.boundXPos != -1) {
@@ -130,24 +129,12 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         this.list.setFont(f);
     }
 
-    public void setMaximumListWidth(int maximumListWidth) {
-        this.maximumListWidth = maximumListWidth;
-    }
-
-    public void setMinimumListWidth(int minimumListWidth) {
-        this.minimumListWidth = minimumListWidth;
-    }
-
     public void setKeyEnterListener(Consumer<ITEM> listener) {
         this.enterKeyListener = listener;
     }
 
     public boolean isInvokedBy(Component component) {
         return this.invoker == component;
-    }
-
-    public void setShowWhenEmpty(boolean showWhenEmpty) {
-        this.showWhenEmpty = showWhenEmpty;
     }
 
     private void runEnterKeyListener() {

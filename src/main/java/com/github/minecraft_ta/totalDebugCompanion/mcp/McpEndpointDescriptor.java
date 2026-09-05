@@ -17,7 +17,6 @@ record McpEndpointDescriptor(
         long processId,
         String startedAt
 ) {
-    static final String FILE_NAME = "mcp-endpoint.json";
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()

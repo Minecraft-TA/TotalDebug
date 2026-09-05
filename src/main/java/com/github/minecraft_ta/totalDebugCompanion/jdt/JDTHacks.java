@@ -98,16 +98,6 @@ public class JDTHacks {
         }
     }
 
-    private static void setStaticField(Class<?> c, String fieldName, Object value) {
-        try {
-            var field = c.getDeclaredField(fieldName);
-            field.setAccessible(true);
-            field.set(null, value);
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     private static void init() throws Throwable {
         //Set global instance
         new JavaCore();

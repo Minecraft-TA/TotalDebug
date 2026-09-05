@@ -57,10 +57,6 @@ public class FlatIconButton extends JButton {
         toggleListeners.forEach(l -> l.accept(state));
     }
 
-    public boolean isToggled() {
-        return this.state;
-    }
-
     public void setToggled(boolean b) {
         this.state = b;
 

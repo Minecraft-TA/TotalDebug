@@ -142,10 +142,6 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.listeners.add(ActionListener.class, listener);
     }
 
-    public void removeActionListener(ActionListener listener) {
-        this.listeners.remove(ActionListener.class, listener);
-    }
-
     public void postActionEvent() {
         ActionEvent event = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, getText());
         for (ActionListener listener : this.listeners.getListeners(ActionListener.class)) {

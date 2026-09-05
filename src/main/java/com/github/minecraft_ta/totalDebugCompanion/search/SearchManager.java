@@ -99,12 +99,6 @@ public class SearchManager {
         this.searchThread.start();
     }
 
-    public void showHighlights() {
-        hideHighlights();
-        final var highlightsCopy = new ArrayList<>(highlights);
-        showHighlights(highlightsCopy);
-    }
-
     public void hideHighlights() {
         this.textPane.getHighlighter().removeAllHighlights();
     }
@@ -149,10 +143,6 @@ public class SearchManager {
 
     public void setUseRegex(boolean useRegex) {
         this.useRegex = useRegex;
-    }
-
-    public int getFocusedMatchIndex() {
-        return this.focusedMatchIndex;
     }
 
     public int getFocusedRangeStart() {

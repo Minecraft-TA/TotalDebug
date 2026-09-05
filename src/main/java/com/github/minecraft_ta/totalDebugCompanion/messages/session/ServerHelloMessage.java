@@ -35,10 +35,6 @@ public final class ServerHelloMessage extends AbstractMessageOutgoing {
         messageStream.writeString(this.rejectionReason);
     }
 
-    public int protocolVersion() {
-        return this.protocolVersion;
-    }
-
     public boolean accepted() {
         return this.accepted;
     }

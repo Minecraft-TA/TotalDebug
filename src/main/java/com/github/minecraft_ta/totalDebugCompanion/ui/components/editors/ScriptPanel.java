@@ -109,7 +109,6 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final SnippetCompletionAdapter snippetCompletionAdapter = new SnippetCompletionAdapter(this.editorPane);
     private CustomCompletionRequestor completionRequestor;
     private boolean didTypeBeforeCaretMove;
-    private int lastSavedVersion = -1;
     private int lastCaretPos;
     private JavaSnippetSource.GeneratedSource lastGeneratedSource;
 
@@ -464,29 +463,6 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         for (TextEdit child : edit.getChildren()) {
             collectReplacementEdits(child, result);
         }
-    }
-
-    private void setupAutocompletionOld() {
-        this.editorPane.getActionMap().put("showSignatureHelp", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                //TODO: Signature help
-                /*CompanionApp.LSP.signatureHelp(new SignatureHelpParams(new TextDocumentIdentifier(scriptView.getURI()), UIUtils.offsetToPosition(editorPane, editorPane.getCaretPosition())))
-                        .thenAccept(res -> {
-                            if (res.getSignatures().isEmpty() || res.getSignatures().stream().allMatch(s -> s.getParameters().isEmpty()) ||
-                                res.getActiveSignature() == null)
-                                return;
-                            try {
-                                var cursorRect = editorPane.modelToView2D(editorPane.getCaretPosition());
-                                SwingUtilities.invokeLater(() -> {
-                                    signatureHelpPopup.apply(res);
-                                    signatureHelpPopup.show(editorPane, (int) cursorRect.getX(), (int) cursorRect.getY() - 5, BasePopup.Alignment.TOP_CENTER);
-                                });
-                            } catch (BadLocationException ignored) {}
-                        });*/
-            }
-        });
-        this.editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl P"), "showSignatureHelp");
     }
 
     private void requestCompletionProposals() {

@@ -58,10 +58,6 @@ public final class BottomInformationBar {
         update(new State(text, Style.FAILURE));
     }
 
-    public void clearInfoText() {
-        update(new State("", Style.PLAIN));
-    }
-
     private void update(State replacement) {
         this.state = replacement;
         for (Consumer<State> listener : this.listeners) {

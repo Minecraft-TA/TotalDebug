@@ -112,8 +112,6 @@ public final class CodeInsightService implements AutoCloseable {
 
     public interface SearchHandle {
         void cancel();
-
-        boolean isDone();
     }
 
     @FunctionalInterface
@@ -126,7 +124,6 @@ public final class CodeInsightService implements AutoCloseable {
         private final Task<T> task;
         private final Listener<T> listener;
         private final AtomicBoolean cancelled = new AtomicBoolean();
-        private final AtomicBoolean done = new AtomicBoolean();
 
         private Operation(RuntimeBinding binding, Task<T> task, Listener<T> listener) {
             this.binding = binding;
@@ -154,7 +151,6 @@ public final class CodeInsightService implements AutoCloseable {
                     });
                 }
             } finally {
-                this.done.set(true);
                 operations.remove(this);
             }
         }
@@ -164,10 +160,6 @@ public final class CodeInsightService implements AutoCloseable {
             this.cancelled.set(true);
         }
 
-        @Override
-        public boolean isDone() {
-            return this.done.get();
-        }
     }
 
     private static void dispatch(Runnable callback) {

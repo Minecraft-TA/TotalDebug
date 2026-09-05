@@ -38,7 +38,6 @@ public class Icons {
 
     public static final FlatSVGIcon JAVA_FILE = new FlatSVGIcon("icons/javaFile.svg");
     public static final FlatSVGIcon TEXT_FILE = new FlatSVGIcon("icons/text.svg");
-    public static final FlatSVGIcon CLASS_FILE = new FlatSVGIcon("icons/classFile.svg");
     public static final FlatSVGIcon JAR_FILE = new FlatSVGIcon("icons/jar.svg");
     public static final FlatSVGIcon FOLDER = new FlatSVGIcon("icons/folder.svg");
     public static final FlatSVGIcon PACKAGE = new FlatSVGIcon("icons/package.svg");
@@ -64,7 +63,6 @@ public class Icons {
 
     public static final FlatSVGIcon CLOSE_ICON = new FlatSVGIcon("icons/close.svg");
     public static final FlatSVGIcon CLOSE_HOVERED_ICON = new FlatSVGIcon("icons/closeHovered.svg");
-    public static final FlatSVGIcon DOWNLOAD = new FlatSVGIcon("icons/download.svg");
     public static final FlatSVGIcon DELETE = new FlatSVGIcon("icons/delete.svg");
     public static final FlatSVGIcon SETTINGS = new FlatSVGIcon("icons/settings.svg");
 
@@ -97,8 +95,6 @@ public class Icons {
     public static final FlatSVGIcon WATCH = new FlatSVGIcon("icons/watch.svg");
     public static final FlatSVGIcon EVALUATE_EXPRESSION = new FlatSVGIcon("icons/evaluateExpression.svg");
 
-    public static final FlatSVGIcon OVERLAY_MODE = new FlatSVGIcon("icons/overlayMode.svg");
-    public static final FlatSVGIcon TARGET = new FlatSVGIcon("icons/target.svg");
 
     public static final FlatSVGIcon SEARCH_ICON = new FlatSVGIcon("icons/search.svg");
     public static final FlatSVGIcon FILTER = new FlatSVGIcon("icons/filter.svg");
@@ -107,19 +103,12 @@ public class Icons {
     public static final FlatSVGIcon PREVIOUS_OCCURRENCE = new FlatSVGIcon("icons/previousOccurrence.svg");
     public static final FlatSVGIcon NEXT_OCCURRENCE = new FlatSVGIcon("icons/nextOccurrence.svg");
 
-    public static final FlatSVGIcon PAUSE = new FlatSVGIcon("icons/pause.svg");
-    public static final FlatSVGIcon CLEAR = new FlatSVGIcon("icons/clear.svg");
-    public static final FlatSVGIcon CLOCK = new FlatSVGIcon("icons/clock.svg");
-    public static final FlatSVGIcon DECOMPILE = new FlatSVGIcon("icons/decompile.svg");
     public static final FlatSVGIcon COPY = new FlatSVGIcon("icons/copy.svg");
-    public static final FlatSVGIcon BLOCK = new FlatSVGIcon("icons/block.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 
-    public static final FlatSVGIcon UP_DOWN = new FlatSVGIcon("icons/upDown.svg");
     public static final FlatSVGIcon PRIMITIVE = new FlatSVGIcon("icons/primitive.svg");
     public static final FlatSVGIcon VALUE = new FlatSVGIcon("icons/value.svg");
     public static final FlatSVGIcon ARRAY = new FlatSVGIcon("icons/array.svg");
-    public static final FlatSVGIcon RIGHT_ARROW = new FlatSVGIcon("icons/arrow_right.svg");
     public static final FlatSVGIcon EXPAND_EDITOR = new FlatSVGIcon("icons/expand_editor.svg");
     public static final FlatSVGIcon COLLAPSE_EDITOR = new FlatSVGIcon("icons/collapse_editor.svg");
     public static final FlatSVGIcon DOWN_ARROW = new FlatSVGIcon("icons/arrow_down.svg");

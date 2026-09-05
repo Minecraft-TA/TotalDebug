@@ -10,10 +10,6 @@ public class FileTreeItemFactory {
         return new TreeItem("", true);
     }
 
-    public TreeItem createItem(String name) {
-        return new TreeItem(name, false);
-    }
-
     public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
         return new FileSystemDirectoryItem(tree, path, watch);
     }

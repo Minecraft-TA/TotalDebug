@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Objects;
 
 final class CodeModeSourceBuilder {
-    static final int MAX_SOURCE_BYTES = JavaSnippetSource.MAX_SOURCE_BYTES;
 
     private CodeModeSourceBuilder() {
     }

@@ -729,10 +729,6 @@ public final class CompanionApp {
         return current != null && current.send(message);
     }
 
-    public static void openClass(String binaryName) {
-        openClass(binaryName, -1, "");
-    }
-
     public static void openClass(String binaryName, int targetType, String targetIdentifier) {
         openOrQueue(
                 NavigationTargets.fromClassOpen(binaryName, targetType, targetIdentifier),
@@ -750,10 +746,6 @@ public final class CompanionApp {
             }
         }
         MainWindow.INSTANCE.navigation().navigate(target, activation);
-    }
-
-    public static void openDebugFrame(com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.StackFrame frame) {
-        openDebugFrame(frame, true);
     }
 
     public static void openDebugFrame(
@@ -786,14 +778,6 @@ public final class CompanionApp {
 
     public static Path getRootPath() {
         return requireProfile().dataDirectory();
-    }
-
-    public static Path getIndexFile() {
-        Path indexFile = activeIndexFile;
-        if (indexFile == null) {
-            throw new IllegalStateException("Class index is not ready");
-        }
-        return indexFile;
     }
 
     public static Path getWorkspaceDirectory() {

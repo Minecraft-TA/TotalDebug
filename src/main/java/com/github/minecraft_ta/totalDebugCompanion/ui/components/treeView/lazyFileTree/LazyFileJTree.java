@@ -144,14 +144,6 @@ public class LazyFileJTree extends JTree {
 
     }
 
-    public void addRootNodes(DirectoryTreeItem... roots) {
-        for (DirectoryTreeItem root : roots) {
-            ((LazyTreeNode) getModel().getRoot()).add(new LazyTreeNode(root));
-        }
-
-        getModel().nodeStructureChanged((TreeNode) getModel().getRoot());
-    }
-
     public void addMouseDoubleClickListener(BiConsumer<LazyTreeNode, TreeItem> listener) {
         this.mouseDoubleClickListeners.add(listener);
     }

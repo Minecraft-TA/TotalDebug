@@ -15,14 +15,6 @@ public class CompletionProposalComparator implements Comparator<CompletionPropos
         return res;
     }
 
-    private static int getRelevance(CompletionProposal proposal) {
-        int relevance = proposal.getRelevance();
-        if (proposal.getKind() == CompletionProposal.PACKAGE_REF)
-            relevance += 100;
-
-        return relevance;
-    }
-
     private static int getNameLength(CompletionProposal proposal) {
         var name = proposal.getName();
         if (name == null)
