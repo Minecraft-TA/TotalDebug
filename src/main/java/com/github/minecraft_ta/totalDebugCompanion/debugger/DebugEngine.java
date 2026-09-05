@@ -37,6 +37,14 @@ public interface DebugEngine extends AutoCloseable {
     CompletableFuture<ValuePreview> preview(int variablesReference);
 
     CompletableFuture<EvaluationResult> evaluate(String expression, int frameId);
+    default DebuggerEvaluation<EvaluationResult> startEvaluation(String expression, int frameId) {
+        DebuggerEvaluation<EvaluationResult> operation = new DebuggerEvaluation<>();
+        evaluate(expression, frameId).whenComplete(operation::complete);
+        return operation;
+    }
+    default DebuggerEvaluation<?> activeEvaluation() { return null; }
+    default DebuggerEvaluation<?> evaluationOperation(String id) { return null; }
+
 
     CompletableFuture<List<DebuggerCompletionProposal>> completions(
             String expression,
@@ -139,13 +147,29 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
+    record BreakpointAction(String source, String script, boolean continueOnSuccess) {
+        public BreakpointAction {
+            if ((source == null || source.isBlank()) == (script == null || script.isBlank())) {
+                throw new IllegalArgumentException("Breakpoint action requires exactly one of source or script");
+            }
+        }
+    }
+
+    record BreakpointActionResult(String source, EvaluationResult result, String error) { }
+
+    default BreakpointActionResult breakpointActionResult() { return null; }
+
     record SourceBreakpoint(
             int line,
             int debuggerLine,
             MethodTarget method,
             String condition,
-            String hitCondition
+            String hitCondition,
+            BreakpointAction action
     ) {
+        public SourceBreakpoint(int line, int debuggerLine, MethodTarget method, String condition, String hitCondition) {
+            this(line, debuggerLine, method, condition, hitCondition, null);
+        }
         public SourceBreakpoint {
             if (line < 1) {
                 throw new IllegalArgumentException("Breakpoint line must be positive");
@@ -187,13 +211,11 @@ public interface DebugEngine extends AutoCloseable {
         }
 
         public SourceBreakpoint withConditions(String condition, String hitCondition) {
-            return new SourceBreakpoint(
-                    this.line,
-                    this.debuggerLine,
-                    this.method,
-                    condition,
-                    hitCondition
-            );
+            return new SourceBreakpoint(this.line, this.debuggerLine, this.method, condition, hitCondition, this.action);
+        }
+
+        public SourceBreakpoint withAction(BreakpointAction action) {
+            return new SourceBreakpoint(this.line, this.debuggerLine, this.method, this.condition, this.hitCondition, action);
         }
     }
 
@@ -274,7 +296,12 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record EvaluationResult(String value, String type, int variablesReference, int indexedVariables) {
+    record ScalarValue(String kind, Object value) { }
+
+    record EvaluationResult(String value, String type, int variablesReference, int indexedVariables, ScalarValue scalar) {
+        public EvaluationResult(String value, String type, int variablesReference, int indexedVariables) {
+            this(value, type, variablesReference, indexedVariables, null);
+        }
         public EvaluationResult {
             value = Objects.requireNonNullElse(value, "");
             type = Objects.requireNonNullElse(type, "");
@@ -305,6 +332,8 @@ public interface DebugEngine extends AutoCloseable {
     }
 
     interface Listener {
+        default void evaluationChanged() { }
+
         default void initialized() {
         }
 

@@ -68,8 +68,8 @@ class DebuggerInspectorTest {
 
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of());
-                assertEquals(3, inspections.get(),
-                        "The watch and retained one-off result should refresh once in the new revision");
+                assertEquals(1, inspections.get(),
+                        "Selecting the same frame must not repeat a watch or an explicit evaluation");
                 inspector.close();
             });
         } finally {

@@ -162,12 +162,25 @@ public final class DebuggerSessionController implements AutoCloseable {
     private volatile boolean breakOnUncaughtExceptions;
     private volatile boolean breakpointsMuted;
     private volatile boolean closed;
+    private volatile DebugEngine.BreakpointActionResult breakpointActionResult;
+
+    public DebugEngine.BreakpointActionResult breakpointActionResult() { return this.breakpointActionResult; }
 
     public DebuggerSessionController(SourceLoader sourceLoader) {
-        this(
-                () -> new MicrosoftJavaDebugEngine(Objects.requireNonNull(sourceLoader, "sourceLoader")),
-                new LocalJvmDebugTargetResolver()::resolve
-        );
+        this(sourceLoader, () -> null);
+    }
+
+    public DebuggerSessionController(SourceLoader sourceLoader, Supplier<String> classpath) {
+        this(sourceLoader, classpath, path -> { throw new IllegalStateException("Saved breakpoint scripts require a script workspace"); });
+    }
+
+    public DebuggerSessionController(SourceLoader sourceLoader, Supplier<String> classpath,
+                                    java.util.function.Function<String, String> scripts) {
+        this(() -> {
+            var engine = new MicrosoftJavaDebugEngine(Objects.requireNonNull(sourceLoader, "sourceLoader"), classpath);
+            engine.breakpointScriptSource(scripts);
+            return engine;
+        }, new LocalJvmDebugTargetResolver()::resolve);
     }
 
     DebuggerSessionController(Supplier<DebugEngine> engineFactory, TargetResolver targetResolver) {
@@ -265,6 +278,7 @@ public final class DebuggerSessionController implements AutoCloseable {
         }
         return submitValue(() -> {
             requireRemotePause(expectedPauseId);
+            requireEvaluationIdle();
             DebugEngine.StackFrame frame;
             List<DebugEngine.Variable> values;
             if (frameId != null) {
@@ -295,13 +309,108 @@ public final class DebuggerSessionController implements AutoCloseable {
     public CompletableFuture<DebugEngine.EvaluationResult> evaluate(
             String expectedPauseId, int frameId, String expression
     ) {
+        return startEvaluation(expectedPauseId, frameId, expression)
+                .thenCompose(operation -> operation.completion().thenCompose(result -> submitValue(() -> {
+                    DebugEngine.StackFrame frame = remoteFrame(expectedPauseId, frameId);
+                    exposeValue(result.variablesReference(), result.type(), frame);
+                    return result;
+                })));
+    }
+
+    private final Map<String, EvaluationEntry> evaluations = new java.util.LinkedHashMap<>();
+    public record EvaluationEntry(String pauseId, DebugEngine.StackFrame frame,
+                                  DebuggerEvaluation<DebugEngine.EvaluationResult> operation) { }
+
+    public CompletableFuture<DebuggerEvaluation<DebugEngine.EvaluationResult>> startEvaluation(
+            String expectedPauseId, int frameId, String source) {
         return submitValue(() -> {
             DebugEngine.StackFrame frame = remoteFrame(expectedPauseId, frameId);
-            DebugEngine.EvaluationResult result = requireEngine().evaluate(expression, frame.id()).join();
-            requireRemotePause(expectedPauseId);
-            exposeValue(result.variablesReference(), result.type(), frame);
+            requireEvaluationIdle();
+            var operation = requireEngine().startEvaluation(source, frameId);
+            this.evaluations.put(operation.id(), new EvaluationEntry(expectedPauseId, frame, operation));
+            while (this.evaluations.size() > 128) {
+                String expired = this.evaluations.entrySet().stream().filter(e -> !e.getValue().operation().running())
+                        .map(Map.Entry::getKey).findFirst().orElse(null);
+                if (expired == null) break;
+                this.evaluations.remove(expired);
+            }
+            operation.completion().whenComplete((result, failure) -> submit(() -> {
+                if (result != null && Objects.equals(this.pauseId, expectedPauseId)
+                        && this.pauseGeneration == this.queue.advisoryGeneration()) {
+                    exposeValue(result.variablesReference(), result.type(), frame);
+                }
+                publishRevision();
+            }));
+            publishRevision();
+            return operation;
+        });
+    }
+
+    public CompletableFuture<EvaluationEntry> evaluation(String id) {
+        return submitValue(() -> {
+            EvaluationEntry entry = this.evaluations.get(id);
+            if (entry == null) throw new IllegalArgumentException("Unknown or expired evaluation ID");
+            return entry;
+        });
+    }
+
+    public CompletableFuture<DebugEngine.EvaluationResult> evaluationResult(String id) {
+        return submitValue(() -> {
+            EvaluationEntry entry = this.evaluations.get(id);
+            if (entry == null) throw new IllegalArgumentException("Unknown or expired evaluation ID");
+            requireRemotePause(entry.pauseId());
+            DebugEngine.EvaluationResult result = entry.operation().completion().getNow(null);
+            if (result != null) exposeValue(result.variablesReference(), result.type(), entry.frame());
             return result;
         });
+    }
+
+    public CompletableFuture<DebuggerEvaluation<?>> evaluationOperation(String id) {
+        return submitValue(() -> {
+            EvaluationEntry entry = this.evaluations.get(id);
+            if (entry != null) return entry.operation();
+            DebugEngine current = this.engine;
+            DebuggerEvaluation<?> operation = current == null ? null : current.evaluationOperation(id);
+            if (operation == null) throw new IllegalArgumentException("Unknown or expired evaluation ID");
+            return operation;
+        });
+    }
+
+    public CompletableFuture<DebuggerEvaluation<?>> cancelEvaluation(String id) {
+        return evaluationOperation(id).thenApply(operation -> {
+            operation.cancel();
+            publishRevision();
+            return operation;
+        });
+    }
+
+    public DebuggerEvaluation.Snapshot evaluationStatus() {
+        DebugEngine current = this.engine;
+        var active = current == null ? null : current.activeEvaluation();
+        return active == null ? null : active.snapshot();
+    }
+
+    public void cancelActiveEvaluation() {
+        DebugEngine current = this.engine;
+        var active = current == null ? null : current.activeEvaluation();
+        if (active != null) active.cancel();
+        publishRevision();
+    }
+
+    private void requireEvaluationIdle() {
+        DebugEngine current = this.engine;
+        if (current != null && current.activeEvaluation() != null) {
+            throw new IllegalStateException("Debugger evaluation is still running; wait or request cancellation");
+        }
+    }
+
+    private void publishRevision() {
+        synchronized (this.changeMonitor) {
+            Snapshot previous = this.snapshot;
+            this.snapshot = new Snapshot(previous.revision() + 1, previous.status(), previous.pauseId(), previous.pause());
+            this.changeMonitor.notifyAll();
+        }
+        this.listeners.forEach(listener -> listener.statusChanged(this.status));
     }
 
     private void exposeValue(int reference, String type, DebugEngine.StackFrame frame) {
@@ -917,25 +1026,27 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (variablesReference <= 0) {
             return CompletableFuture.completedFuture(DebugEngine.ValuePreview.NONE);
         }
-        return submitAdvisory(frame, () -> requireEngine().preview(variablesReference).join());
-    }
-
-    public CompletableFuture<DebugEngine.EvaluationResult> evaluate(
-            String expression,
-            DebugEngine.StackFrame frame
-    ) {
-        Objects.requireNonNull(frame, "frame");
+        long generation = this.queue.advisoryGeneration();
         return submitValue(() -> {
             requirePausedFrame(frame);
-            return requireEngine().evaluate(expression, frame.id()).join();
-        });
+            requireEvaluationIdle();
+            return requireEngine().preview(variablesReference);
+        }).thenCompose(future -> future).thenCompose(result -> submitValue(() -> {
+            if (generation != this.queue.advisoryGeneration()) throw new IllegalStateException("Preview frame is stale");
+            requirePausedFrame(frame);
+            return result;
+        }));
     }
 
-    public CompletableFuture<DebugEngine.EvaluationResult> inspectExpression(
-            String expression,
-            DebugEngine.StackFrame frame
-    ) {
-        return submitAdvisory(frame, () -> requireEngine().evaluate(expression, frame.id()).join());
+    public CompletableFuture<DebugEngine.EvaluationResult> evaluate(String expression, DebugEngine.StackFrame frame) {
+        return submitValue(() -> {
+            requirePausedFrame(frame);
+            return this.pauseId;
+        }).thenCompose(id -> evaluate(id, frame.id(), expression));
+    }
+
+    public CompletableFuture<DebugEngine.EvaluationResult> inspectExpression(String expression, DebugEngine.StackFrame frame) {
+        return evaluate(expression, frame);
     }
 
     public CompletableFuture<List<DebuggerCompletionProposal>> completions(
@@ -960,8 +1071,11 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private CompletableFuture<Void> control(String detail, String expectedPauseId, ThreadControl control) {
+        try { requireEvaluationIdle(); }
+        catch (RuntimeException busy) { return CompletableFuture.failedFuture(busy); }
         if (expectedPauseId == null) this.queue.invalidateAdvisoryWork();
         return submitFuture(() -> {
+            requireEvaluationIdle();
             DebugEngine current = requireEngine();
             PausedState pause = this.pausedState;
             if (this.status.phase() != Phase.PAUSED || pause == null) {
@@ -972,6 +1086,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 this.queue.invalidateAdvisoryWork();
             }
             this.pausedState = null;
+            this.breakpointActionResult = null;
             updateStatus(Phase.RUNNING, detail, null);
             try {
                 control.apply(current, pause.event().threadId()).join();
@@ -999,6 +1114,16 @@ public final class DebuggerSessionController implements AutoCloseable {
     private DebugEngine.Listener engineListener(DebugEngine sourceEngine) {
         return new DebugEngine.Listener() {
             @Override
+            public void evaluationChanged() {
+                submit(() -> {
+                    if (engine == sourceEngine) {
+                        breakpointActionResult = sourceEngine.breakpointActionResult();
+                        publishRevision();
+                    }
+                });
+            }
+
+            @Override
             public void stopped(DebugEngine.StoppedEvent event) {
                 queue.invalidateAdvisoryWork();
                 submit(() -> handleStopped(sourceEngine, event));
@@ -1010,6 +1135,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                 submit(() -> {
                     if (engine == sourceEngine) {
                         pausedState = null;
+                        breakpointActionResult = sourceEngine.breakpointActionResult();
                         DebugTargetDescriptor currentTarget = target;
                         updateStatus(
                                 Phase.RUNNING,
@@ -1032,6 +1158,7 @@ public final class DebuggerSessionController implements AutoCloseable {
                     if (engine == sourceEngine) {
                         engine = null;
                         pausedState = null;
+                        breakpointActionResult = null;
                         resetBreakpointBindings();
                         try {
                             sourceEngine.close();
@@ -1093,12 +1220,26 @@ public final class DebuggerSessionController implements AutoCloseable {
         this.pauseId = UUID.randomUUID().toString();
         this.pauseGeneration = this.queue.advisoryGeneration();
         this.exposedValues.clear();
+        if (breakpointEntries().stream().anyMatch(entry -> entry.breakpoint().request().action() != null)) {
+            this.breakpointActionResult = sourceEngine.breakpointActionResult();
+        }
         List<DebugEngine.StackFrame> frames = List.of();
         try {
             frames = sourceEngine.stackTrace(event.threadId()).join();
             List<DebugEngine.Variable> variables = frames.isEmpty()
                     ? List.of()
                     : loadVariables(sourceEngine, frames.getFirst());
+            if (this.breakpointActionResult != null && !frames.isEmpty()) {
+                var action = this.breakpointActionResult;
+                var value = action.result();
+                List<DebugEngine.Variable> withAction = new ArrayList<>(variables);
+                withAction.add(new DebugEngine.Variable("Last breakpoint action", "", "",
+                        action.error() != null ? action.error() : value == null ? "" : value.value(),
+                        value == null ? "" : value.type(), DebugEngine.VariableKind.EXPRESSION, 0,
+                        value == null ? 0 : value.variablesReference(), 0, value == null ? 0 : value.indexedVariables()));
+                if (value != null) exposeValue(value.variablesReference(), value.type(), frames.getFirst());
+                variables = List.copyOf(withAction);
+            }
             PausedState replacement = new PausedState(event, frames, variables);
             this.pausedState = replacement;
             String detail = frames.isEmpty()
@@ -1294,6 +1435,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private void requirePausedFrame(DebugEngine.StackFrame frame) {
+        requireEvaluationIdle();
         PausedState pause = requirePausedState();
         if (!pause.frames().contains(frame)) {
             throw new IllegalArgumentException("Stack frame does not belong to the current pause");
@@ -1323,6 +1465,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     private void closeEngine() {
         DebugEngine current = this.engine;
         this.engine = null;
+        this.breakpointActionResult = null;
         resetBreakpointBindings();
         if (current == null) {
             return;

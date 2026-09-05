@@ -13,6 +13,8 @@ enum UiRenderScenario {
     DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
     BREAKPOINTS("breakpoints", "Persisted breakpoint list and selected breakpoint details"),
+    EVALUATE_CODE("evaluate-code", "Evaluate Everywhere Java code editor and execution context"),
+    EVALUATE_EXPRESSION("evaluate-expression", "Compact evaluator with inline expansion and history"),
     HIERARCHY_ONE("hierarchy-one", "Hierarchy preview with one implementation"),
     HIERARCHY_MANY("hierarchy-many", "Hierarchy preview with several implementations"),
     IMPLEMENTATION_CHOOSER("implementation-chooser", "Implementation chooser with results"),

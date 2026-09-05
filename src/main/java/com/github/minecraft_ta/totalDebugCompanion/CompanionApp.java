@@ -91,6 +91,7 @@ public final class CompanionApp {
     private static volatile CodeInsightService codeInsightService;
     private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
     private static RuntimeIndexService runtimeIndexService;
+    private static volatile String evaluationClasspath;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;
     private static final List<PendingNavigation> pendingNavigations = new ArrayList<>();
@@ -398,6 +399,8 @@ public final class CompanionApp {
         closeReferenceSearchService();
         RuntimeSourceCatalog sourceCatalog = new RuntimeSourceCatalog(snapshot.sources());
         runtimeSourceCatalog = sourceCatalog;
+        evaluationClasspath = snapshot.sources().stream().map(source -> source.path().toString())
+                .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
         CodeInsightService currentInsightService = codeInsightService;
         if (currentInsightService != null) {
             currentInsightService.rebind(() -> snapshot.index(), sourceCatalog);
@@ -851,7 +854,7 @@ public final class CompanionApp {
     }
 
     private static DebuggerSessionController createDebuggerController() {
-        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource);
+        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource, () -> evaluationClasspath, CompanionApp::loadBreakpointScript);
         controller.setBreakpointsMuted(instanceState().debuggerBreakpointsMuted()).join();
         controller.addListener(new DebuggerSessionController.Listener() {
             @Override
@@ -870,6 +873,17 @@ public final class CompanionApp {
         return controller;
     }
 
+    private static String loadBreakpointScript(String name) {
+        Path relative = Path.of(name);
+        Path root = instancePaths().scripts().toAbsolutePath().normalize();
+        Path file = root.resolve(relative).normalize();
+        if (relative.isAbsolute() || !file.startsWith(root) || file.equals(root)) {
+            throw new IllegalArgumentException("Breakpoint script must be relative to the scripts directory");
+        }
+        try { return java.nio.file.Files.readString(file); }
+        catch (IOException failure) { throw new IllegalStateException("Unable to read breakpoint script " + name, failure); }
+    }
+
     private static List<DebuggerSessionController.BreakpointDefinition> restoreBreakpoints(String runtimeSignature) {
         return instanceState().debuggerBreakpoints(runtimeSignature).stream()
                 .map(persisted -> {
@@ -885,7 +899,7 @@ public final class CompanionApp {
                             persisted.debuggerLine(),
                             method,
                             persisted.condition(),
-                            persisted.hitCondition()
+                            persisted.hitCondition(), persisted.action()
                     );
                     return new DebuggerSessionController.BreakpointDefinition(
                             URI.create(persisted.sourceUri()),
@@ -916,7 +930,7 @@ public final class CompanionApp {
                             method == null ? null : method.descriptor(),
                             request.condition(),
                             request.hitCondition(),
-                            definition.enabled()
+                            definition.enabled(), request.action()
                     );
                 })
                 .toList();
@@ -984,6 +998,7 @@ public final class CompanionApp {
     }
 
     private static void closeDecompilationService() {
+        evaluationClasspath = null;
         CompanionDecompilationService service = decompilationService;
         decompilationService = null;
         if (service != null) {

@@ -488,7 +488,7 @@ class DebuggerSessionControllerTest {
     }
 
     @Test
-    void controlInvalidatesQueuedAdvisoryWorkBeforeItReachesTheEngine() throws Exception {
+    void controlsRejectBusyEvaluationWithoutInvalidatingItsPause() throws Exception {
         RecordingEngine engine = new RecordingEngine();
         DebuggerSessionController controller = new DebuggerSessionController(
                 engine::proxy,
@@ -507,15 +507,13 @@ class DebuggerSessionControllerTest {
             engine.pendingEvaluation = new CompletableFuture<>();
             CompletableFuture<DebugEngine.EvaluationResult> evaluation = controller.evaluate("slow()", frame);
             engine.evaluationStarted.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            CompletableFuture<List<DebuggerCompletionProposal>> completion =
-                    controller.completions("val", 3, frame);
-            CompletableFuture<Void> resume = controller.resume();
-
+            String originalPause = controller.snapshot().pauseId();
+            assertThrows(Exception.class, () -> controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS));
+            assertEquals(originalPause, controller.snapshot().pauseId());
+            assertEquals(-1, engine.resumedThread);
             engine.pendingEvaluation.complete(engine.evaluationResult);
             evaluation.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            resume.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            assertThrows(CancellationException.class, completion::join);
-            assertEquals(0, engine.completionCalls);
+            controller.resume().get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertEquals(73, engine.resumedThread);
         } finally {
             controller.close();
@@ -917,6 +915,7 @@ class DebuggerSessionControllerTest {
         private String assignedValue = "";
         private int completionCalls;
         private int variableCalls;
+        private DebuggerEvaluation<DebugEngine.EvaluationResult> activeEvaluation;
         private CompletableFuture<DebugEngine.EvaluationResult> pendingEvaluation;
         private final CompletableFuture<Void> evaluationStarted = new CompletableFuture<>();
 
@@ -929,6 +928,14 @@ class DebuggerSessionControllerTest {
                     DebugEngine.class.getClassLoader(),
                     new Class<?>[]{DebugEngine.class},
                     (proxy, method, arguments) -> switch (method.getName()) {
+                        case "activeEvaluation" -> this.activeEvaluation != null && this.activeEvaluation.running() ? this.activeEvaluation : null;
+                        case "startEvaluation" -> {
+                            this.activeEvaluation = new DebuggerEvaluation<>();
+                            this.evaluationStarted.complete(null);
+                            (this.pendingEvaluation == null ? completed(this.evaluationResult) : this.pendingEvaluation)
+                                    .whenComplete(this.activeEvaluation::complete);
+                            yield this.activeEvaluation;
+                        }
                         case "registerSource" -> {
                             this.sources.add((DebugEngine.Source) arguments[0]);
                             yield null;

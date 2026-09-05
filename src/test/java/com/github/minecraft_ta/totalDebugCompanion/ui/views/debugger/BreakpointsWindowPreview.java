@@ -18,7 +18,8 @@ public final class BreakpointsWindowPreview {
                 "net.minecraft.world.level.block.Block",
                 "class Block {}"
         );
-        controller.configureBreakpoint(source, 174, "newState != oldState", "3").join();
+        controller.configureBreakpoint(source, new DebugEngine.SourceBreakpoint(174, "newState != oldState", "3")
+                .withAction(new DebugEngine.BreakpointAction("var changed = newState != oldState;\nreturn changed;", null, false))).join();
         controller.toggleBreakpoint(source, 181).join();
         controller.toggleBreakpointEnabled(source, 181).join();
         controller.toggleBreakpoint(source, DebugEngine.SourceBreakpoint.methodEntry(
@@ -35,7 +36,7 @@ public final class BreakpointsWindowPreview {
 
         BreakpointsWindow window = new BreakpointsWindow(owner, controller, target -> {
         });
-        window.setBounds(owner.getX() + 150, owner.getY() + 85, 880, 520);
+        window.setBounds(owner.getX() + 50, owner.getY() + 20, 940, 680);
         window.showWindow();
         return window;
     }

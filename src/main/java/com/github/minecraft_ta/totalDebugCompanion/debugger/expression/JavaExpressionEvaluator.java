@@ -85,7 +85,9 @@ final class JavaExpressionEvaluator {
 
     Value evaluate(String source, StackFrame frame, ObjectReference thisObject, ThreadReference thread)
             throws Exception {
-        return evaluate(parse(source), new Context(frame, thisObject, this, thread)).value();
+        Expression expression = parse(source);
+        JavaExpressionSupport.requireSupported(expression);
+        return evaluate(expression, new Context(frame, thisObject, this, thread)).value();
     }
 
     Value invokeMethod(
@@ -108,6 +110,7 @@ final class JavaExpressionEvaluator {
     }
 
     private static EvalValue evaluate(Expression expression, Context context) throws Exception {
+        DebuggerEvaluationRunner.checkpoint();
         if (expression instanceof ParenthesizedExpression parenthesized) {
             return evaluate(parenthesized.getExpression(), context);
         }
@@ -130,7 +133,7 @@ final class JavaExpressionEvaluator {
             if (context.thisObject() == null) {
                 throw new IllegalArgumentException("'this' is unavailable in the selected frame");
             }
-            return value(context.thisObject());
+            return value(context.thisObject(), context.lexicalType());
         }
         if (expression instanceof SimpleName name) {
             return simpleName(name.getIdentifier(), context);
@@ -195,7 +198,7 @@ final class JavaExpressionEvaluator {
             if (type == null) {
                 throw new IllegalArgumentException("Unknown type " + typeLiteral.getType());
             }
-            return type(type);
+            return value(type.classObject());
         }
         throw new UnsupportedOperationException(
                 "Expression type is not implemented: " + expression.getClass().getSimpleName()
@@ -221,11 +224,11 @@ final class JavaExpressionEvaluator {
                 }
             }
             if (local != null) {
-                return value(context.frame().getValue(local), resolveType(local.typeName(), context));
+                return value(context.frame().getValue(local), local.type() instanceof ReferenceType declared ? declared : null);
             }
         }
         if (context.thisObject() != null) {
-            Field field = findField(context.thisObject().referenceType(), name, false);
+            Field field = findField(context.lexicalType(), name, false);
             if (field != null) {
                 return value(context.thisObject().getValue(field), resolveType(field.typeName(), context));
             }
@@ -284,17 +287,17 @@ final class JavaExpressionEvaluator {
     }
 
     private static EvalValue methodInvocation(MethodInvocation invocation, Context context) throws Exception {
-        List<Value> arguments = new ArrayList<>();
-        for (Object argument : invocation.arguments()) {
-            arguments.add(evaluate((Expression) argument, context).value());
-        }
         EvalValue receiver;
         if (invocation.getExpression() == null) {
             receiver = context.thisObject() == null
                     ? type(context.frame().location().declaringType())
-                    : value(context.thisObject());
+                    : value(context.thisObject(), context.lexicalType());
         } else {
             receiver = evaluate(invocation.getExpression(), context);
+        }
+        List<Value> arguments = new ArrayList<>();
+        for (Object argument : invocation.arguments()) {
+            arguments.add(evaluate((Expression) argument, context).value());
         }
         return invoke(receiver, invocation.getName().getIdentifier(), arguments, context, false, null);
     }
@@ -330,6 +333,7 @@ final class JavaExpressionEvaluator {
         }
         List<Value> converted = DebuggerOverloadResolver.convertArguments(arguments, method, context);
         Value result;
+        DebuggerEvaluationRunner.checkpoint();
         try {
             int invocationOptions = ObjectReference.INVOKE_SINGLE_THREADED;
             if (receiver.typeLiteral()) {
@@ -368,6 +372,7 @@ final class JavaExpressionEvaluator {
             boolean invokeSuper
     ) throws Exception {
         List<Value> converted = DebuggerOverloadResolver.convertArguments(arguments, method, context);
+        DebuggerEvaluationRunner.checkpoint();
         try {
             return receiver.invokeMethod(context.thread(), method, converted,
                     ObjectReference.INVOKE_SINGLE_THREADED
@@ -425,6 +430,11 @@ final class JavaExpressionEvaluator {
     }
 
     private static EvalValue prefix(PrefixExpression prefix, Context context) throws Exception {
+        if (prefix.getOperator() == PrefixExpression.Operator.MINUS && prefix.getOperand() instanceof NumberLiteral literal) {
+            String token = literal.getToken().replace("_", "");
+            if (token.equals("2147483648")) return value(context.vm().mirrorOf(Integer.MIN_VALUE));
+            if (token.equalsIgnoreCase("9223372036854775808L")) return value(context.vm().mirrorOf(Long.MIN_VALUE));
+        }
         Value operand = evaluate(prefix.getOperand(), context).value();
         PrefixExpression.Operator operator = prefix.getOperator();
         if (operator == PrefixExpression.Operator.NOT) {
@@ -441,7 +451,8 @@ final class JavaExpressionEvaluator {
             return value(context.vm().mirrorOf(-number.intValue()));
         }
         if (operator == PrefixExpression.Operator.COMPLEMENT) {
-            return value(context.vm().mirrorOf(~number.longValue()));
+            if (number instanceof Long) return value(context.vm().mirrorOf(~number.longValue()));
+            return value(context.vm().mirrorOf(~number.intValue()));
         }
         throw new UnsupportedOperationException("Prefix operator is not implemented: " + operator);
     }
@@ -492,20 +503,40 @@ final class JavaExpressionEvaluator {
                 || operator == InfixExpression.Operator.XOR || operator == InfixExpression.Operator.LEFT_SHIFT
                 || operator == InfixExpression.Operator.RIGHT_SHIFT_SIGNED
                 || operator == InfixExpression.Operator.RIGHT_SHIFT_UNSIGNED) {
-            long leftNumber = toNumber(left.value()).longValue();
-            long rightNumber = toNumber(right.value()).longValue();
-            long result = switch (operator.toString()) {
-                case "&" -> leftNumber & rightNumber;
-                case "|" -> leftNumber | rightNumber;
-                case "^" -> leftNumber ^ rightNumber;
-                case "<<" -> leftNumber << rightNumber;
-                case ">>" -> leftNumber >> rightNumber;
-                default -> leftNumber >>> rightNumber;
-            };
-            return value(vm.mirrorOf(result));
+            if (left.value() instanceof BooleanValue leftBoolean && right.value() instanceof BooleanValue rightBoolean) {
+                boolean result = switch (operator.toString()) {
+                    case "&" -> leftBoolean.value() & rightBoolean.value();
+                    case "|" -> leftBoolean.value() | rightBoolean.value();
+                    case "^" -> leftBoolean.value() ^ rightBoolean.value();
+                    default -> throw new IllegalArgumentException("Boolean shift is invalid Java");
+                };
+                return value(vm.mirrorOf(result));
+            }
+            Number leftNumber = toNumber(left.value());
+            Number rightNumber = toNumber(right.value());
+            boolean shift = operator == InfixExpression.Operator.LEFT_SHIFT
+                    || operator == InfixExpression.Operator.RIGHT_SHIFT_SIGNED
+                    || operator == InfixExpression.Operator.RIGHT_SHIFT_UNSIGNED;
+            if (leftNumber instanceof Long || !shift && rightNumber instanceof Long) {
+                long a = leftNumber.longValue(), b = rightNumber.longValue();
+                return value(vm.mirrorOf(switch (operator.toString()) {
+                    case "&" -> a & b; case "|" -> a | b; case "^" -> a ^ b;
+                    case "<<" -> a << b; case ">>" -> a >> b; default -> a >>> b;
+                }));
+            }
+            int a = leftNumber.intValue(), b = rightNumber.intValue();
+            return value(vm.mirrorOf(switch (operator.toString()) {
+                case "&" -> a & b; case "|" -> a | b; case "^" -> a ^ b;
+                case "<<" -> a << b; case ">>" -> a >> b; default -> a >>> b;
+            }));
         }
         Number leftNumber = toNumber(left.value());
         Number rightNumber = toNumber(right.value());
+        if ((operator == InfixExpression.Operator.LESS || operator == InfixExpression.Operator.LESS_EQUALS
+                || operator == InfixExpression.Operator.GREATER || operator == InfixExpression.Operator.GREATER_EQUALS)
+                && (Double.isNaN(leftNumber.doubleValue()) || Double.isNaN(rightNumber.doubleValue()))) {
+            return value(vm.mirrorOf(false));
+        }
         if (operator == InfixExpression.Operator.LESS) {
             return value(vm.mirrorOf(compare(leftNumber, rightNumber) < 0));
         }
@@ -518,8 +549,7 @@ final class JavaExpressionEvaluator {
         if (operator == InfixExpression.Operator.GREATER_EQUALS) {
             return value(vm.mirrorOf(compare(leftNumber, rightNumber) >= 0));
         }
-        boolean floating = isFloating(leftNumber) || isFloating(rightNumber);
-        if (floating) {
+        if (leftNumber instanceof Double || rightNumber instanceof Double) {
             double leftDouble = leftNumber.doubleValue();
             double rightDouble = rightNumber.doubleValue();
             return value(vm.mirrorOf(switch (operator.toString()) {
@@ -528,6 +558,13 @@ final class JavaExpressionEvaluator {
                 case "*" -> leftDouble * rightDouble;
                 case "/" -> leftDouble / rightDouble;
                 default -> leftDouble % rightDouble;
+            }));
+        }
+        if (leftNumber instanceof Float || rightNumber instanceof Float) {
+            float a = leftNumber.floatValue(), b = rightNumber.floatValue();
+            return value(vm.mirrorOf(switch (operator.toString()) {
+                case "+" -> a + b; case "-" -> a - b; case "*" -> a * b;
+                case "/" -> a / b; default -> a % b;
             }));
         }
         long leftLong = leftNumber.longValue();
@@ -539,7 +576,8 @@ final class JavaExpressionEvaluator {
             case "/" -> leftLong / rightLong;
             default -> leftLong % rightLong;
         };
-        return value(vm.mirrorOf(leftNumber instanceof Long || rightNumber instanceof Long ? result : (int) result));
+        if (leftNumber instanceof Long || rightNumber instanceof Long) return value(vm.mirrorOf(result));
+        return value(vm.mirrorOf((int) result));
     }
 
     private static boolean isString(Value value) {
@@ -559,7 +597,9 @@ final class JavaExpressionEvaluator {
             return toBoolean(left) == toBoolean(right);
         }
         if (left instanceof PrimitiveValue || right instanceof PrimitiveValue) {
-            return compare(toNumber(left), toNumber(right)) == 0;
+            Number a = toNumber(left), b = toNumber(right);
+            if (Double.isNaN(a.doubleValue()) || Double.isNaN(b.doubleValue())) return false;
+            return compare(a, b) == 0;
         }
         return left instanceof ObjectReference leftObject
                 && right instanceof ObjectReference rightObject
@@ -585,20 +625,22 @@ final class JavaExpressionEvaluator {
     }
 
     private static int compare(Number left, Number right) {
-        return isFloating(left) || isFloating(right)
-                ? Double.compare(left.doubleValue(), right.doubleValue())
-                : Long.compare(left.longValue(), right.longValue());
-    }
-
-    private static boolean isFloating(Number number) {
-        return number instanceof Float || number instanceof Double;
+        if (left instanceof Double || right instanceof Double) {
+            double a = left.doubleValue(), b = right.doubleValue();
+            return a == b ? 0 : Double.compare(a, b);
+        }
+        if (left instanceof Float || right instanceof Float) {
+            float a = left.floatValue(), b = right.floatValue();
+            return a == b ? 0 : Float.compare(a, b);
+        }
+        return Long.compare(left.longValue(), right.longValue());
     }
 
     private static Value mirrorNumber(VirtualMachine vm, String token) {
         String normalized = token.replace("_", "");
         String lower = normalized.toLowerCase(Locale.ROOT);
         if (lower.startsWith("0x") || lower.startsWith("0b") || lower.startsWith("0") && normalized.length() > 1
-                && !normalized.contains(".") && !normalized.contains("e")) {
+                && !normalized.contains(".") && !lower.contains("e")) {
             throw new UnsupportedOperationException("Non-decimal numeric literals are not implemented");
         }
         char suffix = Character.toLowerCase(normalized.charAt(normalized.length() - 1));
@@ -629,6 +671,18 @@ final class JavaExpressionEvaluator {
         if (!(node instanceof Expression expression) || (node.getFlags() & ASTNode.MALFORMED) != 0) {
             throw new IllegalArgumentException("Invalid Java expression: " + source);
         }
+        var scanner = org.eclipse.jdt.core.ToolFactory.createScanner(false, false, false, "21");
+        scanner.setSource(source.toCharArray());
+        try {
+            while (scanner.getNextToken() != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF) {
+                if (scanner.getCurrentTokenStartPosition() < expression.getStartPosition()
+                        || scanner.getCurrentTokenEndPosition() >= expression.getStartPosition() + expression.getLength()) {
+                    throw new IllegalArgumentException("Trailing input after Java expression");
+                }
+            }
+        } catch (org.eclipse.jdt.core.compiler.InvalidInputException invalid) {
+            throw new IllegalArgumentException("Invalid Java expression", invalid);
+        }
         return expression;
     }
 
@@ -657,19 +711,49 @@ final class JavaExpressionEvaluator {
     private record EvalValue(Value value, ReferenceType type, boolean typeLiteral) {
     }
 
-    record Context(
-            StackFrame frame,
-            ObjectReference thisObject,
-            JavaExpressionEvaluator evaluator,
-            ThreadReference thread
-    ) {
-        VirtualMachine vm() {
-            return frame != null ? frame.virtualMachine() : thisObject.virtualMachine();
+    static final class Context {
+        private final ObjectReference thisObject;
+        private final JavaExpressionEvaluator evaluator;
+        private final ThreadReference thread;
+        private final int depth;
+        private final com.sun.jdi.Location location;
+
+        Context(StackFrame frame, ObjectReference thisObject, JavaExpressionEvaluator evaluator, ThreadReference thread) {
+            this.thisObject = thisObject;
+            this.evaluator = evaluator;
+            this.thread = thread;
+            this.location = frame.location();
+            try {
+                this.depth = thread.frames().indexOf(frame);
+            } catch (com.sun.jdi.IncompatibleThreadStateException exception) {
+                throw new IllegalStateException("Evaluation requires a suspended thread", exception);
+            }
+            if (this.depth < 0) throw new IllegalStateException("Selected frame is no longer available");
         }
 
-        RichJavaExpressionEngine.VariableNameResolver variableNameResolver() {
-            return evaluator.variableNameResolver;
+        StackFrame frame() {
+            try {
+                StackFrame current = this.thread.frame(this.depth);
+                if (!current.location().equals(this.location)) {
+                    throw new IllegalStateException("Selected evaluation frame has changed");
+                }
+                return current;
+            } catch (com.sun.jdi.IncompatibleThreadStateException exception) {
+                throw new IllegalStateException("Evaluation frame is no longer suspended", exception);
+            }
         }
+
+        ReferenceType lexicalType() {
+            ReferenceType declared = frame().location().declaringType();
+            return this.thisObject != null && !isAssignable(this.thisObject.referenceType(), declared)
+                    ? this.thisObject.referenceType() : declared;
+        }
+
+        ObjectReference thisObject() { return this.thisObject; }
+        JavaExpressionEvaluator evaluator() { return this.evaluator; }
+        ThreadReference thread() { return this.thread; }
+        VirtualMachine vm() { return this.thread.virtualMachine(); }
+        RichJavaExpressionEngine.VariableNameResolver variableNameResolver() { return this.evaluator.variableNameResolver; }
     }
 
     static final class TargetEvaluationException extends Exception {

@@ -52,7 +52,7 @@ public final class DebuggerScenarios {
                 ),
                 new Scenario(
                         "evaluation-timeout",
-                        "non-returning target invocation timeout and debugger detach",
+                        "non-returning target invocation stays tracked until explicit detach",
                         DebuggerScenarios::nonReturningEvaluationTimeout
                 ),
                 new Scenario("pause-detach", "pause and detach", DebuggerScenarios::pauseAndDetach),
@@ -706,21 +706,17 @@ public final class DebuggerScenarios {
             DebugEngine.StoppedEvent stop = harness.awaitStop("non-returning evaluation breakpoint");
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
 
-            long started = System.nanoTime();
+            var operation = harness.engine().startEvaluation("target.neverReturns()", frame.id());
             try {
-                harness.engine().evaluate("target.neverReturns()", frame.id())
-                        .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                operation.completion().get(6, TimeUnit.SECONDS);
                 throw new AssertionError("Non-returning target invocation unexpectedly completed");
-            } catch (java.util.concurrent.ExecutionException expected) {
-                check(expected.toString().contains("Debugger evaluation exceeded 5 seconds")
-                                && expected.toString().contains("debug session was detached"),
-                        "Non-returning invocation did not fail with the bounded timeout: " + expected);
+            } catch (java.util.concurrent.TimeoutException expected) {
+                check(operation.running(), "Caller timeout forgot the active invocation");
+                equal(DebugEngine.State.STOPPED, harness.engine().state(), "state during slow evaluation");
             }
-            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
-            check(elapsedMillis >= 4_000 && elapsedMillis < 9_000,
-                    "Evaluation timeout completed outside its expected bound: " + elapsedMillis + " ms");
-            harness.awaitDebuggerTermination();
-            equal(DebugEngine.State.TERMINATED, harness.engine().state(), "state after evaluation timeout");
+            operation.cancel();
+            check(operation.running(), "Cancellation pretended to stop target code");
+            harness.engine().disconnect().get(2, TimeUnit.SECONDS);
         }
     }
 

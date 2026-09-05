@@ -52,6 +52,8 @@ public final class DebuggerPanel extends JPanel {
     private final JButton stepInto;
     private final JButton stepOut;
     private final JButton detach;
+    private final JButton cancelEvaluation = new JButton("Cancel evaluation");
+    private final javax.swing.Timer evaluationTimer = new javax.swing.Timer(250, event -> updateEvaluationStatus());
     private final JButton viewBreakpoints;
     private final JToggleButton muteBreakpoints;
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
@@ -116,6 +118,8 @@ public final class DebuggerPanel extends JPanel {
         this.stepInto = toolbarButton(debuggerActions.stepInto());
         this.stepOut = toolbarButton(debuggerActions.stepOut());
         this.detach = toolbarButton(debuggerActions.detach());
+        this.cancelEvaluation.addActionListener(event -> this.controller.cancelActiveEvaluation());
+        this.cancelEvaluation.setVisible(false);
         this.viewBreakpoints = toolbarButton(Icons.VIEW_BREAKPOINTS, "View breakpoints");
         this.viewBreakpoints.addActionListener(event -> showBreakpoints.run());
         this.muteBreakpoints = toolbarToggle(Icons.MUTE_BREAKPOINTS, "Mute breakpoints");
@@ -146,6 +150,7 @@ public final class DebuggerPanel extends JPanel {
         actions.add(this.stepOut);
         actions.add(toolbarSeparator());
         actions.add(this.detach);
+        actions.add(this.cancelEvaluation);
         actions.add(toolbarSeparator());
         actions.add(this.viewBreakpoints);
         actions.add(this.muteBreakpoints);
@@ -179,11 +184,29 @@ public final class DebuggerPanel extends JPanel {
 
         boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED;
         this.inspector.setPaused(paused);
+        updateEvaluationStatus();
         if (!paused) {
             this.selectionRevision++;
             if (clearsPausedSnapshot(status.phase())) {
                 clearPausedSnapshot();
             }
+        }
+    }
+
+    private void updateEvaluationStatus() {
+        var evaluation = this.controller.evaluationStatus();
+        boolean busy = evaluation != null;
+        this.cancelEvaluation.setVisible(busy);
+        this.cancelEvaluation.setEnabled(busy && !evaluation.cancellationRequested());
+        this.inspector.setEvaluationBusy(busy);
+        if (busy) {
+            this.statusLabel.setText((evaluation.cancellationRequested() ? "Cancellation requested" : "Evaluating")
+                    + " (" + evaluation.elapsedMillis() / 1000 + "s)"
+                    + (evaluation.slow() ? " - waiting for the target call to return" : ""));
+            if (!this.evaluationTimer.isRunning()) this.evaluationTimer.start();
+        } else {
+            this.statusLabel.setText(this.controller.status().detail());
+            this.evaluationTimer.stop();
         }
     }
 
@@ -298,6 +321,7 @@ public final class DebuggerPanel extends JPanel {
             return;
         }
         this.disposed = true;
+        this.evaluationTimer.stop();
         this.inspector.close();
         this.controller.removeListener(this.listener);
     }

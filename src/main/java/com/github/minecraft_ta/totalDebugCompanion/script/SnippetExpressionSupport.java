@@ -31,6 +31,15 @@ public final class SnippetExpressionSupport {
 
     private final String className;
     private volatile List<String> imports = List.of();
+    private volatile JavaSnippetSource.Mode mode = JavaSnippetSource.Mode.EXPRESSION;
+    private boolean automaticMode;
+
+    public void setAutomaticMode(boolean automaticMode) { this.automaticMode = automaticMode; }
+    private JavaSnippetSource.Mode mode(String source) {
+        return this.automaticMode ? JavaSnippetSource.detectMode(source) : this.mode;
+    }
+
+    public void setMode(JavaSnippetSource.Mode mode) { this.mode = java.util.Objects.requireNonNull(mode); }
 
     public SnippetExpressionSupport(String className) {
         this.className = className;
@@ -69,13 +78,13 @@ public final class SnippetExpressionSupport {
     }
 
     public JavaSnippetSource.GeneratedSource source(String expression) {
-        return JavaSnippetSource.expression(this.className, combined(expression));
+        return JavaSnippetSource.build(this.className, combined(expression), mode(expression));
     }
 
     private List<DebuggerCompletionProposal> completeNow(String expression, int caret) {
         String combined = combined(expression);
         int prefix = combined.length() - expression.length();
-        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.expression(this.className, combined);
+        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.build(this.className, combined, mode(expression));
         int generatedCaret = generated.sourceMap().toGeneratedOffset(prefix + caret);
         CompilationUnitImpl unit = new CompilationUnitImpl(this.className, generated.source());
         CompletableFuture<List<CompletionItem>> result = new CompletableFuture<>();
@@ -162,7 +171,7 @@ public final class SnippetExpressionSupport {
     private List<DebugEngine.ExpressionToken> tokensNow(String expression) {
         String combined = combined(expression);
         int prefix = combined.length() - expression.length();
-        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.expression(this.className, combined);
+        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.build(this.className, combined, mode(expression));
         var ast = ASTCache.rawParse(this.className, generated.source());
         List<DebugEngine.ExpressionToken> result = new ArrayList<>();
         ast.accept(new ASTVisitor() {

@@ -25,18 +25,116 @@ import java.util.concurrent.CompletableFuture;
 
 /** Microsoft debug-core adapter for one Java expression, completion, and value previews. */
 public final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletionsProvider {
-    private final DebuggerEvaluationRunner evaluations = new DebuggerEvaluationRunner(() -> this.debugContext);
+    private final DebuggerEvaluationRunner evaluations = new DebuggerEvaluationRunner();
     private final DebuggerValuePreviewer valuePreviewer = new DebuggerValuePreviewer(this::evaluate);
     private final JavaExpressionEvaluator evaluator;
     private final JavaExpressionCompletion completion;
+    private final CompiledFrameEvaluator compiled;
     private volatile IDebugAdapterContext debugContext;
     private volatile DebuggerTypeCatalog typeCatalog;
+    private final Map<String, ActionBinding> actions = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicLong stopRevision = new java.util.concurrent.atomic.AtomicLong();
+    private volatile DebugEngine.BreakpointActionResult actionResult;
+    private java.util.function.Function<String, String> scriptSource = path -> {
+        throw new IllegalStateException("Saved breakpoint scripts require the workspace script resolver");
+    };
+    private record ActionBinding(java.net.URI source, DebugEngine.SourceBreakpoint breakpoint) { }
+
+    public void scriptSource(java.util.function.Function<String, String> source) { this.scriptSource = source; }
+    public void invalidateContinuation() { this.stopRevision.incrementAndGet(); }
+    public DebugEngine.BreakpointActionResult breakpointActionResult() { return this.actionResult; }
+    public void clearBreakpointActions(java.net.URI source) {
+        this.actions.entrySet().removeIf(entry -> entry.getValue().source().equals(source));
+    }
+    public String breakpointCondition(java.net.URI source, DebugEngine.SourceBreakpoint breakpoint) {
+        if (breakpoint.action() == null) return breakpoint.condition();
+        String key = "__tdBreakpoint" + java.util.UUID.randomUUID().toString().replace("-", "");
+        this.actions.put(key, new ActionBinding(source, breakpoint));
+        return key;
+    }
 
     public RichJavaExpressionEngine(VariableNameResolver variableNameResolver, TypeScopeResolver typeScopeResolver) {
+        this(variableNameResolver, typeScopeResolver, () -> null);
+    }
+
+    public RichJavaExpressionEngine(VariableNameResolver variableNameResolver, TypeScopeResolver typeScopeResolver,
+                                    java.util.function.Supplier<String> classpath) {
         VariableNameResolver names = Objects.requireNonNull(variableNameResolver, "variableNameResolver");
         TypeScopeResolver scopes = Objects.requireNonNull(typeScopeResolver, "typeScopeResolver");
         this.evaluator = new JavaExpressionEvaluator(names, scopes, this::refreshStackFrames);
+        this.compiled = new CompiledFrameEvaluator(classpath, names, scopes);
         this.completion = new JavaExpressionCompletion(this, this.evaluator, names, scopes);
+    }
+
+    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> activeEvaluation() {
+        return this.evaluations.active();
+    }
+    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> evaluationOperation(String id) {
+        return this.evaluations.operation(id);
+    }
+    public void onEvaluationChange(Runnable changed) { this.evaluations.onChange(changed); }
+
+    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<DebugEngine.EvaluationResult> startEvaluation(
+            String expression, int frameId) {
+        if (this.evaluations.active() != null) throw new IllegalStateException("Debugger evaluation is still running");
+        long generation = this.valueGeneration;
+        StackFrame selected = requireFrame(frameId);
+        ThreadReference thread = selected.thread();
+        return this.evaluations.start(thread, () -> {
+            Value value = evaluateFragment(expression, selected, selected.thisObject(), thread);
+            var formatter = this.debugContext.getVariableFormatter();
+            var options = formatter.getDefaultOptions();
+            int reference = 0;
+            int indexed = 0;
+            if (value instanceof ObjectReference object) {
+                synchronized (this.pinned) {
+                    if (generation != this.valueGeneration) throw new java.util.concurrent.CancellationException("Evaluation result expired");
+                    if (!this.pinned.contains(object)) {
+                        object.disableCollection();
+                        this.pinned.add(object);
+                    }
+                }
+                reference = this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
+                        new VariableProxy(thread, "eval", value, null, expression));
+                if (value instanceof com.sun.jdi.ArrayReference array) indexed = array.length();
+            }
+            return new DebugEngine.EvaluationResult(value instanceof com.sun.jdi.VoidValue ? "" : formatter.valueToString(value, options),
+                    value instanceof com.sun.jdi.VoidValue ? "<void>" : value == null ? "null" : value.type().name(),
+                    reference, indexed, scalar(value));
+        });
+    }
+    private static DebugEngine.ScalarValue scalar(Value value) {
+        if (value == null) return new DebugEngine.ScalarValue("null", null);
+        if (value instanceof com.sun.jdi.VoidValue) return new DebugEngine.ScalarValue("void", null);
+        if (value instanceof com.sun.jdi.StringReference text) return new DebugEngine.ScalarValue("string", text.value());
+        if (value instanceof com.sun.jdi.BooleanValue flag) return new DebugEngine.ScalarValue("boolean", flag.value());
+        if (value instanceof com.sun.jdi.CharValue character) return new DebugEngine.ScalarValue("char", String.valueOf(character.value()));
+        if (value instanceof com.sun.jdi.LongValue number) return new DebugEngine.ScalarValue("long", Long.toString(number.value()));
+        if (value instanceof com.sun.jdi.FloatValue number) return new DebugEngine.ScalarValue("float",
+                Float.isFinite(number.value()) ? number.value() : Float.toString(number.value()));
+        if (value instanceof com.sun.jdi.DoubleValue number) return new DebugEngine.ScalarValue("double",
+                Double.isFinite(number.value()) ? number.value() : Double.toString(number.value()));
+        if (value instanceof com.sun.jdi.PrimitiveValue number) return new DebugEngine.ScalarValue(number.type().name(), number.intValue());
+        return null;
+    }
+
+    private volatile long valueGeneration;
+    private final java.util.Set<ObjectReference> pinned = new java.util.LinkedHashSet<>();
+    public void releaseValues() {
+        synchronized (this.pinned) {
+            this.valueGeneration++;
+            for (ObjectReference value : this.pinned) {
+                try { value.enableCollection(); }
+                catch (com.sun.jdi.VMDisconnectedException | com.sun.jdi.ObjectCollectedException ignored) { }
+            }
+            this.pinned.clear();
+            DebugEngine.BreakpointActionResult previous = this.actionResult;
+            if (previous != null && previous.result() != null && previous.result().variablesReference() > 0) {
+                var result = previous.result();
+                this.actionResult = new DebugEngine.BreakpointActionResult(previous.source(),
+                        new DebugEngine.EvaluationResult(result.value(), result.type(), 0, 0, result.scalar()), previous.error());
+            }
+        }
     }
 
     public FrameVariables frameVariables(int frameId) {
@@ -61,6 +159,22 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
 
     public List<DebugEngine.ExpressionToken> expressionTokens(String expression, int frameId) {
         return JavaExpressionTokens.classify(expression, this.evaluator.context(requireFrame(frameId)));
+    }
+
+    public int arrayLength(int variablesReference) {
+        Object reference = this.debugContext.getRecyclableIdPool().getObjectById(variablesReference);
+        if (reference instanceof VariableProxy proxy && proxy.getProxiedVariable() instanceof com.sun.jdi.ArrayReference array) {
+            return array.length();
+        }
+        throw new IllegalArgumentException("Variable reference does not identify an array: " + variablesReference);
+    }
+
+    public String valueType(int variablesReference) {
+        Object reference = this.debugContext.getRecyclableIdPool().getObjectById(variablesReference);
+        if (reference instanceof VariableProxy proxy && proxy.getProxiedVariable() instanceof ObjectReference value) {
+            return value.type().name();
+        }
+        return null;
     }
 
     public CompletableFuture<DebugEngine.ValuePreview> preview(int variablesReference) {
@@ -104,8 +218,21 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
         return this.evaluations.run(thread, () -> {
             StackFrame frame = thread.frame(depth);
             ObjectReference thisObject = explicitThis == null ? frame.thisObject() : explicitThis;
-            return this.evaluator.evaluate(expression, frame, thisObject, thread);
+            return evaluateFragment(expression, frame, thisObject, thread);
         });
+    }
+
+    private Value evaluateFragment(String source, StackFrame frame, ObjectReference receiver, ThreadReference thread)
+            throws Exception {
+        boolean interpreted;
+        try {
+            JavaExpressionSupport.requireSupported(JavaExpressionEvaluator.parse(source));
+            interpreted = true;
+        } catch (IllegalArgumentException | UnsupportedOperationException compileRequired) {
+            interpreted = false;
+        }
+        if (interpreted) return this.evaluator.evaluate(source, frame, receiver, thread);
+        return this.compiled.evaluate(source, new JavaExpressionEvaluator.Context(frame, receiver, this.evaluator, thread));
     }
 
     @Override
@@ -115,7 +242,69 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                     "Logpoint expression evaluation is not implemented"
             ));
         }
-        return evaluateInternal(breakpoint.getCondition(), thread, 0, null);
+        String conditionKey = breakpoint.getCondition();
+        ActionBinding binding = this.actions.get(conditionKey);
+        long revision = this.stopRevision.get();
+        long started = System.nanoTime();
+        long generation = this.valueGeneration;
+        return this.evaluations.<Value>start(thread, () -> {
+            String source = binding == null ? conditionKey : binding.breakpoint().action().source();
+            DebugEngine.EvaluationResult formatted = null;
+            try {
+                StackFrame frame = thread.frame(0);
+                String condition = binding == null ? conditionKey : binding.breakpoint().condition();
+                Value accepted = condition == null || condition.isBlank() ? thread.virtualMachine().mirrorOf(true)
+                        : evaluateFragment(condition, frame, frame.thisObject(), thread);
+                if (!(accepted instanceof com.sun.jdi.BooleanValue booleanValue)) {
+                    throw new IllegalArgumentException("Breakpoint condition must return a boolean");
+                }
+                boolean stayPaused = booleanValue.value();
+                if (stayPaused && binding != null) {
+                    DebuggerEvaluationRunner.checkpoint();
+                    DebugEngine.BreakpointAction action = binding.breakpoint().action();
+                    source = action.script() == null ? action.source() : action.script();
+                    if (action.script() != null) source = this.scriptSource.apply(action.script());
+                    frame = thread.frame(0);
+                    Value result = evaluateFragment(source, frame, frame.thisObject(), thread);
+                    DebugEngine.ScalarValue captured = scalar(result);
+                    int reference = 0;
+                    if (result instanceof ObjectReference object && (!action.continueOnSuccess() || captured == null)) {
+                        synchronized (this.pinned) {
+                            if (generation != this.valueGeneration) {
+                                throw new java.util.concurrent.CancellationException("Breakpoint action result expired");
+                            }
+                            if (!this.pinned.contains(object)) {
+                                object.disableCollection();
+                                this.pinned.add(object);
+                            }
+                        }
+                        reference = this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
+                                new VariableProxy(thread, "breakpoint action", result, null, ""));
+                    }
+                    var formatter = this.debugContext.getVariableFormatter();
+                    String display = result instanceof com.sun.jdi.VoidValue ? ""
+                            : formatter.valueToString(result, formatter.getDefaultOptions());
+                    formatted = new DebugEngine.EvaluationResult(display,
+                            result == null ? "null" : result instanceof com.sun.jdi.VoidValue ? "<void>" : result.type().name(),
+                            reference, result instanceof com.sun.jdi.ArrayReference array ? array.length() : 0, captured);
+                    if (action.continueOnSuccess() && captured == null) {
+                        throw new IllegalStateException("Continue-on-success requires a scalar action result; object results remain paused for inspection");
+                    }
+                    stayPaused = !action.continueOnSuccess();
+                }
+                DebuggerEvaluationRunner.checkpoint();
+                if ((System.nanoTime() - started) / 1_000_000 >= 5_000
+                        || revision != this.stopRevision.get() || !Objects.equals(conditionKey, breakpoint.getCondition())
+                        || binding != null && this.actions.get(conditionKey) != binding) {
+                    throw new IllegalStateException("Breakpoint evaluation was slow or invalidated; execution remains paused");
+                }
+                if (formatted != null) this.actionResult = new DebugEngine.BreakpointActionResult(source, formatted, null);
+                return thread.virtualMachine().mirrorOf(stayPaused);
+            } catch (Exception failure) {
+                if (binding != null) this.actionResult = new DebugEngine.BreakpointActionResult(source, formatted, failure.toString());
+                throw failure;
+            }
+        }).completion();
     }
 
     @Override

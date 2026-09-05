@@ -116,6 +116,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private String variableStatus = "Variables are available while paused";
     private boolean frameReady;
     private boolean disposed;
+    private boolean expressionPending;
+    private boolean watchSequenceStopped;
 
     DebuggerInspector(
             DebuggerSessionController controller,
@@ -169,6 +171,14 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
 
         this.expression.setPlaceholder("Evaluate Expression (Enter)");
+        this.expression.setExpandable(true);
+        this.expression.addPropertyChangeListener("multiline", event -> {
+            boolean expanded = this.expression.isMultiline();
+            this.expression.setPlaceholder(expanded ? "Evaluate Code (Ctrl+Enter)" : "Evaluate Expression (Enter)");
+            this.expression.setToolTipText(expanded
+                    ? "Evaluate (Ctrl+Enter); Add Watch (Ctrl+Shift+Enter)"
+                    : "Evaluate Expression (Enter); Add Watch (Shift+Enter)");
+        });
         this.expression.setToolTipText("Evaluate Expression (Enter); Add Watch (Shift+Enter)");
         this.expression.addActionListener(event -> evaluateExpression(false));
         this.expression.getInputMap(JComponent.WHEN_FOCUSED).put(
@@ -178,8 +188,16 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.expression.getActionMap().put(ADD_WATCH_ACTION, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                evaluateExpression(true);
+                if (expression.isMultiline() && (event.getModifiers() & ActionEvent.CTRL_MASK) == 0) {
+                    expression.replaceSelection("\n");
+                } else evaluateExpression(true);
             }
+        });
+        this.expression.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+                "addFragmentWatch");
+        this.expression.getActionMap().put("addFragmentWatch", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { evaluateExpression(true); }
         });
         this.addWatch.addActionListener(event -> evaluateExpression(true));
 
@@ -200,12 +218,24 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         ));
         input.add(this.expression.component(), BorderLayout.CENTER);
         input.add(this.addWatch, BorderLayout.EAST);
-        add(input, BorderLayout.NORTH);
-
         JScrollPane scroll = new JScrollPane(this.tree);
         scroll.setBorder(BorderFactory.createEmptyBorder());
-        add(scroll, BorderLayout.CENTER);
+        javax.swing.JSplitPane editorSplit = new javax.swing.JSplitPane(javax.swing.JSplitPane.VERTICAL_SPLIT, input, scroll);
+        editorSplit.setBorder(BorderFactory.createEmptyBorder());
+        editorSplit.setDividerSize(0);
+        editorSplit.setResizeWeight(0);
+        this.expression.addPropertyChangeListener("multiline", event -> {
+            editorSplit.setDividerSize(this.expression.isMultiline() ? 5 : 0);
+            SwingUtilities.invokeLater(editorSplit::resetToPreferredSizes);
+        });
+        add(editorSplit, BorderLayout.CENTER);
         GlobalConfig.getInstance().addAutomaticDebuggerPreviewsListener(this.previewSettingsListener);
+    }
+
+    void setEvaluationBusy(boolean busy) {
+        boolean enabled = !busy && this.controller.status().phase() == DebuggerSessionController.Phase.PAUSED;
+        this.expression.setEnabled(enabled);
+        this.addWatch.setEnabled(enabled);
     }
 
     void setPaused(boolean paused) {
@@ -228,7 +258,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.frameReady = false;
         this.revision++;
         this.previewRevision++;
-        this.expressions.nextFrame();
+        this.expressions.nextFrame(this.controller.snapshot().pauseId(), frame.id());
+        this.watchSequenceStopped = false;
         this.expressionNodes.clear();
         this.expressionCompletion.setCompletionProvider((text, caret, explicit) ->
                 this.controller.completions(text, caret, frame));
@@ -372,10 +403,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         if (!this.frameReady || this.frame == null) {
             return;
         }
-        for (Key key : List.copyOf(this.expressionNodes.keySet())) {
-            inspectOnce(key);
-        }
-        startRootPreviewBatch(variableNodes);
+        inspectNextWatch();
+        if (!this.expressionPending) startRootPreviewBatch(variableNodes);
     }
 
     private void addExpressionNode(Key key) {
@@ -402,17 +431,22 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.expressionNodes.put(key, node);
     }
 
-    private void inspectOnce(Key key) {
-        if (!this.expressions.submitOnce(key) || this.frame == null) {
-            return;
+    private void inspectNextWatch() {
+        if (this.expressionPending || this.watchSequenceStopped || this.frame == null) return;
+        for (Key key : this.expressions.rows()) {
+            if (key.watch() && this.expressions.submitOnce(key)) {
+                this.expressionPending = true;
+                submitExpression(key, this.runtime.inspect(key.expression(), this.frame));
+                return;
+            }
         }
-        submitExpression(key, this.runtime.inspect(key.expression(), this.frame));
     }
 
     private void submitExplicitExpression(Key key) {
         if (this.frame == null) {
             return;
         }
+        this.expressionPending = true;
         rebuild();
         submitExpression(key, this.runtime.evaluate(key.expression(), this.frame));
     }
@@ -423,17 +457,19 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     ) {
         long requestRevision = this.revision;
         DebugEngine.StackFrame requestFrame = this.frame;
+        long started = System.nanoTime();
+        var complete = this.expressions.completionFor(key);
         future.whenComplete((result, failure) -> onEventThread(() -> {
-            if (isStale(requestFrame, requestRevision)) {
-                return;
-            }
-            if (failure != null && isCancellation(failure)) {
-                return;
-            }
+            this.expressionPending = false;
             Outcome outcome = failure == null
                     ? Outcome.success(DebugValue.from(key.expression(), result))
                     : Outcome.failure(failureMessage(failure, "Evaluation failed"));
-            this.expressions.complete(key, outcome);
+            complete.accept(outcome);
+            this.watchSequenceStopped |= failure != null || System.nanoTime() - started >= 5_000_000_000L;
+            if (isStale(requestFrame, requestRevision)) {
+                if (this.frameReady) inspectNextWatch();
+                return;
+            }
             DefaultMutableTreeNode node = this.expressionNodes.get(key);
             if (node == null || node.getParent() != this.root) {
                 return;
@@ -451,7 +487,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
                 addPlaceholder(node, outcome.value());
             }
             this.model.nodeStructureChanged(node);
-            if (outcome.value() != null) {
+            inspectNextWatch();
+            if (outcome.value() != null && !this.expressionPending) {
                 requestTreePreview(node, requestRevision);
             }
         }));
@@ -476,37 +513,33 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             return;
         }
 
-        Map<Integer, DebugEngine.ValuePreview> previews = new LinkedHashMap<>();
-        int[] remaining = {previewNodes.size()};
-        for (DefaultMutableTreeNode node : previewNodes) {
-            DebugValue value = Objects.requireNonNull(
-                    debugValue(node.getUserObject()),
-                    "Preview candidate has no debugger value"
-            );
-            this.runtime.preview(requestFrame, value.variablesReference()).whenComplete((preview, failure) ->
-                    onEventThread(() -> {
-                        if (isStale(requestFrame, requestRevision)
-                                || requestPreviewRevision != this.previewRevision) {
-                            return;
-                        }
-                        if (failure != null && isCancellation(failure)) {
-                            return;
-                        }
-                        DebugEngine.ValuePreview resolved = failure == null && preview != null
-                                ? preview
-                                : DebugEngine.ValuePreview.NONE;
-                        applyPreview(node, value, resolved);
-                        previews.put(value.variablesReference(), resolved);
-                        if (--remaining[0] == 0) {
-                            DebuggerEditorPresentation.select(
-                                    requestFrame,
-                                    this.currentVariables,
-                                    previews
-                            );
-                        }
-                    })
-            );
+        previewRoot(previewNodes, 0, requestFrame, requestRevision, requestPreviewRevision, new LinkedHashMap<>());
+    }
+
+    private void previewRoot(List<DefaultMutableTreeNode> nodes, int index, DebugEngine.StackFrame requestFrame,
+                             long requestRevision, long requestPreviewRevision,
+                             Map<Integer, DebugEngine.ValuePreview> previews) {
+        if (isStale(requestFrame, requestRevision) || requestPreviewRevision != this.previewRevision) return;
+        if (index >= nodes.size() || this.expressionPending) {
+            DebuggerEditorPresentation.select(requestFrame, this.currentVariables, previews);
+            return;
         }
+        DefaultMutableTreeNode node = nodes.get(index);
+        DebugValue value = Objects.requireNonNull(debugValue(node.getUserObject()));
+        long started = System.nanoTime();
+        this.runtime.preview(requestFrame, value.variablesReference()).whenComplete((preview, failure) ->
+                onEventThread(() -> {
+                    if (isStale(requestFrame, requestRevision) || requestPreviewRevision != this.previewRevision) return;
+                    if (failure == null && preview != null) {
+                        applyPreview(node, value, preview);
+                        previews.put(value.variablesReference(), preview);
+                    }
+                    if (failure != null || System.nanoTime() - started >= 5_000_000_000L) {
+                        DebuggerEditorPresentation.select(requestFrame, this.currentVariables, previews);
+                    } else {
+                        previewRoot(nodes, index + 1, requestFrame, requestRevision, requestPreviewRevision, previews);
+                    }
+                }));
     }
 
     private void requestTreePreview(DefaultMutableTreeNode node, long requestRevision) {

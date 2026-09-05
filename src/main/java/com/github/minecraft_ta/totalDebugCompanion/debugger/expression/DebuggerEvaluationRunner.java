@@ -1,108 +1,84 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
-import com.microsoft.java.debug.core.IDebugSession;
-import com.microsoft.java.debug.core.adapter.IDebugAdapterContext;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
 import com.sun.jdi.ThreadReference;
-
-import java.time.Duration;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicReference;
 
-/** Bounds evaluation lifetime and aborts the debug session when target code does not return. */
+/** Owns target execution until it returns, independently of caller wait limits. */
 final class DebuggerEvaluationRunner {
-    static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
-
-    private static final ScheduledExecutorService TIMEOUTS = Executors.newSingleThreadScheduledExecutor(
-            Thread.ofPlatform().daemon().name("debugger-evaluation-timeout").factory()
-    );
-
+    private static final ThreadLocal<DebuggerEvaluation<?>> CURRENT = new ThreadLocal<>();
     private final DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
-    private final Supplier<IDebugAdapterContext> debugContext;
-    private final Duration timeout;
+    private final AtomicReference<DebuggerEvaluation<?>> active = new AtomicReference<>();
+    private volatile Runnable changed = () -> { };
+    private final java.util.Map<String, DebuggerEvaluation<?>> history = new java.util.LinkedHashMap<>();
 
-    DebuggerEvaluationRunner(Supplier<IDebugAdapterContext> debugContext) {
-        this(debugContext, DEFAULT_TIMEOUT);
+    DebuggerEvaluation<?> operation(String id) {
+        synchronized (this.history) { return this.history.get(id); }
     }
 
-    DebuggerEvaluationRunner(Supplier<IDebugAdapterContext> debugContext, Duration timeout) {
-        this.debugContext = Objects.requireNonNull(debugContext, "debugContext");
-        this.timeout = Objects.requireNonNull(timeout, "timeout");
-        if (timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("Evaluation timeout must be positive");
+    void onChange(Runnable changed) { this.changed = changed; }
+    DebuggerEvaluation<?> active() { return this.active.get(); }
+    boolean isInEvaluation(ThreadReference thread) { return this.lifecycle.isInEvaluation(thread); }
+    void clearState(ThreadReference thread) { this.lifecycle.clearState(thread); }
+    static void checkpoint() {
+        DebuggerEvaluation<?> operation = CURRENT.get();
+        if (operation != null) operation.checkpoint();
+    }
+    <T> CompletableFuture<T> run(ThreadReference thread, Evaluation<T> action) {
+        return start(thread, action).completion();
+    }
+    <T> DebuggerEvaluation<T> start(ThreadReference thread, Evaluation<T> action) {
+        DebuggerEvaluation<T> operation = new DebuggerEvaluation<>();
+        if (!this.active.compareAndSet(null, operation)) {
+            throw new IllegalStateException("Debugger evaluation is still running; wait or request cancellation");
         }
-    }
-
-    boolean isInEvaluation(ThreadReference thread) {
-        return this.lifecycle.isInEvaluation(thread);
-    }
-
-    void clearState(ThreadReference thread) {
-        this.lifecycle.clearState(thread);
-    }
-
-    <T> CompletableFuture<T> run(ThreadReference thread, Evaluation<T> operation) {
-        CompletableFuture<T> result = new CompletableFuture<>();
-        AtomicBoolean completed = new AtomicBoolean();
-        CompletableFuture<T> invocation = CompletableFuture.supplyAsync(() -> {
-            this.lifecycle.begin(thread);
-            try {
-                return operation.run();
-            } catch (Exception exception) {
-                throw new CompletionException(exception);
-            } finally {
-                this.lifecycle.end(thread);
+        synchronized (this.history) {
+            this.history.put(operation.id(), operation);
+            while (this.history.size() > 128) {
+                String oldest = this.history.entrySet().stream().filter(entry -> !entry.getValue().running())
+                        .map(java.util.Map.Entry::getKey).findFirst().orElse(null);
+                if (oldest == null) break;
+                this.history.remove(oldest);
             }
-        });
-        ScheduledFuture<?> timeoutTask = TIMEOUTS.schedule(
-                () -> timeout(result, completed),
-                this.timeout.toNanos(),
-                TimeUnit.NANOSECONDS
-        );
-        invocation.whenComplete((value, failure) -> {
-            if (!completed.compareAndSet(false, true)) {
-                return;
-            }
-            timeoutTask.cancel(false);
-            if (failure == null) {
-                result.complete(value);
-            } else {
-                result.completeExceptionally(failure);
-            }
-        });
-        return result;
-    }
-
-    private <T> void timeout(CompletableFuture<T> result, AtomicBoolean completed) {
-        if (!completed.compareAndSet(false, true)) {
-            return;
         }
-        TimeoutException failure = new TimeoutException(
-                "Debugger evaluation exceeded " + this.timeout.toSeconds() + " seconds; the debug session was detached"
-        );
         try {
-            IDebugAdapterContext context = Objects.requireNonNull(
-                    this.debugContext.get(), "Debug adapter context is unavailable during evaluation timeout"
-            );
-            IDebugSession session = Objects.requireNonNull(
-                    context.getDebugSession(), "Debug session is unavailable during evaluation timeout"
-            );
-            session.detach();
-        } catch (RuntimeException abortFailure) {
-            failure.addSuppressed(abortFailure);
+            this.lifecycle.begin(thread);
+            notifyChanged();
+            Thread.ofPlatform().daemon().name("debugger-evaluation").start(() -> {
+                T value = null;
+                Throwable failure = null;
+                CURRENT.set(operation);
+                try {
+                    operation.checkpoint();
+                    value = action.run();
+                } catch (Throwable thrown) {
+                    failure = thrown;
+                } finally {
+                    CURRENT.remove();
+                    this.lifecycle.end(thread);
+                    this.active.compareAndSet(operation, null);
+                    operation.complete(value, failure);
+                    notifyChanged();
+                }
+            });
+        } catch (Throwable failure) {
+            this.lifecycle.end(thread);
+            this.active.compareAndSet(operation, null);
+            operation.complete(null, failure);
+            notifyChanged();
         }
-        result.completeExceptionally(failure);
+        return operation;
+    }
+
+    private void notifyChanged() {
+        try { this.changed.run(); }
+        catch (RuntimeException observerFailure) {
+            System.getLogger(DebuggerEvaluationRunner.class.getName()).log(System.Logger.Level.WARNING,
+                    "Evaluation status listener failed", observerFailure);
+        }
     }
 
     @FunctionalInterface
-    interface Evaluation<T> {
-        T run() throws Exception;
-    }
+    interface Evaluation<T> { T run() throws Exception; }
 }

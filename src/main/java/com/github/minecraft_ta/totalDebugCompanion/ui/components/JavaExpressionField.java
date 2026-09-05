@@ -12,6 +12,9 @@ import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JScrollPane;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -34,14 +37,20 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Single-line Java expression editor with runtime-backed semantic coloring. */
+/** Java expression editor with optional inline expansion and semantic coloring. */
 public final class JavaExpressionField extends RSyntaxTextArea {
     private final JScrollPane component = new JScrollPane(this);
+    private final JPanel container = new JPanel(new BorderLayout());
+    private final JPanel actions = new JPanel(new BorderLayout());
+    private final JPanel actionRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING, 0, 0));
+    private final FlatIconButton expand = new FlatIconButton(Icons.EXPAND_EDITOR, false);
+    private boolean expandable;
     private final EventListenerList listeners = new EventListenerList();
     private final AtomicLong semanticRevision = new AtomicLong();
     private final Timer semanticTimer = new Timer(60, event -> requestSemanticTokens());
     private SemanticTokenProvider semanticTokenProvider;
     private String placeholder = "";
+    private boolean multiline;
 
     public JavaExpressionField() {
         this(0);
@@ -59,13 +68,58 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.component.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         this.component.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
         this.component.getViewport().setBorder(null);
+        this.container.setBorder(UIManager.getBorder("TextField.border"));
+        this.component.setBorder(BorderFactory.createEmptyBorder());
+        this.actions.setOpaque(false);
+        this.expand.setMargin(new Insets(2, 4, 2, 4));
+        this.expand.setToolTipText("Expand editor");
+        this.expand.getAccessibleContext().setAccessibleName("Expand editor");
+        this.expand.addActionListener(event -> {
+            setMultiline(!this.multiline);
+            requestFocusInWindow();
+        });
+        this.actionRow.setOpaque(false);
+        this.actionRow.add(this.expand);
+        this.actions.add(this.actionRow, BorderLayout.NORTH);
+        this.actions.setVisible(false);
+        this.container.add(this.component, BorderLayout.CENTER);
+        this.container.add(this.actions, BorderLayout.EAST);
         this.semanticTimer.setRepeats(false);
         ((AbstractDocument) getDocument()).setDocumentFilter(new SingleLineFilter());
         getDocument().addDocumentListener((DocumentChangeListener) this::documentChanged);
+        getInputMap().put(javax.swing.KeyStroke.getKeyStroke("ctrl ENTER"), "evaluateFragment");
+        getActionMap().put("evaluateFragment", new javax.swing.AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { postActionEvent(); }
+        });
+    }
+
+    public boolean isMultiline() { return this.multiline; }
+
+    public void setMultiline(boolean multiline) {
+        boolean previous = this.multiline;
+        this.multiline = multiline;
+        ((AbstractDocument) getDocument()).setDocumentFilter(multiline ? null : new SingleLineFilter());
+        setRows(multiline ? 7 : 1);
+        this.component.setVerticalScrollBarPolicy(multiline ? JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                : JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        this.expand.setIcon(multiline ? Icons.COLLAPSE_EDITOR : Icons.EXPAND_EDITOR);
+        this.expand.setToolTipText(multiline ? "Collapse editor" : "Expand editor");
+        this.expand.getAccessibleContext().setAccessibleName(this.expand.getToolTipText());
+        this.container.revalidate();
+        firePropertyChange("multiline", previous, multiline);
+    }
+
+    public void setExpandable(boolean expandable) {
+        this.expandable = expandable;
+        this.actions.setVisible(expandable);
+    }
+
+    public void addInlineAction(javax.swing.JButton button) {
+        this.actionRow.add(button);
     }
 
     public JComponent component() {
-        return this.component;
+        return this.container;
     }
 
     public void setPlaceholder(String placeholder) {
@@ -105,6 +159,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         if (this.component != null) {
             this.component.setEnabled(enabled);
         }
+        if (this.expand != null) this.expand.setEnabled(enabled);
     }
 
     @Override
@@ -113,8 +168,8 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         if (getSyntaxScheme() != null) {
             CodeUtils.initJavaColors(getSyntaxScheme());
         }
-        if (this.component != null) {
-            this.component.setBorder(UIManager.getBorder("TextField.border"));
+        if (this.container != null) {
+            this.container.setBorder(UIManager.getBorder("TextField.border"));
         }
         applyFieldColors();
     }
@@ -125,6 +180,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         Color caret = UIManager.getColor("TextField.caretForeground");
         if (background != null) {
             setBackground(background);
+            if (this.container != null) this.container.setBackground(background);
         }
         if (foreground != null) {
             setForeground(foreground);
@@ -216,7 +272,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         CompletableFuture<List<DebugEngine.ExpressionToken>> tokens(String expression);
     }
 
-    private static final class SingleLineFilter extends DocumentFilter {
+    private final class SingleLineFilter extends DocumentFilter {
         @Override
         public void insertString(FilterBypass bypass, int offset, String text, AttributeSet attributes)
                 throws BadLocationException {
@@ -234,7 +290,11 @@ public final class JavaExpressionField extends RSyntaxTextArea {
             super.replace(bypass, offset, length, oneLine(text), attributes);
         }
 
-        private static String oneLine(String text) {
+        private String oneLine(String text) {
+            if (expandable && text != null && (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0)) {
+                setMultiline(true);
+                return text;
+            }
             return text == null ? null : text.replace('\r', ' ').replace('\n', ' ');
         }
     }

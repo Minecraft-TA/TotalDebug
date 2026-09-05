@@ -8,6 +8,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JavaSnippetSourceTest {
     @Test
+    void detectsExpressionsIndependentlyOfEditorLineCount() {
+        assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("getServer()"));
+        assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("/* receiver */ getServer() // result"));
+        assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("List.of(\n 1,\n 2\n)"));
+        assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("import java.util.List;\nList.of(1)"));
+        assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("\"a;b\""));
+        assertEquals(JavaSnippetSource.Mode.BODY, JavaSnippetSource.detectMode("var value = 1;\nreturn value;"));
+        assertEquals(JavaSnippetSource.Mode.BODY, JavaSnippetSource.detectMode("logln(1); logln(2);"));
+        assertEquals(JavaSnippetSource.Mode.BODY, JavaSnippetSource.detectMode("getServer(); return 2;"));
+        assertEquals(JavaSnippetSource.Mode.BODY, JavaSnippetSource.detectMode("for (int i = 0; i < 2; i++) logln(i);"));
+    }
+    @Test
     void bodySourceKeepsOnlyTheUserSnippetVisible() {
         String editor = """
                 import java.util.List;

@@ -357,7 +357,7 @@ public final class DebuggerTestHarness implements AutoCloseable {
     }
 
     private void installEngine() {
-        MicrosoftJavaDebugEngine replacement = new MicrosoftJavaDebugEngine(this::resolveSource);
+        MicrosoftJavaDebugEngine replacement = new MicrosoftJavaDebugEngine(this::resolveSource, DebuggerTestHarness::fixtureClasspath);
         CompletableFuture<Void> engineTermination = new CompletableFuture<>();
         this.engine = replacement;
         this.termination = engineTermination;
@@ -436,9 +436,20 @@ public final class DebuggerTestHarness implements AutoCloseable {
                         + (initiallySuspended ? "y" : "n")
                         + ",address=127.0.0.1:0",
                 "-cp",
-                testClasses.toString(),
+                fixtureClasspath(),
                 mainClass.getName()
         ).redirectErrorStream(true).start();
+    }
+
+    private static String fixtureClasspath() {
+        try {
+            return Path.of(DebuggerTestHarness.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                    + java.io.File.pathSeparator
+                    + Path.of(com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge.class
+                        .getProtectionDomain().getCodeSource().getLocation().toURI());
+        } catch (URISyntaxException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static Path sourcePath(Class<?> fixtureClass) {

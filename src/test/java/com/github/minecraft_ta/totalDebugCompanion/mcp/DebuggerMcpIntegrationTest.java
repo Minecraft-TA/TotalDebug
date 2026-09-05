@@ -90,7 +90,7 @@ class DebuggerMcpIntegrationTest {
                 var transport = HttpClientStreamableHttpTransport.builder(base).endpoint("/mcp").build();
                 try (McpSyncClient client = McpClient.sync(transport).requestTimeout(Duration.ofSeconds(35)).build()) {
                     client.initialize();
-                    assertEquals(10, client.listTools().tools().stream().filter(t -> t.name().startsWith("debugger_")).count());
+                    assertEquals(12, client.listTools().tools().stream().filter(t -> t.name().startsWith("debugger_")).count());
                     Map<String, Object> initial = call(client, "debugger_status", Map.of());
                     assertEquals("unavailable", initial.get("phase"));
                     error(client, "debugger_control", Map.of("action", "attach"));
@@ -125,9 +125,13 @@ class DebuggerMcpIntegrationTest {
                             "pause_id", pauseId, "value_ref", named(locals, "values").get("value_ref"), "start", 1, "count", 1));
                     assertEquals("4", array(page, "variables").getFirst().get("value"));
                     assertEquals(true, page.get("truncated"));
-                    assertEquals("46", call(client, "debugger_evaluate", Map.of(
-                            "pause_id", pauseId, "frame_id", frameId, "expression", "counter + payload.amount")).get("value"));
-                    error(client, "debugger_evaluate", Map.of("pause_id", "stale", "frame_id", frameId, "expression", "counter++"));
+                    Map<String, Object> evaluated = call(client, "debugger_evaluate", Map.of(
+                            "pause_id", pauseId, "frame_id", frameId, "source", "counter + payload.amount", "wait_ms", 5000));
+                    assertEquals("succeeded", evaluated.get("state"));
+                    assertEquals("46", object(evaluated, "result").get("value"));
+                    assertEquals("46", object(call(client, "debugger_evaluation_wait", Map.of(
+                            "operation_id", evaluated.get("operation_id"), "wait_ms", 0)), "result").get("value"));
+                    error(client, "debugger_evaluate", Map.of("pause_id", "stale", "frame_id", frameId, "source", "counter++"));
                     error(client, "debugger_variables", Map.of("pause_id", pauseId, "value_ref", 999999));
                     Map<String, Object> step = call(client, "debugger_control", Map.of(
                             "action", "step_into", "pause_id", pauseId, "wait_ms", 5000));

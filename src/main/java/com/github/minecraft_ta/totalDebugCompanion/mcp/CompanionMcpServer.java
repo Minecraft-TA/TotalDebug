@@ -180,7 +180,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "search_literals" -> this.search.searchLiterals(requiredString(request.arguments(), "query"));
                 case "debugger_status", "debugger_wait", "debugger_control", "debugger_threads",
                      "debugger_breakpoints", "debugger_breakpoint_set", "debugger_breakpoint_remove",
-                     "debugger_frames", "debugger_variables", "debugger_evaluate" ->
+                     "debugger_frames", "debugger_variables", "debugger_evaluate", "debugger_evaluation_wait", "debugger_evaluation_cancel" ->
                         this.debugger.call(request.name(), request.arguments());
                 default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
             };

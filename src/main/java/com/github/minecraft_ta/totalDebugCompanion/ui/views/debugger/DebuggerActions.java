@@ -73,7 +73,8 @@ public final class DebuggerActions implements AutoCloseable {
             return;
         }
 
-        boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED;
+        boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED
+                && this.controller.evaluationStatus() == null;
         this.attach.setEnabled(status.phase() == DebuggerSessionController.Phase.DETACHED
                 || status.phase() == DebuggerSessionController.Phase.FAILED);
         this.resume.setEnabled(paused);

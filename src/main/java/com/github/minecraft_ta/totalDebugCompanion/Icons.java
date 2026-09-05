@@ -120,5 +120,7 @@ public class Icons {
     public static final FlatSVGIcon VALUE = new FlatSVGIcon("icons/value.svg");
     public static final FlatSVGIcon ARRAY = new FlatSVGIcon("icons/array.svg");
     public static final FlatSVGIcon RIGHT_ARROW = new FlatSVGIcon("icons/arrow_right.svg");
+    public static final FlatSVGIcon EXPAND_EDITOR = new FlatSVGIcon("icons/expand_editor.svg");
+    public static final FlatSVGIcon COLLAPSE_EDITOR = new FlatSVGIcon("icons/collapse_editor.svg");
     public static final FlatSVGIcon DOWN_ARROW = new FlatSVGIcon("icons/arrow_down.svg");
 }

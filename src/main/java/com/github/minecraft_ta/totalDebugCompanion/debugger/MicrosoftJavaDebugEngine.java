@@ -53,6 +53,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final IDebugAdapter adapter;
 
     public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader) {
+        this(sourceLoader, () -> null);
+    }
+
+    public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader,
+                                    java.util.function.Supplier<String> classpath) {
         configureInitialCoreSettings();
         this.sourceRegistry = new MicrosoftSourceRegistry(sourceLoader);
 
@@ -64,14 +69,26 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         providers.registerProvider(ISourceLookUpProvider.class, this.sourceRegistry);
         this.expressionEngine = new RichJavaExpressionEngine(
                 this.sourceRegistry::displayedVariableName,
-                this.sourceRegistry::typeScope
+                this.sourceRegistry::typeScope, classpath
         );
+        this.expressionEngine.onEvaluationChange(() -> this.listeners.forEach(Listener::evaluationChanged));
         providers.registerProvider(IEvaluationProvider.class, this.expressionEngine);
         providers.registerProvider(IHotCodeReplaceProvider.class, new NoHotCodeReplaceProvider());
         providers.registerProvider(ICompletionsProvider.class, this.expressionEngine);
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
     }
 
+    public void breakpointScriptSource(java.util.function.Function<String, String> source) {
+        this.expressionEngine.scriptSource(source);
+    }
+
+    @Override public DebuggerEvaluation<?> evaluationOperation(String id) { return this.expressionEngine.evaluationOperation(id); }
+
+    @Override public BreakpointActionResult breakpointActionResult() { return this.expressionEngine.breakpointActionResult(); }
+
+    private void requireEvaluationIdle() {
+        if (activeEvaluation() != null) throw new IllegalStateException("Debugger evaluation is still running");
+    }
     private static void configureInitialCoreSettings() {
         DebugSettings settings = DebugSettings.getCurrent();
         settings.showLogicalStructure = false;
@@ -155,10 +172,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         source.name = sourceName(sourceUri);
         source.path = sourceUri.toString();
 
+        this.expressionEngine.clearBreakpointActions(sourceUri);
         Types.SourceBreakpoint[] coreBreakpoints = requested.stream().map(breakpoint ->
             new Types.SourceBreakpoint(
                     breakpoint.debuggerLine(),
-                    breakpoint.condition(),
+                    this.expressionEngine.breakpointCondition(sourceUri, breakpoint),
                     breakpoint.hitCondition()
             )
         ).toArray(Types.SourceBreakpoint[]::new);
@@ -210,6 +228,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
     @Override
     public CompletableFuture<List<StackFrame>> stackTrace(long threadId) {
+        requireEvaluationIdle();
         requireState(State.STOPPED);
         Requests.StackTraceArguments arguments = new Requests.StackTraceArguments();
         arguments.threadId = threadId;
@@ -245,6 +264,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
     @Override
     public CompletableFuture<List<Scope>> scopes(int frameId) {
+        requireEvaluationIdle();
         requireState(State.STOPPED);
         Requests.ScopesArguments arguments = new Requests.ScopesArguments();
         arguments.frameId = frameId;
@@ -275,6 +295,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
     @Override
     public CompletableFuture<List<Variable>> variables(int variablesReference, int start, int count) {
+        requireEvaluationIdle();
         requireState(State.STOPPED);
         if (variablesReference <= 0) {
             return CompletableFuture.failedFuture(new IllegalArgumentException(
@@ -297,6 +318,10 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
                 Map.of()
         );
         Map<String, VariableKind> scopeKinds = this.variableKindsByScope.get(variablesReference);
+        if (scopeKinds == null && !this.childKindsByReference.containsKey(variablesReference)) {
+            String type = this.expressionEngine.valueType(variablesReference);
+            if (type != null) registerChildKind(variablesReference, type);
+        }
         VariableKind childKind = this.childKindsByReference.get(variablesReference);
         if (scopeKinds == null && childKind == null) {
             return CompletableFuture.failedFuture(new IllegalStateException(
@@ -312,6 +337,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         arguments.variablesReference = variablesReference;
         arguments.start = start;
         arguments.count = count;
+        if (!unpaged) {
+            int remaining = this.expressionEngine.arrayLength(variablesReference) - start;
+            if (remaining <= 0) return CompletableFuture.completedFuture(List.of());
+            arguments.count = Math.min(count, remaining);
+        }
 
         return request(Requests.Command.VARIABLES, arguments, Responses.VariablesResponseBody.class)
                 .thenApply(body -> {
@@ -345,6 +375,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
     @Override
     public CompletableFuture<Void> setVariable(int variablesReference, String name, String value) {
+        requireEvaluationIdle();
         requireState(State.STOPPED);
         if (variablesReference <= 0) {
             return CompletableFuture.failedFuture(new IllegalArgumentException(
@@ -373,22 +404,16 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         if (expression == null || expression.isBlank()) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Expression must not be blank"));
         }
-        Requests.EvaluateArguments arguments = new Requests.EvaluateArguments();
-        arguments.expression = expression;
-        arguments.frameId = frameId;
-        arguments.context = "watch";
-
-        return request(Requests.Command.EVALUATE, arguments, Responses.EvaluateResponseBody.class)
-                .thenApply(body -> {
-                    registerChildKind(body.variablesReference, body.type);
-                    return new EvaluationResult(
-                            body.result,
-                            body.type,
-                            body.variablesReference,
-                            body.indexedVariables
-                    );
-                });
+        return startEvaluation(expression, frameId).completion();
     }
+    @Override
+    public DebuggerEvaluation<EvaluationResult> startEvaluation(String expression, int frameId) {
+        requireState(State.STOPPED);
+        return this.expressionEngine.startEvaluation(expression, frameId);
+    }
+    @Override
+    public DebuggerEvaluation<?> activeEvaluation() { return this.expressionEngine.activeEvaluation(); }
+
 
     @Override
     public CompletableFuture<List<DebuggerCompletionProposal>> completions(
@@ -515,6 +540,8 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     }
 
     private CompletableFuture<Void> resumeWith(Requests.Command command, Requests.Arguments arguments) {
+        requireEvaluationIdle();
+        this.expressionEngine.releaseValues();
         if (!this.state.compareAndSet(State.STOPPED, State.RUNNING)) {
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Debugger operation is unavailable in state " + this.state.get()
@@ -537,6 +564,8 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
 
     @Override
     public CompletableFuture<Void> disconnect() {
+        this.expressionEngine.invalidateContinuation();
+        this.expressionEngine.releaseValues();
         State current = this.state.get();
         if (current == State.NEW || current == State.TERMINATED || current == State.CLOSED) {
             return CompletableFuture.completedFuture(null);
@@ -618,6 +647,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.StoppedEvent stopped) {
+            this.expressionEngine.invalidateContinuation();
             clearVariableNameContexts();
             this.state.set(State.STOPPED);
             StoppedEvent converted = new StoppedEvent(
@@ -629,6 +659,8 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.ContinuedEvent continued) {
+            this.expressionEngine.invalidateContinuation();
+            this.expressionEngine.releaseValues();
             clearVariableNameContexts();
             this.state.set(State.RUNNING);
             this.listeners.forEach(listener -> listener.continued(
@@ -654,6 +686,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
             return;
         }
         if (event instanceof Events.ExitedEvent || event instanceof Events.TerminatedEvent) {
+            this.expressionEngine.releaseValues();
             clearVariableNameContexts();
             State previous = this.state.getAndSet(State.TERMINATED);
             if (previous != State.TERMINATED && previous != State.CLOSED) {

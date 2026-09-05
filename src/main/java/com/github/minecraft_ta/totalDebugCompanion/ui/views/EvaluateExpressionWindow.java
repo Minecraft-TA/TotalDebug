@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
@@ -21,12 +23,10 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
 import javax.swing.BorderFactory;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -57,23 +57,31 @@ public final class EvaluateExpressionWindow extends JDialog {
     private final SnippetExpressionSupport expressionSupport = new SnippetExpressionSupport(CLASS_NAME);
     private final SnippetExecutionService executions;
     private final ExpressionHistory history;
-    private final JComboBox<SnippetExecutionService.Side> side =
-            new JComboBox<>(SnippetExecutionService.Side.values());
+    private final JComboBox<EvaluationContext> context = new JComboBox<>();
+    private boolean refreshingContexts;
+    private final DebuggerSessionController.Listener debuggerListener = new DebuggerSessionController.Listener() {
+        @Override public void statusChanged(DebuggerSessionController.Status status) { refreshLater(); }
+        @Override public void paused(DebuggerSessionController.PausedState state) { refreshLater(); }
+        private void refreshLater() { SwingUtilities.invokeLater(() -> refreshContexts()); }
+    };
+    private com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> pausedExecution;
     private final FlatIconButton evaluate = new FlatIconButton(Icons.EVALUATE_EXPRESSION, false);
     private final FlatIconButton stop = new FlatIconButton(Icons.STOP, false);
-    private final FlatIconButton save = new FlatIconButton(Icons.JAVA_FILE, false);
     private final ScriptResultTree resultTree = new ScriptResultTree();
     private final JScrollPane resultScroll = new JScrollPane(this.resultTree);
     private final JTextPane output = textPane();
     private final JTextPane problems = textPane();
     private final JTabbedPane results = new JTabbedPane();
-    private final JLabel status = new JLabel("Enter a Java expression");
+    private final JLabel status = new JLabel();
+    private final javax.swing.JSplitPane editorSplit = new javax.swing.JSplitPane(javax.swing.JSplitPane.VERTICAL_SPLIT);
 
     private SnippetExecutionService.Execution activeExecution;
     private JavaSnippetSource.GeneratedSource activeSource;
     private int activeDiagnosticLineOffset;
     private long executionRevision;
     private int historyIndex = -1;
+    private boolean evaluationRunning;
+    private boolean cancelPending;
 
     public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions) {
         super(owner, "Evaluate Expression", false);
@@ -82,6 +90,8 @@ public final class EvaluateExpressionWindow extends JDialog {
         configureInput();
         configureResults();
         configureWindow();
+        CompanionApp.getDebuggerController().addListener(this.debuggerListener);
+        refreshContexts();
     }
 
     public void showWindow() {
@@ -96,34 +106,31 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     private void configureInput() {
+        this.expression.setExpandable(true);
+        this.expressionSupport.setAutomaticMode(true);
         this.expression.setPlaceholder("Evaluate Java expression (Enter)");
         this.expression.setSemanticTokenProvider(this.expressionSupport::tokens);
         this.expression.addActionListener(event -> evaluate());
         this.completion.setCompletionProvider(this.expressionSupport::complete);
         this.completion.setAcceptanceListener(this.expressionSupport::accepted);
 
-        this.side.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(
-                    JList<?> list,
-                    Object value,
-                    int index,
-                    boolean selected,
-                    boolean focused
-            ) {
-                String label = value == SnippetExecutionService.Side.SERVER ? "Server" : "Client";
-                return super.getListCellRendererComponent(list, label, index, selected, focused);
-            }
+        this.context.setToolTipText("Evaluation context");
+        this.context.addActionListener(event -> {
+            if (!this.refreshingContexts) updateContext();
         });
-        this.side.setToolTipText("Minecraft side used to evaluate the expression");
+        this.expression.addPropertyChangeListener("multiline", event -> {
+            boolean expanded = this.expression.isMultiline();
+            this.expression.setPlaceholder(expanded ? "Java expression or statements (Ctrl+Enter)" : "Evaluate Expression (Enter)");
+            this.evaluate.setToolTipText(expanded ? "Evaluate (Ctrl+Enter)" : "Evaluate (Enter)");
+            this.editorSplit.setDividerSize(expanded ? 5 : 0);
+            SwingUtilities.invokeLater(() -> this.editorSplit.resetToPreferredSizes());
+        });
 
         this.evaluate.setToolTipText("Evaluate Expression (Enter)");
         this.evaluate.addActionListener(event -> evaluate());
         this.stop.setToolTipText("Stop evaluation");
         this.stop.addActionListener(event -> stop());
         this.stop.setVisible(false);
-        this.save.setToolTipText("Save as Script");
-        this.save.addActionListener(event -> saveAsScript());
 
         bindHistory(KeyEvent.VK_UP, 1);
         bindHistory(KeyEvent.VK_DOWN, -1);
@@ -133,24 +140,53 @@ public final class EvaluateExpressionWindow extends JDialog {
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
                 BorderFactory.createEmptyBorder(7, 8, 7, 8)
         ));
-        input.add(this.side, BorderLayout.WEST);
+        JPanel contextRow = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 4));
+        contextRow.add(this.context);
+        input.add(contextRow, BorderLayout.NORTH);
         input.add(this.expression.component(), BorderLayout.CENTER);
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
         actions.add(this.evaluate);
         actions.add(this.stop);
-        actions.add(this.save);
+        FlatIconButton more = new FlatIconButton(Icons.DOWN_ARROW, false);
+        more.setToolTipText("History and script actions");
+        more.addActionListener(event -> {
+            javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+            javax.swing.JMenuItem saveItem = new javax.swing.JMenuItem("Save as Script", Icons.JAVA_FILE);
+            saveItem.setEnabled(!this.evaluationRunning && !this.expression.getText().isBlank());
+            saveItem.addActionListener(ignored -> saveAsScript());
+            menu.add(saveItem);
+            if (!this.history.entries().isEmpty()) menu.addSeparator();
+            for (ExpressionHistory.Entry entry : this.history.entries()) {
+                String label = entry.expression().replace('\n', ' ').replace('\r', ' ');
+                javax.swing.JMenuItem item = new javax.swing.JMenuItem(label.length() > 70 ? label.substring(0, 67) + "..." : label);
+                item.setEnabled(!this.evaluationRunning);
+                item.addActionListener(ignored -> restoreHistory(entry));
+                menu.add(item);
+            }
+            menu.show(more, 0, more.getHeight());
+        });
+        more.setMargin(new java.awt.Insets(2, 4, 2, 4));
+        this.expression.addInlineAction(more);
         input.add(actions, BorderLayout.EAST);
-        add(input, BorderLayout.NORTH);
+        this.editorSplit.setTopComponent(input);
+        this.editorSplit.setBorder(BorderFactory.createEmptyBorder());
+        this.editorSplit.setDividerSize(0);
+        this.editorSplit.setResizeWeight(0);
+        add(this.editorSplit, BorderLayout.CENTER);
     }
 
     private void configureResults() {
+        this.results.putClientProperty("JTabbedPane.hideTabAreaWithOneTab", true);
         this.resultScroll.setBorder(BorderFactory.createEmptyBorder());
         JPanel content = new JPanel(new BorderLayout());
         this.status.setBorder(BorderFactory.createEmptyBorder(6, 9, 6, 9));
+        this.status.setVisible(false);
+        this.status.addPropertyChangeListener("text", event ->
+                this.status.setVisible(this.status.getText() != null && !this.status.getText().isBlank()));
         content.add(this.status, BorderLayout.NORTH);
         content.add(this.results, BorderLayout.CENTER);
-        add(content, BorderLayout.CENTER);
+        this.editorSplit.setBottomComponent(content);
         applyTheme();
     }
 
@@ -167,11 +203,16 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     private void evaluate() {
         String requested = this.expression.getText().trim();
-        if (requested.isEmpty() || this.activeExecution != null) {
+        if (requested.isEmpty() || this.evaluationRunning) {
+            return;
+        }
+        if (selectedContext() == null || !contextAvailable(selectedContext())) return;
+        if (selectedContext().frame() != null) {
+            evaluatePaused(requested);
             return;
         }
         SnippetExecutionService.Side selectedSide =
-                (SnippetExecutionService.Side) this.side.getSelectedItem();
+                selectedContext().side();
         JavaSnippetSource.GeneratedSource source;
         try {
             source = this.expressionSupport.source(requested);
@@ -191,7 +232,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         this.history.record(new ExpressionHistory.Entry(
                 requested,
                 selectedSide,
-                this.expressionSupport.imports()
+                this.expressionSupport.imports(), JavaSnippetSource.detectMode(requested)
         ));
         this.historyIndex = -1;
         long revision = ++this.executionRevision;
@@ -200,6 +241,45 @@ public final class EvaluateExpressionWindow extends JDialog {
         this.results.removeAll();
         this.activeExecution.completion().whenComplete((outcome, failure) ->
                 SwingUtilities.invokeLater(() -> finish(revision, outcome, failure)));
+    }
+
+    private void evaluatePaused(String requested) {
+        var selected = selectedContext();
+        var frame = selected.frame();
+        if (frame == null || selected.pauseId() == null) {
+            showFailure("Select a frame from a current debugger pause");
+            return;
+        }
+        StringBuilder source = new StringBuilder();
+        this.expressionSupport.imports().forEach(imported -> source.append("import ").append(imported).append(";\n"));
+        source.append(requested);
+        var controller = CompanionApp.getDebuggerController();
+        String pauseId = selected.pauseId();
+        setRunning(true);
+        this.status.setText("Evaluating in " + frame.name());
+        this.results.removeAll();
+        controller.startEvaluation(pauseId, frame.id(), source.toString()).whenComplete((operation, startFailure) ->
+                SwingUtilities.invokeLater(() -> {
+                    if (startFailure != null) { setRunning(false); showFailure(startFailure.getMessage()); return; }
+                    this.pausedExecution = operation;
+                    if (this.cancelPending) operation.cancel();
+                    this.history.record(new ExpressionHistory.Entry(requested,
+                            SnippetExecutionService.Side.CLIENT, this.expressionSupport.imports(),
+                            JavaSnippetSource.detectMode(requested)));
+                    this.historyIndex = -1;
+                    operation.completion().whenComplete((value, failure) -> SwingUtilities.invokeLater(() -> {
+                        this.pausedExecution = null;
+                        setRunning(false);
+                        if (failure != null) { showFailure(failure.getMessage()); return; }
+                        if (!java.util.Objects.equals(controller.snapshot().pauseId(), pauseId)) {
+                            showFailure("Evaluation result expired when its originating pause ended");
+                            return;
+                        }
+                        this.results.addTab("Result", new com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel(
+                                controller, pauseId, value));
+                        this.status.setText("Evaluation completed in " + frame.name());
+                    }));
+                }));
     }
 
     private void finish(long revision, ExecutionResult outcome, Throwable failure) {
@@ -253,6 +333,11 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     private void stop() {
+        this.cancelPending = true;
+        if (this.pausedExecution != null) {
+            this.pausedExecution.cancel();
+            this.status.setText("Cancellation requested; waiting for the current target call to return");
+        }
         if (this.activeExecution != null) {
             this.activeExecution.cancel().run();
             this.status.setText("Stopping…");
@@ -260,11 +345,13 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     private void setRunning(boolean running) {
+        this.evaluationRunning = running;
+        this.cancelPending = false;
         this.expression.setEnabled(!running);
-        this.side.setEnabled(!running);
+        this.context.setEnabled(!running);
         this.evaluate.setVisible(!running);
+        this.evaluate.setEnabled(!running && contextAvailable(selectedContext()));
         this.stop.setVisible(running);
-        this.save.setEnabled(!running);
     }
 
     private void bindHistory(int keyCode, int direction) {
@@ -293,10 +380,14 @@ public final class EvaluateExpressionWindow extends JDialog {
             return;
         }
         ExpressionHistory.Entry entry = entries.get(this.historyIndex);
+        restoreHistory(entry);
+    }
+
+    private void restoreHistory(ExpressionHistory.Entry entry) {
+        this.expression.setMultiline(entry.mode() == JavaSnippetSource.Mode.BODY || entry.expression().contains("\n"));
         this.expression.setText(entry.expression());
         this.expression.setCaretPosition(entry.expression().length());
         this.expressionSupport.setImports(entry.imports());
-        this.side.setSelectedItem(entry.side());
     }
 
     private void saveAsScript() {
@@ -325,7 +416,8 @@ public final class EvaluateExpressionWindow extends JDialog {
         for (String imported : this.expressionSupport.imports()) {
             source.append("import ").append(imported).append(";\n");
         }
-        source.append("return ").append(requested).append(';').append(System.lineSeparator());
+        if (JavaSnippetSource.detectMode(requested) == JavaSnippetSource.Mode.BODY) source.append(requested).append(System.lineSeparator());
+        else source.append("return ").append(requested).append(';').append(System.lineSeparator());
         try {
             Files.createDirectories(path.getParent());
             com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(path, source.toString());
@@ -347,6 +439,68 @@ public final class EvaluateExpressionWindow extends JDialog {
         EditorPalette palette = ThemeManager.palette();
         configureTextPane(this.output, palette, ThemeColors.text());
         configureTextPane(this.problems, palette, ThemeColors.error());
+    }
+
+    private record EvaluationContext(SnippetExecutionService.Side side, String pauseId,
+                                     DebugEngine.StackFrame frame, String label) {
+        @Override public String toString() { return this.label; }
+    }
+
+    private EvaluationContext selectedContext() { return (EvaluationContext) this.context.getSelectedItem(); }
+
+    private boolean contextAvailable(EvaluationContext context) {
+        if (context == null) return false;
+        if (context.frame() == null) return true;
+        var snapshot = CompanionApp.getDebuggerController().snapshot();
+        return java.util.Objects.equals(context.pauseId(), snapshot.pauseId()) && snapshot.pause() != null
+                && snapshot.pause().frames().stream().anyMatch(frame -> frame.id() == context.frame().id());
+    }
+
+    private void refreshContexts() {
+        EvaluationContext previous = selectedContext();
+        this.refreshingContexts = true;
+        this.context.removeAllItems();
+        this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.CLIENT, null, null, "Client"));
+        this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.SERVER, null, null, "Server"));
+        var snapshot = CompanionApp.getDebuggerController().snapshot();
+        if (snapshot.pause() != null) {
+            for (var frame : snapshot.pause().frames()) {
+                this.context.addItem(new EvaluationContext(null, snapshot.pauseId(), frame,
+                        "Paused · " + frame.name() + ":" + frame.line()));
+            }
+        }
+        if (previous != null) {
+            if (previous.frame() != null && !contextAvailable(previous)) {
+                previous = new EvaluationContext(null, previous.pauseId(), previous.frame(), "Frame no longer paused");
+                this.context.addItem(previous);
+            }
+            this.context.setSelectedItem(previous);
+        }
+        this.refreshingContexts = false;
+        updateContext();
+    }
+
+    private void updateContext() {
+        EvaluationContext selected = selectedContext();
+        if (selected != null) this.context.setPrototypeDisplayValue(selected);
+        this.evaluate.setEnabled(!this.evaluationRunning && contextAvailable(selected));
+        if (!this.evaluationRunning && !contextAvailable(selected)) this.status.setText("Frame no longer paused; select an evaluation context");
+        else if (!this.evaluationRunning && this.status.getText().startsWith("Frame no longer paused")) {
+            this.status.setText("");
+        }
+        if (selected != null && selected.frame() != null && contextAvailable(selected)) {
+            var controller = CompanionApp.getDebuggerController();
+            this.completion.setCompletionProvider((text, caret, explicit) -> controller.completions(text, caret, selected.frame()));
+            this.expression.setSemanticTokenProvider(text -> controller.expressionTokens(text, selected.frame()));
+        } else {
+            this.completion.setCompletionProvider(this.expressionSupport::complete);
+            this.expression.setSemanticTokenProvider(this.expressionSupport::tokens);
+        }
+    }
+
+    @Override public void dispose() {
+        CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
+        super.dispose();
     }
 
     private static JTextPane textPane() {

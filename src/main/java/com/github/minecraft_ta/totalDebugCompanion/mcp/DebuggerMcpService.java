@@ -29,9 +29,11 @@ final class DebuggerMcpService {
         DebuggerSessionController session = this.controller.get();
         try {
             return switch (tool) {
-                case "debugger_status" -> snapshot(session.snapshot());
-                case "debugger_wait" -> snapshot(session.waitForChange(
-                        ((Number) args.get("after_revision")).longValue(), integer(args, "wait_ms", 30_000)));
+                case "debugger_status" -> sessionSnapshot(session);
+                case "debugger_wait" -> {
+                    session.waitForChange(((Number) args.get("after_revision")).longValue(), integer(args, "wait_ms", 30_000));
+                    yield sessionSnapshot(session);
+                }
                 case "debugger_control" -> control(session, args);
                 case "debugger_threads" -> Map.of("threads", await(session.threads()).stream()
                         .map(thread -> Map.of("id", thread.id(), "name", thread.name())).toList());
@@ -43,14 +45,73 @@ final class DebuggerMcpService {
                 case "debugger_frames" -> Map.of("frames", await(session.frames(text(args, "pause_id")))
                         .stream().map(DebuggerMcpService::frame).toList());
                 case "debugger_variables" -> variables(session, args);
-                case "debugger_evaluate" -> evaluation(await(session.evaluate(text(args, "pause_id"),
-                        integer(args, "frame_id", 0), text(args, "expression"))));
+                case "debugger_evaluate" -> operation(session, await(session.startEvaluation(text(args, "pause_id"),
+                        integer(args, "frame_id", 0), text(args, "source"))), integer(args, "wait_ms", 1000));
+                case "debugger_evaluation_wait" -> operation(session,
+                        await(session.evaluationOperation(text(args, "operation_id"))), integer(args, "wait_ms", 1000));
+                case "debugger_evaluation_cancel" -> {
+                    var requested = await(session.cancelEvaluation(text(args, "operation_id")));
+                    yield operation(session, requested, 0);
+                }
                 default -> throw new IllegalArgumentException("Unknown debugger tool: " + tool);
             };
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Debugger wait interrupted", exception);
         }
+    }
+
+    private static Map<String, Object> sessionSnapshot(DebuggerSessionController session) {
+        Map<String, Object> result = snapshot(session.snapshot());
+        var evaluation = session.evaluationStatus();
+        if (evaluation != null) result.put("evaluation", operationStatus(evaluation));
+        var action = session.breakpointActionResult();
+        if (action != null) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("source", action.source());
+            if (action.result() != null) details.put("result", evaluation(action.result()));
+            if (action.error() != null) details.put("error", action.error());
+            result.put("breakpoint_action", details);
+        }
+        return result;
+    }
+
+    private static Map<String, Object> operationStatus(
+            com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation.Snapshot state) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("operation_id", state.id());
+        result.put("state", state.state());
+        result.put("elapsed_ms", state.elapsedMillis());
+        result.put("slow", state.slow());
+        result.put("cancellation_requested", state.cancellationRequested());
+        if (state.error() != null) result.put("error", state.error());
+        return result;
+    }
+
+    private static Map<String, Object> operation(DebuggerSessionController session,
+            com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> operation,
+            int waitMillis) throws InterruptedException {
+        if (waitMillis < 0 || waitMillis > 120_000) throw new IllegalArgumentException("wait_ms must be between 0 and 120000");
+        Object value = null;
+        try {
+            value = operation.completion().get(waitMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException pending) {
+            // Only the caller's wait expired. The same execution remains available by ID.
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException failed) {
+            // Terminal diagnostics belong to the operation response.
+        }
+        var state = operation.snapshot();
+        if (value == null && state.state().equals("succeeded")) value = operation.completion().getNow(null);
+        Map<String, Object> result = operationStatus(state);
+        if (value instanceof DebugEngine.EvaluationResult) {
+            var entry = await(session.evaluation(operation.id()));
+            if (Objects.equals(session.snapshot().pauseId(), entry.pauseId())) {
+                result.put("result", evaluation(await(session.evaluationResult(operation.id()))));
+            } else {
+                result.put("result_expired", true);
+            }
+        }
+        return result;
     }
 
     private Map<String, Object> control(DebuggerSessionController session, Map<String, Object> args)
@@ -85,6 +146,10 @@ final class DebuggerMcpService {
         DebugEngine.SourceBreakpoint request = DebuggerBreakpointResolver.resolve(source, line,
                 (String) args.get("condition"), (String) args.get("hit_condition"))
                 .orElseThrow(() -> new IllegalArgumentException("No executable bytecode is mapped to line " + line));
+        if (args.get("action") instanceof Map<?, ?> action) {
+            request = request.withAction(new DebugEngine.BreakpointAction((String) action.get("source"),
+                    (String) action.get("script"), "continue_on_success".equals(action.get("completion"))));
+        }
         await(session.putBreakpoint(source, request, (Boolean) args.getOrDefault("enabled", true)));
         DebuggerSessionController.Breakpoint resolved = session.breakpoint(source.uri(), line);
         if (resolved == null) throw new IllegalStateException("Breakpoint was removed concurrently");
@@ -154,7 +219,14 @@ final class DebuggerMcpService {
     }
 
     private static Map<String, Object> evaluation(DebugEngine.EvaluationResult value) {
-        return value(value.value(), value.type(), value.variablesReference(), value.indexedVariables());
+        Map<String, Object> result = value(value.value(), value.type(), value.variablesReference(), value.indexedVariables());
+        if (value.scalar() != null) {
+            Map<String, Object> scalar = new LinkedHashMap<>();
+            scalar.put("kind", value.scalar().kind());
+            scalar.put("value", value.scalar().value());
+            result.put("scalar", scalar);
+        }
+        return result;
     }
 
     private static Map<String, Object> value(String value, String type, int reference, int indexed) {
@@ -175,6 +247,14 @@ final class DebuggerMcpService {
         if (breakpoint.resolvedLine() > 0) result.put("resolved_line", breakpoint.resolvedLine());
         if (breakpoint.request().condition() != null) result.put("condition", breakpoint.request().condition());
         if (breakpoint.request().hitCondition() != null) result.put("hit_condition", breakpoint.request().hitCondition());
+        var action = breakpoint.request().action();
+        if (action != null) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            if (action.source() != null) details.put("source", action.source());
+            if (action.script() != null) details.put("script", action.script());
+            details.put("completion", action.continueOnSuccess() ? "continue_on_success" : "stay_paused");
+            result.put("action", details);
+        }
         if (!breakpoint.detail().isBlank()) result.put("error", breakpoint.detail());
         return result;
     }

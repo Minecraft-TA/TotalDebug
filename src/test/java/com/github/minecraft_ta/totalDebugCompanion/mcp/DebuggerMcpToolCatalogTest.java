@@ -16,7 +16,7 @@ class DebuggerMcpToolCatalogTest {
                 "id", "pause-a", "reason", "breakpoint", "thread_id", 42, "all_threads_stopped", true,
                 "top_frame", Map.of("id", 1, "method", "run", "binary_name", "example.Test", "line", 4)));
         Map<String, Object> breakpoint = Map.of("binary_name", "example.Test", "line", 4, "state", "bound");
-        Map<String, Map<String, Object>> examples = Map.of(
+        Map<String, Map<String, Object>> examples = new java.util.HashMap<>(Map.of(
                 "debugger_status", state, "debugger_wait", state, "debugger_control", state,
                 "debugger_threads", Map.of("threads", List.of(Map.of("id", 42, "name", "main"))),
                 "debugger_breakpoints", Map.of("muted", false, "breakpoints", List.of(breakpoint)),
@@ -25,8 +25,12 @@ class DebuggerMcpToolCatalogTest {
                 "debugger_frames", Map.of("frames", List.of(Map.of("id", 1, "method", "run"))),
                 "debugger_variables", Map.of("variables", List.of(Map.of("name", "x", "kind", "local",
                         "value", "1", "type", "int")), "truncated", true),
-                "debugger_evaluate", Map.of("value", "3", "type", "int"));
-        assertEquals(10, DebuggerMcpToolCatalog.tools().size());
+                "debugger_evaluate", Map.of("operation_id", "eval-a", "state", "succeeded", "elapsed_ms", 2,
+                        "slow", false, "cancellation_requested", false, "result", Map.of("value", "3", "type", "int"))));
+        examples.put("debugger_evaluation_wait", examples.get("debugger_evaluate"));
+        examples.put("debugger_evaluation_cancel", Map.of("operation_id", "eval-a", "state", "running", "elapsed_ms", 5,
+                "slow", false, "cancellation_requested", true));
+        assertEquals(12, DebuggerMcpToolCatalog.tools().size());
         for (McpSchema.Tool tool : DebuggerMcpToolCatalog.tools()) {
             McpJsonDefaults.getSchemaValidator().assertConforms(tool.name(), tool.inputSchema());
             McpJsonDefaults.getSchemaValidator().assertConforms(tool.name(), tool.outputSchema());
@@ -55,6 +59,10 @@ class DebuggerMcpToolCatalogTest {
         invalid("debugger_wait", Map.of("after_revision", 0, "wait_ms", 120001));
         valid("debugger_breakpoint_set", Map.of("binary_name", "example.Test", "line", 4, "enabled", false));
         invalid("debugger_breakpoint_set", Map.of("binary_name", "example.Test", "line", 4, "enabled", "false"));
+        valid("debugger_breakpoint_set", Map.of("binary_name", "example.Test", "line", 4,
+                "action", Map.of("source", "return 1;", "completion", "stay_paused")));
+        invalid("debugger_breakpoint_set", Map.of("binary_name", "example.Test", "line", 4,
+                "action", Map.of("source", "return 1;", "script", "probe.java")));
     }
 
     static void assertOutput(String name, Map<String, Object> value) {

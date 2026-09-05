@@ -31,7 +31,7 @@ class MicrosoftJavaDebugEngineIntegrationTest {
 
     @Test
     @Timeout(20)
-    void detachesWhenTargetEvaluationDoesNotReturn() throws Exception {
+    void keepsAttachmentWhenTargetEvaluationDoesNotReturn() throws Exception {
         DebuggerScenarios.nonReturningEvaluationTimeout();
     }
 

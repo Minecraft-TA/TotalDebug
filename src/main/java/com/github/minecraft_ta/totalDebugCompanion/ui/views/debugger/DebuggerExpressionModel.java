@@ -31,8 +31,11 @@ final class DebuggerExpressionModel {
     }
 
     private final Set<String> watches = new LinkedHashSet<>(CompanionApp.instanceState().debuggerWatches());
-    private final Set<Key> submitted = new HashSet<>();
-    private final Map<Key, Outcome> outcomes = new HashMap<>();
+    private Set<Key> submitted = new HashSet<>();
+    private Map<Key, Outcome> outcomes = new HashMap<>();
+    private final Map<Integer, FrameResults> frames = new HashMap<>();
+    private String pauseId;
+    private record FrameResults(Set<Key> submitted, Map<Key, Outcome> outcomes) { }
     private String retainedExpression = "";
 
     List<Key> rows() {
@@ -90,13 +93,27 @@ final class DebuggerExpressionModel {
         this.outcomes.remove(key);
     }
 
-    void nextFrame() {
-        this.submitted.clear();
-        this.outcomes.clear();
+    void nextFrame(String pauseId, int frameId) {
+        if (!Objects.equals(this.pauseId, pauseId)) {
+            this.frames.clear();
+            this.pauseId = pauseId;
+        }
+        FrameResults results = this.frames.computeIfAbsent(frameId,
+                ignored -> new FrameResults(new HashSet<>(), new HashMap<>()));
+        this.submitted = results.submitted();
+        this.outcomes = results.outcomes();
+    }
+
+    java.util.function.Consumer<Outcome> completionFor(Key key) {
+        Map<Key, Outcome> destination = this.outcomes;
+        return outcome -> destination.put(key, outcome);
     }
 
     void clearSession() {
-        nextFrame();
+        this.frames.clear();
+        this.submitted = new HashSet<>();
+        this.outcomes = new HashMap<>();
+        this.pauseId = null;
         this.retainedExpression = "";
     }
 

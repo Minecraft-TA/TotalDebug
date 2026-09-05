@@ -70,11 +70,34 @@ Debugger tools control the same session, breakpoints, and paused JVM as Companio
 - `debugger_control(action, ...)` accepts `attach`, `detach`, `pause`, `continue`, `step_over`, `step_into`, or `step_out`. Pause requires `thread_id`. Continue and step require the exact `pause_id`. Pause and step wait up to 10 seconds by default; the other actions return after acknowledgement. `wait_ms` overrides that wait. Detach does not terminate Minecraft.
 - `debugger_threads` lists attached JVM thread IDs and names.
 - `debugger_breakpoints` lists the shared breakpoints and global mute state.
-- `debugger_breakpoint_set(binary_name, line, condition?, hit_condition?, enabled?)` deterministically creates or replaces one breakpoint. Omitted conditions are cleared and enabled defaults to true. `line` is the absolute displayed Vineflower line, not a line relative to a `runtime_source` member snippet. Use its `start_line` to calculate that absolute line. Source is loaded without opening an editor; method declarations use the same executable-line resolver as the UI.
+- `debugger_breakpoint_set(binary_name, line, condition?, hit_condition?, enabled?, action?)` deterministically creates or replaces one breakpoint. Omitted conditions are cleared and enabled defaults to true. `line` is the absolute displayed Vineflower line, not a line relative to a `runtime_source` member snippet. Use its `start_line` to calculate that absolute line. Source is loaded without opening an editor; method declarations use the same executable-line resolver as the UI.
 - `debugger_breakpoint_remove(binary_name, line)` returns whether a breakpoint was removed.
 - `debugger_frames(pause_id)` returns the stack of the thread that caused the stop, with frame IDs, method names, and available binary names and displayed lines.
 - `debugger_variables(pause_id, frame_id | value_ref, start?, count?)` returns frame locals or one level of object/array children. The default page has 100 entries, the maximum is 500, and `truncated: true` means another page exists. Only returned expandable values have a `value_ref`.
-- `debugger_evaluate(pause_id, frame_id, expression)` returns the value representation, Java type, and an expandable `value_ref` when applicable. Java method calls can mutate Minecraft. The existing evaluator detaches the debugger if evaluation exceeds five seconds; it cannot promise to undo target-side effects.
+- `debugger_evaluate(pause_id, frame_id, source, wait_ms)` evaluates an expression or a Java statement body. Bodies may use `return`; without a return they produce `void`. Imports can precede the source. The default wait is 1000 ms. The response contains `operation_id`, `state`, elapsed time and cancellation status, plus `result` or an execution `error` when complete.
+- `debugger_evaluation_wait(operation_id, wait_ms)` waits on that same execution. It never runs the source again. `debugger_evaluation_cancel(operation_id)` requests cancellation between operations. A target method already executing must return before cancellation can take effect.
+- Results contain display `value`, Java `type`, an optional live `value_ref`, and `scalar` for primitives, strings, null and void. Long scalar values are decimal strings; nonfinite floats are `NaN`, `Infinity` or `-Infinity` strings. Null and void have distinct scalar kinds.
+
+Breakpoint actions accept either inline `source` or a saved `script` path relative to the active workspace scripts directory. They run after a true condition. The default `completion` is `stay_paused`; `continue_on_success` is explicit and requires a scalar result. A slow, failed, cancelled or invalidated action stays paused. An object result also stays paused and remains inspectable. Saved scripts are read again on every hit. `debugger_status.breakpoint_action` contains the latest result or error, not a log history.
+
+```json
+{
+  "binary_name": "example.MyClass",
+  "line": 42,
+  "action": {
+    "source": "localCount += 1; return localCount;",
+    "completion": "stay_paused"
+  }
+}
+```
+
+Operation IDs reported in `debugger_status.evaluation` use the same wait/cancel tools, including automatic evaluations. Wait returns terminal status for those operations; breakpoint results appear in `debugger_status.breakpoint_action`.
+
+Only one target evaluation runs at a time. Other evaluations, variable reads/writes and resume/step commands report busy. Status, cancellation and explicit detach remain available. A slow call never causes an automatic detach, resume or retry. Method calls and assignments can mutate Minecraft; cancellation does not undo them.
+
+Compiled fragments require the matching preloaded TotalDebug helper, JDK 21 in Companion, prepared runtime classpath files and local-variable debug metadata. Ordinary loops, declarations, construction, lambda capture and local writeback are supported. Local writes survive a thrown exception. The current compiled adapter rejects inaccessible or unnamed frame types, ambiguous loader-specific classpath types, nested type declarations and lexical `super`. These are explicit capability limits, not interpreter fallbacks. Compilation happens in Companion before target invocation, without Minecraft ticks or an SCNet response.
+
+The latest 128 operations in the current engine remain available by operation ID, including conditions, actions and previews. Explicit evaluations also retain their pause binding for result retrieval. Completed metadata survives resume; live results expire with their pause and return `result_expired: true`. For an investigation, inspect variables first, collect related facts in one fragment, and wait on its operation ID. Stop the probe sequence after a failure.
 
 Pause IDs are unique for each stop and expire when execution resumes, the target changes, or the debugger detaches. Frame IDs and value references are accepted only with the current pause ID. A stale request fails explicitly, even if the adapter reuses the same numeric IDs. Breakpoints created through MCP are visible and persisted through the existing UI controller.
 

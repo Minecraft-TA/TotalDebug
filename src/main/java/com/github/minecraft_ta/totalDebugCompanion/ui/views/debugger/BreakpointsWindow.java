@@ -52,7 +52,7 @@ import java.util.function.Consumer;
 
 /** Modeless editor for every breakpoint in the active runtime. */
 public final class BreakpointsWindow extends JDialog {
-    private static final Dimension DEFAULT_SIZE = new Dimension(880, 520);
+    private static final Dimension DEFAULT_SIZE = new Dimension(940, 680);
 
     private final DebuggerSessionController controller;
     private final Consumer<NavigationTarget> navigation;
@@ -65,6 +65,9 @@ public final class BreakpointsWindow extends JDialog {
     private final JavaExpressionField condition = new JavaExpressionField();
     private final ExpressionCompletionSupport conditionCompletion = new ExpressionCompletionSupport(this.condition);
     private final JTextField hitCount = new JTextField();
+    private final javax.swing.JComboBox<String> actionKind = new javax.swing.JComboBox<>(new String[]{"None", "Java", "Saved script"});
+    private final JavaExpressionField actionSource = new JavaExpressionField();
+    private final JCheckBox continueOnSuccess = new JCheckBox("Continue after a successful scalar result");
     private final JButton navigate = new JButton("Navigate");
     private final JButton remove = new JButton("Remove");
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
@@ -147,6 +150,13 @@ public final class BreakpointsWindow extends JDialog {
         };
         this.condition.addFocusListener(saveOnBlur);
         this.hitCount.addFocusListener(saveOnBlur);
+        this.actionSource.addFocusListener(saveOnBlur);
+        this.actionSource.addActionListener(event -> saveEditingBreakpoint());
+        this.actionKind.addActionListener(event -> {
+            this.actionSource.setMultiline(this.actionKind.getSelectedIndex() == 1);
+            this.actionSource.setPlaceholder(this.actionKind.getSelectedIndex() == 2 ? "Script path relative to scripts directory" : "Java expression or statements");
+        });
+        this.continueOnSuccess.addActionListener(event -> saveEditingBreakpoint());
         this.navigate.addActionListener(event -> navigateSelected());
         this.remove.addActionListener(event -> removeSelected());
 
@@ -196,6 +206,9 @@ public final class BreakpointsWindow extends JDialog {
 
         addField(3, "Condition:", this.condition.component());
         addField(4, "Hit count:", this.hitCount);
+        addField(5, "Action:", this.actionKind);
+        addField(6, "Source or script:", this.actionSource.component());
+        addField(7, "On success:", this.continueOnSuccess);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.TRAILING, 8, 0));
         buttons.setOpaque(false);
@@ -203,11 +216,10 @@ public final class BreakpointsWindow extends JDialog {
         buttons.add(this.remove);
         JButton done = new JButton("Done");
         done.addActionListener(event -> {
-            saveEditingBreakpoint();
-            setVisible(false);
+            if (saveEditingBreakpoint()) setVisible(false);
         });
         buttons.add(done);
-        constraints.gridy = 5;
+        constraints.gridy = 8;
         constraints.weighty = 1;
         constraints.anchor = GridBagConstraints.SOUTH;
         constraints.insets = new Insets(20, 0, 0, 0);
@@ -266,6 +278,9 @@ public final class BreakpointsWindow extends JDialog {
             this.enabled.setEnabled(present);
             this.condition.setEnabled(present);
             this.hitCount.setEnabled(present);
+            this.actionKind.setEnabled(present);
+            this.actionSource.setEnabled(present);
+            this.continueOnSuccess.setEnabled(present);
             this.navigate.setEnabled(present);
             this.remove.setEnabled(present);
             if (!present) {
@@ -275,6 +290,9 @@ public final class BreakpointsWindow extends JDialog {
                 this.enabled.setSelected(false);
                 this.condition.setText("");
                 this.hitCount.setText("");
+                this.actionKind.setSelectedIndex(0);
+                this.actionSource.setText("");
+                this.continueOnSuccess.setSelected(false);
                 this.conditionCompletion.setCompletionProvider(null);
                 this.condition.setSemanticTokenProvider(null);
                 return;
@@ -287,6 +305,10 @@ public final class BreakpointsWindow extends JDialog {
             this.enabled.setSelected(breakpoint.state() != DebuggerSessionController.BreakpointState.DISABLED);
             this.condition.setText(Objects.requireNonNullElse(breakpoint.request().condition(), ""));
             this.hitCount.setText(Objects.requireNonNullElse(breakpoint.request().hitCondition(), ""));
+            var action = breakpoint.request().action();
+            this.actionKind.setSelectedIndex(action == null ? 0 : action.script() == null ? 1 : 2);
+            this.actionSource.setText(action == null ? "" : action.script() == null ? action.source() : action.script());
+            this.continueOnSuccess.setSelected(action != null && action.continueOnSuccess());
             ExpressionCompletionSupport.CompletionProvider provider = completionProvider(entry);
             this.conditionCompletion.setCompletionProvider(provider);
             this.condition.setSemanticTokenProvider(expression ->
@@ -310,32 +332,41 @@ public final class BreakpointsWindow extends JDialog {
         }
     }
 
-    private void saveEditingBreakpoint() {
+    private boolean saveEditingBreakpoint() {
         if (this.loading) {
-            return;
+            return false;
         }
         BreakpointKey key = this.editingBreakpoint;
         if (key == null) {
-            return;
+            return true;
         }
         DebuggerSessionController.Breakpoint breakpoint = this.controller.breakpoint(key.sourceUri(), key.line());
         if (breakpoint == null) {
-            return;
+            return true;
         }
         String hitCondition = this.hitCount.getText().trim();
         if (!hitCondition.isEmpty()) {
             try {
                 if (Integer.parseInt(hitCondition) < 1) {
-                    return;
+                    this.state.setText("Hit count must be a positive integer");
+                    return false;
                 }
             } catch (NumberFormatException ignored) {
-                return;
+                this.state.setText("Hit count must be a positive integer");
+                return false;
             }
         }
-        this.controller.configureBreakpoint(
-                key.sourceUri(),
-                breakpoint.request().withConditions(this.condition.getText(), hitCondition)
-        );
+        int actionKind = this.actionKind.getSelectedIndex();
+        String source = this.actionSource.getText().trim();
+        if (actionKind != 0 && source.isBlank()) {
+            this.state.setText("Enter action source or a saved script path");
+            return false;
+        }
+        DebugEngine.BreakpointAction action = actionKind == 0 ? null : new DebugEngine.BreakpointAction(
+                actionKind == 1 ? source : null, actionKind == 2 ? source : null, this.continueOnSuccess.isSelected());
+        this.controller.configureBreakpoint(key.sourceUri(),
+                breakpoint.request().withConditions(this.condition.getText(), hitCondition).withAction(action));
+        return true;
     }
 
     private void navigateSelected() {

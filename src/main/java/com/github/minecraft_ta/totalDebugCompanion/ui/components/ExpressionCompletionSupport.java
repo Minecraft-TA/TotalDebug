@@ -130,17 +130,22 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
                 if (isCompletionVisible()) {
                     acceptSelection();
                 } else {
-                    field.postActionEvent();
+                    if (field.isMultiline()) field.replaceSelection("\n");
+                    else field.postActionEvent();
                 }
             }
         });
         this.field.setFocusTraversalKeysEnabled(false);
+        javax.swing.Action insertTab = this.field.getActionMap().get(
+                this.field.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("TAB")));
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("TAB"), ACCEPT_TAB);
         this.field.getActionMap().put(ACCEPT_TAB, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
                 if (isCompletionVisible()) {
                     acceptSelection();
+                } else if (field.isMultiline() && insertTab != null) {
+                    insertTab.actionPerformed(event);
                 } else {
                     field.transferFocus();
                 }
@@ -156,12 +161,15 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     }
 
     private void bind(String keyStroke, String actionKey, int direction) {
+        javax.swing.Action moveCaret = this.field.getActionMap().get(
+                this.field.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke(keyStroke)));
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(keyStroke), actionKey);
         this.field.getActionMap().put(actionKey, new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
                 if (!isCompletionVisible()) {
-                    updatePopup(true);
+                    if (field.isMultiline() && moveCaret != null) moveCaret.actionPerformed(event);
+                    else updatePopup(true);
                     return;
                 }
                 int size = model.size();

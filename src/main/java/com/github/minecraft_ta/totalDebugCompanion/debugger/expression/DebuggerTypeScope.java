@@ -21,15 +21,17 @@ import java.util.Set;
 /** Java package/import scope used by debugger evaluation and completion. */
 public final class DebuggerTypeScope {
     private final String packageName;
+    private final List<String> compilerImports;
     private final Map<String, String> singleImports;
     private final List<String> onDemandImports;
 
     private DebuggerTypeScope(
             String packageName,
             Map<String, String> singleImports,
-            List<String> onDemandImports
+            List<String> onDemandImports, List<String> compilerImports
     ) {
         this.packageName = packageName;
+        this.compilerImports = List.copyOf(compilerImports);
         this.singleImports = Map.copyOf(singleImports);
         this.onDemandImports = List.copyOf(onDemandImports);
     }
@@ -56,7 +58,14 @@ public final class DebuggerTypeScope {
                 singleImports.put(simpleName(importedName), importedName);
             }
         }
-        return new DebuggerTypeScope(packageName, singleImports, onDemandImports);
+        List<String> compilerImports = new ArrayList<>();
+        for (Object declaration : unit.imports()) compilerImports.add(declaration.toString());
+        return new DebuggerTypeScope(packageName, singleImports, onDemandImports, compilerImports);
+    }
+
+    String compilerImports() {
+        return (this.packageName.isEmpty() ? "" : "import " + this.packageName + ".*;\n")
+                + String.join("\n", this.compilerImports);
     }
 
     ReferenceType resolve(String sourceName, ReferenceType declaringType, VirtualMachine vm) {

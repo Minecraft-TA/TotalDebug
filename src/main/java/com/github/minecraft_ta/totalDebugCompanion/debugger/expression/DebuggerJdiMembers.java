@@ -23,8 +23,8 @@ final class DebuggerJdiMembers {
         return result;
     }
 
-    private static void collectFields(ReferenceType type, List<Field> result, Set<String> visitedTypes) {
-        if (type == null || !visitedTypes.add(type.name())) return;
+    private static void collectFields(ReferenceType type, List<Field> result, Set<ReferenceType> visitedTypes) {
+        if (type == null || !visitedTypes.add(type)) return;
         result.addAll(type.fields());
         if (type instanceof ClassType classType) {
             collectFields(classType.superclass(), result, visitedTypes);
@@ -40,8 +40,8 @@ final class DebuggerJdiMembers {
         return result;
     }
 
-    private static void collectMethods(ReferenceType type, List<Method> result, Set<String> visitedTypes) {
-        if (type == null || !visitedTypes.add(type.name())) return;
+    private static void collectMethods(ReferenceType type, List<Method> result, Set<ReferenceType> visitedTypes) {
+        if (type == null || !visitedTypes.add(type)) return;
         result.addAll(type.methods());
         if (type instanceof ClassType classType) {
             collectMethods(classType.superclass(), result, visitedTypes);
@@ -61,12 +61,14 @@ final class DebuggerJdiMembers {
         String normalized = name.replace("...", "[]");
         if (isPrimitive(normalized)) return null;
         List<ReferenceType> exact = vm.classesByName(normalized);
+        if (exact.size() > 1) throw new IllegalArgumentException("Type is ambiguous across runtime class loaders: " + normalized);
         if (!exact.isEmpty()) return exact.getFirst();
         String nestedName = normalized;
         int dot = nestedName.lastIndexOf('.');
         while (dot > 0) {
             nestedName = nestedName.substring(0, dot) + "$" + nestedName.substring(dot + 1);
             exact = vm.classesByName(nestedName);
+            if (exact.size() > 1) throw new IllegalArgumentException("Type is ambiguous across runtime class loaders: " + normalized);
             if (!exact.isEmpty()) return exact.getFirst();
             dot = nestedName.lastIndexOf('.', dot - 1);
         }
@@ -81,7 +83,7 @@ final class DebuggerJdiMembers {
 
     static boolean isAssignable(ReferenceType source, ReferenceType target) {
         if (source == null || target == null) return false;
-        if (source.name().equals(target.name())) return true;
+        if (source.equals(target)) return true;
         if (source instanceof ClassType classType) {
             if (isAssignable(classType.superclass(), target)) return true;
             return classType.interfaces().stream().anyMatch(iface -> isAssignable(iface, target));

@@ -31,6 +31,36 @@ public final class JavaSnippetSource {
         return build(className, expression, Mode.EXPRESSION);
     }
 
+    /** Classifies syntax without executing code; editor expansion does not affect its meaning. */
+    public static Mode detectMode(String source) {
+        String body = splitImports(source).body().trim();
+        var parser = JdtConfiguration.createParser();
+        parser.setKind(org.eclipse.jdt.core.dom.ASTParser.K_EXPRESSION);
+        parser.setSource(body.toCharArray());
+        var node = parser.createAST(null);
+        if (!(node instanceof org.eclipse.jdt.core.dom.Expression)
+                || !onlyTrivia(body.substring(0, node.getStartPosition()))
+                || !onlyTrivia(body.substring(node.getStartPosition() + node.getLength()))) return Mode.BODY;
+        boolean[] valid = {true};
+        node.accept(new org.eclipse.jdt.core.dom.ASTVisitor() {
+            @Override public void preVisit(org.eclipse.jdt.core.dom.ASTNode child) {
+                if ((child.getFlags() & (org.eclipse.jdt.core.dom.ASTNode.MALFORMED
+                        | org.eclipse.jdt.core.dom.ASTNode.RECOVERED)) != 0) valid[0] = false;
+            }
+        });
+        return valid[0] ? Mode.EXPRESSION : Mode.BODY;
+    }
+
+    private static boolean onlyTrivia(String source) {
+        var scanner = org.eclipse.jdt.core.ToolFactory.createScanner(false, false, false, JdtConfiguration.JAVA_VERSION);
+        scanner.setSource(source.toCharArray());
+        try {
+            return scanner.getNextToken() == org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF;
+        } catch (org.eclipse.jdt.core.compiler.InvalidInputException invalid) {
+            return false;
+        }
+    }
+
     public static GeneratedSource build(String className, String editorText, Mode mode) {
         requireClassName(className);
         Objects.requireNonNull(editorText, "editorText");
@@ -85,6 +115,15 @@ public final class JavaSnippetSource {
                 List.copyOf(mappings)
         );
         return new GeneratedSource(className, editorText, generated.toString(), bytes, mode, sourceMap);
+    }
+
+    public record FragmentParts(String imports, String body) { }
+
+    public static FragmentParts splitImports(String text) {
+        List<ImportSegment> segments = imports(text);
+        StringBuilder declarations = new StringBuilder();
+        for (ImportSegment segment : segments) declarations.append(text, segment.editorStart(), segment.editorEnd()).append('\n');
+        return new FragmentParts(declarations.toString(), maskImports(text, segments));
     }
 
     private static List<ImportSegment> imports(String editorText) {

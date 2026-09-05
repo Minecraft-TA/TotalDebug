@@ -32,12 +32,17 @@ public final class ExpressionHistory {
         this.changed.accept(List.copyOf(this.entries));
     }
 
-    public record Entry(String expression, SnippetExecutionService.Side side, List<String> imports) {
+    public record Entry(String expression, SnippetExecutionService.Side side, List<String> imports,
+                        com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode mode) {
+        public Entry(String expression, SnippetExecutionService.Side side, List<String> imports) {
+            this(expression, side, imports, com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode.EXPRESSION);
+        }
         public Entry {
             if (Objects.requireNonNull(expression).isBlank()) {
                 throw new IllegalArgumentException("expression must not be blank");
             }
             side = Objects.requireNonNull(side);
+            mode = Objects.requireNonNull(mode);
             imports = List.copyOf(imports);
         }
     }

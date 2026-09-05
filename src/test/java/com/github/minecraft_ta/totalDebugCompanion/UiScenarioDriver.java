@@ -136,6 +136,16 @@ final class UiScenarioDriver {
                     "open-breakpoints",
                     () -> BreakpointsWindowPreview.open(MainWindow.INSTANCE)
             );
+            case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
+                var window = new com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow(
+                        MainWindow.INSTANCE, null); // This fixture renders the editor without an execution backend.
+                var editor = findComponent(window, com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField.class);
+                editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
+                        ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
+                        : "getServer()");
+                window.showWindow();
+                window.setLocation(MainWindow.INSTANCE.getX() + 70, MainWindow.INSTANCE.getY() + 70);
+            });
             case HIERARCHY_ONE -> advanceHierarchyPreview(
                     context,
                     context.source().indexOf("interface SingleAction")
@@ -226,6 +236,7 @@ final class UiScenarioDriver {
             case DEBUGGER_LOCATION -> MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
+            case EVALUATE_CODE, EVALUATE_EXPRESSION -> findShowingWindow(com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);
                 yield popup != null && findLabelContaining(popup, "Looking up") == null;

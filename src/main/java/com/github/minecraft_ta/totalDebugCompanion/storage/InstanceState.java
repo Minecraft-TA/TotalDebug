@@ -39,7 +39,7 @@ public final class InstanceState implements AutoCloseable {
         }
         try {
             var json = JsonFiles.read(paths.state());
-            if (JsonFiles.integer(json, "format") != 1) {
+            if (JsonFiles.integer(json, "format") != 2) {
                 throw new IOException("Unsupported instance state format: " + paths.state());
             }
             JsonFiles.array(json, "debuggerWatches");
@@ -176,7 +176,7 @@ public final class InstanceState implements AutoCloseable {
 
     private void scheduleSave() {
         if (this.writer != null) {
-            this.writer.schedule(JsonFiles.GSON.toJsonTree(new Persisted(1, this.debuggerWatches,
+            this.writer.schedule(JsonFiles.GSON.toJsonTree(new Persisted(2, this.debuggerWatches,
                     this.debuggerBreakpoints, this.debuggerBreakpointsMuted,
                     this.breakOnCaughtExceptions, this.breakOnUncaughtExceptions, this.historyEntries)));
         }
@@ -210,8 +210,15 @@ public final class InstanceState implements AutoCloseable {
             String methodDescriptor,
             String condition,
             String hitCondition,
-            boolean enabled
+            boolean enabled,
+            com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction action
     ) {
+        public PersistedBreakpoint(String sourceUri, String binaryName, int line, int debuggerLine,
+                                   String methodOwner, String methodName, String methodDescriptor,
+                                   String condition, String hitCondition, boolean enabled) {
+            this(sourceUri, binaryName, line, debuggerLine, methodOwner, methodName, methodDescriptor,
+                    condition, hitCondition, enabled, null);
+        }
         public PersistedBreakpoint {
             if (sourceUri == null || sourceUri.isBlank()) {
                 throw new IllegalArgumentException("Breakpoint source URI must not be blank");

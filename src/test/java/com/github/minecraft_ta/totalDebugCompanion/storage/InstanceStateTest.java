@@ -21,9 +21,11 @@ class InstanceStateTest {
         var first = new InstancePaths(this.home.resolve("first"));
         var second = new InstancePaths(this.home.resolve("second"));
         var breakpoint = new InstanceState.PersistedBreakpoint("decompiled:///example/Target.java",
-                "example.Target", 12, 8, null, null, null, "x > 1", "2", false);
+                "example.Target", 12, 8, null, null, null, "x > 1", "2", false,
+                new com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction(null, "probe.java", true));
         var entry = new ExpressionHistory.Entry("Blocks.AIR", SnippetExecutionService.Side.CLIENT,
-                List.of("net.minecraft.world.level.block.Blocks"));
+                List.of("net.minecraft.world.level.block.Blocks"),
+                com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode.BODY);
         try (var state = InstanceState.open(first)) {
             state.setDebuggerWatches(List.of(" player ", "player", "level"));
             state.setDebuggerBreakpoints("runtime-a", List.of(breakpoint));

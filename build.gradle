@@ -102,6 +102,7 @@ configurations {
 
 dependencies {
     implementation("com.github.minecraft_ta:totaldebug-storage:" + storage_version)
+    implementation("com.github.minecraft_ta:totaldebug-evaluation:" + storage_version)
     parchmentData("org.parchmentmc.data:parchment-${parchment_minecraft_version}:${parchment_mappings_version}")
 
     implementation platform('io.modelcontextprotocol.sdk:mcp-bom:2.0.1')
