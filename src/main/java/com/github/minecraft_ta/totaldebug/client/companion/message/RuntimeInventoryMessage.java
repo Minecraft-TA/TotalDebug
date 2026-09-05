@@ -46,15 +46,4 @@ public final class RuntimeInventoryMessage extends AbstractMessageOutgoing {
         return this.state;
     }
 
-    public String inventoryId() {
-        return this.inventoryId;
-    }
-
-    public String inventoryFile() {
-        return this.inventoryFile;
-    }
-
-    public String detail() {
-        return this.detail;
-    }
 }

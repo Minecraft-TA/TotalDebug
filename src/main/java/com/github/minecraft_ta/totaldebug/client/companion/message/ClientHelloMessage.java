@@ -39,27 +39,4 @@ public final class ClientHelloMessage extends AbstractMessageOutgoing {
         messageStream.writeString(this.workspaceDirectory);
     }
 
-    public int protocolVersion() {
-        return this.protocolVersion;
-    }
-
-    public String token() {
-        return this.token;
-    }
-
-    public long requestedCapabilities() {
-        return this.requestedCapabilities;
-    }
-
-    public String profileId() {
-        return this.profileId;
-    }
-
-    public String dataDirectory() {
-        return this.dataDirectory;
-    }
-
-    public String workspaceDirectory() {
-        return this.workspaceDirectory;
-    }
 }

@@ -18,7 +18,6 @@ public final class CompanionProgressActionBar {
 
     static Component messageFor(CompanionStartupProgress progress) {
         return switch (progress.stage()) {
-            case INDEXING -> Component.translatable("companion_app.start_indexing");
             case DOWNLOADING -> progress.hasDeterminateProgress()
                     ? Component.translatable(
                             "companion_app.download_progress",

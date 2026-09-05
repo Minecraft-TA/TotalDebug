@@ -11,6 +11,5 @@
   "companion_app.connection_success": "Connected to the companion app.",
   "companion_app.startup_fail": "Companion startup failed. See chat for details.",
   "companion_app.download_start": "Downloading %s...",
-  "companion_app.download_progress": "Downloading %s... %s%%",
-  "companion_app.start_indexing": "Indexing classes..."
+  "companion_app.download_progress": "Downloading %s... %s%%"
 }

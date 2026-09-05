@@ -40,19 +40,4 @@ public final class DebugTargetMessage extends AbstractMessageOutgoing {
         messageStream.writeLong(this.processId);
     }
 
-    public String targetId() {
-        return this.targetId;
-    }
-
-    public String displayName() {
-        return this.displayName;
-    }
-
-    public byte targetKind() {
-        return this.targetKind;
-    }
-
-    public long processId() {
-        return this.processId;
-    }
 }

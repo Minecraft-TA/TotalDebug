@@ -67,12 +67,6 @@ public final class TickTaskScheduler {
         }
     }
 
-    public void clearAll() {
-        for (TickDomain domain : TickDomain.values()) {
-            clear(domain);
-        }
-    }
-
     private TaskQueue queue(TickDomain domain, TickPhase phase) {
         Objects.requireNonNull(domain, "domain");
         Objects.requireNonNull(phase, "phase");

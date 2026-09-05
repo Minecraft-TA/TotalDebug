@@ -27,8 +27,7 @@ class LanguageResourcesTest {
             "companion_app.connection_success",
             "companion_app.startup_fail",
             "companion_app.download_start",
-            "companion_app.download_progress",
-            "companion_app.start_indexing"
+            "companion_app.download_progress"
     );
 
     @Test

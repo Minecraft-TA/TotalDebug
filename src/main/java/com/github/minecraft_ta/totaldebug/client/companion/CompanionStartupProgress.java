@@ -21,10 +21,6 @@ public record CompanionStartupProgress(
         }
     }
 
-    static CompanionStartupProgress indexing() {
-        return stage(Stage.INDEXING);
-    }
-
     static CompanionStartupProgress downloading(String version, long completedBytes, long totalBytes) {
         return new CompanionStartupProgress(Stage.DOWNLOADING, version, completedBytes, totalBytes);
     }
@@ -69,7 +65,6 @@ public record CompanionStartupProgress(
     }
 
     public enum Stage {
-        INDEXING,
         DOWNLOADING,
         STARTING,
         CONNECTING,
