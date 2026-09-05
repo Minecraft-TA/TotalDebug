@@ -102,15 +102,14 @@ public final class ScriptRunner implements AutoCloseable {
         Objects.requireNonNull(sourceCode, "sourceCode");
         Objects.requireNonNull(environment, "environment");
         if (this.closed) {
-            sendResult(scriptId, ExecutionStatus.COMPILATION_FAILED, "The script runner is closed");
+            sendCompilationFailure(scriptId, "The script runner is closed");
             return;
         }
 
         ScriptRun run = new ScriptRun(scriptId, sourceCode, environment);
         if (this.runs.putIfAbsent(scriptId, run) != null) {
-            sendResult(
+            sendCompilationFailure(
                     scriptId,
-                    ExecutionStatus.COMPILATION_FAILED,
                     "A script with this id is already running"
             );
             return;
@@ -329,8 +328,8 @@ public final class ScriptRunner implements AutoCloseable {
         return thread;
     }
 
-    private void sendResult(int scriptId, ExecutionStatus type, String message) {
-        sendResult(scriptId, ExecutionResult.fromStatus(type, message));
+    private void sendCompilationFailure(int scriptId, String message) {
+        sendResult(scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message));
     }
 
     private void sendResult(int scriptId, ExecutionResult result) {

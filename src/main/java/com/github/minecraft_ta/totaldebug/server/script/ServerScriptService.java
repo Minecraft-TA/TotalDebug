@@ -51,7 +51,7 @@ public final class ServerScriptService {
                 player.hasPermissions(server.getOperatorUserPermissionLevel())
         );
         if (!decision.allowed()) {
-            sendResult(server, player, payload.scriptId(), ExecutionStatus.COMPILATION_FAILED,
+            sendCompilationFailure(server, player, payload.scriptId(),
                     decision.rejectionReason());
             return;
         }
@@ -61,11 +61,10 @@ public final class ServerScriptService {
             runner = runnerFor(server, player);
         } catch (IOException | RuntimeException exception) {
             TotalDebug.LOGGER.error("Unable to prepare the server live-script compiler", exception);
-            sendResult(
+            sendCompilationFailure(
                     server,
                     player,
                     payload.scriptId(),
-                    ExecutionStatus.COMPILATION_FAILED,
                     "Unable to prepare the server live-script compiler: " + exception.getMessage()
             );
             return;
@@ -133,14 +132,13 @@ public final class ServerScriptService {
         return this.compilerClasspath;
     }
 
-    private void sendResult(
+    private void sendCompilationFailure(
             MinecraftServer server,
             ServerPlayer sessionPlayer,
             int scriptId,
-            ExecutionStatus type,
             String message
     ) {
-        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(type, message));
+        sendResult(server, sessionPlayer, scriptId, ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, message));
     }
 
     private void sendResult(
