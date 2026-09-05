@@ -14,3 +14,8 @@ The first fix batch is recorded in [release stabilization progress](../../RELEAS
 The isolated assemblies remain at `C:\Users\Admin\IdeaProjects\TotalDebug\.codex\release-audit-workspace`. Original full build logs are `C:\Users\Admin\IdeaProjects\TotalDebug\.codex\audit-*-build.log`. The exact TotalDebug probe classpath was written to the isolated build's `audit-classpath.txt`. Probe output may include harmless local test JVM ports and JDI object IDs; these are not credentials or live Minecraft endpoints.
 
 The initial SCNet command used an unquoted PowerShell property argument, which Gradle parsed as a task name. It was corrected to `'-PscnetVersion=2.0.0'` before the successful build. This invocation error was not counted as a repository defect.
+
+Follow-up evidence after the committed transport and compiled-scope fixes:
+
+- `companion-evaluation-recheck-output.txt` reruns the original `CompanionEvaluationAudit.java` against current main/test classes and the shaded Companion JAR. C7 now passes; C5's semantic errors and C8's 128-history/140-pin mismatch still reproduce.
+- `ScriptSessionIdentityProbe.java` and `script-session-identity-output.txt` reproduce C10 against the production client script service and forwarded-result codec. Compile with the current TotalDebug test runtime classpath and run `com.github.minecraft_ta.totaldebug.client.script.ScriptSessionIdentityProbe`. The nonzero result intentionally asserts that an old completion must not consume a replacement run's identity.

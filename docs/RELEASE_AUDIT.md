@@ -2,7 +2,7 @@
 
 Audited 2026-09-05. Status: not ready to release. This report covers the four repositories as one product, verifies the earlier audit, and defines the work needed for a clean release. It is an audit and implementation backlog, not release approval.
 
-Implementation update: C1 and C2 are fixed and verified locally; C9 passes at the completed task baseline. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results. The findings below preserve the original audit evidence; the remaining release gates are open.
+Implementation update: C1-C4 and C7 are fixed in committed local slices; C9 passes at the completed task baseline. C10 is a new reproduced finding from the implementation follow-up. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the next choice. The original findings preserve their audit evidence; the remaining release gates are open.
 
 The immediate work is correctness, paired distribution, reproducible verification, and removal of obsolete production paths. More feature development is not needed to make this release useful.
 
@@ -139,6 +139,16 @@ Required outcome: attach pin ownership to retained results and release objects w
 The new `expand_editor.svg` and `collapse_editor.svg` resources have no `_dark.svg` counterparts. `IconThemeSwitchTest.everyIconShipsADarkVariant:111` fails with those exact names. This exists in the original tree, not only the isolated copy.
 
 Required outcome: finish the icon assets and verify both themes, then restore the full suite to green. Do not remove the test to make the build pass.
+
+### C10. A stale completion can settle a different run after Companion reconnects
+
+Priority P1, reproduced during the implementation follow-up. The Companion session-close handler calls `ClientScriptService.close`, which clears `activeRuns` and requests cancellation. The result correlation key contains only the integer script ID and execution side. If the next Companion session reuses that ID while Minecraft remains running, a completion from the old execution passes the new run's identity check. It removes the new registration, so the actual new completion is subsequently discarded.
+
+The production service and forwarded-result codec were exercised without a game connection. After replacing the Companion session and submitting ID 41 again, delivering the old and then new result produced only `[old session]`. This is distinct from the fixed C1 lock cycle.
+
+Evidence: [probe](audit-evidence/2026-09-05/ScriptSessionIdentityProbe.java), [captured result](audit-evidence/2026-09-05/script-session-identity-output.txt), [service](../src/main/java/com/github/minecraft_ta/totaldebug/client/script/ClientScriptService.java).
+
+Required outcome: give each execution an identity that survives client/server routing and cannot alias across Companion sessions. Reject stale completions by that identity. Retain knowledge of still-running target work across UI/session loss, while accurately separating a lost observer from actual execution termination. Coordinate this with C6, rather than changing only one local map key.
 
 ## Distribution and verification blockers
 

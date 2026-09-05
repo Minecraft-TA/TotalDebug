@@ -1,0 +1,9 @@
+SLF4J(W): Class path contains multiple SLF4J providers.
+SLF4J(W): Found provider [org.gradle.internal.logging.slf4j.StaticLoggerProvider@36f0f1be]
+SLF4J(W): Found provider [org.apache.logging.slf4j.SLF4JServiceProvider@157632c9]
+SLF4J(W): See https://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J(I): Actual provider is of type [org.gradle.internal.logging.slf4j.StaticLoggerProvider@36f0f1be]
+Discarding an execution-result chunk for inactive or client-side script 41
+Received completions after session replacement: [old session]
+Exception in thread "main" java.lang.AssertionError: Old-session completion settled the new run and consumed its identity
+	at com.github.minecraft_ta.totaldebug.client.script.ScriptSessionIdentityProbe.main(ScriptSessionIdentityProbe.java:34)

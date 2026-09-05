@@ -1,6 +1,6 @@
 # Release stabilization progress
 
-Updated 2026-09-05. The first implementation batch fixes audit findings C1 and C2 locally. The project is still not ready for stable publication; the remaining work is tracked in [the release audit](RELEASE_AUDIT.md).
+Updated 2026-09-05. Findings C1-C4 and C7 are fixed in committed local slices. C9's icon build failure is also resolved. The project is still not ready for stable publication; the remaining work is tracked in [the release audit](RELEASE_AUDIT.md).
 
 ## Baseline after the other task finished
 
@@ -51,8 +51,30 @@ Evidence is retained under [audit evidence](audit-evidence/2026-09-05/README.md)
 
 ## Remaining work
 
-Continue W1 with SCNet dispatch mutation and server endpoint publication, C3 and C4, and truthful script cancellation, C6. Evaluation semantics, lexical binding and target pin ownership remain C5, C7 and C8. The cleanup, CI/publication, paired installer and live acceptance work in W3-W6 remains required.
+Continue W1 with truthful script cancellation, C6, and the newly reproduced session-identity defect, C10. Evaluation semantics and target pin ownership remain C5 and C8. The cleanup, CI/publication, paired installer and live acceptance work in W3-W6 remains required.
 
 Keep Packagecloud for this release and use the upstream SCNet/JIndex repositories, as decided in the audit. Account access and public candidate publication are still pending.
 
 The user authorized committing and continuing through the remaining correctness slices. The first fixes are committed as TotalDebug `421c534` and SCNet `59c8efa`. Nothing was pushed, published remotely or deployed to Minecraft. Existing unrelated documentation and workspace files were preserved.
+
+## Subsequent committed slices
+
+| Slice | Commit | Verification |
+| --- | --- | --- |
+| C3, message dispatch | SCNet `989b339` | Four new failure cases reproduced before the fix; five added tests pass, including callback failures. Full suite: 68 tests. |
+| C4, server endpoint lifecycle | SCNet `0971750` | Three deterministic ordering tests reproduced before the fix. Five added cases cover publication, shutdown during preparation, configuration, close before startup and executor rejection. Full suite: 73 tests. |
+| C7, compiled lexical binding | Companion `6e390ed` | Seven real JDWP cases reproduced before the fix. Twelve added cases cover blocks, loops, lambda parameters, catch/resource scope, declaration order and exception writeback. Full suite: 438 tests. |
+
+C3 snapshots callbacks and claims one-shot listeners before invocation. Registration/removal affects the next dispatch, including nested posts. Concurrent posts may invoke persistent listeners concurrently; callback errors retain the existing explicit stderr reporting. Consumer listener-removal call sites were inspected.
+
+C4 reserves configuration during endpoint preparation, publishes the endpoint before dispatch and installs close cleanup before publication. Shutdown can complete while preparation is blocked, and a subsequently prepared endpoint is closed without starting. No server state lock is held while an executor or application callback runs. The executor seam preserves the existing accept executor and per-client transport executors.
+
+C7 uses declaration visibility ranges instead of a fragment-wide set of names. Enhanced-for variables do not hide fields in their iterable expression; resource variables do not hide fields in catch/finally clauses. Flow-scoped patterns are explicitly refused before target invocation because the adapter does not implement their control-flow binding. That supported-context limit belongs in the next evaluation design decision.
+
+SCNet was published to Maven Local as `2.0.0` before the consumer builds. TotalDebug `build '-PtotaldebugUsePublishedCompanion=true' --warning-mode fail` passed, with 427 mod tests and the unchanged 13-test storage suite verified. Companion `build --warning-mode fail` passed all 438 tests. The latest verified suite total is 951, with no failures, errors or skipped tests. JIndex's source and native artifact remain unchanged.
+
+The original Companion audit probe was rerun against these completed builds. C7 now returns the correct field value. C5's incorrect overload/numeric/string behavior remains, and C8 still retains 140 target pins with only 128 history entries. The new `ScriptSessionIdentityProbe` confirms C10: after Companion session replacement, an old server completion settles a new run with the same integer ID and the actual new completion is discarded.
+
+Pre-fix logs are `.codex/dispatch-red.log`, `.codex/server-lifecycle-red.log` and `.codex/compiled-scope-red.log`. Full build logs are `.codex/dispatch-green.log`, `.codex/server-lifecycle-build.log`, `.codex/transport-consumer-totaldebug.log` and `.codex/compiled-scope-build.log`. Probe outputs are retained in the evidence directory.
+
+The next decision is documented in [release architecture decisions](RELEASE_DECISIONS.md). No cancellation/wire-format redesign or evaluator backend replacement has been started while that choice is pending.
