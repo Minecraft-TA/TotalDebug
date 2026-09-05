@@ -14,6 +14,71 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(30)
 class EvaluationSemanticsIntegrationTest {
     @Test
+    void discardedEvaluationHistoryDoesNotKeepTargetObjectsPinned() throws Exception {
+        withFrame((engine, frame) -> {
+            for (int index = 0; index < 140; index++) {
+                value(engine, frame, "\"retained-" + index + "\"");
+            }
+            assertEquals(128, pinnedObjects(engine),
+                    "Only retained history should own pins when no inspector is open");
+        });
+    }
+
+    @Test
+    void anInspectorKeepsAnEvictedObjectGraphUntilItCloses() throws Exception {
+        withFrame((engine, frame) -> {
+            var operation = engine.startEvaluation("return new Object[] {new byte[1048576]};", frame.id());
+            var result = operation.completion().get(10, TimeUnit.SECONDS);
+            try (var inspector = engine.retainValue(result.variablesReference())) {
+                for (int index = 0; index < 140; index++) value(engine, frame, "\"history-" + index + "\"");
+                assertNull(engine.evaluationOperation(operation.id()));
+                assertEquals(129, pinnedObjects(engine));
+                var child = engine.variables(result.variablesReference(), 0, 10).get().getFirst();
+                assertEquals("byte[]", child.type());
+                assertEquals("0", engine.variables(child.variablesReference(), 1048575, 1).get().getFirst().value());
+            }
+            assertEquals(128, pinnedObjects(engine));
+            assertThrows(IllegalArgumentException.class, () -> engine.retainValue(result.variablesReference()));
+        });
+    }
+
+    @Test
+    void aliasesShareAPinAndDetachExpiresOutstandingInspectors() throws Exception {
+        withFrame((engine, frame) -> {
+            var first = engine.evaluate("receiver", frame.id()).get();
+            var alias = engine.evaluate("(Object) receiver", frame.id()).get();
+            assertNotEquals(first.variablesReference(), alias.variablesReference());
+            assertEquals(1, pinnedObjects(engine));
+            var inspector = engine.retainValue(first.variablesReference());
+            engine.disconnect().get(10, TimeUnit.SECONDS);
+            assertEquals(0, pinnedObjects(engine));
+            inspector.close();
+            assertEquals(0, pinnedObjects(engine));
+        });
+    }
+
+    @Test
+    void resumeReleasesValuesEvenWhenAnInspectorIsStillOpen() throws Exception {
+        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
+            harness.setBreakpoints(
+                    new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_STOP")),
+                    new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_SECOND")));
+            harness.start();
+            var first = harness.awaitStop("first pause");
+            var engine = harness.engine();
+            var value = engine.evaluate("receiver", harness.firstFrame(first.threadId()).id()).get();
+            var inspector = engine.retainValue(value.variablesReference());
+            assertEquals(1, pinnedObjects(engine));
+            engine.resume(first.threadId()).get();
+            harness.awaitStop("next pause");
+            assertEquals(0, pinnedObjects(engine));
+            assertThrows(IllegalArgumentException.class, () -> engine.retainValue(value.variablesReference()));
+            inspector.close();
+            assertEquals(0, pinnedObjects(engine));
+        }
+    }
+
+    @Test
     void evaluatesReceiverBeforeArguments() throws Exception {
         withFrame((engine, frame) -> assertEquals("12", value(engine, frame,
                 "receiver.receiver().combine(receiver.argument())")));
@@ -228,6 +293,18 @@ class EvaluationSemanticsIntegrationTest {
 
     private static String value(DebugEngine engine, DebugEngine.StackFrame frame, String expression) throws Exception {
         return engine.evaluate(expression, frame.id()).get(10, TimeUnit.SECONDS).value();
+    }
+
+    private static int pinnedObjects(DebugEngine engine) throws Exception {
+        var engineField = MicrosoftJavaDebugEngine.class.getDeclaredField("expressionEngine");
+        engineField.setAccessible(true);
+        Object expressions = engineField.get(engine);
+        var valuesField = expressions.getClass().getDeclaredField("retainedValues");
+        valuesField.setAccessible(true);
+        Object values = valuesField.get(expressions);
+        var pinnedField = values.getClass().getDeclaredField("pins");
+        pinnedField.setAccessible(true);
+        return ((java.util.Map<?, ?>) pinnedField.get(values)).size();
     }
 
     private static void withFrame(Assertion assertion) throws Exception {

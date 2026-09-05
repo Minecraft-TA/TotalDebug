@@ -192,6 +192,9 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     private void configureWindow() {
         setDefaultCloseOperation(HIDE_ON_CLOSE);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowClosing(java.awt.event.WindowEvent event) { clearDebuggerResults(); }
+        });
         setMinimumSize(new Dimension(720, 360));
         setSize(860, 500);
         setIconImages(Icons.createWindowIconImages(ThemeManager.current()));
@@ -238,7 +241,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         long revision = ++this.executionRevision;
         setRunning(true);
         this.status.setText("Compiling…");
-        this.results.removeAll();
+        clearResults();
         this.activeExecution.completion().whenComplete((outcome, failure) ->
                 SwingUtilities.invokeLater(() -> finish(revision, outcome, failure)));
     }
@@ -257,7 +260,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         String pauseId = selected.pauseId();
         setRunning(true);
         this.status.setText("Evaluating in " + frame.name());
-        this.results.removeAll();
+        clearResults();
         controller.startEvaluation(pauseId, frame.id(), source.toString()).whenComplete((operation, startFailure) ->
                 SwingUtilities.invokeLater(() -> {
                     if (startFailure != null) { setRunning(false); showFailure(startFailure.getMessage()); return; }
@@ -275,6 +278,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                             showFailure("Evaluation result expired when its originating pause ended");
                             return;
                         }
+                        if (!isVisible()) return;
                         this.results.addTab("Result", new com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel(
                                 controller, pauseId, value));
                         this.status.setText("Evaluation completed in " + frame.name());
@@ -292,7 +296,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         this.activeSource = null;
         this.activeDiagnosticLineOffset = 0;
         setRunning(false);
-        this.results.removeAll();
+        clearResults();
         StringBuilder failures = new StringBuilder();
         if (failure != null) {
             failures.append(failure.getMessage());
@@ -326,7 +330,7 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     private void showFailure(String message) {
-        this.results.removeAll();
+        clearResults();
         this.problems.setText(message == null ? "Unable to evaluate expression" : message);
         this.results.addTab("Problems", Icons.ERROR, scrollPane(this.problems));
         this.status.setText("Evaluation failed");
@@ -499,8 +503,23 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     @Override public void dispose() {
+        clearDebuggerResults();
         CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
         super.dispose();
+    }
+
+    private void clearDebuggerResults() {
+        for (int index = this.results.getTabCount() - 1; index >= 0; index--) {
+            if (this.results.getComponentAt(index) instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel panel) {
+                panel.close();
+                this.results.removeTabAt(index);
+            }
+        }
+    }
+
+    private void clearResults() {
+        clearDebuggerResults();
+        this.results.removeAll();
     }
 
     private static JTextPane textPane() {

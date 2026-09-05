@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.microsoft.java.debug.core.IEvaluatableBreakpoint;
 import com.microsoft.java.debug.core.adapter.ICompletionsProvider;
 import com.microsoft.java.debug.core.adapter.IDebugAdapterContext;
@@ -25,7 +26,9 @@ import java.util.concurrent.CompletableFuture;
 
 /** Microsoft debug-core adapter for one Java expression, completion, and value previews. */
 public final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletionsProvider {
-    private final DebuggerEvaluationRunner evaluations = new DebuggerEvaluationRunner();
+    private final DebuggerValueStore retainedValues = new DebuggerValueStore(
+            reference -> this.debugContext.getRecyclableIdPool().removeObjectById(reference));
+    private final DebuggerEvaluationRunner evaluations = new DebuggerEvaluationRunner(this.retainedValues::releaseHistory);
     private final DebuggerValuePreviewer valuePreviewer = new DebuggerValuePreviewer(this::evaluate);
     private final JavaExpressionEvaluator evaluator;
     private final JavaExpressionCompletion completion;
@@ -35,6 +38,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
     private final Map<String, ActionBinding> actions = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicLong stopRevision = new java.util.concurrent.atomic.AtomicLong();
     private volatile DebugEngine.BreakpointActionResult actionResult;
+    private DebuggerValueLease actionValue = DebuggerValueLease.NONE;
     private java.util.function.Function<String, String> scriptSource = path -> {
         throw new IllegalStateException("Saved breakpoint scripts require the workspace script resolver");
     };
@@ -77,7 +81,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
     public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<DebugEngine.EvaluationResult> startEvaluation(
             String expression, int frameId) {
         if (this.evaluations.active() != null) throw new IllegalStateException("Debugger evaluation is still running");
-        long generation = this.valueGeneration;
+        long generation = this.retainedValues.generation();
         StackFrame selected = requireFrame(frameId);
         ThreadReference thread = selected.thread();
         return this.evaluations.start(thread, () -> {
@@ -87,15 +91,9 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
             int reference = 0;
             int indexed = 0;
             if (value instanceof ObjectReference object) {
-                synchronized (this.pinned) {
-                    if (generation != this.valueGeneration) throw new java.util.concurrent.CancellationException("Evaluation result expired");
-                    if (!this.pinned.contains(object)) {
-                        object.disableCollection();
-                        this.pinned.add(object);
-                    }
-                }
-                reference = this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
-                        new VariableProxy(thread, "eval", value, null, expression));
+                reference = this.retainedValues.register(generation, DebuggerEvaluationRunner.currentId(), object,
+                        () -> this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
+                                new VariableProxy(thread, "eval", value, null, expression)));
                 if (value instanceof com.sun.jdi.ArrayReference array) indexed = array.length();
             }
             return new DebugEngine.EvaluationResult(value instanceof com.sun.jdi.VoidValue ? "" : formatter.valueToString(value, options),
@@ -118,16 +116,13 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
         return null;
     }
 
-    private volatile long valueGeneration;
-    private final java.util.Set<ObjectReference> pinned = new java.util.LinkedHashSet<>();
+    public DebuggerValueLease retainValue(int reference) { return this.retainedValues.retain(reference); }
+
     public void releaseValues() {
-        synchronized (this.pinned) {
-            this.valueGeneration++;
-            for (ObjectReference value : this.pinned) {
-                try { value.enableCollection(); }
-                catch (com.sun.jdi.VMDisconnectedException | com.sun.jdi.ObjectCollectedException ignored) { }
-            }
-            this.pinned.clear();
+        synchronized (this.retainedValues) {
+            this.retainedValues.clear();
+            this.actionValue.close();
+            this.actionValue = DebuggerValueLease.NONE;
             DebugEngine.BreakpointActionResult previous = this.actionResult;
             if (previous != null && previous.result() != null && previous.result().variablesReference() > 0) {
                 var result = previous.result();
@@ -246,7 +241,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
         ActionBinding binding = this.actions.get(conditionKey);
         long revision = this.stopRevision.get();
         long started = System.nanoTime();
-        long generation = this.valueGeneration;
+        long generation = this.retainedValues.generation();
         return this.evaluations.<Value>start(thread, () -> {
             String source = binding == null ? conditionKey : binding.breakpoint().action().source();
             DebugEngine.EvaluationResult formatted = null;
@@ -269,17 +264,9 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                     DebugEngine.ScalarValue captured = scalar(result);
                     int reference = 0;
                     if (result instanceof ObjectReference object && (!action.continueOnSuccess() || captured == null)) {
-                        synchronized (this.pinned) {
-                            if (generation != this.valueGeneration) {
-                                throw new java.util.concurrent.CancellationException("Breakpoint action result expired");
-                            }
-                            if (!this.pinned.contains(object)) {
-                                object.disableCollection();
-                                this.pinned.add(object);
-                            }
-                        }
-                        reference = this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
-                                new VariableProxy(thread, "breakpoint action", result, null, ""));
+                        reference = this.retainedValues.register(generation, DebuggerEvaluationRunner.currentId(), object,
+                                () -> this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
+                                        new VariableProxy(thread, "breakpoint action", result, null, "")));
                     }
                     var formatter = this.debugContext.getVariableFormatter();
                     String display = result instanceof com.sun.jdi.VoidValue ? ""
@@ -298,13 +285,24 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                         || binding != null && this.actions.get(conditionKey) != binding) {
                     throw new IllegalStateException("Breakpoint evaluation was slow or invalidated; execution remains paused");
                 }
-                if (formatted != null) this.actionResult = new DebugEngine.BreakpointActionResult(source, formatted, null);
+                if (formatted != null) retainActionResult(generation, new DebugEngine.BreakpointActionResult(source, formatted, null));
                 return thread.virtualMachine().mirrorOf(stayPaused);
             } catch (Exception failure) {
-                if (binding != null) this.actionResult = new DebugEngine.BreakpointActionResult(source, formatted, failure.toString());
+                if (binding != null) retainActionResult(generation, new DebugEngine.BreakpointActionResult(source, formatted, failure.toString()));
                 throw failure;
             }
         }).completion();
+    }
+
+    private void retainActionResult(long generation, DebugEngine.BreakpointActionResult result) {
+        synchronized (this.retainedValues) {
+            if (generation != this.retainedValues.generation()) return;
+            DebuggerValueLease retained = result.result() == null ? DebuggerValueLease.NONE
+                    : this.retainedValues.retain(result.result().variablesReference());
+            this.actionValue.close();
+            this.actionValue = retained;
+            this.actionResult = result;
+        }
     }
 
     @Override

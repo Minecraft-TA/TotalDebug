@@ -318,6 +318,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private final Map<String, EvaluationEntry> evaluations = new java.util.LinkedHashMap<>();
+    private final Map<String, DebuggerValueLease> evaluationValues = new java.util.HashMap<>();
     public record EvaluationEntry(String pauseId, DebugEngine.StackFrame frame,
                                   DebuggerEvaluation<DebugEngine.EvaluationResult> operation) { }
 
@@ -326,21 +327,40 @@ public final class DebuggerSessionController implements AutoCloseable {
         return submitValue(() -> {
             DebugEngine.StackFrame frame = remoteFrame(expectedPauseId, frameId);
             requireEvaluationIdle();
-            var operation = requireEngine().startEvaluation(source, frameId);
+            DebugEngine owner = requireEngine();
+            var operation = owner.startEvaluation(source, frameId);
             this.evaluations.put(operation.id(), new EvaluationEntry(expectedPauseId, frame, operation));
             while (this.evaluations.size() > 128) {
                 String expired = this.evaluations.entrySet().stream().filter(e -> !e.getValue().operation().running())
                         .map(Map.Entry::getKey).findFirst().orElse(null);
                 if (expired == null) break;
                 this.evaluations.remove(expired);
+                DebuggerValueLease retained = this.evaluationValues.remove(expired);
+                if (retained != null) retained.close();
             }
-            operation.completion().whenComplete((result, failure) -> submit(() -> {
-                if (result != null && Objects.equals(this.pauseId, expectedPauseId)
-                        && this.pauseGeneration == this.queue.advisoryGeneration()) {
-                    exposeValue(result.variablesReference(), result.type(), frame);
+            operation.completion().whenComplete((result, failure) -> {
+                DebuggerValueLease value = DebuggerValueLease.NONE;
+                if (result != null && result.variablesReference() > 0) {
+                    try { value = owner.retainValue(result.variablesReference()); }
+                    catch (IllegalStateException | IllegalArgumentException expired) {
+                        // Resume or detach can expire the value before this completion observer runs.
+                    }
                 }
-                publishRevision();
-            }));
+                DebuggerValueLease retained = value;
+                submitFuture(() -> {
+                    if (this.engine == owner && this.evaluations.containsKey(operation.id())
+                            && Objects.equals(this.pauseId, expectedPauseId)) {
+                        this.evaluationValues.put(operation.id(), retained);
+                    } else retained.close();
+                    if (result != null && Objects.equals(this.pauseId, expectedPauseId)
+                            && this.pauseGeneration == this.queue.advisoryGeneration()) {
+                        exposeValue(result.variablesReference(), result.type(), frame);
+                    }
+                    publishRevision();
+                }).whenComplete((ignored, observerFailure) -> {
+                    if (observerFailure != null) retained.close();
+                });
+            });
             publishRevision();
             return operation;
         });
@@ -351,6 +371,13 @@ public final class DebuggerSessionController implements AutoCloseable {
             EvaluationEntry entry = this.evaluations.get(id);
             if (entry == null) throw new IllegalArgumentException("Unknown or expired evaluation ID");
             return entry;
+        });
+    }
+
+    public CompletableFuture<DebuggerValueLease> retainValue(String expectedPauseId, int reference) {
+        return submitValue(() -> {
+            requireRemotePause(expectedPauseId);
+            return requireEngine().retainValue(reference);
         });
     }
 
@@ -1217,6 +1244,7 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (this.engine != sourceEngine) {
             return;
         }
+        releaseEvaluationValues();
         this.pauseId = UUID.randomUUID().toString();
         this.pauseGeneration = this.queue.advisoryGeneration();
         this.exposedValues.clear();
@@ -1463,6 +1491,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     private void closeEngine() {
+        releaseEvaluationValues();
         DebugEngine current = this.engine;
         this.engine = null;
         this.breakpointActionResult = null;
@@ -1488,6 +1517,11 @@ public final class DebuggerSessionController implements AutoCloseable {
         if (failure != null) {
             throw propagate(failure);
         }
+    }
+
+    private void releaseEvaluationValues() {
+        this.evaluationValues.values().forEach(DebuggerValueLease::close);
+        this.evaluationValues.clear();
     }
 
     private void updateStatus(Phase phase, String detail, Throwable failure) {

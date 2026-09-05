@@ -37,6 +37,7 @@ public interface DebugEngine extends AutoCloseable {
     CompletableFuture<ValuePreview> preview(int variablesReference);
 
     CompletableFuture<EvaluationResult> evaluate(String expression, int frameId);
+    DebuggerValueLease retainValue(int variablesReference);
     default DebuggerEvaluation<EvaluationResult> startEvaluation(String expression, int frameId) {
         DebuggerEvaluation<EvaluationResult> operation = new DebuggerEvaluation<>();
         evaluate(expression, frameId).whenComplete(operation::complete);

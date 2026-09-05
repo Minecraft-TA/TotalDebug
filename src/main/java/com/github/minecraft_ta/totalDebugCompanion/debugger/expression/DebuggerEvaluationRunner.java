@@ -12,6 +12,14 @@ final class DebuggerEvaluationRunner {
     private final AtomicReference<DebuggerEvaluation<?>> active = new AtomicReference<>();
     private volatile Runnable changed = () -> { };
     private final java.util.Map<String, DebuggerEvaluation<?>> history = new java.util.LinkedHashMap<>();
+    private final java.util.function.Consumer<String> discard;
+
+    DebuggerEvaluationRunner() { this(ignored -> { }); }
+    DebuggerEvaluationRunner(java.util.function.Consumer<String> discard) { this.discard = discard; }
+
+    static String currentId() {
+        return java.util.Objects.requireNonNull(CURRENT.get(), "No active evaluation").id();
+    }
 
     DebuggerEvaluation<?> operation(String id) {
         synchronized (this.history) { return this.history.get(id); }
@@ -33,6 +41,7 @@ final class DebuggerEvaluationRunner {
         if (!this.active.compareAndSet(null, operation)) {
             throw new IllegalStateException("Debugger evaluation is still running; wait or request cancellation");
         }
+        java.util.List<String> discarded = new java.util.ArrayList<>();
         synchronized (this.history) {
             this.history.put(operation.id(), operation);
             while (this.history.size() > 128) {
@@ -40,9 +49,11 @@ final class DebuggerEvaluationRunner {
                         .map(java.util.Map.Entry::getKey).findFirst().orElse(null);
                 if (oldest == null) break;
                 this.history.remove(oldest);
+                discarded.add(oldest);
             }
         }
         try {
+            discarded.forEach(this::discard);
             this.lifecycle.begin(thread);
             notifyChanged();
             Thread.ofPlatform().daemon().name("debugger-evaluation").start(() -> {
@@ -55,6 +66,7 @@ final class DebuggerEvaluationRunner {
                 } catch (Throwable thrown) {
                     failure = thrown;
                 } finally {
+                    if (failure != null) discard(operation.id());
                     CURRENT.remove();
                     this.lifecycle.end(thread);
                     this.active.compareAndSet(operation, null);
@@ -76,6 +88,14 @@ final class DebuggerEvaluationRunner {
         catch (RuntimeException observerFailure) {
             System.getLogger(DebuggerEvaluationRunner.class.getName()).log(System.Logger.Level.WARNING,
                     "Evaluation status listener failed", observerFailure);
+        }
+    }
+
+    private void discard(String id) {
+        try { this.discard.accept(id); }
+        catch (RuntimeException failure) {
+            System.getLogger(DebuggerEvaluationRunner.class.getName()).log(System.Logger.Level.WARNING,
+                    "Unable to release retained evaluation values", failure);
         }
     }
 

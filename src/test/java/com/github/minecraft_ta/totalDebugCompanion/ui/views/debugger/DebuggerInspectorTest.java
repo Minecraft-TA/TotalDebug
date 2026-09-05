@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import org.junit.jupiter.api.Test;
@@ -130,6 +131,9 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
+            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
                             DebugEngine.StackFrame frame,
@@ -207,6 +211,9 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
+            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
                             DebugEngine.StackFrame frame,
@@ -290,6 +297,9 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
+            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
                             DebugEngine.StackFrame frame,
@@ -355,7 +365,22 @@ class DebuggerInspectorTest {
             AtomicInteger evaluations,
             List<DebugEngine.Variable> variables
     ) {
+        return runtime(inspections, evaluations, variables, 0,
+                ignored -> CompletableFuture.completedFuture(DebuggerValueLease.NONE));
+    }
+
+    private static DebuggerInspector.RuntimeAccess runtime(
+            AtomicInteger inspections,
+            AtomicInteger evaluations,
+            List<DebugEngine.Variable> variables,
+            int resultReference,
+            java.util.function.IntFunction<CompletableFuture<DebuggerValueLease>> retain
+    ) {
         return new DebuggerInspector.RuntimeAccess() {
+            @Override
+            public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return retain.apply(reference);
+            }
             @Override
             public CompletableFuture<List<DebugEngine.Variable>> variables(
                     DebugEngine.StackFrame frame,
@@ -380,7 +405,7 @@ class DebuggerInspectorTest {
                     DebugEngine.StackFrame frame
             ) {
                 evaluations.incrementAndGet();
-                return CompletableFuture.completedFuture(new DebugEngine.EvaluationResult("1", "int", 0, 0));
+                return CompletableFuture.completedFuture(new DebugEngine.EvaluationResult("value", "Object", resultReference, 0));
             }
 
             @Override
@@ -392,6 +417,56 @@ class DebuggerInspectorTest {
                 return CompletableFuture.completedFuture(new DebugEngine.EvaluationResult("1", "int", 0, 0));
             }
         };
+    }
+
+    @Test
+    void replacingAndClosingAnInspectorReleasesValuesIncludingLateResults() throws Exception {
+        GlobalConfig config = GlobalConfig.getInstance();
+        boolean previousPreviews = config.automaticDebuggerPreviews();
+        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
+        DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
+        AtomicInteger owners = new AtomicInteger();
+        AtomicInteger retains = new AtomicInteger();
+        CompletableFuture<DebuggerValueLease> late = new CompletableFuture<>();
+        try {
+            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
+            config.setAutomaticDebuggerPreviews(false);
+            SwingUtilities.invokeAndWait(() -> {
+                var runtime = runtime(new AtomicInteger(), new AtomicInteger(), List.of(), 77, reference -> {
+                    assertEquals(77, reference);
+                    if (retains.incrementAndGet() == 3) return late;
+                    owners.incrementAndGet();
+                    return CompletableFuture.completedFuture(owners::decrementAndGet);
+                });
+                DebuggerInspector inspector = new DebuggerInspector(controller, ignored -> { }, runtime);
+                try {
+                    inspector.beginFrame(FRAME);
+                    inspector.showVariables(FRAME, List.of());
+                    JavaExpressionField expression = find(inspector, JavaExpressionField.class);
+                    assertNotNull(expression);
+                    expression.setText("first()");
+                    expression.postActionEvent();
+                    assertEquals(1, owners.get());
+                    expression.setText("second()");
+                    expression.postActionEvent();
+                    assertEquals(1, owners.get(), "Replacing an expression must release the old value");
+                    expression.setText("third()");
+                    expression.postActionEvent();
+                    assertEquals(0, owners.get());
+                    inspector.close();
+                    owners.incrementAndGet();
+                    late.complete(owners::decrementAndGet);
+                    assertEquals(0, owners.get(), "A result arriving after Close must release its value");
+                } finally {
+                    inspector.close();
+                }
+            });
+        } finally {
+            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
+            config.setAutomaticDebuggerPreviews(previousPreviews);
+            controller.close();
+            DebuggerEditorPresentation.clear();
+        }
     }
 
     private static DebugEngine.Variable variable(String name, int reference, int indexedVariables) {

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
@@ -73,6 +74,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private static final String ADD_WATCH_ACTION = "debugger.addWatch";
 
     interface RuntimeAccess {
+        CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference);
         CompletableFuture<List<DebugEngine.Variable>> variables(
                 DebugEngine.StackFrame frame,
                 int variablesReference,
@@ -117,6 +119,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private boolean frameReady;
     private boolean disposed;
     private boolean expressionPending;
+    private Object pendingExpression;
     private boolean watchSequenceStopped;
 
     DebuggerInspector(
@@ -124,6 +127,9 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             Consumer<NavigationTarget> navigation
     ) {
         this(controller, navigation, new RuntimeAccess() {
+            @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return controller.retainValue(pauseId, reference);
+            }
             @Override
             public CompletableFuture<List<DebugEngine.Variable>> variables(
                     DebugEngine.StackFrame frame,
@@ -459,12 +465,19 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugEngine.StackFrame requestFrame = this.frame;
         long started = System.nanoTime();
         var complete = this.expressions.completionFor(key);
-        future.whenComplete((result, failure) -> onEventThread(() -> {
-            this.expressionPending = false;
+        Object request = new Object();
+        this.pendingExpression = request;
+        String pauseId = this.controller.snapshot().pauseId();
+        future.thenCompose(result -> this.runtime.retainValue(pauseId, result.variablesReference())
+                .thenApply(lease -> new RetainedResult(result, lease))).whenComplete((retained, failure) -> onEventThread(() -> {
+            if (this.pendingExpression == request) this.expressionPending = false;
             Outcome outcome = failure == null
-                    ? Outcome.success(DebugValue.from(key.expression(), result))
+                    ? Outcome.success(DebugValue.from(key.expression(), retained.result()))
                     : Outcome.failure(failureMessage(failure, "Evaluation failed"));
-            complete.accept(outcome);
+            if (!complete.apply(outcome, retained == null ? DebuggerValueLease.NONE : retained.lease())) {
+                if (this.frameReady && !this.disposed) inspectNextWatch();
+                return;
+            }
             this.watchSequenceStopped |= failure != null || System.nanoTime() - started >= 5_000_000_000L;
             if (isStale(requestFrame, requestRevision)) {
                 if (this.frameReady) inspectNextWatch();
@@ -493,6 +506,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             }
         }));
     }
+
+    private record RetainedResult(DebugEngine.EvaluationResult result, DebuggerValueLease lease) { }
 
     private void startRootPreviewBatch(List<DefaultMutableTreeNode> nodes) {
         DebugEngine.StackFrame requestFrame = this.frame;
@@ -866,6 +881,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             return;
         }
         this.disposed = true;
+        this.expressions.clearSession();
         this.revision++;
         this.previewRevision++;
         this.expressionCompletion.close();

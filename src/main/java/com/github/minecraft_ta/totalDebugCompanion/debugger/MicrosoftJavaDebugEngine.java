@@ -412,6 +412,11 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return this.expressionEngine.startEvaluation(expression, frameId);
     }
     @Override
+    public DebuggerValueLease retainValue(int reference) {
+        requireState(State.STOPPED);
+        return this.expressionEngine.retainValue(reference);
+    }
+    @Override
     public DebuggerEvaluation<?> activeEvaluation() { return this.expressionEngine.activeEvaluation(); }
 
 

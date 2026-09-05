@@ -928,6 +928,7 @@ class DebuggerSessionControllerTest {
                     DebugEngine.class.getClassLoader(),
                     new Class<?>[]{DebugEngine.class},
                     (proxy, method, arguments) -> switch (method.getName()) {
+                        case "retainValue" -> DebuggerValueLease.NONE;
                         case "activeEvaluation" -> this.activeEvaluation != null && this.activeEvaluation.running() ? this.activeEvaluation : null;
                         case "startEvaluation" -> {
                             this.activeEvaluation = new DebuggerEvaluation<>();
