@@ -74,7 +74,7 @@ TotalDebugCompanion/
 ```
 
 - `settings.json` contains appearance, fonts, debugger window geometry and presentation preferences. It contains no watches, breakpoints or expression history.
-- `profile.json` remembers the current instance home, actual game directory and supported capabilities. It is not a project catalog. No placeholder `project.json`, `projects.json` or game reconnect records are created.
+- `profile.json` remembers the current instance home and actual game directory. It is not a project catalog. No placeholder `project.json`, `projects.json` or game reconnect records are created.
 - The `run/companion` files coordinate the existing single Companion process. Credentials are published with user-only POSIX permissions or Windows ACLs. Lock ownership, not the existence of a lock file, determines liveness.
 - Immutable launch copies retain the three most recently used builds, plus any older build still pinned by a launching or running process. Publishers and pruning share a cache lock; the launcher pins the JAR through process exit, and Companion also pins its running copy. Authored scripts and installed executables are outside this cleanup scope.
 - The MCP directory is Tomcat's reconstructible work area, not an execution store.
