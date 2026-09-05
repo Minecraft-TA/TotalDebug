@@ -19,6 +19,10 @@ final class CompanionForegroundHandoff {
         Objects.requireNonNull(sendRequest, "sendRequest");
         this.permission.grantTo(companionProcessId);
         beforeTransfer.run();
-        sendRequest.run();
+        try {
+            sendRequest.run();
+        } catch (java.util.concurrent.RejectedExecutionException rejected) {
+            throw new IOException("Companion connection could not accept the request: " + rejected.getMessage(), rejected);
+        }
     }
 }

@@ -11,6 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CompanionForegroundHandoffTest {
     @Test
+    void queueRejectionUsesTheExistingIoFailureContract() {
+        CompanionForegroundHandoff handoff = new CompanionForegroundHandoff(processId -> { });
+        var rejected = new java.util.concurrent.RejectedExecutionException("receiver is not keeping up");
+        IOException failure = assertThrows(IOException.class,
+                () -> handoff.transfer(42L, () -> { }, () -> { throw rejected; }));
+        assertEquals(rejected, failure.getCause());
+    }
+
+    @Test
     void grantsPermissionBeforeReleasingInputAndSendingTheRequest() throws Exception {
         List<String> events = new ArrayList<>();
         CompanionForegroundHandoff handoff = new CompanionForegroundHandoff(

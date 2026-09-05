@@ -183,7 +183,12 @@ public final class CompanionAppClient implements AutoCloseable {
             );
             return;
         }
-        this.client.getMessageProcessor().enqueueMessage(new ExecutionResultMessage(scriptId, result));
+        try {
+            this.client.getMessageProcessor().enqueueMessage(new ExecutionResultMessage(scriptId, result));
+        } catch (java.util.concurrent.RejectedExecutionException rejected) {
+            TotalDebug.LOGGER.debug("Companion transport rejected execution result {} for script {}",
+                    result.status(), scriptId, rejected);
+        }
     }
 
     public synchronized void openClassAndFocus(
