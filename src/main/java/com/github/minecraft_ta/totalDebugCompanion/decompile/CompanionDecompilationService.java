@@ -106,7 +106,10 @@ public final class CompanionDecompilationService implements AutoCloseable {
     }
 
     public java.util.List<String> cachedClasses() throws IOException {
-        return this.sourceStore.cachedClasses();
+        synchronized (this.inFlightRequests) {
+            // A retired tree may finish refreshing after its runtime has been replaced.
+            return this.closed ? java.util.List.of() : this.sourceStore.cachedClasses();
+        }
     }
 
     public byte[] loadClassBytes(String binaryName) throws IOException {

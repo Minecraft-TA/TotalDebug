@@ -82,6 +82,25 @@ class CompanionDecompilationServiceTest {
     }
 
     @Test
+    void retiredTreeReaderDoesNotReadTheReplacementRuntimesCache() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
+            CompanionDecompilationService retired = service("old-runtime", bytecodeSource(List.of(classes), index),
+                    new AtomicInteger(), "old");
+            try (retired) {
+                retired.decompile(CacheFixture.class.getName()).join();
+            }
+            try (CompanionDecompilationService current = service("new-runtime",
+                    bytecodeSource(List.of(classes), index), new AtomicInteger(), "current")) {
+                current.decompile(CacheFixture.class.getName()).join();
+                assertTrue(retired.cachedClasses().isEmpty());
+                assertEquals(List.of(CacheFixture.class.getName()), current.cachedClasses());
+            }
+        }
+    }
+
+    @Test
     void cachedClassDoesNotWaitBehindAColdDecompilation() throws Exception {
         byte[] cachedBytes = classBytes(CacheFixture.class);
         byte[] coldBytes = classBytes(ColdFixture.class);
