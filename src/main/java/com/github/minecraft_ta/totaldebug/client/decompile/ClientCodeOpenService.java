@@ -28,11 +28,11 @@ public final class ClientCodeOpenService {
         this.companionApp = Objects.requireNonNull(companionApp, "companionApp");
     }
 
-    public CompletableFuture<Void> openClass(Class<?> targetClass) {
-        return openClass(targetClass, SourceTarget.wholeClass());
+    public void openClass(Class<?> targetClass) {
+        openClass(targetClass, SourceTarget.wholeClass());
     }
 
-    public CompletableFuture<Void> openClass(Class<?> targetClass, SourceTarget sourceTarget) {
+    public void openClass(Class<?> targetClass, SourceTarget sourceTarget) {
         Objects.requireNonNull(targetClass, "targetClass");
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         String binaryName = targetClass.getName();
@@ -40,13 +40,13 @@ public final class ClientCodeOpenService {
         if (!TotalDebugConfig.CLIENT.useCompanionApp.get()) {
             showMessage(Component.literal("TotalDebug Companion is disabled in the client config")
                     .withStyle(ChatFormatting.YELLOW));
-            return CompletableFuture.completedFuture(null);
+            return;
         }
 
         synchronized (this.inFlightRequests) {
             CompletableFuture<Void> existing = this.inFlightRequests.get(binaryName);
             if (existing != null && !existing.isDone()) {
-                return existing;
+                return;
             }
 
             showMessage(Component.literal("Opening " + binaryName + "...").withStyle(ChatFormatting.GRAY));
@@ -79,15 +79,14 @@ public final class ClientCodeOpenService {
                     }
                 }
             });
-            return task;
         }
     }
 
-    public CompletableFuture<Void> focusCompanion() {
+    public void focusCompanion() {
         if (!TotalDebugConfig.CLIENT.useCompanionApp.get()) {
             showMessage(Component.literal("TotalDebug Companion is disabled in the client config")
                     .withStyle(ChatFormatting.YELLOW));
-            return CompletableFuture.completedFuture(null);
+            return;
         }
 
         CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
@@ -103,7 +102,6 @@ public final class ClientCodeOpenService {
             showMessage(Component.literal("TotalDebug: " + cause.getMessage()).withStyle(ChatFormatting.RED));
             return null;
         });
-        return task;
     }
 
     private static void releaseGameInput() {

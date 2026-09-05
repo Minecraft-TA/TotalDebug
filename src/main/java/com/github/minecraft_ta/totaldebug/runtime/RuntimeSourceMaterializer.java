@@ -204,7 +204,7 @@ public final class RuntimeSourceMaterializer {
         }
     }
 
-    private static boolean reusable(Path cache, Input input, JsonObject entry) throws IOException {
+    private static boolean reusable(Path cache, Input input, JsonObject entry) {
         if (entry == null) {
             return false;
         }

@@ -384,16 +384,15 @@ public final class ScriptRunner implements AutoCloseable {
             }
         }
 
-        private boolean scheduleAndReportCompilation(Runnable schedulingAction) {
+        private void scheduleAndReportCompilation(Runnable schedulingAction) {
             synchronized (this.lock) {
                 if (this.terminal || this.cancellationRequested) {
-                    return false;
+                    return;
                 }
                 schedulingAction.run();
                 this.pendingResults.add(ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_COMPLETED, ""));
             }
             drainResults();
-            return true;
         }
 
         private boolean beginExecution(Thread thread) {

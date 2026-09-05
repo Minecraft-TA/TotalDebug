@@ -20,16 +20,17 @@ final class CodeTargetResolver {
     }
 
     static Optional<Class<?>> resolveWorldTarget(Minecraft minecraft) {
-        if (minecraft.level == null) {
+        var level = minecraft.level;
+        if (level == null) {
             return Optional.empty();
         }
 
         return resolveWorldTarget(minecraft.hitResult, position -> {
-            BlockEntity blockEntity = minecraft.level.getBlockEntity(position);
+            BlockEntity blockEntity = level.getBlockEntity(position);
             if (blockEntity != null) {
                 return Optional.of(blockEntity.getClass());
             }
-            return Optional.of(minecraft.level.getBlockState(position).getBlock().getClass());
+            return Optional.of(level.getBlockState(position).getBlock().getClass());
         });
     }
 
@@ -50,12 +51,13 @@ final class CodeTargetResolver {
     }
 
     static Optional<Class<?>> resolveItemTarget(Minecraft minecraft, ItemStack itemStack) {
-        if (minecraft.level == null || itemStack.isEmpty()) {
+        var level = minecraft.level;
+        if (level == null || itemStack.isEmpty()) {
             return Optional.empty();
         }
 
         if (itemStack.getItem() instanceof SpawnEggItem spawnEgg) {
-            Entity entity = spawnEgg.getType(itemStack).create(minecraft.level);
+            Entity entity = spawnEgg.getType(itemStack).create(level);
             return entity == null ? Optional.empty() : Optional.of(entity.getClass());
         }
 
