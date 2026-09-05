@@ -82,7 +82,7 @@ class LocalDeploymentTest {
         assertTrue(configured.contains("useCompanionApp = false"));
         assertTrue(configured.contains("# Keep this preference and its comment."));
         assertTrue(configured.contains("preservedValue = \"keep exactly\""));
-        assertTrue(configured.contains(this.developmentJar.toString().replace('\\', '/')));
+        assertTrue(configured.contains(this.developmentJar.toRealPath().toString().replace('\\', '/')));
         var unchangedTime = Files.getLastModifiedTime(mod);
         var unchangedConfigTime = Files.getLastModifiedTime(config);
         BuildResult unchanged = run(false, this.instance.toString());
