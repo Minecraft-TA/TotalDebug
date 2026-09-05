@@ -158,13 +158,13 @@ Resolution now removes interface declarations shadowed by more specific interfac
 
 ### C12. A retired source tree reads the replacement runtime's cache
 
-Fixed locally in Companion `c2b3d1c`; live restart verification remains pending. The deployed startup log contained a cache-identity exception from the decompiled-source tree. A focused regression reproduces the same failure by closing the old decompilation service, opening a new runtime in the same cache directory, and then letting the old reader refresh.
+Fixed in Companion `c2b3d1c`; subsequent online and offline restarts passed without the warning. The deployed startup log contained a cache-identity exception from the decompiled-source tree. A focused regression reproduces the same failure by closing the old decompilation service, opening a new runtime in the same cache directory, and then letting the old reader refresh. The exact original live interleaving was not replayed.
 
 Cached-class listing now shares the service's close lock and returns no entries after closure. Current runtime readers retain their existing identity and integrity checks. The fix avoids stale readers without weakening cache validation or adding a compatibility path. Source lookup on the deployed build already worked; this finding concerns a late refresh during runtime replacement.
 
 ### C13. Evaluated array children advertise invalid Java expressions
 
-Fixed locally in Companion `672281c`; deployment replay is pending. Live stdio inspection returned an array child address ending in `.0`, which also feeds the UI's Copy Expression action. Evaluated results created debugger variable proxies without marking arrays as indexed, so the upstream adapter used field syntax.
+Fixed in Companion `672281c`; [deployment replay](audit-evidence/2026-09-05/live-array-expression-fix.json) passes on the verified new JAR. Live stdio inspection returned an array child address ending in `.0`, which also feeds the UI's Copy Expression action. Evaluated results created debugger variable proxies without marking arrays as indexed, so the upstream adapter used field syntax.
 
 Result proxies now carry the indexed flag. Breakpoint actions omit the parent address when no expression addresses their result. A real-JDWP regression fails on `values.1` before the fix, then verifies both the corrected `values[1]` address and its evaluated value. The 16 affected integration/resolver tests and shaded packaging pass. See the progress record for the new artifact hash and deployment status.
 
