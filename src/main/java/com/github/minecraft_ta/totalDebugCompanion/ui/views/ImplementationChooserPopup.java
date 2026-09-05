@@ -145,7 +145,7 @@ public final class ImplementationChooserPopup extends BasePopup {
             HierarchyQuery nextQuery,
             HierarchyRelation nextRelation
     ) {
-        prepare(editor, offset, nextQuery, nextRelation);
+        prepare(editor, nextQuery, nextRelation);
         startSearch();
         showAtAnchor(editor, offset);
     }
@@ -157,7 +157,7 @@ public final class ImplementationChooserPopup extends BasePopup {
             HierarchyRelation relation,
             Throwable failure
     ) {
-        prepare(editor, offset, query, relation);
+        prepare(editor, query, relation);
         this.listModel.clear();
         this.message.setText("Hierarchy lookup failed: " + failure.getClass().getSimpleName());
         showCard(MESSAGE_CARD);
@@ -169,7 +169,6 @@ public final class ImplementationChooserPopup extends BasePopup {
 
     private void prepare(
             JTextComponent editor,
-            int offset,
             HierarchyQuery nextQuery,
             HierarchyRelation nextRelation
     ) {

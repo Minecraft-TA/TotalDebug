@@ -11,10 +11,9 @@ class DebuggerValueTextTest {
         assertEquals(
                 "LegacyRandomSource",
                 DebuggerValueText.visibleValue(
-                        "net.minecraft.world.level.levelgen.LegacyRandomSource@45",
-                        "net.minecraft.util.RandomSource"
+                        "net.minecraft.world.level.levelgen.LegacyRandomSource@45"
                 )
         );
-        assertEquals("byte[25]", DebuggerValueText.visibleValue("byte[25]@17", "byte[]"));
+        assertEquals("byte[25]", DebuggerValueText.visibleValue("byte[25]@17"));
     }
 }

@@ -210,26 +210,24 @@ final class JavaExpressionEvaluator {
     }
 
     private static EvalValue simpleName(String name, Context context) throws Exception {
-        if (context.frame() != null) {
-            LocalVariable local = context.frame().visibleVariableByName(name);
-            if (local == null) {
-                String binaryName = context.frame().location().declaringType().name();
-                Method method = context.frame().location().method();
-                for (LocalVariable candidate : context.frame().visibleVariables()) {
-                    if (context.evaluator().variableNameResolver.displayedName(
-                            binaryName, method.name(), method.signature(), candidate.name()).equals(name)) {
-                        if (local != null) {
-                            throw new IllegalArgumentException(
-                                    "Displayed variable name is ambiguous in the selected frame: " + name
-                            );
-                        }
-                        local = candidate;
+        LocalVariable local = context.frame().visibleVariableByName(name);
+        if (local == null) {
+            String binaryName = context.frame().location().declaringType().name();
+            Method method = context.frame().location().method();
+            for (LocalVariable candidate : context.frame().visibleVariables()) {
+                if (context.evaluator().variableNameResolver.displayedName(
+                        binaryName, method.name(), method.signature(), candidate.name()).equals(name)) {
+                    if (local != null) {
+                        throw new IllegalArgumentException(
+                                "Displayed variable name is ambiguous in the selected frame: " + name
+                        );
                     }
+                    local = candidate;
                 }
             }
-            if (local != null) {
-                return value(context.frame().getValue(local), local.type() instanceof ReferenceType declared ? declared : null);
-            }
+        }
+        if (local != null) {
+            return value(context.frame().getValue(local), local.type() instanceof ReferenceType declared ? declared : null);
         }
         if (context.thisObject() != null) {
             Field field = findField(context.lexicalType(), name, false);
@@ -237,12 +235,10 @@ final class JavaExpressionEvaluator {
                 return value(context.thisObject().getValue(field), resolveType(field.typeName(), context));
             }
         }
-        if (context.frame() != null) {
-            Field field = findField(context.frame().location().declaringType(), name, true);
-            if (field != null) {
-                return value(context.frame().location().declaringType().getValue(field),
-                        resolveType(field.typeName(), context));
-            }
+        Field field = findField(context.frame().location().declaringType(), name, true);
+        if (field != null) {
+            return value(context.frame().location().declaringType().getValue(field),
+                    resolveType(field.typeName(), context));
         }
         ReferenceType type = resolveType(name, context);
         if (type != null) {

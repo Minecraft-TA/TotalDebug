@@ -30,11 +30,9 @@ class SearchableEnvironmentImpl extends SearchableEnvironment {
             throw new RuntimeException(e);
         }
     }
-    private final JavaProjectImpl javaProject;
 
     public SearchableEnvironmentImpl(JavaProjectImpl javaProject) throws JavaModelException {
         super(javaProject, (WorkingCopyOwner) null, true, JavaProject.NO_RELEASE);
-        this.javaProject = javaProject;
     }
 
     @Override

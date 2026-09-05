@@ -188,7 +188,7 @@ final class DebuggerValueTree {
                 Icon rowIcon = node.getUserObject() instanceof ExpressionValue expressionValue
                         ? expressionValue.watch() ? Icons.WATCH : Icons.EVALUATE_EXPRESSION
                         : icon(debugValue);
-                String visibleValue = DebuggerValueText.visibleValue(debugValue.value(), debugValue.type());
+                String visibleValue = DebuggerValueText.visibleValue(debugValue.value());
                 String simpleType = DebuggerValueText.simpleTypeName(debugValue.type());
                 String secondary = debugValue.preview().available()
                         ? debugValue.preview().summary()

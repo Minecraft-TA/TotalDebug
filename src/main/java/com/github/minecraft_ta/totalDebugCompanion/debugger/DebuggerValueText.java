@@ -6,10 +6,10 @@ public final class DebuggerValueText {
     }
 
     public static String visibleValue(DebugEngine.Variable variable) {
-        return visibleValue(variable.value(), variable.type());
+        return visibleValue(variable.value());
     }
 
-    public static String visibleValue(String value, String type) {
+    public static String visibleValue(String value) {
         if (value.isBlank()) {
             return value;
         }
