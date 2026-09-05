@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
-import com.github.minecraft_ta.totalDebugCompanion.model.PacketLoggerView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -41,12 +40,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
     private final NavigationService navigationService;
-    private final JMenu toolsMenu = new JMenu("Tools");
     private final JMenu scriptMenu = new JMenu("Script");
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
     private final ApplicationStatusBar statusBar;
-    private final Action chunkGridAction;
-    private final Action packetLoggerAction;
     private final Action evaluateExpressionAction;
     private final Action newScriptAction;
     private final DebuggerActions debuggerActions;
@@ -84,22 +80,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
             }
         });
         menuBar.add(fileMenu);
-
-        this.chunkGridAction = new AbstractAction("Chunk Grid", Icons.OVERLAY_MODE) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                ChunkGridWindow.open();
-            }
-        };
-        this.packetLoggerAction = new AbstractAction("Packet Logger", Icons.UP_DOWN) {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                editorTabs.focusOrCreateIfAbsent(PacketLoggerView.class, v -> true, PacketLoggerView::new);
-            }
-        };
-        this.toolsMenu.add(this.chunkGridAction);
-        this.toolsMenu.add(this.packetLoggerAction);
-        menuBar.add(this.toolsMenu);
 
         this.evaluateExpressionAction = new AbstractAction("Evaluate Expression...", Icons.EVALUATE_EXPRESSION) {
             @Override
@@ -400,13 +380,8 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     private void refreshActions() {
-        boolean chunkGrid = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID);
-        boolean packetLogger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER);
         boolean scripts = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION);
         boolean debugger = CompanionApp.supportsCapability(CompanionProtocol.CAPABILITY_DEBUGGER);
-        this.toolsMenu.setVisible(chunkGrid || packetLogger);
-        this.chunkGridAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_CHUNK_GRID));
-        this.packetLoggerAction.setEnabled(CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_PACKET_LOGGER));
         this.scriptMenu.setVisible(scripts);
         this.evaluateExpressionAction.setEnabled(
                 CompanionApp.hasCapability(CompanionProtocol.CAPABILITY_SCRIPT_EXECUTION)

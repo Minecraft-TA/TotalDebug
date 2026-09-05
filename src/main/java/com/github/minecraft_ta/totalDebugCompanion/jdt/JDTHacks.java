@@ -30,14 +30,11 @@ public class JDTHacks {
     private static final Unsafe UNSAFE;
     static {
         try {
-            long t = System.nanoTime();
             var theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");
             theUnsafe.setAccessible(true);
             UNSAFE = (Unsafe) theUnsafe.get(null);
 
-            System.out.println("Starting init hack");
             init();
-            System.out.println("Init hack too: " + (System.nanoTime() - t) / 1_000_000.0);
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }

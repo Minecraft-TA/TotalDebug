@@ -95,8 +95,8 @@ class CompanionSessionRejectionTest {
 
     private static Client configuredClient(String token) {
         Client client = new Client();
-        client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.RECOMMENDED_MAX_FRAME_SIZE);
-        client.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.RECOMMENDED_MAX_STRING_LENGTH);
+        client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE);
+        client.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH);
         client.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, TestClientHello.class);
         client.getMessageProcessor().registerMessage(
                 CompanionProtocol.SERVER_HELLO,
