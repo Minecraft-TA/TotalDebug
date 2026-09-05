@@ -22,16 +22,12 @@ class LanguageResourcesTest {
             "commands.total_debug.decompile.entity.failed",
             "commands.total_debug.decompile.blockentity.failed",
             "commands.total_debug.decompile.class.failed",
-            "commands.total_debug.decompile.class.usage",
-            "commands.total_debug.searchreference.progress",
             "companion_app.starting",
             "companion_app.connecting",
             "companion_app.connection_success",
             "companion_app.startup_fail",
             "companion_app.download_start",
             "companion_app.download_progress",
-            "companion_app.open_file",
-            "companion_app.dumping_minecraft_classes",
             "companion_app.start_indexing"
     );
 

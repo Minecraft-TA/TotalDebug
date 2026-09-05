@@ -26,6 +26,7 @@ class CompanionJavaRuntimeTest {
             "java.transaction.xa",
             "java.xml",
             "jdk.attach",
+            "jdk.compiler",
             "jdk.jdi",
             "jdk.unsupported",
             "jdk.zipfs"

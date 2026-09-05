@@ -6,21 +6,13 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.Collection;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 public final class TotalDebugConfig {
     public static final Client CLIENT;
     public static final ModConfigSpec CLIENT_SPEC;
     public static final Server SERVER;
     public static final ModConfigSpec SERVER_SPEC;
-
-    private static final Pattern BINARY_CLASS_NAME = Pattern.compile(
-            "(?:[\\p{L}_$][\\p{L}\\p{N}_$]*\\.)*[\\p{L}_$][\\p{L}\\p{N}_$]*"
-    );
 
     static {
         Pair<Client, ModConfigSpec> client = new ModConfigSpec.Builder().configure(Client::new);
@@ -41,29 +33,9 @@ public final class TotalDebugConfig {
         modContainer.registerConfig(ModConfig.Type.SERVER, SERVER_SPEC, TotalDebug.MOD_ID + "-server.toml");
     }
 
-    public static List<String> blockedPacketClasses() {
-        return List.copyOf(CLIENT.blockedPacketClasses.get());
-    }
-
-    public static void setBlockedPacketClasses(Collection<String> classNames) {
-        Objects.requireNonNull(classNames, "classNames");
-        List<String> normalized = List.copyOf(new LinkedHashSet<>(classNames));
-        if (!normalized.stream().allMatch(TotalDebugConfig::isValidPacketClassName)) {
-            throw new IllegalArgumentException("Every blocked packet entry must be a Java binary class name");
-        }
-
-        CLIENT.blockedPacketClasses.set(normalized);
-        CLIENT.blockedPacketClasses.save();
-    }
-
-    static boolean isValidPacketClassName(Object value) {
-        return value instanceof String className && BINARY_CLASS_NAME.matcher(className).matches();
-    }
-
     public static final class Client {
         public final ModConfigSpec.BooleanValue useCompanionApp;
         public final ModConfigSpec.ConfigValue<String> companionDevelopmentJar;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> blockedPacketClasses;
 
         private Client(ModConfigSpec.Builder builder) {
             builder.push("decompilation");
@@ -78,16 +50,6 @@ public final class TotalDebugConfig {
                     .define("companionDevelopmentJar", "");
             builder.pop();
 
-            builder.push("network");
-            this.blockedPacketClasses = builder
-                    .comment("Java binary class names of packets the server should not send to this client.")
-                    .defineListAllowEmpty(
-                            "blockedPacketClasses",
-                            List.of(),
-                            () -> "net.minecraft.network.protocol.PacketClass",
-                            TotalDebugConfig::isValidPacketClassName
-                    );
-            builder.pop();
         }
     }
 

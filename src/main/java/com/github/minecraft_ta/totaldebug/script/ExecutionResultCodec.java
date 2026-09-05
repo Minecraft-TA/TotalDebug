@@ -14,8 +14,8 @@ import java.util.Objects;
 public final class ExecutionResultCodec {
     private static final int DIRECT_MESSAGE_OVERHEAD_BYTES = Integer.BYTES * 2;
     public static final int MAX_WIRE_BYTES = Math.min(
-            DefaultMessageProcessor.RECOMMENDED_MAX_STRING_LENGTH,
-            DefaultMessageProcessor.RECOMMENDED_MAX_FRAME_SIZE - DIRECT_MESSAGE_OVERHEAD_BYTES
+            DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH,
+            DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE - DIRECT_MESSAGE_OVERHEAD_BYTES
     );
     private static final int SEARCH_STEPS = 12;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
