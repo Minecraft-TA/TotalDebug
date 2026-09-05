@@ -25,7 +25,10 @@ public class CompanionEvaluationAudit {
             var expressionField = MicrosoftJavaDebugEngine.class.getDeclaredField("expressionEngine");
             expressionField.setAccessible(true);
             var expressionEngine = expressionField.get(h.engine());
-            var pinnedField = expressionEngine.getClass().getDeclaredField("pinned");
+            var valuesField = expressionEngine.getClass().getDeclaredField("retainedValues");
+            valuesField.setAccessible(true);
+            var values = valuesField.get(expressionEngine);
+            var pinnedField = values.getClass().getDeclaredField("pins");
             pinnedField.setAccessible(true);
             var runnerField = expressionEngine.getClass().getDeclaredField("evaluations");
             runnerField.setAccessible(true);
@@ -33,7 +36,7 @@ public class CompanionEvaluationAudit {
             var historyField = runner.getClass().getDeclaredField("history");
             historyField.setAccessible(true);
             System.out.println("AUDIT retention history=" + ((java.util.Map<?,?>) historyField.get(runner)).size()
-                    + " targetPins=" + ((java.util.Set<?>) pinnedField.get(expressionEngine)).size());
+                    + " targetPins=" + ((java.util.Map<?,?>) pinnedField.get(values)).size());
         }
     }
     private static void check(DebugEngine e, DebugEngine.StackFrame f, String source) {

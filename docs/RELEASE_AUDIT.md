@@ -2,7 +2,7 @@
 
 Audited 2026-09-05. Status: not ready to release. This report covers the four repositories as one product, verifies the earlier audit, and defines the work needed for a clean release. It is an audit and implementation backlog, not release approval.
 
-Implementation update: C1-C4, C6, C7 and C10 are fixed in local stabilization slices; C9 passes at the completed task baseline. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the agreed scope. The original findings below preserve their audit evidence; the remaining release gates are open.
+Implementation update: C1-C4, C6-C8 and C10 are fixed in local stabilization slices; C9 passes at the completed task baseline. C5 remains open. See [release stabilization progress](RELEASE_PROGRESS.md) for revisions, regression evidence and current build results, and [architecture decisions](RELEASE_DECISIONS.md) for the agreed scope. The original findings below preserve their audit evidence; the remaining release gates are open.
 
 The immediate work is correctness, paired distribution, reproducible verification, and removal of obsolete production paths. More feature development is not needed to make this release useful.
 
