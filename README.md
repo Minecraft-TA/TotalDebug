@@ -9,7 +9,7 @@ Local searchable snapshots of the old implementations may live under `legacy/`; 
 ## Development
 
 - Minecraft 1.21.1
-- NeoForge 21.1.248
+- NeoForge 21.1.201
 - Java 21
 - Mojang mappings with Parchment
 - Gradle 9.7.1 and ModDevGradle 2.0.144
@@ -63,7 +63,7 @@ Use the development override for mutable Companion builds. The managed installer
 Install that verified Companion build as the MCP sidecar used by new Codex tasks with:
 
 ```powershell
-.\gradlew.bat installCodexCompanionMcp
+.\gradlew.bat installCodexCompanionMcp -PtotaldebugUseMavenLocal=true
 ```
 
 The task copies the Companion JAR to the stable Codex-owned path `%USERPROFILE%\.codex\mcp\totaldebug-companion\TotalDebugCompanion.jar`. Moving either repository afterward does not affect Codex. Rebuilding alone does not replace the installed copy; rerun the install task after Companion MCP changes. Override the Codex directory with `-PcodexHome=C:\path\to\.codex` or the `CODEX_HOME` environment variable.
@@ -73,13 +73,13 @@ TotalDebug stages Companion builds side by side by content hash. The hash identi
 Pass an explicit JAR to override the sibling checkout:
 
 ```powershell
-.\gradlew.bat runClient -PtotaldebugCompanionJar=C:\path\to\TotalDebugCompanion.jar
+.\gradlew.bat runClient -PtotaldebugUseMavenLocal=true -PtotaldebugCompanionJar=C:\path\to\TotalDebugCompanion.jar
 ```
 
 To test the pinned published Companion instead, disable sibling discovery:
 
 ```powershell
-.\gradlew.bat runClient -PtotaldebugUsePublishedCompanion=true
+.\gradlew.bat runClient -PtotaldebugUseMavenLocal=true -PtotaldebugUsePublishedCompanion=true
 ```
 
 The Companion application lives in [TotalDebugCompanion](https://github.com/Minecraft-TA/TotalDebugCompanion).

@@ -2,7 +2,9 @@
 
 This file is the audit ledger for the NeoForge port. A row is only marked complete when its implementation and listed verification gates are complete. Legacy sources under `legacy/` are references, not production source sets.
 
-Small commits use focused unit tests and `gradlew build`. Expensive client/server smoke runs happen once at a phase boundary or when a change touches runtime-only behavior, not after every foundation commit.
+Small commits use focused unit tests and `gradlew build -PtotaldebugUseMavenLocal=true`. Expensive client/server smoke runs happen once at a phase boundary or when a change touches runtime-only behavior, not after every foundation commit.
+
+The rows below preserve completion evidence from each porting slice, including its versions and test counts. Current development uses SCNet 2.0.0, JIndex 1.1.0-SNAPSHOT and shared storage/evaluation 2.0.0-SNAPSHOT. Companion owns JIndex and decompilation; TotalDebug supplies the runtime inventory. Maven Local requires an explicit development flag. Use [build instructions](docs/BUILD_RELEASE.md), [release scope](docs/RELEASE_SCOPE.md) and [stabilization progress](docs/RELEASE_PROGRESS.md) for the current contracts, evaluator behavior and remaining acceptance gates.
 
 ## Fixed decisions
 
