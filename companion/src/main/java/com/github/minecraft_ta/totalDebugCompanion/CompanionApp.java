@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
@@ -760,6 +761,10 @@ public final class CompanionApp {
     private static DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
         CompanionDecompilationService service = decompilationService;
         return service == null ? null : service.loadDebugSource(binaryName);
+    }
+
+    public static AppPaths appPaths() {
+        return launchConfiguration == null ? AppPaths.defaults(System.getenv()) : launchConfiguration.paths();
     }
 
     public static InstancePaths instancePaths() {

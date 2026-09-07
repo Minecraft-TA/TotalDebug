@@ -4,7 +4,7 @@ TotalDebug keeps instance-authored files with the Minecraft workspace and applic
 
 ## Instance files
 
-The instance home is `{workspace}/total-debug`. A normal modpack uses the actual Minecraft game directory as its workspace. The checked-in development runs explicitly set `totaldebug.workspaceRoot` to the TotalDebug repository. They do not infer a project by walking parents or looking for Gradle files.
+The instance home is `{game-directory}/total-debug`. Development client and server runs use `run/total-debug` inside the repository, alongside the rest of the development game files.
 
 ```text
 total-debug/
@@ -63,6 +63,8 @@ TotalDebugCompanion/
       .lock
       <jar-content-hash>/
         TotalDebugCompanion.jar
+    jdt/
+      .plugins/dummyBundle/
     mcp/
       work/Tomcat/127.0.0.1/ROOT/
   logs/
@@ -77,6 +79,7 @@ TotalDebugCompanion/
 - `profile.json` remembers the current instance home and actual game directory. Companion reopens this profile on standalone startup.
 - The `run/companion` files coordinate the existing single Companion process. Credentials are published with user-only POSIX permissions or Windows ACLs. Lock ownership, not the existence of a lock file, determines liveness.
 - Immutable launch copies retain the three most recently used builds, plus any older build still pinned by a launching or running process. Publishers and pruning share a cache lock; the launcher pins the JAR through process exit, and Companion also pins its running copy. Authored scripts and installed executables are outside this cleanup scope.
+- The JDT directory holds embedded Eclipse plugin metadata. The dummy bundle is part of the JDT adapter, not a Minecraft plugin.
 - The MCP directory is Tomcat's reconstructible work area, not an execution store.
 - Each launch has a unique log directory. Java output rotates between two files, each at most 4 MiB once Companion's logger starts. Up to ten recent log directories are retained, plus any older active launch. The launcher captures JVM/bootstrap failures in the same `companion.log` before application logging starts. Those pre-application bytes are not subject to the Java logger's size limit. Per-directory leases protect active logs; root locks serialize creation and pruning.
 
@@ -90,7 +93,7 @@ The installed executable stays at:
 
 TotalDebug downloads and verifies its paired Companion release only when this JAR is missing. Existing files are preserved, including manual development replacements. Updating to a new application pair requires replacing or removing the installed JAR explicitly.
 
-For a dev run this is beneath `run/`, even though instance-authored files use the repository workspace. A configured development JAR bypasses this installed payload. `localBundle` produces a flat pair of JARs under `build/local-bundle`. `deployLocal` installs them into the explicitly configured Minecraft directory and points its client configuration at the mutable Companion build. See the README deployment instructions.
+For a dev run this is beneath `run/total-debug`, alongside instance-authored files. A configured development JAR bypasses this installed payload. `localBundle` produces a flat pair of JARs under `build/local-bundle`. `deployLocal` installs them into the explicitly configured Minecraft directory and points its client configuration at the mutable Companion build. See the README deployment instructions.
 
 NeoForge configuration, Minecraft logs/options, launcher files and other mods' files remain in their original owners' directories.
 

@@ -37,5 +37,6 @@ public record AppPaths(Path home) {
     public Path mcpEndpoint() { return run().resolve("mcp-endpoint.json"); }
     public Path launchCache() { return home.resolve("cache").resolve("apps"); }
     public Path mcpCache() { return home.resolve("cache").resolve("mcp"); }
+    public Path jdtCache() { return home.resolve("cache").resolve("jdt"); }
     public Path logs() { return home.resolve("logs"); }
 }

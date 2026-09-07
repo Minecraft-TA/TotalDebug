@@ -5,19 +5,15 @@ import java.util.Objects;
 
 /** Storage for one instance, independent of its current game connection. */
 public record InstancePaths(Path home) {
-    public static final String WORKSPACE_PROPERTY = "totaldebug.workspaceRoot";
-
     public InstancePaths {
         home = Objects.requireNonNull(home, "home").toAbsolutePath().normalize();
     }
 
     public static InstancePaths forGame(Path gameDirectory) {
-        String workspace = System.getProperty(WORKSPACE_PROPERTY);
-        Path root = workspace == null || workspace.isBlank() ? gameDirectory : Path.of(workspace);
-        return new InstancePaths(root.resolve("total-debug"));
+        return new InstancePaths(gameDirectory.resolve("total-debug"));
     }
 
-    /** Installation is game-local even when authored state uses an explicit dev workspace. */
+    /** Installation stays with the game instance. */
     public static Path installationDirectory(Path gameDirectory) {
         return Objects.requireNonNull(gameDirectory).toAbsolutePath().normalize().resolve("total-debug").resolve("companion-app");
     }

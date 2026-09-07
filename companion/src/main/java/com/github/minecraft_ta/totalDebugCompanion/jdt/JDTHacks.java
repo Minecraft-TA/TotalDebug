@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.BundleContextImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.ContentTypeManagerImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.DummyJarPackageFragmentRoot;
@@ -129,10 +130,12 @@ public class JDTHacks {
         value.open(true);
         field.set(InternalPlatform.getDefault(), value);
 
+        IPath metadataLocation = Path.fromOSString(CompanionApp.appPaths().jdtCache().toString());
+
         //cachedInstanceLocation
         field = InternalPlatform.class.getDeclaredField("cachedInstanceLocation");
         field.setAccessible(true);
-        field.set(InternalPlatform.getDefault(), new org.eclipse.core.runtime.Path(""));
+        field.set(InternalPlatform.getDefault(), metadataLocation);
 
         //initialized
         field = InternalPlatform.class.getDeclaredField("initialized");
@@ -154,7 +157,7 @@ public class JDTHacks {
 
             @Override
             public IPath getMetadataLocation() throws IllegalStateException {
-                return new Path("");
+                return metadataLocation;
             }
         });
 

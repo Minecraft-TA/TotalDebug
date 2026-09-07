@@ -10,22 +10,13 @@ class LayoutTest {
     @TempDir Path home;
 
     @Test
-    void devRootIsExplicitAndNeverGuessedFromFolderNames() throws Exception {
+    void developmentDataStaysInsideTheGameDirectory() throws Exception {
         Path game = Files.createDirectories(this.home.resolve("project/run"));
-        String previous = System.getProperty(InstancePaths.WORKSPACE_PROPERTY);
-        try {
-            System.clearProperty(InstancePaths.WORKSPACE_PROPERTY);
-            assertEquals(game.resolve("total-debug"), InstancePaths.forGame(game).home());
-            System.setProperty(InstancePaths.WORKSPACE_PROPERTY, game.getParent().toString());
-            var dev = InstancePaths.forGame(game);
-            assertEquals(game.getParent().resolve("total-debug"), dev.home());
-            assertEquals(dev.home().resolve("cache/runtime/index.jindex"), dev.index());
-            assertEquals(dev.home().resolve("scripts"), dev.scripts());
-            assertEquals(game.resolve("total-debug/companion-app"), InstancePaths.installationDirectory(game));
-        } finally {
-            if (previous == null) System.clearProperty(InstancePaths.WORKSPACE_PROPERTY);
-            else System.setProperty(InstancePaths.WORKSPACE_PROPERTY, previous);
-        }
+        var instance = InstancePaths.forGame(game);
+        assertEquals(game.resolve("total-debug"), instance.home());
+        assertEquals(instance.home().resolve("cache/runtime/index.jindex"), instance.index());
+        assertEquals(instance.home().resolve("scripts"), instance.scripts());
+        assertEquals(instance.home().resolve("companion-app"), InstancePaths.installationDirectory(game));
     }
 
     @Test

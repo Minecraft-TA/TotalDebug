@@ -37,7 +37,6 @@ neoForge {
             client()
             ideName = 'Run Client'
             gameDirectory = rootProject.layout.projectDirectory.dir('run')
-            systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             if (minecraftDebugPort.isPresent()) {
                 jvmArgument(
                         "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
@@ -55,7 +54,6 @@ neoForge {
             server()
             ideName = 'Run Server'
             gameDirectory = rootProject.layout.projectDirectory.dir('run')
-            systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             programArgument '--nogui'
         }
     }

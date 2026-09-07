@@ -45,7 +45,7 @@ Close Minecraft, then run:
 
 The directory must already contain `mods/` and `config/`. The task replaces the two application JARs and updates the Companion development path. After installation succeeds, it removes older version-named TotalDebug JARs. It preserves other mods, saved scripts and user state. See [local deployment](../README.md#deploy-locally).
 
-Client runs use the current built Companion by default. `-PtotaldebugCompanionJar=C:/path/to/TotalDebugCompanion.jar` selects an explicit development JAR. `-PtotaldebugUsePublishedCompanion=true` selects the bundled published fallback instead. These options change client launching, not the contents of `localBundle`. Development run data and `totaldebug.workspaceRoot` remain anchored at the repository root.
+Client runs use the current built Companion by default. `-PtotaldebugCompanionJar=C:/path/to/TotalDebugCompanion.jar` selects an explicit development JAR. `-PtotaldebugUsePublishedCompanion=true` selects the bundled published fallback instead. These options change client launching, not the contents of `localBundle`. Development run data stays under `run/total-debug`.
 
 To install the desktop MCP sidecar independently:
 
