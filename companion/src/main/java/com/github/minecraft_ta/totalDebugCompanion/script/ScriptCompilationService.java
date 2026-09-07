@@ -11,16 +11,20 @@ import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 /** Compiles off the UI thread; Minecraft remains responsible for loading and running the result. */
 public final class ScriptCompilationService implements AutoCloseable {
+    public record CompilationResult(ScriptBytecode bytecode, String inventoryId) {}
+
     private static final Pattern SCRIPT_CLASS = Pattern.compile(
             "\\bpublic\\s+(?:final\\s+)?class\\s+([\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*)"
                     + "\\s+extends\\s+(?:com\\.github\\.minecraft_ta\\.totaldebug\\.script\\.)?ScriptProgram\\b");
@@ -56,6 +60,37 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
     }
 
+    /** Compiles a named Java class without submitting it for execution. */
+    public CompletableFuture<CompilationResult> compile(String source, String entryClass) {
+        ReadySnapshot selected = this.snapshot;
+        if (this.closed || selected == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "The runtime class index is not ready for compilation"));
+        }
+        var result = new CompletableFuture<CompilationResult>();
+        try {
+            this.worker.execute(() -> {
+                try {
+                    CompilationResult compiled = compileSelected(selected, source, entryClass, result::isCancelled);
+                    if (this.closed || this.snapshot != selected) {
+                        throw new IllegalStateException("The runtime changed during compilation");
+                    }
+                    result.complete(compiled);
+                } catch (Exception exception) {
+                    result.completeExceptionally(exception);
+                }
+            });
+        } catch (RuntimeException exception) {
+            result.completeExceptionally(exception);
+        }
+        return result;
+    }
+
+    public boolean isCurrentInventory(String inventoryId) {
+        ReadySnapshot current = this.snapshot;
+        return !this.closed && current != null && current.inventoryId().equals(inventoryId);
+    }
+
     public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
                        Consumer<ExecutionResult> failureHandler) {
         ReadySnapshot selected = this.snapshot;
@@ -85,20 +120,12 @@ public final class ScriptCompilationService implements AutoCloseable {
             if (!matcher.find()) throw new IllegalArgumentException(
                     "Script source must contain a public class that directly extends ScriptProgram");
             String primaryClass = matcher.group(1);
-            ScriptBytecode bytecode = CacheFiles.locked(selected.indexFile().getParent(), () -> {
-                synchronized (this.compilerLock) {
-                    if (this.closed || this.snapshot != selected || this.pending.get(id) != task) {
-                        throw new IllegalStateException("The runtime changed or compilation was cancelled");
-                    }
-                    CacheFiles.requireIdentity(selected.indexFile().getParent().resolve("inventory.json"),
-                            "id", selected.inventoryId());
-                    return new ScriptBytecode(primaryClass, this.compiler.compile(source, primaryClass, ""));
-                }
-            });
+            CompilationResult compiled = compileSelected(selected, source, primaryClass,
+                    () -> this.pending.get(id) != task);
             synchronized (task) {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || !this.sender.test(new RunScriptMessage(
-                        id, bytecode, selected.inventoryId(), serverSide, environment))) {
+                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
                 }
                 this.pending.remove(id, task);
@@ -106,6 +133,21 @@ public final class ScriptCompilationService implements AutoCloseable {
         } catch (Exception exception) {
             if (this.pending.remove(id, task)) task.failureHandler.accept(failure(exception.getMessage()));
         }
+    }
+
+    private CompilationResult compileSelected(ReadySnapshot selected, String source, String entryClass,
+                                               BooleanSupplier cancelled) throws Exception {
+        return CacheFiles.locked(selected.indexFile().getParent(), () -> {
+            synchronized (this.compilerLock) {
+                if (this.closed || this.snapshot != selected || cancelled.getAsBoolean()) {
+                    throw new IllegalStateException("The runtime changed or compilation was cancelled");
+                }
+                CacheFiles.requireIdentity(selected.indexFile().getParent().resolve("inventory.json"),
+                        "id", selected.inventoryId());
+                return new CompilationResult(new ScriptBytecode(entryClass,
+                        this.compiler.compile(source, entryClass, "")), selected.inventoryId());
+            }
+        });
     }
 
     /** Returns true when cancellation was handled before any bytecode was sent. */
@@ -128,7 +170,8 @@ public final class ScriptCompilationService implements AutoCloseable {
     public void close() {
         this.closed = true;
         runtimeDisconnected();
-        this.worker.shutdownNow();
+        // Drain queued compile-only requests so their futures complete with the closed-state failure.
+        this.worker.shutdown();
         bind(null);
     }
 

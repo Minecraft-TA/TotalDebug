@@ -19,6 +19,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService.CompilationResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
@@ -74,6 +75,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
@@ -731,6 +733,15 @@ public final class CompanionApp {
     public static boolean send(AbstractMessage message) {
         CompanionSession current = session;
         return current != null && current.send(message);
+    }
+
+    public static CompletableFuture<CompilationResult> compileJava(String source, String entryClass) {
+        return scriptCompiler.compile(source, entryClass);
+    }
+
+    /** A pre-send check; the receiving runtime must still validate the result's inventory identity. */
+    public static boolean isCurrentRuntimeInventory(String inventoryId) {
+        return isConnected() && scriptCompiler.isCurrentInventory(inventoryId);
     }
 
     public static boolean runScript(int id, String source, boolean serverSide,

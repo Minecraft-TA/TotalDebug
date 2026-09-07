@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
@@ -44,6 +45,54 @@ class ScriptCompilationServiceTest {
                 }
             }
             """;
+
+    @Test
+    void compilesNamedClassesWithoutScriptProgramOrExecutionTransport() throws Exception {
+        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
+            compiler.bind(snapshot);
+            var compiled = compiler.compile("""
+                    package behavior;
+                    import fixture.Api;
+                    public final class ItemBehavior extends Api {
+                        public record Result(String text) {}
+                        public Result inspect() { return new Result(value("item") + Api.secret); }
+                    }
+                    """, "behavior.ItemBehavior").get(10, TimeUnit.SECONDS);
+            assertEquals("inventory", compiled.inventoryId());
+            assertTrue(compiler.isCurrentInventory(compiled.inventoryId()));
+            assertFalse(compiler.isCurrentInventory("different-inventory"));
+            assertEquals("behavior.ItemBehavior", compiled.bytecode().primaryClass());
+            assertEquals(2, compiled.bytecode().classes().size());
+            assertTrue(compiled.bytecode().classes().containsKey("behavior.ItemBehavior$Result"));
+            try (var target = new URLClassLoader(snapshot.sources().stream().map(source -> {
+                try { return source.path().toUri().toURL(); }
+                catch (Exception exception) { throw new AssertionError(exception); }
+            }).toArray(URL[]::new), getClass().getClassLoader())) {
+                Class<?> type = new ScriptClassLoader(target, compiled.bytecode().classes())
+                        .loadClass("behavior.ItemBehavior");
+                assertEquals("Result[text=item21]",
+                        type.getMethod("inspect").invoke(type.getConstructor().newInstance()).toString());
+            }
+            assertTrue(this.sent.isEmpty());
+            assertTrue(this.failures.isEmpty());
+        }
+    }
+
+    @Test
+    void compileOnlyReportsDiagnosticsAndRecoversWithFreshOutputs() throws Exception {
+        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
+            compiler.bind(snapshot);
+            var invalid = compiler.compile("public class Broken { Missing field; }", "Broken");
+            ExecutionException failure = assertThrows(ExecutionException.class,
+                    () -> invalid.get(10, TimeUnit.SECONDS));
+            assertInstanceOf(InMemoryCompilationException.class, failure.getCause());
+            assertTrue(failure.getCause().getMessage().contains("Missing"));
+            var valid = compiler.compile("public class Valid {}", "Valid").get(10, TimeUnit.SECONDS);
+            assertEquals(List.of("Valid"), List.copyOf(valid.bytecode().classes().keySet()));
+            assertTrue(this.sent.isEmpty());
+            assertTrue(this.failures.isEmpty());
+        }
+    }
 
     @Test
     void compilesUsingSharedIndexAndSendsAllClassesWithoutLoadingGameTypes() throws Exception {
@@ -103,6 +152,58 @@ class ScriptCompilationServiceTest {
             ExecutionResult failure = this.failures.poll(10, TimeUnit.SECONDS);
             assertNotNull(failure);
             assertTrue(failure.error().text().contains("Runtime cache has changed"));
+            ExecutionException compileOnlyFailure = assertThrows(ExecutionException.class,
+                    () -> compiler.compile(SOURCE, "Probe").get(10, TimeUnit.SECONDS));
+            assertTrue(compileOnlyFailure.getCause().getMessage().contains("Runtime cache has changed"));
+            assertTrue(this.sent.isEmpty());
+        }
+    }
+
+    @Test
+    void queuedCompileOnlyRejectsReplacedSnapshotWithoutUsingClosedIndex() throws Exception {
+        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
+            compiler.bind(snapshot);
+            var release = new CountDownLatch(1);
+            CompletableFuture<Void> writer = holdCacheLock(release);
+            var compilation = compiler.compile(SOURCE, "Probe");
+            try {
+                CompletableFuture.runAsync(() -> compiler.bind(null)).get(2, TimeUnit.SECONDS);
+                assertFalse(compiler.isCurrentInventory("inventory"));
+                snapshot.close();
+            } finally {
+                release.countDown();
+            }
+            writer.get(5, TimeUnit.SECONDS);
+            ExecutionException failure = assertThrows(ExecutionException.class,
+                    () -> compilation.get(5, TimeUnit.SECONDS));
+            assertInstanceOf(IllegalStateException.class, failure.getCause());
+            assertTrue(failure.getCause().getMessage().contains("runtime changed"));
+            assertTrue(this.sent.isEmpty());
+        }
+    }
+
+    @Test
+    void closingCompilerCompletesQueuedCompileOnlyFutures() throws Exception {
+        try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
+            compiler.bind(snapshot);
+            var release = new CountDownLatch(1);
+            CompletableFuture<Void> writer = holdCacheLock(release);
+            var first = compiler.compile(SOURCE, "Probe");
+            var queued = compiler.compile("public class Queued {}", "Queued");
+            try {
+                CompletableFuture.runAsync(compiler::close).get(2, TimeUnit.SECONDS);
+                snapshot.close();
+            } finally {
+                release.countDown();
+            }
+            writer.get(5, TimeUnit.SECONDS);
+            for (var compilation : List.of(first, queued,
+                    compiler.compile("public class AfterClose {}", "AfterClose"))) {
+                ExecutionException failure = assertThrows(ExecutionException.class,
+                        () -> compilation.get(5, TimeUnit.SECONDS));
+                assertInstanceOf(IllegalStateException.class, failure.getCause());
+            }
+            assertFalse(compiler.isCurrentInventory("inventory"));
             assertTrue(this.sent.isEmpty());
         }
     }
@@ -165,6 +266,21 @@ class ScriptCompilationServiceTest {
 
     private ScriptCompilationService service() {
         return new ScriptCompilationService(this.sent::add);
+    }
+
+    private CompletableFuture<Void> holdCacheLock(CountDownLatch release) throws Exception {
+        var locked = new CountDownLatch(1);
+        CompletableFuture<Void> writer = CompletableFuture.runAsync(() -> {
+            try {
+                CacheFiles.locked(this.directory, () -> {
+                    locked.countDown();
+                    assertTrue(release.await(10, TimeUnit.SECONDS));
+                    return null;
+                });
+            } catch (Exception exception) { throw new AssertionError(exception); }
+        });
+        assertTrue(locked.await(5, TimeUnit.SECONDS));
+        return writer;
     }
 
     private ReadySnapshot fixture() throws Exception {
