@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
-
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.AbstractMessageIncoming;
@@ -9,18 +10,16 @@ import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -198,7 +197,7 @@ class CompanionSessionRejectionTest {
     public static final class TestExecutionResult extends AbstractMessageOutgoing {
         @Override
         public void write(ByteBufferOutputStream stream) {
-            new ExecutionResultMessage(1, new ExecutionResult(ExecutionResult.Status.RUN_COMPLETED,
+            new ExecutionResultMessage(1, new ExecutionResult(ExecutionStatus.RUN_COMPLETED,
                     ExecutionText.empty(), null, ExecutionText.empty())).write(stream);
         }
     }

@@ -1,26 +1,20 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
-
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
-
-import com.github.minecraft_ta.totalDebugCompanion.messages.FocusWindowMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.ReadyMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.codeView.OpenClassMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ReadyMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.message.impl.DefaultMessageBus;
-
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -129,43 +123,15 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     private void registerMessages() {
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.READY, ReadyMessage.class);
-        this.server.getMessageProcessor().registerMessage(
-                CompanionProtocol.OPEN_CLASS,
-                OpenClassMessage.class,
-                OpenClassMessage::new
-        );
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class);
-        this.server.getMessageProcessor().registerMessage(
-                CompanionProtocol.EXECUTION_RESULT,
-                ExecutionResultMessage.class,
-                ExecutionResultMessage::new
-        );
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class, FocusWindowMessage::new);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class, ClientHelloMessage::new);
-        this.server.getMessageProcessor().registerMessage(CompanionProtocol.SERVER_HELLO, ServerHelloMessage.class);
-        this.server.getMessageProcessor().registerMessage(
-                CompanionProtocol.RUNTIME_INVENTORY,
-                RuntimeInventoryMessage.class,
-                RuntimeInventoryMessage::new
-        );
-        this.server.getMessageProcessor().registerMessage(
-                CompanionProtocol.RETRY_RUNTIME_INVENTORY,
-                RetryRuntimeInventoryMessage.class
-        );
-        this.server.getMessageProcessor().registerMessage(
-                CompanionProtocol.DEBUG_TARGET,
-                DebugTargetMessage.class,
-                DebugTargetMessage::new
-        );
+        com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings.registerCompanion(this.server.getMessageProcessor());
+
     }
 
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
         this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
-        this.server.getMessageBus().listenAlways(OpenClassMessage.class, OpenClassMessage::handle);
+        this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> com.github.minecraft_ta.totalDebugCompanion.CompanionApp.openClass(message.binaryName(), message.targetType(), message.targetIdentifier()));
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(com.github.minecraft_ta.totalDebugCompanion.CompanionApp::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {

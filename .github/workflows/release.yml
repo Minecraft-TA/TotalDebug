@@ -1,0 +1,91 @@
+name: Prepare paired release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: New unused version, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paired-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Select version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          $version = if ($env:REQUESTED_VERSION) { $env:REQUESTED_VERSION } else { $env:RELEASE_REF -replace '^v', '' }
+          if ($version -notmatch '^[0-9][A-Za-z0-9.+-]*$') { throw 'Invalid release version' }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Require an unused release and the selected commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+          $tags = gh api --paginate "repos/$env:GH_REPO/releases?per_page=100" --jq '.[].tag_name'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($tags -contains $tag) { throw "Release $tag already exists; select an unused version." }
+          git show-ref --verify --quiet "refs/tags/$tag"
+          if ($LASTEXITCODE -eq 0) {
+            $tagCommit = git rev-parse "$tag^{commit}"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($tagCommit -ne (git rev-parse HEAD)) { throw 'The release tag points to a different commit.' }
+          }
+          $global:LASTEXITCODE = 0
+      - name: Build and verify exact release pair
+        shell: pwsh
+        run: |
+          ./gradlew.bat :releaseBundle "-PreleaseVersion=$env:RELEASE_VERSION" -PtotaldebugUseMavenLocal=false "-Dmaven.repo.local=$env:RUNNER_TEMP/empty-maven" --warning-mode fail --console=plain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Create draft without replacing assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.RELEASE_VERSION }}
+          target_commitish: ${{ github.sha }}
+          draft: true
+          overwrite_files: false
+          fail_on_unmatched_files: true
+          files: |
+            build/release/total_debug.jar
+            build/release/TotalDebugCompanion.jar
+            build/release/total_debug.jar.sha256
+            build/release/TotalDebugCompanion.jar.sha256
+      - name: Verify draft assets against the staged files
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'release-verification'
+          gh release download "v$env:RELEASE_VERSION" --dir $downloadDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($name in @('total_debug.jar', 'TotalDebugCompanion.jar', 'total_debug.jar.sha256', 'TotalDebugCompanion.jar.sha256')) {
+            $staged = (Get-FileHash -Algorithm SHA256 -LiteralPath "build/release/$name").Hash
+            $uploaded = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $downloadDirectory $name)).Hash
+            if ($staged -ne $uploaded) { throw "Uploaded artifact differs: $name" }
+          }
+          Write-Output 'Draft pair verified. Complete runtime checks before publishing the draft.'

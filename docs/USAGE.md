@@ -34,7 +34,7 @@ Resume and detach expire live references from that pause. Evaluation history kee
 
 ## Local integrations
 
-Companion exposes source navigation, script execution and debugger operations through its [MCP API](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/MCP.md). Use it with trusted local clients.
+Companion exposes source navigation, script execution and debugger operations through its [MCP API](../companion/MCP.md). Use it with trusted local clients.
 
 The transport limits payloads to 16 MiB by default and queues at most 1024 accepted messages per connection. A receiver that cannot keep up causes a reported connection failure. Messages are not replayed after reconnect.
 

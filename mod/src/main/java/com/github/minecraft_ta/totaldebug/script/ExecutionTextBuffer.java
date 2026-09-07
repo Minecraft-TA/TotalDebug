@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
+
 /** Retains a bounded prefix while still counting all text written by a live script. */
 final class ExecutionTextBuffer {
     private final int retainedLimit;

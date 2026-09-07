@@ -1,62 +1,72 @@
 # Builds and publication
 
-Use Java 21 and each repository's checked-in Gradle wrapper. The application consists of TotalDebug and TotalDebugCompanion, with SCNet for transport and JIndex for indexing. TotalDebug also produces the shared storage and evaluation libraries.
+Use a full JDK 21 and the repository-root wrapper. Keep the IDE's Gradle JVM and command-line `JAVA_HOME` consistent so sequential commands can reuse a daemon. The five projects are `mod`, `companion`, `protocol`, `storage` and `evaluation`. Shared code uses direct project dependencies. SCNet and JIndex are external libraries.
 
-## Coordinated local builds
+## Development commands
 
-Place the four repositories alongside each other and run these commands in order:
+Run these from the repository root:
 
-| Repository | Command |
+| Command | Purpose |
 | --- | --- |
-| SCNet | `.\gradlew.bat build publishToMavenLocal '-PscnetVersion=2.0.0' --warning-mode fail` |
-| JIndex | `.\gradlew.bat build publishToMavenLocal --warning-mode fail` |
-| TotalDebug | `.\gradlew.bat :storage:publishToMavenLocal :evaluation:publishToMavenLocal --warning-mode fail` |
-| TotalDebugCompanion | `.\gradlew.bat build -PtotaldebugUseMavenLocal=true --warning-mode fail` |
-| TotalDebug | `.\gradlew.bat build -PtotaldebugUseMavenLocal=true -PtotaldebugUsePublishedCompanion=true --warning-mode fail` |
+| `.\gradlew.bat :protocol:test` | Message codecs and transport direction checks |
+| `.\gradlew.bat :storage:test` | Shared storage tests |
+| `.\gradlew.bat :evaluation:test` | Compiler/runtime helpers and class-bundle tests |
+| `.\gradlew.bat :companion:test` | Desktop tests without application packaging |
+| `.\gradlew.bat :mod:test` | Mod tests without application packaging |
+| `.\gradlew.bat :test` | All normal application/library tests |
+| `.\gradlew.bat :check` | Full verification, including packaging and deployment-task tests |
+| `.\gradlew.bat :build` | Verification and application artifacts |
+| `.\gradlew.bat :localBundle` | Both current JARs in `build/local-bundle`, without tests or installation |
+| `.\gradlew.bat :companion:shadowJar` | Desktop executable only |
+| `.\gradlew.bat :mod:runClient` | Development Minecraft client with the current Companion build |
+| `.\gradlew.bat :mod:runServer` | Development dedicated server |
 
-Application builds use public repositories by default. `-PtotaldebugUseMavenLocal=true` resolves the coordinated libraries exclusively from Maven Local, so a missing local dependency fails instead of selecting different published bytes. Other dependencies keep their normal repositories.
+Use `--tests 'package.TestClass'` on the owning test task for focused feedback. Normal tests do not depend on Shadow or mod JAR packaging. NeoForge dependencies are still needed to compile and test the mod. Companion tests retain the generated Parchment index used by decompilation; third-party notice collection runs only when packaging the executable.
 
-The last command verifies the mod without building Companion again. Omit `-PtotaldebugUsePublishedCompanion=true` to use the sibling Companion checkout; the root task forwards the local dependency option and publishes the shared modules first.
+The checked-in configuration enables configuration cache, build cache and filesystem watching. Avoid habitual `clean` during editing. A warm unchanged invocation and a test that actually executes measure different things. The worker cap and heap ceiling are shared build settings, not a guarantee about total resident JVM memory.
 
-Use the same local dependency option with `localBundle`, `deployLocal`, `runClient` and `runServer`. See [local deployment](../README.md#deploy-locally) for instance paths and restart instructions.
+Build conventions and custom tasks live in `build-logic`. Root `check` explicitly includes its functional tests. Those tests use temporary fake Minecraft instances; normal builds do not install anything.
 
-## Maven publication
+## Dependencies
 
-SCNet and JIndex are published from their upstream repositories, `tth05/SCNet` and `tth05/JIndex`. The four library publications use `https://packagecloud.io/tth05/repo/java/maven2/`. Public consumers use `https://packagecloud.io/tth05/repo/maven2`.
+Dependency versions live in `gradle/libs.versions.toml`; settings own plugin resolution and repositories. Minecraft/desktop runtime constraints can require different versions of the same library. Review final nested and shaded artifacts when changing dependency scopes.
 
-Publishing credentials read `PACKAGECLOUD_TOKEN` from the environment with an empty password. Keep credentials out of repository files and command arguments.
+Builds use published SCNet and JIndex by default. When developing those libraries, publish them from their own checkouts, then use `-PtotaldebugUseMavenLocal=true`. That opt-in resolves the `com.github.tth05` group exclusively from Maven Local; a missing local artifact fails. Internal protocol/storage/evaluation artifacts are never selected from Maven Local and require no publication. Existing library publications remain available for older application releases.
 
-| Artifact | Producer version property | Consumer version property |
-| --- | --- | --- |
-| `com.github.tth05:SCNet` | SCNet `scnetVersion` | Both applications `scnet_version` |
-| `com.github.tth05:jindex` | JIndex `jindexVersion` | Companion `jindex_version` |
-| `com.github.minecraft_ta:totaldebug-storage` | TotalDebug `mod_version` | Companion `storage_version` |
-| `com.github.minecraft_ta:totaldebug-evaluation` | TotalDebug `mod_version` | Companion `evaluation_version` |
-| Companion JAR | Companion `releaseVersion` | Mod's immutable download URL and SHA-256 pin |
-| TotalDebug mod | TotalDebug `mod_version` | Installed mod JAR |
+## Local installation
 
-Generate and inspect publication metadata with `generatePomFileForMavenJavaPublication` in SCNet/JIndex and `:storage:generatePomFileForStoragePublication :evaluation:generatePomFileForEvaluationPublication` in TotalDebug.
-
-Publish using `publishMavenJavaPublicationToPackagecloudRepository` in SCNet/JIndex and `:storage:publishStoragePublicationToPackagecloudRepository :evaluation:publishEvaluationPublicationToPackagecloudRepository` in TotalDebug.
-
-## Publish a matching application pair
-
-1. Select immutable library versions, update consumer properties and publish the libraries.
-2. Build Companion with `-PtotaldebugUseMavenLocal=false`, then publish its application JAR.
-3. Set the mod's Companion URL and SHA-256 pin to those uploaded bytes.
-4. Build TotalDebug with `-PtotaldebugUseMavenLocal=false -PtotaldebugUsePublishedCompanion=true`.
-5. Verify public dependency resolution using a fresh Gradle dependency cache, then install and exercise the resulting pair.
-
-Verify F6 navigation, search, usages, hierarchy, scripts, debugger evaluation, disconnect/reconnect and offline reopening on the pair intended for distribution. Include the applicable client/server permission checks. Record the artifact hashes with the release.
-
-Both peers require the same application protocol. Changing the handshake or message layout requires coordinated changes and a protocol version increment.
-
-## MCP sidecar installation
-
-To install Companion at a stable path for Codex's local MCP integration:
+Close Minecraft, then run:
 
 ```powershell
-.\gradlew.bat installCodexCompanionMcp -PtotaldebugUseMavenLocal=true
+.\gradlew.bat :deployLocal "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
 ```
 
-The task copies the application JAR to `%USERPROFILE%/.codex/mcp/totaldebug-companion/TotalDebugCompanion.jar`. Override the directory with `-PcodexHome=C:/path/to/.codex` or `CODEX_HOME`. Rebuilding Companion does not update that copy; rerun the install task after MCP changes. See [Companion's MCP documentation](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/MCP.md) for connection setup.
+The directory must already contain `mods/` and `config/`. The task installs only the two application JARs and updates the Companion development path. It preserves other mods, saved scripts and user state. Remove duplicate version-named TotalDebug JARs before deployment. See [local deployment](../README.md#deploy-locally).
+
+Client runs use the current built Companion by default. `-PtotaldebugCompanionJar=C:/path/to/TotalDebugCompanion.jar` selects an explicit development JAR. `-PtotaldebugUsePublishedCompanion=true` selects the bundled published fallback instead. These options change client launching, not the contents of `localBundle`. Development run data and `totaldebug.workspaceRoot` remain anchored at the repository root.
+
+To install the desktop MCP sidecar independently:
+
+```powershell
+.\gradlew.bat :installCodexCompanionMcp
+```
+
+The destination is `%USERPROFILE%/.codex/mcp/totaldebug-companion/TotalDebugCompanion.jar`. Override the Codex home with `-PcodexHome=C:/path/to/.codex` or `CODEX_HOME`. Rerun the task after MCP changes. It builds only Companion and its dependencies. See [MCP setup](../companion/MCP.md).
+
+## Prepare a paired release
+
+Select a new, unused version, then run from one checkout:
+
+```powershell
+.\gradlew.bat :releaseBundle "-PreleaseVersion=<new-version>" --warning-mode fail
+```
+
+`build/release` contains `total_debug.jar`, `TotalDebugCompanion.jar` and their `.sha256` files. Release preparation runs the full automated checks. The mod's release descriptor contains the exact staged Companion hash and its intended immutable asset URL under `Minecraft-TA/TotalDebug`. It does not download or publish anything.
+
+Ordinary mod resources retain the valid last-published Companion descriptor for existing installer behavior. Local development explicitly supplies the current Companion path. `:mod:releaseJar` creates a separate artifact by replacing the descriptor in the final ModDev JAR and preserving nested libraries and manifest metadata. The release variant receives its own module-packaging test. Never upload the ordinary development mod JAR as a release.
+
+The release workflow creates a draft with both validated JARs and checksums, refuses asset replacement, and checks downloaded asset hashes. Publish the draft after verifying F6 navigation, search/usages/hierarchy, scripts, debugger evaluation, reconnect/offline reopening and relevant client/server permission checks on the staged pair. Upload the same files that were hashed; do not rebuild Companion between hashing and uploading.
+
+Old Companion release assets remain in their original repository because released mods pin those URLs. Keep existing releases immutable. After a new release is published, update the checked-in fallback descriptor and development version deliberately for subsequent development.
+
+Both peers still require the same application protocol. A handshake or wire-layout change requires coordinated consumers and a protocol version increment. Existing installed Companion JARs remain untouched; users updating the pair must follow the [manual update procedure](../README.md#install).

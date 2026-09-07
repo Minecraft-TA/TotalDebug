@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.math.BigInteger;
@@ -15,7 +15,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -211,7 +210,7 @@ class CodeModeJobServiceTest {
         try (CodeModeJobService service = service(transport, true)) {
             var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
                     CodeModeJobService.ExecutionEnvironment.THREAD);
-            service.acceptResult(submitted.scriptId(), new ExecutionResult(ExecutionResult.Status.CANCELLATION_PENDING,
+            service.acceptResult(submitted.scriptId(), new ExecutionResult(ExecutionStatus.CANCELLATION_PENDING,
                     ExecutionText.empty(), null, ExecutionText.complete("Stop timed out; script is still running")));
             var pending = service.waitFor(submitted.jobId(), 1);
             assertEquals(CodeModeJobService.JobState.CANCELLING, pending.state());
@@ -262,7 +261,7 @@ class CodeModeJobServiceTest {
             );
             String retained = "x".repeat(300_000);
             service.acceptResult(-1, new ExecutionResult(
-                    ExecutionResult.Status.RUN_COMPLETED,
+                    ExecutionStatus.RUN_COMPLETED,
                     new ExecutionText(retained, 400_000, true),
                     null,
                     text("")
@@ -306,7 +305,7 @@ class CodeModeJobServiceTest {
 
     private static ExecutionResult progress() {
         return new ExecutionResult(
-                ExecutionResult.Status.COMPILATION_COMPLETED,
+                ExecutionStatus.COMPILATION_COMPLETED,
                 text(""),
                 null,
                 text("")
@@ -315,7 +314,7 @@ class CodeModeJobServiceTest {
 
     private static ExecutionResult completed(String logs, ExecutionValue value) {
         return new ExecutionResult(
-                ExecutionResult.Status.RUN_COMPLETED,
+                ExecutionStatus.RUN_COMPLETED,
                 text(logs),
                 value,
                 text("")
@@ -324,7 +323,7 @@ class CodeModeJobServiceTest {
 
     private static ExecutionResult failed(String logs, ExecutionValue value, String error) {
         return new ExecutionResult(
-                ExecutionResult.Status.RUN_EXCEPTION,
+                ExecutionStatus.RUN_EXCEPTION,
                 text(logs),
                 value,
                 text(error)

@@ -1,6 +1,6 @@
 name: Build
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 permissions:
   contents: read
@@ -25,8 +25,18 @@ jobs:
       - name: Build
         shell: pwsh
         run: >-
-          ./gradlew.bat clean build
-          -PtotaldebugUsePublishedCompanion=true
+          ./gradlew.bat :check :localBundle
           -PtotaldebugUseMavenLocal=false
           "-Dmaven.repo.local=$env:RUNNER_TEMP/totaldebug-empty-maven"
           --warning-mode fail --console=plain
+      - name: Verify configuration cache reuse
+        shell: pwsh
+        run: |
+          ./gradlew.bat :protocol:test --warning-mode fail --console=plain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $output = ./gradlew.bat :protocol:test --warning-mode fail --console=plain 2>&1
+          $output | Write-Output
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (($output -join "`n") -notmatch 'Configuration cache entry reused|Reusing configuration cache') {
+            throw 'The unchanged protocol task did not reuse configuration cache.'
+          }

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -9,11 +11,11 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CodeFormatterUtil;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
@@ -27,7 +29,6 @@ import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-
 import javax.swing.*;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -63,13 +64,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         stopButton.setToolTipText("Stop execution");
         stopButton.setEnabled(false);
     }
-    private final JComboBox<RunScriptMessage.ExecutionEnvironment> executionEnvironmentComboBox = new JComboBox<>(RunScriptMessage.ExecutionEnvironment.values());
+    private final JComboBox<ScriptExecutionEnvironment> executionEnvironmentComboBox = new JComboBox<>(ScriptExecutionEnvironment.values());
     {
         executionEnvironmentComboBox.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                var c = (JLabel) super.getListCellRendererComponent(list, ((RunScriptMessage.ExecutionEnvironment) value).getLabel(), index, isSelected, cellHasFocus);
-                c.setIcon(((RunScriptMessage.ExecutionEnvironment) value).getIcon());
+                var c = (JLabel) super.getListCellRendererComponent(list, environmentLabel((ScriptExecutionEnvironment) value), index, isSelected, cellHasFocus);
+                c.setIcon((value == ScriptExecutionEnvironment.THREAD ? null : com.github.minecraft_ta.totalDebugCompanion.Icons.WARNING));
                 return c;
             }
         });
@@ -149,17 +150,17 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             if (m.getScriptId() != this.scriptId)
                 return;
 
-            ExecutionResult.Status status = m.getResult().status();
-            if (status == ExecutionResult.Status.RUN_COMPLETED) {
+            ExecutionStatus status = m.getResult().status();
+            if (status == ExecutionStatus.RUN_COMPLETED) {
                 showRunResult(m);
                 this.bottomInformationBar.setSuccessInfoText("Run completed!");
-            } else if (status == ExecutionResult.Status.COMPILATION_FAILED) {
+            } else if (status == ExecutionStatus.COMPILATION_FAILED) {
                 showRunResult(m);
                 this.bottomInformationBar.setFailureInfoText("Compilation failed!");
-            } else if (status == ExecutionResult.Status.RUN_EXCEPTION) {
+            } else if (status == ExecutionStatus.RUN_EXCEPTION) {
                 showRunResult(m);
                 this.bottomInformationBar.setFailureInfoText("Run failed!");
-            } else if (status == ExecutionResult.Status.CANCELLATION_PENDING) {
+            } else if (status == ExecutionStatus.CANCELLATION_PENDING) {
                 this.bottomInformationBar.setProcessInfoText(m.getResult().error().text());
             } else {
                 this.bottomInformationBar.setProcessInfoText("Running...");
@@ -196,7 +197,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 this.scriptId,
                 this.lastGeneratedSource.source(),
                 server,
-                (RunScriptMessage.ExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem()
+                (ScriptExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem()
         ))) {
             setRunButtonsState(true);
             this.bottomInformationBar.setFailureInfoText(
@@ -247,14 +248,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             this.runOutputTabs.addTab("Result", Icons.EVALUATE_EXPRESSION, this.resultScrollPane);
         }
         if (!result.logs().text().isEmpty()) {
-            this.logPanelTextPane.setText(result.logs().displayText());
+            this.logPanelTextPane.setText(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(result.logs()));
             this.runOutputTabs.addTab("Output", Icons.TEXT_FILE, this.logPanelScrollPane);
         }
         if (!result.error().text().isEmpty()) {
             if (!problems.isEmpty()) {
                 problems.append(System.lineSeparator());
             }
-            problems.append(mapDiagnostics(result.error().displayText()));
+            problems.append(mapDiagnostics(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(result.error())));
         }
         if (!problems.isEmpty()) {
             this.errorTextPane.setText(problems.toString());
@@ -682,5 +683,12 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
             return 1;
         }
+    }
+    private static String environmentLabel(ScriptExecutionEnvironment environment) {
+        return switch (environment) {
+            case THREAD -> "Thread";
+            case PRE_TICK -> "Pre Tick";
+            case POST_TICK -> "Post Tick";
+        };
     }
 }

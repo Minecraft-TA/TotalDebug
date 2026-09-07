@@ -1,12 +1,11 @@
 package com.github.minecraft_ta.totaldebug.network;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
-import com.github.minecraft_ta.totaldebug.script.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 

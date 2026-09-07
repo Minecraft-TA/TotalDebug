@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import org.junit.jupiter.api.Test;
-
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,7 +31,7 @@ class ExecutionValueJsonTest {
 
         assertEquals(
                 Map.of("values", List.of(BigInteger.ONE, new BigInteger("9007199254740993"))),
-                map.toJsonValue()
+                new ExecutionValuePresentation(map).toJsonValue()
         );
     }
 
@@ -48,7 +48,7 @@ class ExecutionValueJsonTest {
                 List.of()
         );
         @SuppressWarnings("unchecked")
-        Map<String, Object> scalar = (Map<String, Object>) truncated.toJsonValue();
+        Map<String, Object> scalar = (Map<String, Object>) new ExecutionValuePresentation(truncated).toJsonValue();
         assertEquals("prefix", scalar.get("value"));
         assertEquals(100, scalar.get("value_total_characters"));
 
@@ -62,7 +62,7 @@ class ExecutionValueJsonTest {
                 ))
         );
         @SuppressWarnings("unchecked")
-        Map<String, Object> envelope = (Map<String, Object>) map.toJsonValue();
+        Map<String, Object> envelope = (Map<String, Object>) new ExecutionValuePresentation(map).toJsonValue();
         assertTrue(envelope.containsKey("entries"));
     }
 
@@ -90,7 +90,7 @@ class ExecutionValueJsonTest {
         );
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> envelope = (Map<String, Object>) list.toJsonValue();
+        Map<String, Object> envelope = (Map<String, Object>) new ExecutionValuePresentation(list).toJsonValue();
         assertEquals(1, envelope.get("identity"));
         @SuppressWarnings("unchecked")
         Map<String, Object> nestedReference = (Map<String, Object>) ((List<?>) envelope.get("values")).getFirst();

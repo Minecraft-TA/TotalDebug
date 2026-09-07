@@ -102,7 +102,7 @@ The evaluator's input-recall list belongs in `state.json`. Save useful code expl
 
 ## Ownership and publication
 
-The internal `storage` Gradle module in TotalDebug owns paths, atomic operations, file leases, launch/log retention and shared inventory/launch contracts. Companion consumes `com.github.minecraft_ta:totaldebug-storage` from Maven Local for coordinated development. SCNet and JIndex do not gain application directory knowledge.
+The internal `storage` Gradle module in TotalDebug owns paths, atomic operations, file leases, launch/log retention and shared inventory/launch contracts. The mod and Companion both consume it through a direct Gradle project dependency. SCNet and JIndex do not gain application directory knowledge.
 
 Feature owners still own their formats: Companion settings/profile/state, decompiler debug metadata and index metadata; game source materialization. Both applications use shared publication mechanics.
 

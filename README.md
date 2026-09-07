@@ -1,6 +1,6 @@
 # TotalDebug
 
-TotalDebug is a Minecraft 1.21.1 NeoForge mod for inspecting and debugging a running modpack. Its desktop app, [TotalDebug Companion](https://github.com/Minecraft-TA/TotalDebugCompanion), brings source browsing, Java scripts and a debugger to the classes installed in your game.
+TotalDebug is a Minecraft 1.21.1 NeoForge mod for inspecting and debugging a running modpack. Its desktop app, [TotalDebug Companion](companion/README.md), brings source browsing, Java scripts and a debugger to the classes installed in your game. Both applications and their shared libraries live in this repository.
 
 Press **F6** while looking at a block or entity, or hovering an item, to open its runtime class in Companion. You can also use `/decompile block`.
 
@@ -20,30 +20,30 @@ Update TotalDebug and Companion together. To download the Companion paired with 
 
 ## Build
 
-Use the checked-in Gradle wrapper. For changes across the four repositories, follow the dependency order in [build and release instructions](docs/BUILD_RELEASE.md), then run:
+Use Java 21 and the checked-in root Gradle wrapper. One checkout builds both applications:
 
 ```powershell
-.\gradlew.bat build -PtotaldebugUseMavenLocal=true
-.\gradlew.bat runClient -PtotaldebugUseMavenLocal=true
+.\gradlew.bat :build
+.\gradlew.bat :mod:runClient
 ```
 
-`runServer` starts a development dedicated server. Versions are defined in [gradle.properties](gradle.properties).
+Use `:companion:test`, `:mod:test`, or a shared module's `:test` task for focused feedback. `:mod:runServer` starts a development dedicated server. Dependency versions are in [the version catalog](gradle/libs.versions.toml). See [build and release instructions](docs/BUILD_RELEASE.md) for task boundaries and artifact preparation.
 
-When a sibling `../TotalDebugCompanion` checkout exists, the mod build prepares its application JAR. To use an explicit JAR, pass `-PtotaldebugCompanionJar=C:/path/to/TotalDebugCompanion.jar`. To use the configured published Companion instead, pass `-PtotaldebugUsePublishedCompanion=true`.
+Development clients use the current Companion build. To launch an explicit JAR, pass `-PtotaldebugCompanionJar=C:/path/to/TotalDebugCompanion.jar`. To use the configured published fallback instead, pass `-PtotaldebugUsePublishedCompanion=true`.
 
 ## Deploy locally
 
 Close Minecraft and run:
 
 ```powershell
-.\gradlew.bat deployLocal -PtotaldebugUseMavenLocal=true "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
+.\gradlew.bat :deployLocal "-PtotaldebugInstanceDir=C:/path/to/instance/minecraft"
 ```
 
 The target is the Minecraft directory containing `mods/` and `config/`. Save `totaldebugInstanceDir=C:/path/to/instance/minecraft` in your user `~/.gradle/gradle.properties` to omit it from later commands.
 
 Deployment installs `mods/total_debug.jar` and `total-debug/companion-app/TotalDebugCompanion.jar`, and configures `decompilation.companionDevelopmentJar` to use the mutable Companion build. Remove any version-named `total_debug-*.jar` first. Other mods, scripts and state are preserved. Restart Minecraft after deployment.
 
-For later Companion-only changes, rebuild Companion, close its window and press F6. Each launch uses an immutable copy so the running app does not lock the build output.
+For later Companion-only changes, run `:companion:shadowJar`, close its window and press F6. Each launch uses an immutable copy so the running app does not lock the build output.
 
 `localBundle` produces the two JARs in `build/local-bundle` without installing them or running tests.
 
@@ -53,4 +53,4 @@ For later Companion-only changes, rebuild Companion, close its window and press 
 - [Builds and publication](docs/BUILD_RELEASE.md)
 - [Storage and cache management](docs/STORAGE.md)
 - [Profiling startup and shutdown](docs/RUNTIME_PERFORMANCE.md)
-- [Companion MCP tools](https://github.com/Minecraft-TA/TotalDebugCompanion/blob/master/MCP.md)
+- [Companion MCP tools](companion/MCP.md)

@@ -38,3 +38,27 @@ tasks.register('installCodexCompanionMcp', Copy) {
     from(executable)
     into(codexHome.map { "${it}/mcp/totaldebug-companion" })
 }
+
+def releaseMod = configurations.create('releaseModArtifact') {
+    canBeConsumed = false
+    canBeResolved = true
+}
+dependencies { add('releaseModArtifact', project(path: ':mod', configuration: 'releaseModElements')) }
+def selectedReleaseVersion = providers.gradleProperty('releaseVersion').orElse('')
+def releaseCheck = tasks.register('releaseCheck', totaldebug.gradle.VerifyReleasePair) {
+    group = 'verification'
+    dependsOn tasks.named('check'), ':mod:releasePackagingTest'
+    modJar = layout.file(releaseMod.elements.map { it.iterator().next().asFile })
+    companionJar = layout.file(executable.elements.map { it.iterator().next().asFile })
+    releaseVersion = selectedReleaseVersion
+    downloadUri = selectedReleaseVersion.map { "https://github.com/Minecraft-TA/TotalDebug/releases/download/v${it}/TotalDebugCompanion.jar" }
+    outputDirectory = layout.buildDirectory.dir('release-checksums')
+}
+tasks.register('releaseBundle', Sync) {
+    group = 'distribution'
+    description = 'Prepares and verifies a paired release without uploading it.'
+    from(releaseMod)
+    from(executable)
+    from(releaseCheck)
+    into(layout.buildDirectory.dir('release'))
+}

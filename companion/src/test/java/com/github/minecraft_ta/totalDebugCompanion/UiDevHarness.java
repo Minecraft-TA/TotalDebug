@@ -51,9 +51,9 @@ import javax.tools.ToolProvider;
  * can actually be looked at.
  *
  * <pre>
- * ./gradlew uiHarness
- * ./gradlew uiHarness --args="--theme=islands-light --scenario=search-results"
- * ./gradlew uiContactSheet
+ * ./gradlew :companion:uiHarness
+ * ./gradlew :companion:uiHarness --args="--theme=islands-light --scenario=search-results"
+ * ./gradlew :companion:uiContactSheet
  * </pre>
  *
  * <p>Lives in {@code src/test} on purpose: production static-initialisation order is delicate here

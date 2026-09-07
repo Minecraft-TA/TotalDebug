@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
@@ -23,7 +25,6 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidStack;
-
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -36,10 +37,9 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.github.minecraft_ta.totaldebug.script.ExecutionValue.Child;
-import static com.github.minecraft_ta.totaldebug.script.ExecutionValue.ChildKind;
-import static com.github.minecraft_ta.totaldebug.script.ExecutionValue.Kind;
+import static com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue.Child;
+import static com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue.ChildKind;
+import static com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue.Kind;
 
 /** Captures a bounded value graph while the script still owns its execution context. */
 public final class ExecutionValueCapture {

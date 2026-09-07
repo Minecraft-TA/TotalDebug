@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.values;
 
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
-
 import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.event.TreeExpansionEvent;
@@ -84,7 +84,7 @@ public final class ScriptResultTree extends JTree {
         ExecutionValue snapshot = node.row.snapshot();
         for (ExecutionValue.Child child : snapshot.children()) {
             String childName = child.kind() == ExecutionValue.ChildKind.MAP_ENTRY
-                    ? "[" + child.key().displayValue(MAX_MAP_KEY_CHARACTERS) + "]"
+                    ? "[" + new ExecutionValuePresentation(child.key()).displayValue(MAX_MAP_KEY_CHARACTERS) + "]"
                     : child.name().text();
             node.add(node(childName, child.kind(), child.value(), false));
         }
@@ -202,7 +202,7 @@ public final class ScriptResultTree extends JTree {
                 ExecutionValue snapshot = result.snapshot();
                 String simpleType = simpleType(snapshot.type().text());
                 String primary = clip(result.name(), MAX_MAP_KEY_CHARACTERS) + " = "
-                        + snapshot.displayValue(MAX_LABEL_VALUE_CHARACTERS);
+                        + new ExecutionValuePresentation(snapshot).displayValue(MAX_LABEL_VALUE_CHARACTERS);
                 String preview = snapshot.preview().text()
                         + (snapshot.preview().truncated() ? "…" : "");
                 String secondary = preview.isBlank() ? simpleType : preview;
@@ -216,7 +216,7 @@ public final class ScriptResultTree extends JTree {
                         tree
                 );
                 String detail = preview.isBlank()
-                        ? snapshot.displayValue(MAX_TOOLTIP_VALUE_CHARACTERS)
+                        ? new ExecutionValuePresentation(snapshot).displayValue(MAX_TOOLTIP_VALUE_CHARACTERS)
                         : preview;
                 if (snapshot.value().truncated()) {
                     detail += "  (retained " + snapshot.value().text().length() + " of "

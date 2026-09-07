@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
-import org.eclipse.jdt.core.IJavaElement;
+import com.github.minecraft_ta.totaldebug.protocol.navigation.SourceTargetKind;
 
 /** Adapts protocol-level source selections into semantic navigation targets. */
 public final class NavigationTargets {
@@ -12,13 +12,13 @@ public final class NavigationTargets {
             int targetType,
             String targetIdentifier
     ) {
-        if (targetType == -1) {
+        if (targetType == SourceTargetKind.WHOLE_CLASS) {
             return new NavigationTarget.RuntimeClass(binaryName);
         }
-        if (targetType == IJavaElement.FIELD) {
+        if (targetType == SourceTargetKind.FIELD) {
             return new NavigationTarget.RuntimeDeclaration(new RuntimeMember.Field(binaryName, targetIdentifier));
         }
-        if (targetType == IJavaElement.METHOD) {
+        if (targetType == SourceTargetKind.METHOD) {
             int descriptorStart = targetIdentifier.indexOf('(');
             if (descriptorStart < 0) {
                 throw new IllegalArgumentException("Method target has no JVM descriptor: " + targetIdentifier);

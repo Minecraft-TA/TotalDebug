@@ -1,15 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExpressionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
@@ -21,7 +22,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-
 import javax.swing.BorderFactory;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -223,7 +223,7 @@ public final class EvaluateExpressionWindow extends JDialog {
             this.activeExecution = this.executions.execute(
                     source,
                     selectedSide,
-                    RunScriptMessage.ExecutionEnvironment.POST_TICK
+                    ScriptExecutionEnvironment.POST_TICK
             );
         } catch (RuntimeException exception) {
             this.activeSource = null;
@@ -305,19 +305,19 @@ public final class EvaluateExpressionWindow extends JDialog {
                 this.results.addTab("Result", Icons.EVALUATE_EXPRESSION, this.resultScroll);
             }
             if (!outcome.logs().text().isEmpty()) {
-                this.output.setText(outcome.logs().displayText());
+                this.output.setText(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(outcome.logs()));
                 this.results.addTab("Output", Icons.TEXT_FILE, scrollPane(this.output));
             }
             if (!outcome.error().text().isEmpty()) {
                 if (!failures.isEmpty()) {
                     failures.append(System.lineSeparator());
                 }
-                String error = outcome.error().displayText();
+                String error = com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(outcome.error());
                 failures.append(completedSource == null
                         ? error
                         : completedSource.mapDiagnostics(error, completedLineOffset));
             }
-            this.status.setText(outcome.status() == ExecutionResult.Status.RUN_COMPLETED
+            this.status.setText(outcome.status() == ExecutionStatus.RUN_COMPLETED
                     ? "Evaluation completed"
                     : "Evaluation failed");
         }

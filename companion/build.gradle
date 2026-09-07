@@ -11,6 +11,7 @@ configurations {
 }
 
 dependencies {
+    implementation project(':protocol')
     implementation project(':storage')
     implementation project(':evaluation')
     parchmentData libs.parchment
@@ -140,3 +141,10 @@ tasks.register('debuggerHarness', JavaExec) {
 
 configurations.create('executableElements') { canBeConsumed = true; canBeResolved = false }
 artifacts { executableElements tasks.named('shadowJar') }
+
+tasks.register('packagingTest', totaldebug.gradle.VerifyCompanionJar) {
+    group = 'verification'
+    executableJar = tasks.named('shadowJar').flatMap { it.archiveFile }
+    reportFile = layout.buildDirectory.file('reports/packaging.txt')
+}
+tasks.named('check') { dependsOn tasks.named('packagingTest') }

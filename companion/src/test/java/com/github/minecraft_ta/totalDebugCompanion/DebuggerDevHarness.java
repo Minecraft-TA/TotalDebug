@@ -14,9 +14,9 @@ import java.util.logging.Logger;
  * Runs the debugger proof suite without the Companion UI or JUnit.
  *
  * <pre>
- * ./gradlew debuggerHarness
- * ./gradlew debuggerHarness --args="--scenario=stepping"
- * ./gradlew debuggerHarness --args="--list"
+ * ./gradlew :companion:debuggerHarness
+ * ./gradlew :companion:debuggerHarness --args="--scenario=stepping"
+ * ./gradlew :companion:debuggerHarness --args="--list"
  * </pre>
  */
 public final class DebuggerDevHarness {

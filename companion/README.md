@@ -24,11 +24,11 @@ See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/1.21
 
 Companion requires **Windows x64 and a full JDK 21**. The application JAR contains its dependencies, but no Java runtime.
 
-For coordinated source builds, follow TotalDebug's [dependency build order](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/BUILD_RELEASE.md), then run:
+From the repository root, run these commands. The shared libraries build automatically. See [build instructions](../docs/BUILD_RELEASE.md) for checks and paired releases.
 
 ```powershell
-.\gradlew.bat build -PtotaldebugUseMavenLocal=true
-java -jar build/libs/TotalDebugCompanion.jar
+.\gradlew.bat :companion:shadowJar
+java -jar companion/build/libs/TotalDebugCompanion.jar
 ```
 
 TotalDebug can launch the same JAR from Minecraft. Standalone startup reopens the last profile when one is available.
@@ -36,12 +36,12 @@ TotalDebug can launch the same JAR from Minecraft. Standalone startup reopens th
 For UI changes, the test harness renders named states without a game session:
 
 ```powershell
-.\gradlew.bat uiHarness -PtotaldebugUseMavenLocal=true '--args=--theme=islands-dark --scenario=search-results'
-.\gradlew.bat uiHarness -PtotaldebugUseMavenLocal=true '--args=--list-scenarios'
-.\gradlew.bat uiContactSheet -PtotaldebugUseMavenLocal=true
+.\gradlew.bat :companion:uiHarness '--args=--theme=islands-dark --scenario=search-results'
+.\gradlew.bat :companion:uiHarness '--args=--list-scenarios'
+.\gradlew.bat :companion:uiContactSheet
 ```
 
-Contact sheets and individual captures are written under `build/ui-screenshots`.
+Contact sheets and individual captures are written under `companion/build/ui-screenshots`.
 
 ## Integrations and storage
 

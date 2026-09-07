@@ -1,10 +1,9 @@
 package com.github.minecraft_ta.totaldebug.network;
 
-import com.github.minecraft_ta.totaldebug.script.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 

@@ -1,10 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCodec;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.google.gson.JsonParseException;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -22,13 +24,13 @@ class ExecutionValueTest {
                 List.of()
         );
 
-        assertEquals("\"abc…\"", value.displayValue(3));
+        assertEquals("\"abc…\"", new ExecutionValuePresentation(value).displayValue(3));
         assertEquals("abcdef", value.value().text());
     }
 
     @Test
     void parsesAValidatedSnapshotTree() {
-        ExecutionResult result = ExecutionResult.parse("""
+        ExecutionResult result = ExecutionResultCodec.decode("""
                 {
                   "status":"RUN_COMPLETED",
                   "logs":{"text":"","totalCharacters":0,"truncated":false},
@@ -66,7 +68,7 @@ class ExecutionValueTest {
 
     @Test
     void rejectsAChildCountSmallerThanThePayload() {
-        assertThrows(JsonParseException.class, () -> ExecutionResult.parse("""
+        assertThrows(JsonParseException.class, () -> ExecutionResultCodec.decode("""
                 {"status":"RUN_COMPLETED",
                  "logs":{"text":"","totalCharacters":0,"truncated":false},
                  "value":{"type":{"text":"x","totalCharacters":1,"truncated":false},

@@ -1,13 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionResult;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.tth05.scnet.Server;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -259,7 +260,7 @@ public final class CodeModeJobService implements AutoCloseable {
         Objects.requireNonNull(result, "result");
         Instant now = this.clock.instant();
         boolean valuePresent = result.value() != null;
-        Object value = valuePresent ? result.value().toJsonValue() : null;
+        Object value = valuePresent ? new ExecutionValuePresentation(result.value()).toJsonValue() : null;
         switch (result.status()) {
             case COMPILATION_COMPLETED -> job.markRunning(now);
             case CANCELLATION_PENDING -> job.markCancellationPending(result.error(), now);
@@ -371,8 +372,8 @@ public final class CodeModeJobService implements AutoCloseable {
         PRE_TICK,
         POST_TICK;
 
-        private RunScriptMessage.ExecutionEnvironment toWireValue() {
-            return RunScriptMessage.ExecutionEnvironment.valueOf(name());
+        private ScriptExecutionEnvironment toWireValue() {
+            return ScriptExecutionEnvironment.valueOf(name());
         }
     }
 
@@ -433,7 +434,6 @@ public final class CodeModeJobService implements AutoCloseable {
             }
             return result;
         }
-
 
     }
 

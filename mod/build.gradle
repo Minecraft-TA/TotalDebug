@@ -35,6 +35,7 @@ neoForge {
     runs {
         client {
             client()
+            gameDirectory = rootProject.layout.projectDirectory.dir('run')
             systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             if (minecraftDebugPort.isPresent()) {
                 jvmArgument(
@@ -51,6 +52,7 @@ neoForge {
 
         server {
             server()
+            gameDirectory = rootProject.layout.projectDirectory.dir('run')
             systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             programArgument '--nogui'
         }
@@ -73,7 +75,10 @@ dependencies {
     implementation project(':evaluation')
     jarJar project(':evaluation')
     additionalRuntimeClasspath project(':evaluation')
+    implementation project(':protocol')
     implementation project(':storage')
+    jarJar project(':protocol')
+    additionalRuntimeClasspath project(':protocol')
     jarJar project(':storage')
     additionalRuntimeClasspath project(':storage')
     compileOnly libs.jna.mod
@@ -133,3 +138,25 @@ tasks.named('test', Test) {
     jvmArgs '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
 }
 idea { module { downloadSources = true; downloadJavadoc = true } }
+
+def releaseVersion = providers.gradleProperty('releaseVersion').orElse('')
+def releaseMetadata = tasks.register('generateCompanionReleaseMetadata', totaldebug.gradle.GenerateCompanionReleaseMetadata) {
+    companionJar = layout.file(companionExecutable.elements.map { it.iterator().next().asFile })
+    getReleaseVersion().set(releaseVersion)
+    publishedVersion = providers.gradleProperty('mod_version')
+    downloadUri = releaseVersion.map { "https://github.com/Minecraft-TA/TotalDebug/releases/download/v${it}/TotalDebugCompanion.jar" }
+    outputFile = layout.buildDirectory.file('generated/release/companion-release.properties')
+}
+def releaseJar = tasks.register('releaseJar', totaldebug.gradle.ReleaseModJar) {
+    getModJar().set(modJar.flatMap { it.archiveFile })
+    getReleaseMetadata().set(releaseMetadata.flatMap { it.outputFile })
+    getReleaseVersion().set(releaseVersion)
+    outputFile = layout.buildDirectory.file('release/total_debug.jar')
+}
+configurations.create('releaseModElements') { canBeConsumed = true; canBeResolved = false }
+artifacts.add('releaseModElements', releaseJar.flatMap { it.outputFile }) { builtBy releaseJar }
+tasks.register('releasePackagingTest', Test) {
+    testClassesDirs = sourceSets.packagingTest.output.classesDirs
+    classpath = sourceSets.packagingTest.runtimeClasspath
+    jvmArgumentProviders.add(new totaldebug.gradle.PackagedModArgumentProvider(releaseJar.flatMap { it.outputFile }))
+}

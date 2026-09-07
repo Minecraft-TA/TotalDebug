@@ -1,20 +1,18 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
-import com.github.minecraft_ta.totaldebug.client.companion.message.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.script.ExecutionResult;
-import com.github.minecraft_ta.totaldebug.script.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
-
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

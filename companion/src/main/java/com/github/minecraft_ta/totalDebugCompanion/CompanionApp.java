@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
-
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.fonts.inter.FlatInterFont;
 import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
@@ -19,9 +18,9 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
-import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.RetryRuntimeInventoryMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -49,7 +48,6 @@ import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
-
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -279,7 +277,7 @@ public final class CompanionApp {
     }
 
     private static synchronized void activateSessionProfile(
-            com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage hello
+            com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage hello
     ) throws IOException {
         CompanionProfile requested;
         try {

@@ -1,13 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ServerHelloMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import org.junit.jupiter.api.Test;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

@@ -1,8 +1,7 @@
 package com.github.minecraft_ta.totaldebug.network;
 
-import com.github.minecraft_ta.totaldebug.script.ExecutionResult;
-import com.github.minecraft_ta.totaldebug.script.ExecutionResultCodec;
-
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCodec;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;

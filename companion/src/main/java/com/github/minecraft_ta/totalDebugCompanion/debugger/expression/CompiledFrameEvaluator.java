@@ -1,13 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
+import com.github.minecraft_ta.totaldebug.evaluation.CompiledClassBundle;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 import com.sun.jdi.*;
 import org.eclipse.jdt.core.dom.*;
-
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -93,7 +91,7 @@ final class CompiledFrameEvaluator {
         boolean invoked = false;
         try {
             ClassObjectReference installed = (ClassObjectReference) bridge.invokeMethod(context.thread(), install,
-                    List.of(vm.mirrorOf(encode(classes)), vm.mirrorOf(binaryName), owner.classObject()),
+                    List.of(vm.mirrorOf(CompiledClassBundle.encode(classes)), vm.mirrorOf(binaryName), owner.classObject()),
                     ObjectReference.INVOKE_SINGLE_THREADED);
             ClassType compiled = (ClassType) installed.reflectedType();
             instance = compiled.newInstance(context.thread(), compiled.concreteMethodByName("<init>", "()V"),
@@ -294,19 +292,6 @@ final class CompiledFrameEvaluator {
             return this.name.equals(reference.getIdentifier())
                     && reference.getStartPosition() >= this.start && reference.getStartPosition() < this.end;
         }
-    }
-
-    private static String encode(Map<String, byte[]> classes) throws java.io.IOException {
-        var bytes = new ByteArrayOutputStream();
-        try (var output = new DataOutputStream(bytes)) {
-            output.writeInt(classes.size());
-            for (var entry : classes.entrySet()) {
-                output.writeUTF(entry.getKey());
-                output.writeInt(entry.getValue().length);
-                output.write(entry.getValue());
-            }
-        }
-        return Base64.getEncoder().encodeToString(bytes.toByteArray());
     }
 
     private record Replacement(int start, int length, String text) { }

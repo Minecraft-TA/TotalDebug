@@ -1,11 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.values;
 
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionText;
-import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValue;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import org.junit.jupiter.api.Test;
-
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

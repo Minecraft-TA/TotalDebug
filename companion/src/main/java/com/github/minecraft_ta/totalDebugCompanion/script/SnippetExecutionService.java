@@ -1,11 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.RunScriptMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.ExecutionResultMessage;
-import com.github.minecraft_ta.totalDebugCompanion.messages.script.StopScriptMessage;
-
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -29,7 +30,7 @@ public final class SnippetExecutionService implements AutoCloseable {
     public Execution execute(
             JavaSnippetSource.GeneratedSource source,
             Side side,
-            RunScriptMessage.ExecutionEnvironment environment
+            ScriptExecutionEnvironment environment
     ) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(side, "side");
