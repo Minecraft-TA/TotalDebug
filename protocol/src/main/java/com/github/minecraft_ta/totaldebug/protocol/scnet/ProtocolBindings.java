@@ -5,84 +5,34 @@ import com.github.tth05.scnet.message.IMessageProcessor;
 
 /** The exact allowed message directions at each protocol endpoint. */
 public final class ProtocolBindings {
-    private ProtocolBindings() {}
-    public static void registerMod(IMessageProcessor processor) {
-        processor.registerMessage(
-                CompanionProtocol.READY,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.CompanionReadyMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.CompanionReadyMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.OPEN_CLASS,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.RUN_SCRIPT,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RunScriptMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RunScriptMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.EXECUTION_RESULT,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ExecutionResultMessage.class
-        );
-        processor.registerMessage(
-                CompanionProtocol.STOP_SCRIPT,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.StopScriptMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.StopScriptMessage::new
-        );
-        processor.registerMessage(CompanionProtocol.FOCUS_WINDOW, com.github.minecraft_ta.totaldebug.protocol.scnet.mod.FocusWindowMessage.class);
-        processor.registerMessage(CompanionProtocol.CLIENT_HELLO, com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ClientHelloMessage.class);
-        processor.registerMessage(
-                CompanionProtocol.SERVER_HELLO,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ServerHelloMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ServerHelloMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.RUNTIME_INVENTORY,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RuntimeInventoryMessage.class
-        );
-        processor.registerMessage(
-                CompanionProtocol.RETRY_RUNTIME_INVENTORY,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RetryRuntimeInventoryMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RetryRuntimeInventoryMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.DEBUG_TARGET,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.mod.DebugTargetMessage.class
-        );
-
+    private ProtocolBindings() {
     }
+
+    public static void registerMod(IMessageProcessor processor) {
+        processor.registerIncoming(CompanionProtocol.READY, ReadyMessage.class, ReadyMessage::new);
+        processor.registerBidirectional(CompanionProtocol.OPEN_CLASS, OpenClassMessage.class, OpenClassMessage::new);
+        processor.registerIncoming(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class, RunScriptMessage::new);
+        processor.registerOutgoing(CompanionProtocol.EXECUTION_RESULT, ExecutionResultMessage.class);
+        processor.registerIncoming(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class, StopScriptMessage::new);
+        processor.registerOutgoing(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class);
+        processor.registerOutgoing(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class);
+        processor.registerIncoming(CompanionProtocol.SERVER_HELLO, ServerHelloMessage.class, ServerHelloMessage::new);
+        processor.registerOutgoing(CompanionProtocol.RUNTIME_INVENTORY, RuntimeInventoryMessage.class);
+        processor.registerIncoming(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class, RetryRuntimeInventoryMessage::new);
+        processor.registerOutgoing(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class);
+    }
+
     public static void registerCompanion(IMessageProcessor processor) {
-        processor.registerMessage(CompanionProtocol.READY, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ReadyMessage.class);
-        processor.registerMessage(
-                CompanionProtocol.OPEN_CLASS,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage::new
-        );
-        processor.registerMessage(CompanionProtocol.RUN_SCRIPT, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage.class);
-        processor.registerMessage(
-                CompanionProtocol.EXECUTION_RESULT,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage::new
-        );
-        processor.registerMessage(CompanionProtocol.STOP_SCRIPT, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage.class);
-        processor.registerMessage(CompanionProtocol.FOCUS_WINDOW, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.FocusWindowMessage.class, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.FocusWindowMessage::new);
-        processor.registerMessage(CompanionProtocol.CLIENT_HELLO, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage.class, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage::new);
-        processor.registerMessage(CompanionProtocol.SERVER_HELLO, com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ServerHelloMessage.class);
-        processor.registerMessage(
-                CompanionProtocol.RUNTIME_INVENTORY,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage::new
-        );
-        processor.registerMessage(
-                CompanionProtocol.RETRY_RUNTIME_INVENTORY,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RetryRuntimeInventoryMessage.class
-        );
-        processor.registerMessage(
-                CompanionProtocol.DEBUG_TARGET,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage.class,
-                com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage::new
-        );
+        processor.registerOutgoing(CompanionProtocol.READY, ReadyMessage.class);
+        processor.registerBidirectional(CompanionProtocol.OPEN_CLASS, OpenClassMessage.class, OpenClassMessage::new);
+        processor.registerOutgoing(CompanionProtocol.RUN_SCRIPT, RunScriptMessage.class);
+        processor.registerIncoming(CompanionProtocol.EXECUTION_RESULT, ExecutionResultMessage.class, ExecutionResultMessage::new);
+        processor.registerOutgoing(CompanionProtocol.STOP_SCRIPT, StopScriptMessage.class);
+        processor.registerIncoming(CompanionProtocol.FOCUS_WINDOW, FocusWindowMessage.class, FocusWindowMessage::new);
+        processor.registerIncoming(CompanionProtocol.CLIENT_HELLO, ClientHelloMessage.class, ClientHelloMessage::new);
+        processor.registerOutgoing(CompanionProtocol.SERVER_HELLO, ServerHelloMessage.class);
+        processor.registerIncoming(CompanionProtocol.RUNTIME_INVENTORY, RuntimeInventoryMessage.class, RuntimeInventoryMessage::new);
+        processor.registerOutgoing(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class);
+        processor.registerIncoming(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class, DebugTargetMessage::new);
     }
 }

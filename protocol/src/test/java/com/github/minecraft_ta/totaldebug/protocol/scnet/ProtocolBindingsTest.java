@@ -27,7 +27,7 @@ class ProtocolBindingsTest {
         try (Server server = endpoint(ProtocolBindings::registerMod)) {
             var received = new CompletableFuture<Integer>();
             server.getMessageBus().listenAlways(
-                    com.github.minecraft_ta.totaldebug.protocol.scnet.mod.StopScriptMessage.class,
+                    StopScriptMessage.class,
                     message -> received.complete(message.scriptId()));
             try (SocketChannel socket = SocketChannel.open(server.getLocalAddress())) {
                 write(socket, CompanionProtocol.CLIENT_HELLO, new byte[]{-1});
@@ -42,7 +42,7 @@ class ProtocolBindingsTest {
         try (Server server = endpoint(ProtocolBindings::registerCompanion)) {
             var received = new CompletableFuture<String>();
             server.getMessageBus().listenAlways(
-                    com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage.class,
+                    ClientHelloMessage.class,
                     message -> received.complete(message.token()));
             try (SocketChannel socket = SocketChannel.open(server.getLocalAddress())) {
                 write(socket, CompanionProtocol.RUN_SCRIPT, new byte[]{-1});
@@ -66,7 +66,7 @@ class ProtocolBindingsTest {
             assertTrue(client.connect(listener.getLocalAddress()));
             try (SocketChannel connection = listener.accept()) {
                 client.getMessageProcessor().enqueueMessage(
-                        new com.github.minecraft_ta.totaldebug.protocol.scnet.mod.StopScriptMessage(7));
+                        new StopScriptMessage(7));
                 assertInstanceOf(IllegalArgumentException.class, failure.get(5, TimeUnit.SECONDS));
             }
         }

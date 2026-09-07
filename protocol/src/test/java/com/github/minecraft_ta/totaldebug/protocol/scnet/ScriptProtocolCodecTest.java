@@ -1,22 +1,79 @@
-package com.github.minecraft_ta.totaldebug.protocol.scnet.companion;
+package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
-
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import com.github.tth05.scnet.util.ByteBufferInputStream;
-import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
-import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.tth05.scnet.util.ByteBufferInputStream;
+import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.nio.ByteBuffer;
 import java.util.HexFormat;
+import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScriptProtocolCodecTest {
     private static final HexFormat HEX = HexFormat.of();
+
+    @Test
+    void runScriptReadsTheSharedGoldenBytes() {
+        byte[] golden = HEX.parseHex(
+                GoldenMessages.RUN_SCRIPT
+        );
+        RunScriptMessage message = new RunScriptMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
+
+        assertEquals(7, message.scriptId());
+        assertEquals("public class X {}", message.scriptText());
+        assertTrue(message.serverSide());
+        assertEquals("POST_TICK", message.executionEnvironment());
+    }
+
+    @Test
+    void executionResultWritesTheCanonicalEnvelope() {
+        ExecutionValue value = new ExecutionValue(
+                ExecutionText.complete("java.lang.Boolean"),
+                ExecutionText.complete("true"),
+                ExecutionText.empty(),
+                ExecutionValue.Kind.BOOLEAN,
+                0,
+                0,
+                false,
+                java.util.List.of()
+        );
+        ExecutionResult result = new ExecutionResult(
+                ExecutionStatus.RUN_COMPLETED,
+                ExecutionText.complete("out"),
+                value,
+                ExecutionText.empty()
+        );
+        ExecutionResultMessage message = new ExecutionResultMessage(
+                7,
+                result
+        );
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        message.write(output);
+        ByteBufferInputStream input = new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output)));
+
+        assertEquals(7, input.readInt());
+        assertEquals("""
+                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false}}""", input.readString());
+    }
+
+    @Test
+    void stopScriptReadsTheSharedGoldenBytes() {
+        StopScriptMessage message = new StopScriptMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(HEX.parseHex(GoldenMessages.STOP_SCRIPT))));
+
+        assertEquals(7, message.scriptId());
+    }
+
 
     @Test
     void cancellationPendingSurvivesTheResultEnvelopeWithoutBecomingTerminal() {
@@ -27,8 +84,8 @@ class ScriptProtocolCodecTest {
         written.write(output);
         ExecutionResultMessage read = new ExecutionResultMessage();
         read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
-        assertEquals(result, read.getResult());
-        assertEquals(false, read.getResult().status().terminal());
+        assertEquals(result, read.result());
+        assertEquals(false, read.result().status().terminal());
     }
 
     @Test
@@ -76,8 +133,8 @@ class ScriptProtocolCodecTest {
         ExecutionResultMessage read = new ExecutionResultMessage();
         read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
 
-        assertEquals(7, read.getScriptId());
-        assertEquals(result, read.getResult());
+        assertEquals(7, read.scriptId());
+        assertEquals(result, read.result());
     }
 
     @Test

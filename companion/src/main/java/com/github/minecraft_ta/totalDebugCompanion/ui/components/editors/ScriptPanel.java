@@ -11,9 +11,9 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CodeFormatterUtil;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
@@ -147,10 +147,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupFormatting();
 
         CompanionApp.SERVER.getMessageBus().listenAlways(ExecutionResultMessage.class, this, (m) -> {
-            if (m.getScriptId() != this.scriptId)
+            if (m.scriptId() != this.scriptId)
                 return;
 
-            ExecutionStatus status = m.getResult().status();
+            ExecutionStatus status = m.result().status();
             if (status == ExecutionStatus.RUN_COMPLETED) {
                 showRunResult(m);
                 this.bottomInformationBar.setSuccessInfoText("Run completed!");
@@ -161,7 +161,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 showRunResult(m);
                 this.bottomInformationBar.setFailureInfoText("Run failed!");
             } else if (status == ExecutionStatus.CANCELLATION_PENDING) {
-                this.bottomInformationBar.setProcessInfoText(m.getResult().error().text());
+                this.bottomInformationBar.setProcessInfoText(m.result().error().text());
             } else {
                 this.bottomInformationBar.setProcessInfoText("Running...");
             }
@@ -242,7 +242,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private void showRunResult(ExecutionResultMessage message) {
         this.runOutputTabs.removeAll();
         StringBuilder problems = new StringBuilder();
-        ExecutionResult result = message.getResult();
+        ExecutionResult result = message.result();
         if (result.value() != null) {
             this.resultTree.showResult(result.value());
             this.runOutputTabs.addTab("Result", Icons.EVALUATE_EXPRESSION, this.resultScrollPane);

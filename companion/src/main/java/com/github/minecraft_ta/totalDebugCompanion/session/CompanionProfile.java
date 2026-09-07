@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.google.gson.JsonObject;
 import java.io.IOException;

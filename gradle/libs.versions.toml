@@ -21,7 +21,7 @@ asm-desktop = { module = "org.ow2.asm:asm", version = "9.9.1" }
 jdt = { module = "org.eclipse.jdt:org.eclipse.jdt.core", version = "3.46.0" }
 osgi-annotations = { module = "org.osgi:org.osgi.service.component.annotations", version = "1.5.1" }
 jindex = { module = "com.github.tth05:jindex", version = "2.0.0" }
-scnet = { module = "com.github.tth05:SCNet", version = "2.0.0" }
+scnet = { module = "com.github.tth05:SCNet", version = "2.1.0" }
 java-debug = { module = "com.microsoft.java:com.microsoft.java.debug.core", version = "0.53.1" }
 vineflower = { module = "org.vineflower:vineflower", version = "1.12.0" }
 classgraph = { module = "io.github.classgraph:classgraph", version = "4.8.193" }

@@ -1,15 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.FocusWindowMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ReadyMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ServerHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -123,8 +124,7 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     private void registerMessages() {
-        com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings.registerCompanion(this.server.getMessageProcessor());
-
+        ProtocolBindings.registerCompanion(this.server.getMessageProcessor());
     }
 
     private void registerHandlers() {

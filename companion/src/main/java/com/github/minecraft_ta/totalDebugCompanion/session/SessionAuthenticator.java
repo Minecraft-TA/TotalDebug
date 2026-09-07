@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;

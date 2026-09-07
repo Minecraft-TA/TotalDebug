@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

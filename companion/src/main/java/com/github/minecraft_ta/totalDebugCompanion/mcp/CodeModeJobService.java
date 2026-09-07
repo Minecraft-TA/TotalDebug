@@ -3,9 +3,9 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.tth05.scnet.Server;
@@ -86,8 +86,8 @@ public final class CodeModeJobService implements AutoCloseable {
                 Clock.systemUTC()
         );
         server.getMessageBus().listenAlways(ExecutionResultMessage.class, this, message -> {
-            int scriptId = message.getScriptId();
-            ExecutionResult result = message.getResult();
+            int scriptId = message.scriptId();
+            ExecutionResult result = message.result();
             try {
                 this.statusExecutor.execute(() -> acceptResult(scriptId, result));
             } catch (RejectedExecutionException ignored) {

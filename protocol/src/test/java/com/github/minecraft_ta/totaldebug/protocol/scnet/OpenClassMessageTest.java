@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totaldebug.protocol.scnet.mod;
+package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;

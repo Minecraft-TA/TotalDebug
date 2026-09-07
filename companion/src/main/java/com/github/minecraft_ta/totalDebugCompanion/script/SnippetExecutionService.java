@@ -4,9 +4,9 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvi
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -73,11 +73,11 @@ public final class SnippetExecutionService implements AutoCloseable {
     }
 
     private void acceptResult(ExecutionResultMessage message) {
-        ExecutionResult result = message.getResult();
+        ExecutionResult result = message.result();
         if (!result.status().terminal()) {
             return;
         }
-        CompletableFuture<ExecutionResult> completion = this.runs.remove(message.getScriptId());
+        CompletableFuture<ExecutionResult> completion = this.runs.remove(message.scriptId());
         if (completion == null) {
             return;
         }

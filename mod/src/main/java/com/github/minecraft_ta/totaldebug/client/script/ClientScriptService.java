@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResultAssembler;

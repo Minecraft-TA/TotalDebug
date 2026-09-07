@@ -18,9 +18,9 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RetryRuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -277,7 +277,7 @@ public final class CompanionApp {
     }
 
     private static synchronized void activateSessionProfile(
-            com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ClientHelloMessage hello
+            com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage hello
     ) throws IOException {
         CompanionProfile requested;
         try {

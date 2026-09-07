@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
@@ -8,17 +9,17 @@ import com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.decompile.SourceTarget;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ClientHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.CompanionReadyMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.DebugTargetMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.FocusWindowMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RunScriptMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RetryRuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.RuntimeInventoryMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.ServerHelloMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.mod.StopScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
@@ -232,13 +233,13 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void registerProtocol() {
-        com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings.registerMod(this.client.getMessageProcessor());
+        ProtocolBindings.registerMod(this.client.getMessageProcessor());
         this.client.getMessageBus().listenAlways(ServerHelloMessage.class, this::handleServerHello);
         this.client.getMessageBus().listenAlways(
                 RetryRuntimeInventoryMessage.class,
                 message -> startRuntimeInventoryPreparation(true)
         );
-        this.client.getMessageBus().listenAlways(CompanionReadyMessage.class, message -> {
+        this.client.getMessageBus().listenAlways(ReadyMessage.class, message -> {
             CompletableFuture<Void> authentication = this.authenticated;
             if (!authentication.isDone() || authentication.isCompletedExceptionally()) {
                 failSession("Companion sent Ready before the session handshake completed", null);

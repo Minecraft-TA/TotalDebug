@@ -10,7 +10,7 @@ import com.github.tth05.scnet.message.AbstractMessageOutgoing;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.companion.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import org.junit.jupiter.api.Test;
