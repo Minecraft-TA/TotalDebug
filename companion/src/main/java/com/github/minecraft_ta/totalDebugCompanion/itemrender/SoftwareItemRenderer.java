@@ -23,10 +23,12 @@ final class SoftwareItemRenderer {
     private static final List<String> GENERATED_LAYERS = List.of("layer0", "layer1", "layer2", "layer3", "layer4");
     private static final Vec3 LIGHT_ZERO = new Vec3(-0.2, 1.0, 0.7).normalize();
     private static final Vec3 LIGHT_ONE = new Vec3(0.2, 1.0, -0.7).normalize();
-    private static final BufferedImage WHITE_TEXTURE = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+    private static final TextureRegion WHITE_TEXTURE;
 
     static {
-        WHITE_TEXTURE.setRGB(0, 0, 0xFFFFFFFF);
+        BufferedImage white = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        white.setRGB(0, 0, 0xFFFFFFFF);
+        WHITE_TEXTURE = TextureRegion.full(white);
     }
 
     private final ItemModelRepository models;
@@ -89,7 +91,7 @@ final class SoftwareItemRenderer {
             if (!model.hasTexture(layer)) {
                 break;
             }
-            BufferedImage texture = this.models.texture(model.resolveTexture('#' + layer));
+            TextureRegion texture = this.models.texture(model.resolveTexture('#' + layer));
             ExtraFaceData faceData = model.layerFaceData().getOrDefault(layerIndex, ExtraFaceData.DEFAULT);
             int tint = multiplyArgb(request.tintColor(layerIndex), faceData.color());
             drawScaledLayer(target, texture, tint);
@@ -111,7 +113,7 @@ final class SoftwareItemRenderer {
                 break;
             }
             foundLayer = true;
-            BufferedImage texture = this.models.texture(model.resolveTexture('#' + layer));
+            TextureRegion texture = this.models.texture(model.resolveTexture('#' + layer));
             ExtraFaceData faceData = model.layerFaceData().getOrDefault(layerIndex, ExtraFaceData.DEFAULT);
             int tint = multiplyArgb(request.tintColor(layerIndex), faceData.color());
             addGeneratedLayer(
@@ -141,7 +143,7 @@ final class SoftwareItemRenderer {
         for (Element element : model.elements()) {
             for (Map.Entry<ItemModelRepository.Direction, Face> faceEntry : element.faces().entrySet()) {
                 Face face = faceEntry.getValue();
-                BufferedImage texture = this.models.texture(model.resolveTexture(face.texture()));
+                TextureRegion texture = this.models.texture(model.resolveTexture(face.texture()));
                 Vec3[] modelVertices = faceEntry.getKey().vertices(element.from(), element.to());
                 Vertex[] vertices = new Vertex[4];
                 Vec3[] transformed = new Vec3[4];
@@ -187,7 +189,7 @@ final class SoftwareItemRenderer {
             if (face.vertices().size() < 3) {
                 continue;
             }
-            BufferedImage texture = face.texture() == null
+            TextureRegion texture = face.texture() == null
                     ? WHITE_TEXTURE
                     : this.models.texture(model.resolveMeshTexture(face));
             Vertex[] vertices = new Vertex[face.vertices().size()];
@@ -218,7 +220,7 @@ final class SoftwareItemRenderer {
 
     private static void addGeneratedLayer(
             List<Triangle> triangles,
-            BufferedImage texture,
+            TextureRegion texture,
             int tint,
             int renderSize,
             Transform guiTransform,
@@ -261,42 +263,42 @@ final class SoftwareItemRenderer {
                 faceData
         );
 
-        int width = texture.getWidth();
-        int height = texture.getHeight();
+        int width = texture.columns();
+        int height = texture.rows();
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                if ((texture.getRGB(x, y) >>> 24) == 0) {
+                if ((texture.pixel(x, y) >>> 24) == 0) {
                     continue;
                 }
-                double x0 = (double) x / width;
-                double x1 = (double) (x + 1) / width;
-                double y0 = 1.0 - (double) y / height;
-                double y1 = 1.0 - (double) (y + 1) / height;
-                double u0 = (double) x / width;
-                double u1 = (double) (x + 1) / width;
-                double v0 = (double) y / height;
-                double v1 = (double) (y + 1) / height;
-                double edgeU = (x + 0.5) / width;
-                double edgeV = (y + 0.5) / height;
-                if (x == 0 || (texture.getRGB(x - 1, y) >>> 24) == 0) {
+                double x0 = texture.u0(x);
+                double x1 = texture.u1(x);
+                double y0 = 1.0 - texture.v0(y);
+                double y1 = 1.0 - texture.v1(y);
+                double u0 = texture.u0(x);
+                double u1 = texture.u1(x);
+                double v0 = texture.v0(y);
+                double v1 = texture.v1(y);
+                double edgeU = (u0 + u1) / 2;
+                double edgeV = (v0 + v1) / 2;
+                if (x == 0 || (texture.pixel(x - 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y1, back), new Vec3(x0, y1, front), new Vec3(x0, y0, front)},
                             new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (x == width - 1 || (texture.getRGB(x + 1, y) >>> 24) == 0) {
+                if (x == width - 1 || (texture.pixel(x + 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x1, y0, front), new Vec3(x1, y1, front), new Vec3(x1, y1, back), new Vec3(x1, y0, back)},
                             new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (y == 0 || (texture.getRGB(x, y - 1) >>> 24) == 0) {
+                if (y == 0 || (texture.pixel(x, y - 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y0, front), new Vec3(x1, y0, front), new Vec3(x1, y0, back)},
                             new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (y == height - 1 || (texture.getRGB(x, y + 1) >>> 24) == 0) {
+                if (y == height - 1 || (texture.pixel(x, y + 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y1, front), new Vec3(x0, y1, back), new Vec3(x1, y1, back), new Vec3(x1, y1, front)},
                             new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},
@@ -310,7 +312,7 @@ final class SoftwareItemRenderer {
             List<Triangle> triangles,
             Vec3[] modelVertices,
             double[][] textureCoordinates,
-            BufferedImage texture,
+            TextureRegion texture,
             int tint,
             int renderSize,
             Transform guiTransform,
@@ -423,12 +425,10 @@ final class SoftwareItemRenderer {
         return Math.max(directional, emitted);
     }
 
-    private static void drawScaledLayer(BufferedImage target, BufferedImage texture, int tint) {
+    private static void drawScaledLayer(BufferedImage target, TextureRegion texture, int tint) {
         for (int y = 0; y < target.getHeight(); y++) {
-            int textureY = Math.min(texture.getHeight() - 1, y * texture.getHeight() / target.getHeight());
             for (int x = 0; x < target.getWidth(); x++) {
-                int textureX = Math.min(texture.getWidth() - 1, x * texture.getWidth() / target.getWidth());
-                int source = colorize(texture.getRGB(textureX, textureY), tint, 1.0);
+                int source = colorize(texture.sampleScaled(x, y, target.getWidth(), target.getHeight()), tint, 1.0);
                 if ((source >>> 24) != 0) {
                     target.setRGB(x, y, blend(target.getRGB(x, y), source));
                 }
@@ -477,9 +477,7 @@ final class SoftwareItemRenderer {
                 double depth = firstWeight * triangle.first().z()
                         + secondWeight * triangle.second().z()
                         + thirdWeight * triangle.third().z();
-                int textureX = Math.clamp((int) Math.floor(u * triangle.texture().getWidth()), 0, triangle.texture().getWidth() - 1);
-                int textureY = Math.clamp((int) Math.floor(v * triangle.texture().getHeight()), 0, triangle.texture().getHeight() - 1);
-                int source = colorize(triangle.texture().getRGB(textureX, textureY), triangle.tint(), triangle.brightness());
+                int source = colorize(triangle.texture().sample(u, v), triangle.tint(), triangle.brightness());
                 int sourceAlpha = source >>> 24;
                 if (sourceAlpha == 0) {
                     continue;
@@ -578,7 +576,7 @@ final class SoftwareItemRenderer {
             Vertex first,
             Vertex second,
             Vertex third,
-            BufferedImage texture,
+            TextureRegion texture,
             int tint,
             double brightness
     ) {

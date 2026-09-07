@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.itemrender.integration.fusio
 
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemModelId;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderException;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureRegion;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.UnsupportedItemModelException;
 
 import com.google.gson.JsonArray;
@@ -42,7 +43,7 @@ public final class FusionItemRenderIntegration {
         }
     }
 
-    public static BufferedImage isolatedTexture(ItemModelId textureId, BufferedImage image, JsonObject metadata)
+    public static TextureRegion isolatedTexture(ItemModelId textureId, BufferedImage image, JsonObject metadata)
             throws ItemRenderException {
         try {
             JsonObject fusion = requiredObject(metadata, "fusion");
@@ -71,7 +72,7 @@ public final class FusionItemRenderIntegration {
             String layoutName = fusion.has("layout") ? requiredString(fusion, "layout") : "full";
             Layout layout = parseLayout(textureId, layoutName);
             if (layout.discardItemQuad) {
-                return new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+                return TextureRegion.full(new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB));
             }
             return selectIsolatedTile(textureId, image, metadata, layout);
         } catch (ItemRenderException exception) {
@@ -81,7 +82,7 @@ public final class FusionItemRenderIntegration {
         }
     }
 
-    private static BufferedImage selectIsolatedTile(
+    private static TextureRegion selectIsolatedTile(
             ItemModelId textureId,
             BufferedImage image,
             JsonObject metadata,
@@ -89,7 +90,6 @@ public final class FusionItemRenderIntegration {
     ) throws ItemRenderException {
         int imageWidth = image.getWidth();
         int imageHeight = image.getHeight();
-        int effectiveImageHeight = imageHeight;
         int frameWidth = imageWidth;
         int frameHeight = imageHeight;
         JsonObject animation = metadata.has("animation") ? requiredObject(metadata, "animation") : null;
@@ -98,8 +98,7 @@ public final class FusionItemRenderIntegration {
             if (animation != null) {
                 throw invalidMetadata(textureId, "square legacy full layout cannot be animated");
             }
-            frameHeight = imageHeight * 6 / 8;
-            effectiveImageHeight = frameHeight;
+            return new TextureRegion(image, 0, 0, imageWidth / 8.0, imageHeight / 8.0);
         } else if (animation != null) {
             int declaredWidth = optionalInt(animation, "width", -1);
             int declaredHeight = optionalInt(animation, "height", -1);
@@ -119,28 +118,24 @@ public final class FusionItemRenderIntegration {
 
         if (frameWidth < 1 || frameHeight < 1
                 || imageWidth % frameWidth != 0
-                || effectiveImageHeight % frameHeight != 0) {
+                || imageHeight % frameHeight != 0) {
             throw invalidMetadata(
                     textureId,
                     "image " + imageWidth + "x" + imageHeight + " does not contain whole animation frames"
             );
         }
-        if (frameWidth % layout.width != 0 || frameHeight % layout.height != 0) {
-            throw unsupported(textureId, "fractional Fusion " + layout.serializedName + " texture tile");
-        }
-
         int columns = imageWidth / frameWidth;
-        int rows = effectiveImageHeight / frameHeight;
+        int rows = imageHeight / frameHeight;
         int frameIndex = animation == null ? 0 : firstFrameIndex(animation);
         if (frameIndex < 0 || frameIndex >= columns * rows) {
             throw invalidMetadata(textureId, "animation frame index is outside the texture");
         }
 
-        int tileWidth = frameWidth / layout.width;
-        int tileHeight = frameHeight / layout.height;
-        int x = frameIndex % columns * frameWidth + layout.defaultTileX * tileWidth;
-        int y = frameIndex / columns * frameHeight + layout.defaultTileY * tileHeight;
-        return copy(image, x, y, tileWidth, tileHeight);
+        double tileWidth = (double) frameWidth / layout.width;
+        double tileHeight = (double) frameHeight / layout.height;
+        double x = frameIndex % columns * frameWidth + layout.defaultTileX * tileWidth;
+        double y = frameIndex / columns * frameHeight + layout.defaultTileY * tileHeight;
+        return new TextureRegion(image, x, y, tileWidth, tileHeight);
     }
 
     private static int firstFrameIndex(JsonObject animation) {
@@ -174,13 +169,6 @@ public final class FusionItemRenderIntegration {
             case "overlay" -> Layout.OVERLAY;
             default -> throw unsupported(textureId, "Fusion connecting texture layout " + name);
         };
-    }
-
-    private static BufferedImage copy(BufferedImage source, int x, int y, int width, int height) {
-        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        int[] pixels = source.getRGB(x, y, width, height, null, 0, width);
-        result.setRGB(0, 0, width, height, pixels, 0, width);
-        return result;
     }
 
     private static JsonObject requiredObject(JsonObject json, String name) {
@@ -252,15 +240,13 @@ public final class FusionItemRenderIntegration {
     }
 
     private enum Layout {
-        FULL("full", 8, 6, 0, 0, false),
-        HORIZONTAL("horizontal", 4, 1, 0, 0, false),
-        SIMPLE("simple", 4, 4, 0, 0, false),
-        VERTICAL("vertical", 1, 4, 0, 0, false),
-        COMPACT("compact", 5, 1, 0, 0, false),
-        PIECED("pieced", 5, 1, 0, 0, false),
-        OVERLAY("overlay", 6, 3, 1, 1, true);
-
-        private final String serializedName;
+        FULL(8, 6, 0, 0, false),
+        HORIZONTAL(4, 1, 0, 0, false),
+        SIMPLE(4, 4, 0, 0, false),
+        VERTICAL(1, 4, 0, 0, false),
+        COMPACT(5, 1, 0, 0, false),
+        PIECED(5, 1, 0, 0, false),
+        OVERLAY(6, 3, 1, 1, true);
         private final int width;
         private final int height;
         private final int defaultTileX;
@@ -268,14 +254,12 @@ public final class FusionItemRenderIntegration {
         private final boolean discardItemQuad;
 
         Layout(
-                String serializedName,
                 int width,
                 int height,
                 int defaultTileX,
                 int defaultTileY,
                 boolean discardItemQuad
         ) {
-            this.serializedName = serializedName;
             this.width = width;
             this.height = height;
             this.defaultTileX = defaultTileX;

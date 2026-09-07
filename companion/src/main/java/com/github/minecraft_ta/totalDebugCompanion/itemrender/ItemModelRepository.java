@@ -34,7 +34,7 @@ final class ItemModelRepository {
     private final ResourcePackStack resources;
     private final AtlasSpriteResolver atlasSprites;
     private final Map<ItemModelId, ResolvedModel> modelCache = new HashMap<>();
-    private final Map<ItemModelId, BufferedImage> textureCache = new HashMap<>();
+    private final Map<ItemModelId, TextureRegion> textureCache = new HashMap<>();
 
     ItemModelRepository(ResourcePackStack resources) {
         this.resources = resources;
@@ -49,16 +49,16 @@ final class ItemModelRepository {
         return resolve(modelId, new LinkedHashSet<>());
     }
 
-    BufferedImage texture(ItemModelId textureId) throws IOException {
-        BufferedImage cached = this.textureCache.get(textureId);
+    TextureRegion texture(ItemModelId textureId) throws IOException {
+        TextureRegion cached = this.textureCache.get(textureId);
         if (cached != null) {
             return cached;
         }
 
         AtlasSpriteResolver.Sprite sprite = this.atlasSprites.resolve(textureId);
         BufferedImage decoded = readTextureImage(sprite.resource());
-        BufferedImage frame = sprite.generated()
-                ? this.atlasSprites.applyPalette(sprite, decoded, this::readTextureImage)
+        TextureRegion frame = sprite.generated()
+                ? TextureRegion.full(this.atlasSprites.applyPalette(sprite, decoded, this::readTextureImage))
                 : textureFrame(sprite.resource(), decoded);
         this.textureCache.put(textureId, frame);
         return frame;
@@ -809,11 +809,11 @@ final class ItemModelRepository {
         };
     }
 
-    private BufferedImage textureFrame(ItemModelId textureId, BufferedImage image) throws IOException {
+    private TextureRegion textureFrame(ItemModelId textureId, BufferedImage image) throws IOException {
         String metadataPath = textureId.textureResourcePath() + ".mcmeta";
         Optional<byte[]> metadataBytes = this.resources.read(metadataPath, MAXIMUM_MODEL_BYTES);
         if (metadataBytes.isEmpty()) {
-            return toArgb(image);
+            return TextureRegion.full(toArgb(image));
         }
 
         try {
@@ -822,7 +822,7 @@ final class ItemModelRepository {
                 return FusionItemRenderIntegration.isolatedTexture(textureId, image, root);
             }
             if (!root.has("animation")) {
-                return toArgb(image);
+                return TextureRegion.full(toArgb(image));
             }
             JsonObject animation = requiredObject(root, "animation");
             int frameWidth = optionalInt(animation, "width", -1);
@@ -845,12 +845,12 @@ final class ItemModelRepository {
             if (frameIndex < 0 || frameIndex >= columns * rows) {
                 throw new JsonParseException("animation frame index is outside the texture");
             }
-            return toArgb(image.getSubimage(
+            return TextureRegion.full(toArgb(image.getSubimage(
                     frameIndex % columns * frameWidth,
                     frameIndex / columns * frameHeight,
                     frameWidth,
                     frameHeight
-            ));
+            )));
         } catch (RuntimeException exception) {
             throw new ItemRenderException(
                     ItemRenderException.Kind.RESOURCE_ERROR,

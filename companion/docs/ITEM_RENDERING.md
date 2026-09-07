@@ -35,10 +35,10 @@ Reports count archive model files processed without failure. They separately cou
 
 The historical ATM10 Sky scan at renderer revision `2e4fde1` processed 40,674 of 43,913 archive model files without failure, or 92.62 percent. Comparisons must preserve the ordered resource roots and model denominator, and separately inspect representative images and failure categories.
 
-## Deferred fractional Fusion texture regions
+## Fractional Fusion texture regions
 
-Fusion 1.2.12 normally gives an item quad the isolated tile from a connecting texture. Whole-pixel tiles can be cropped into a `BufferedImage`.
+Fusion 1.2.12 gives an item quad an isolated tile from a connecting texture. `TextureRegion` keeps the source image and exact pixel bounds so the renderer can sample tiles whose dimensions are not whole pixels.
 
-`rechiseled:block/coal_block_compacted` is an 80 by 16 connecting texture with no declared layout. Fusion uses its default 8 by 6 full layout, giving a tile of 10 by 2.67 pixels. Fusion keeps the original image and represents the tile with fractional UV coordinates. The renderer currently reports `fractional Fusion full texture tile` for the six affected block, slab and stair item models.
+`rechiseled:block/coal_block_compacted` is an 80 by 16 connecting texture with no declared layout. Fusion uses its default 8 by 6 full layout, giving a tile of 10 by 2.67 pixels. The renderer samples that region directly for element faces and generated layers. Generated edges clip their geometry to partial boundary texels.
 
-Supporting this requires preserving the image and UV bounds when resolving textures. Rounding the crop or inferring another layout would change the sampled pixels. A regression fixture must cover a non-integral region and check that the other Fusion previews remain unchanged.
+Regression fixtures compare a fractional region against an independently constructed texture with the same color proportions. They cover flat and transformed generated models, element faces, animation-frame offsets and integer tile preservation. The renderer does not round the tile or infer a different layout.

@@ -29,7 +29,7 @@ class AtlasSpriteResolverTest {
         png("test:key", 0x40112233, 0x00445566);
         png("test:palette", 0x80ABCDEF, 0xFF000000);
         try (ResourcePackStack resources = roots()) {
-            BufferedImage image = new ItemModelRepository(resources).texture(ItemModelId.parse("test:trim_gold"));
+            BufferedImage image = new ItemModelRepository(resources).texture(ItemModelId.parse("test:trim_gold")).image();
             assertEquals(0x40ABCDEF, image.getRGB(0, 0));
             assertEquals(0xFF445566, image.getRGB(1, 0));
             assertEquals(0xFF778899, image.getRGB(2, 0));
@@ -55,7 +55,7 @@ class AtlasSpriteResolverTest {
         try (ResourcePackStack resources = ResourcePackStack.open(List.of(
                 new ItemRenderResourceRoot(pack), ItemRenderResourceRoot.nested(archive, "nested")))) {
             assertEquals(0xFF00BB00, new ItemModelRepository(resources)
-                    .texture(ItemModelId.parse("test:trim_gold")).getRGB(0, 0));
+                    .texture(ItemModelId.parse("test:trim_gold")).image().getRGB(0, 0));
         }
     }
 
@@ -68,12 +68,12 @@ class AtlasSpriteResolverTest {
         atlas("{\"type\":\"single\",\"resource\":\"test:trim_gold\"}," + paletteSource());
         try (ResourcePackStack resources = roots()) {
             assertEquals(0xFFAA0000, new ItemModelRepository(resources)
-                    .texture(ItemModelId.parse("test:trim_gold")).getRGB(0, 0));
+                    .texture(ItemModelId.parse("test:trim_gold")).image().getRGB(0, 0));
         }
         atlas(paletteSource() + ",{\"type\":\"single\",\"resource\":\"test:trim_gold\"}");
         try (ResourcePackStack resources = roots()) {
             assertEquals(0xFF00BB00, new ItemModelRepository(resources)
-                    .texture(ItemModelId.parse("test:trim_gold")).getRGB(0, 0));
+                    .texture(ItemModelId.parse("test:trim_gold")).image().getRGB(0, 0));
         }
     }
 
@@ -91,7 +91,7 @@ class AtlasSpriteResolverTest {
         atlas(directory + "," + filter + "," + directory);
         try (ResourcePackStack resources = roots()) {
             assertEquals(0xFF00BB00, new ItemModelRepository(resources)
-                    .texture(ItemModelId.parse("test:item/trim_gold")).getRGB(0, 0));
+                    .texture(ItemModelId.parse("test:item/trim_gold")).image().getRGB(0, 0));
         }
     }
 
@@ -130,7 +130,7 @@ class AtlasSpriteResolverTest {
         png("test:palette", 0xFFAA0000);
         try (ResourcePackStack resources = roots()) {
             ItemModelRepository repository = new ItemModelRepository(resources);
-            assertEquals(0xFFAA0000, repository.texture(ItemModelId.parse("test:trim_gold")).getRGB(0, 0));
+            assertEquals(0xFFAA0000, repository.texture(ItemModelId.parse("test:trim_gold")).image().getRGB(0, 0));
             ItemRenderException failure = assertThrows(ItemRenderException.class,
                     () -> repository.texture(ItemModelId.parse("test:unknown")));
             assertEquals(ItemRenderException.Kind.MISSING_RESOURCE, failure.kind());
