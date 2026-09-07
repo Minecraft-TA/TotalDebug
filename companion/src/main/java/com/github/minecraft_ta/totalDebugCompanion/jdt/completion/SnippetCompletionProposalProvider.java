@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CodeFormatterUtil;
 import org.eclipse.jdt.core.CompletionContext;
 import org.eclipse.jdt.core.ICompilationUnit;
 
@@ -23,11 +22,24 @@ public class SnippetCompletionProposalProvider {
             item.setKind(CompletionItemKind.KEYWORD);
             item.addTextEdit(new CustomTextEdit(
                     new Range(context.getTokenStart(), token.length()),
-                    s.getText().replace("\n", "\n" + "\t".repeat(CodeFormatterUtil.getIndentationLevelAtOffset(unit, context.getTokenStart())))
+                    s.getText().replace("\n", "\n" + indentationAt(unit, context.getTokenStart()))
             ));
 
             return item;
         }).toList();
+    }
+
+    static String indentationAt(ICompilationUnit unit, int offset) {
+        try {
+            String source = unit.getSource();
+            int position = Math.max(0, Math.min(offset, source.length()));
+            int start = source.lastIndexOf('\n', position - 1) + 1;
+            int end = start;
+            while (end < source.length() && (source.charAt(end) == ' ' || source.charAt(end) == '\t')) end++;
+            return source.substring(start, end);
+        } catch (org.eclipse.jdt.core.JavaModelException e) {
+            throw new IllegalStateException("Cannot read snippet indentation", e);
+        }
     }
 
     private enum Snippets {

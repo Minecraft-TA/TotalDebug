@@ -1,8 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CodeFormatterUtil;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CompletionProposalDescriptionProvider;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CompletionProposalReplacementProvider;
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.*;
@@ -29,8 +26,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     private final ICompilationUnit unit;
 
     private CompletionContext context;
-    private CompletionProposalDescriptionProvider descriptionProvider;
-    private CompletionProposalReplacementProvider proposalProvider;
+    private CompletionEdits proposalProvider;
 
     private volatile boolean cancelled;
     private long startTime;
@@ -79,10 +75,10 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         item.setRelevance(mapRelevance(proposal));
         item.setKind(mapKind(proposal));
 
-        if (!this.descriptionProvider.updateDescription(proposal, item))
-            return null;
-
-        this.proposalProvider.updateReplacement(proposal, item, '\0');
+        String label = CompletionLabels.label(proposal, this.context);
+        if (label == null) return null;
+        item.setLabel(label);
+        this.proposalProvider.populate(proposal, item);
 
         if (item.getTextEdits().stream().allMatch(edit -> edit.getNewText().isEmpty()))
             return null;
@@ -123,7 +119,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 Range declarationReplacementRange;
                 if ((postStatementTerminationChar != '\n' && postStatementTerminationChar != ';') || (preStatementTerminationChar != '\n' && preStatementTerminationChar != ';')) {
                     declarationReplacementRange = new Range(getLineStartOffsetWithoutWhitespace(this.unit.getBuffer(), this.offset), 0);
-                    declarationText += "\n" + "\t".repeat(CodeFormatterUtil.getIndentationLevelAtOffset(this.unit, this.offset));
+                    declarationText += "\n" + SnippetCompletionProposalProvider.indentationAt(this.unit, this.offset);
 
                     item.addTextEdit(new CustomTextEdit(
                             new Range(start, node.sourceEnd - start + 1),
@@ -149,7 +145,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 names.add(new String(argument.readableName()));
         }
 
-        this.proposalProvider.singleImportRewrite(names.toArray(new String[0])).forEach(item::addTextEdit);
+        this.proposalProvider.addImports(names.toArray(new String[0])).forEach(item::addTextEdit);
     }
 
     public int mapRelevance(CompletionProposal proposal) {
@@ -226,8 +222,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     public void acceptContext(CompletionContext context) {
         super.acceptContext(context);
         this.context = context;
-        this.descriptionProvider = new CompletionProposalDescriptionProvider(context);
-        this.proposalProvider = new CompletionProposalReplacementProvider(this.unit, context, this.offset);
+        this.proposalProvider = new CompletionEdits(this.unit, context);
     }
 
     @Override

@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.jdtLs.CodeFormatterUtil;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
@@ -24,6 +23,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.core.runtime.OperationCanceledException;
+import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
@@ -420,13 +420,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 );
                 int bodyOffset = generated.sourceMap().editorBodyOffset();
                 String body = editorText.substring(bodyOffset);
-                TextEdit edit = CodeFormatterUtil.format2(
-                        CodeFormatter.K_STATEMENTS,
-                        body,
-                        0,
-                        "\n",
-                        JDTHacks.DUMMY_JAVA_PROJECT.getOptions(false)
-                );
+                TextEdit edit = ToolFactory.createCodeFormatter(JDTHacks.DUMMY_JAVA_PROJECT.getOptions(false))
+                        .format(CodeFormatter.K_STATEMENTS, body, 0, body.length(), 0, "\n");
                 if (edit == null) {
                     bottomInformationBar.setFailureInfoText("Unable to format this script.");
                     return;

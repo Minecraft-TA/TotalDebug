@@ -79,12 +79,6 @@ def thirdPartyNotices = tasks.register('generateThirdPartyNotices', GenerateThir
     outputDirectory = layout.buildDirectory.dir('generated-resources/third-party-notices')
 }
 
-tasks.named('processResources') {
-    from('src/main/java/com/github/minecraft_ta/totalDebugCompanion/jdt/completion/jdtLs/LICENSE') {
-        into 'META-INF/third-party/vendored-jdt-ls'
-    }
-}
-
 tasks.named('shadowJar') {
     from(thirdPartyNotices) { into 'META-INF/third-party' }
     dependsOn generateParchmentParameterIndex

@@ -22,7 +22,6 @@ abstract class VerifyCompanionJar extends DefaultTask {
                     'com/github/minecraft_ta/totaldebug/storage/RuntimeInventory.class',
                     'com/github/minecraft_ta/totaldebug/evaluation/PausedEvaluationBridge.class',
                     'totaldebug/parchment-parameters.bin',
-                    'META-INF/third-party/vendored-jdt-ls/LICENSE',
                     'META-INF/third-party/INDEX.json'
             ]
             expected.each { name ->
