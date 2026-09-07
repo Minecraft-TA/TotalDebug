@@ -60,7 +60,6 @@ import java.net.URI;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -103,6 +102,8 @@ public final class CompanionApp {
 
     public static void main(String[] args) {
         int result = 1;
+        var consoleOut = System.out;
+        var consoleErr = System.err;
         try {
             var configuration = CompanionLaunchConfiguration.parse(args, System.getenv());
             var paths = configuration.paths();
@@ -114,13 +115,19 @@ public final class CompanionApp {
                 try (reservation;
                      var output = com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.open(paths,
                              reservation == null ? Path.of(requestedLog) : reservation.log());
-                     var print = new java.io.PrintStream(output, true, StandardCharsets.UTF_8)) {
-                    // Release the inherited handles before rotating their bootstrap log on Windows.
-                    System.out.close();
-                    System.err.close();
-                    System.setOut(print);
-                    System.setErr(print);
+                     var stdout = DiagnosticConsole.stream(output, requestedLog == null ? consoleOut : null);
+                     var stderr = DiagnosticConsole.stream(output, requestedLog == null ? consoleErr : null)) {
+                    if (requestedLog != null) {
+                        // Release Minecraft's inherited handles before rotating the bootstrap log on Windows.
+                        consoleOut.close();
+                        consoleErr.close();
+                    }
+                    System.setOut(stdout);
+                    System.setErr(stderr);
                     result = run(args, System.getenv(), CompanionTimeouts.DEFAULT);
+                } finally {
+                    System.setOut(consoleOut);
+                    System.setErr(consoleErr);
                 }
             }
         } catch (Exception exception) {
