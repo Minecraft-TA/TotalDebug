@@ -35,6 +35,7 @@ neoForge {
     runs {
         client {
             client()
+            ideName = 'Run Client'
             gameDirectory = rootProject.layout.projectDirectory.dir('run')
             systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             if (minecraftDebugPort.isPresent()) {
@@ -52,6 +53,7 @@ neoForge {
 
         server {
             server()
+            ideName = 'Run Server'
             gameDirectory = rootProject.layout.projectDirectory.dir('run')
             systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             programArgument '--nogui'
@@ -67,6 +69,8 @@ neoForge {
     addModdingDependenciesTo sourceSets.test
 }
 
+neoForge.runs.named('client') { taskBefore tasks.named('prepareClientRun') }
+neoForge.runs.named('server') { taskBefore tasks.named('prepareServerRun') }
 
 if (!explicitCompanionJar.isPresent() && !usePublishedCompanion.get()) {
     tasks.named('prepareClientRun') { dependsOn companionExecutable }

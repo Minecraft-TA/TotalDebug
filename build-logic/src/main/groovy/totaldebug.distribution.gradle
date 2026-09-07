@@ -26,7 +26,7 @@ def localBundle = tasks.register('localBundle', Sync) {
     into(layout.buildDirectory.dir('local-bundle'))
 }
 tasks.named('deployLocal') {
-    bundleDirectory = localBundle.map { it.destinationDir }
+    bundleDirectory = layout.dir(localBundle.map { it.destinationDir })
     developmentCompanionJar = layout.file(executable.elements.map { it.iterator().next().asFile })
 }
 def codexHome = providers.gradleProperty('codexHome')
