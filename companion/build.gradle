@@ -133,6 +133,15 @@ tasks.register('debuggerHarness', JavaExec) {
     mainClass = 'com.github.minecraft_ta.totalDebugCompanion.DebuggerDevHarness'
 }
 
+// Discovers and batch-renders item models from directories and archives without Minecraft.
+tasks.register('itemRenderHarness', JavaExec) {
+    group = 'verification'
+    description = 'Runs the archive-backed item renderer and writes model-format reports.'
+    workingDir = layout.projectDirectory.asFile
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderDevHarness'
+}
+
 configurations.create('executableElements') { canBeConsumed = true; canBeResolved = false }
 artifacts { executableElements tasks.named('shadowJar') }
 
