@@ -27,6 +27,34 @@ The vanilla `blocks` atlas supports `single`, `directory`, `filter` and `palette
 
 Loader-specific models backed by executable mod code remain explicit unsupported cases until they receive an isolated integration. Runtime-rendered fallback is deferred. Default model requests cannot reproduce arbitrary ItemStack components, dynamic item colors, world-dependent model decisions or custom item renderers. A successful render does not establish pixel parity with Minecraft.
 
+## Fluid containers
+
+`neoforge:fluid_container` composes the base, a fluid texture clipped to the fluid mask, and an optional cover. It supports inherited container models, `flip_gas`, `cover_is_mask` and `apply_fluid_luminosity`. Mask alpha determines geometry, so a nonzero mask pixel does not reduce the fluid's opacity. Fluid and cover layers have NeoForge's slight depth offsets and use front GUI lighting.
+
+Model JSON supplies a fluid ID, but mod code supplies that fluid's appearance. Add a resource root containing `totaldebug/fluid-appearances.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "fluids": {
+    "example:fluid": {
+      "stillTexture": "example:block/fluid_still",
+      "tint": "FFFFFFFF",
+      "lightLevel": 0,
+      "lighterThanAir": false
+    }
+  }
+}
+```
+
+The example values illustrate the format. Capture actual values from the matching pack with the [Code-mode capture body](examples/capture-fluid-appearances.java), after client initialization. Save the returned JSON string's contents at that resource path and review its `errors` map. The script reads the fluid registry and returns metadata without writing files or rendering anything. Its APIs were checked against the cached NeoForge 1.21.1 sources; execution against ATM10 is still pending. Resource packs continue to supply the texture pixels. Later roots override earlier entries by fluid ID, and rendering works with Minecraft closed after capture.
+
+`request.withFluid(ItemModelId.parse("example:fluid"))` selects a container's current fluid. A null selection uses the model's default; `minecraft:empty` draws the container without a fluid layer and needs no captured appearance. An explicit tint at index 1 overrides the captured default. Callers must resolve stack-specific fluid components and fullness model predicates themselves. The capture uses a fresh one-bucket `FluidStack`, so it cannot represent every component-dependent tint.
+
+Missing fluid metadata produces `missing captured fluid appearance` with the required fluid ID. No texture path or color is inferred from a name. Animated fluid textures use the existing first-frame support. Animated mask geometry is explicitly unsupported because NeoForge unions opacity across animation frames. The software renderer uses its existing generated-edge extrusion; transformed edge pixels have not been compared with Minecraft.
+
+The captured ATM10 archive set contains 214 models using this loader: 205 modded bucket models and nine JustDireThings canister models. These remain outside the measured success count until a matching fluid appearance capture is available and the scan is rerun. Unit fixtures establish compositor behavior, not pack coverage or Minecraft pixel parity.
+
 ## What archive counts mean
 
 The scan visits every `assets/<namespace>/models/item/*.json` file, including nested paths. These include parent templates, predicate targets, trim variants, JEI-only models and compatibility models for absent mods. A trim variant is meaningful only when selected for a matching armor stack. It is not a standalone registered item.

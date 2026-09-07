@@ -73,6 +73,7 @@ final class SoftwareItemRenderer {
             case GENERATED -> collectGenerated(model, request, triangles, transform, rootTransform, guiLight);
             case ELEMENTS -> collectElements(model, request, triangles, transform, rootTransform, guiLight);
             case MESH -> collectMesh(model, request, triangles, transform, rootTransform, guiLight);
+            case FLUID_CONTAINER -> collectFluidContainer(model, request, triangles, transform, rootTransform);
             case COMPOSITE -> {
                 for (ResolvedModel part : model.parts()) {
                     collectModel(part, request, triangles, transform, guiLight, rootTransform);
@@ -119,6 +120,7 @@ final class SoftwareItemRenderer {
             addGeneratedLayer(
                     triangles,
                     texture,
+                    null,
                     tint,
                     request.size(),
                     transform,
@@ -129,6 +131,45 @@ final class SoftwareItemRenderer {
         }
         if (!foundLayer) {
             throw noGeometry(model, "generated model has no layer0 texture");
+        }
+    }
+
+    private void collectFluidContainer(
+            ResolvedModel model, ItemRenderRequest request, List<Triangle> triangles,
+            Transform transform, ModelTransform rootTransform
+    ) throws IOException {
+        var container = model.fluidContainer();
+        ItemModelId fluidId = request.fluidId() == null ? container.fluidId() : request.fluidId();
+        FluidAppearance fluid = fluidId.equals(ItemModelId.parse("minecraft:empty"))
+                ? null : this.models.fluidAppearance(fluidId);
+        if (fluid != null && container.flipGas() && fluid.lighterThanAir()) {
+            rootTransform = rootTransform.compose(ModelTransform.scale(-1, -1, 1).around(new Vec3(0.5, 0.5, 0.5)));
+        }
+        int before = triangles.size();
+        TextureRegion base = model.hasTexture("base") ? this.models.texture(model.resolveTexture("base")) : null;
+        if (base != null) {
+            addGeneratedLayer(triangles, base, null, request.tintColor(0), request.size(), transform,
+                    rootTransform, GuiLight.FRONT, ExtraFaceData.DEFAULT);
+        }
+        if (fluid != null && model.hasTexture("fluid")) {
+            TextureRegion mask = this.models.fluidMask(model.resolveTexture("fluid"));
+            TextureRegion texture = this.models.texture(fluid.stillTexture());
+            int tint = request.tintColors().getOrDefault(1, fluid.tint());
+            ExtraFaceData light = container.applyLuminosity() && fluid.lightLevel() > 0
+                    ? new ExtraFaceData(0xFFFFFFFF, 15, 15, false) : ExtraFaceData.DEFAULT;
+            addGeneratedLayer(triangles, texture, mask, tint, request.size(), transform,
+                    rootTransform.compose(ModelTransform.scale(1, 1, 1.002).around(new Vec3(0.5, 0.5, 0.5))),
+                    GuiLight.FRONT, light);
+        }
+        if (model.hasTexture("cover") && (!container.coverIsMask() || base != null)) {
+            TextureRegion cover = this.models.fluidMask(model.resolveTexture("cover"));
+            addGeneratedLayer(triangles, container.coverIsMask() ? base : cover, cover, request.tintColor(2),
+                    request.size(), transform,
+                    rootTransform.compose(ModelTransform.scale(1, 1, 1.004).around(new Vec3(0.5, 0.5, 0.5))),
+                    GuiLight.FRONT, ExtraFaceData.DEFAULT);
+        }
+        if (triangles.size() == before) {
+            throw noGeometry(model, "fluid container has no visible layers");
         }
     }
 
@@ -221,6 +262,7 @@ final class SoftwareItemRenderer {
     private static void addGeneratedLayer(
             List<Triangle> triangles,
             TextureRegion texture,
+            TextureRegion mask,
             int tint,
             int renderSize,
             Transform guiTransform,
@@ -230,75 +272,88 @@ final class SoftwareItemRenderer {
     ) {
         double front = 8.5 / 16.0;
         double back = 7.5 / 16.0;
-        addTexturedQuad(
-                triangles,
-                new Vec3[]{
-                        new Vec3(0, 1, front), new Vec3(0, 0, front),
-                        new Vec3(1, 0, front), new Vec3(1, 1, front)
-                },
-                new double[][]{{0, 0}, {0, 1}, {1, 1}, {1, 0}},
-                texture,
-                tint,
-                renderSize,
-                guiTransform,
-                rootTransform,
-                guiLight,
-                true,
-                faceData
-        );
-        addTexturedQuad(
-                triangles,
-                new Vec3[]{
-                        new Vec3(1, 1, back), new Vec3(1, 0, back),
-                        new Vec3(0, 0, back), new Vec3(0, 1, back)
-                },
-                new double[][]{{1, 0}, {1, 1}, {0, 1}, {0, 0}},
-                texture,
-                tint,
-                renderSize,
-                guiTransform,
-                rootTransform,
-                guiLight,
-                true,
-                faceData
-        );
+        if (mask == null) {
+            addTexturedQuad(
+                    triangles,
+                    new Vec3[]{
+                            new Vec3(0, 1, front), new Vec3(0, 0, front),
+                            new Vec3(1, 0, front), new Vec3(1, 1, front)
+                    },
+                    new double[][]{{0, 0}, {0, 1}, {1, 1}, {1, 0}},
+                    texture,
+                    tint,
+                    renderSize,
+                    guiTransform,
+                    rootTransform,
+                    guiLight,
+                    true,
+                    faceData
+            );
+            addTexturedQuad(
+                    triangles,
+                    new Vec3[]{
+                            new Vec3(1, 1, back), new Vec3(1, 0, back),
+                            new Vec3(0, 0, back), new Vec3(0, 1, back)
+                    },
+                    new double[][]{{1, 0}, {1, 1}, {0, 1}, {0, 0}},
+                    texture,
+                    tint,
+                    renderSize,
+                    guiTransform,
+                    rootTransform,
+                    guiLight,
+                    true,
+                    faceData
+            );
+        }
 
-        int width = texture.columns();
-        int height = texture.rows();
+        TextureRegion shape = mask == null ? texture : mask;
+        int width = shape.columns();
+        int height = shape.rows();
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                if ((texture.pixel(x, y) >>> 24) == 0) {
+                if ((shape.pixel(x, y) >>> 24) == 0) {
                     continue;
                 }
-                double x0 = texture.u0(x);
-                double x1 = texture.u1(x);
-                double y0 = 1.0 - texture.v0(y);
-                double y1 = 1.0 - texture.v1(y);
-                double u0 = texture.u0(x);
-                double u1 = texture.u1(x);
-                double v0 = texture.v0(y);
-                double v1 = texture.v1(y);
+                double x0 = shape.u0(x);
+                double x1 = shape.u1(x);
+                double y0 = 1.0 - shape.v0(y);
+                double y1 = 1.0 - shape.v1(y);
+                double u0 = shape.u0(x);
+                double u1 = shape.u1(x);
+                double v0 = shape.v0(y);
+                double v1 = shape.v1(y);
+                if (mask != null) {
+                    addTexturedQuad(triangles,
+                            new Vec3[]{new Vec3(x0, y0, front), new Vec3(x0, y1, front), new Vec3(x1, y1, front), new Vec3(x1, y0, front)},
+                            new double[][]{{u0, v0}, {u0, v1}, {u1, v1}, {u1, v0}},
+                            texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
+                    addTexturedQuad(triangles,
+                            new Vec3[]{new Vec3(x1, y0, back), new Vec3(x1, y1, back), new Vec3(x0, y1, back), new Vec3(x0, y0, back)},
+                            new double[][]{{u1, v0}, {u1, v1}, {u0, v1}, {u0, v0}},
+                            texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
+                }
                 double edgeU = (u0 + u1) / 2;
                 double edgeV = (v0 + v1) / 2;
-                if (x == 0 || (texture.pixel(x - 1, y) >>> 24) == 0) {
+                if (x == 0 || (shape.pixel(x - 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y1, back), new Vec3(x0, y1, front), new Vec3(x0, y0, front)},
                             new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (x == width - 1 || (texture.pixel(x + 1, y) >>> 24) == 0) {
+                if (x == width - 1 || (shape.pixel(x + 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x1, y0, front), new Vec3(x1, y1, front), new Vec3(x1, y1, back), new Vec3(x1, y0, back)},
                             new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (y == 0 || (texture.pixel(x, y - 1) >>> 24) == 0) {
+                if (y == 0 || (shape.pixel(x, y - 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y0, front), new Vec3(x1, y0, front), new Vec3(x1, y0, back)},
                             new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
-                if (y == height - 1 || (texture.pixel(x, y + 1) >>> 24) == 0) {
+                if (y == height - 1 || (shape.pixel(x, y + 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y1, front), new Vec3(x0, y1, back), new Vec3(x1, y1, back), new Vec3(x1, y1, front)},
                             new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},

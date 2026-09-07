@@ -62,6 +62,14 @@ For the same 1,433 sampled existing texture IDs across 323 roots, the warm media
 
 The backend does not execute item predicates, arbitrary mod loaders or custom renderers. A manifest of registered item IDs and representative stack state is still needed to measure real ItemStack coverage. Runtime-rendered fallback remains deferred. These limits do not prevent generating new previews from supported captured resources while Minecraft is closed.
 
+## Fluid-container follow-up
+
+The fluid compositor adds eight passing regression tests, bringing the Companion suite to 544 tests with no failures or skips. Fixtures cover mask resolution and alpha, both cover modes, inheritance and gas flipping, empty containers, missing or malformed captures, current-fluid selection, tint overrides, resource priority, cache separation and the animated-mask limit.
+
+A repeat scan with the same 323 archive roots still processes 41,451 of 43,914 models without failure. Every model retains its previous status and visible-pixel count. The 214 fluid-container failures now report `missing captured fluid appearance` instead of an unsupported loader. No matching ATM10 fluid metadata was available, so this is a regression check, not a coverage increase. All nine representative PNGs are byte-identical to the previous final previews.
+
+Follow-up evidence is in `build/reports/item-render/atm10sky-fluid`, `build/fluid-containers/comparison.json` and `build/archive-baseline/images-fluid`. See the [fluid capture instructions](ITEM_RENDERING.md#fluid-containers) for the remaining runtime-data dependency.
+
 ## Reproduce locally
 
 Use a full JDK 21 and the root wrapper. The local validation used the already available SCNet/JIndex Maven Local artifacts as described in the [build guide](../../docs/BUILD_RELEASE.md).

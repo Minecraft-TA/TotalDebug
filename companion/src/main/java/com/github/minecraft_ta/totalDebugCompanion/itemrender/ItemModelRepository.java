@@ -35,6 +35,7 @@ final class ItemModelRepository {
     private final AtlasSpriteResolver atlasSprites;
     private final Map<ItemModelId, ResolvedModel> modelCache = new HashMap<>();
     private final Map<ItemModelId, TextureRegion> textureCache = new HashMap<>();
+    private Map<ItemModelId, FluidAppearance> fluidAppearances;
 
     ItemModelRepository(ResourcePackStack resources) {
         this.resources = resources;
@@ -92,6 +93,37 @@ final class ItemModelRepository {
         this.modelCache.clear();
         this.textureCache.clear();
         this.atlasSprites.clearCache();
+        this.fluidAppearances = null;
+    }
+
+    FluidAppearance fluidAppearance(ItemModelId fluidId) throws IOException {
+        if (this.fluidAppearances == null) {
+            this.fluidAppearances = FluidAppearance.read(this.resources);
+        }
+        FluidAppearance appearance = this.fluidAppearances.get(fluidId);
+        if (appearance == null) {
+            throw new ItemRenderException(ItemRenderException.Kind.UNSUPPORTED_FEATURE,
+                    "missing captured fluid appearance", "Fluid " + fluidId + " needs an entry in "
+                    + FluidAppearance.RESOURCE_PATH + " from the matching pack; no texture or tint is inferred");
+        }
+        return appearance;
+    }
+
+    TextureRegion fluidMask(ItemModelId textureId) throws IOException {
+        var metadata = this.resources.read(textureId.textureResourcePath() + ".mcmeta", MAXIMUM_MODEL_BYTES);
+        boolean animated;
+        try {
+            animated = metadata.isPresent() && JsonParser.parseString(new String(metadata.get(), StandardCharsets.UTF_8))
+                    .getAsJsonObject().has("animation");
+        } catch (RuntimeException exception) {
+            throw new ItemRenderException(ItemRenderException.Kind.RESOURCE_ERROR, "invalid fluid-container mask metadata",
+                    "Invalid metadata for mask " + textureId, exception);
+        }
+        if (animated) {
+            throw new ItemRenderException(ItemRenderException.Kind.UNSUPPORTED_FEATURE,
+                    "animated fluid-container mask", "Animated mask " + textureId + " requires a union of frame geometry");
+        }
+        return texture(textureId);
     }
 
     private ResolvedModel resolve(ItemModelId modelId, LinkedHashSet<ItemModelId> resolving) throws IOException {
@@ -175,6 +207,7 @@ final class ItemModelRepository {
         List<ResolvedModel> parts = parent == null ? List.of() : parent.parts();
         Map<Integer, ExtraFaceData> layerFaceData = parent == null ? Map.of() : parent.layerFaceData();
         List<MeshFace> meshFaces = parent == null ? List.of() : parent.meshFaces();
+        FluidContainer fluidContainer = parent == null ? null : parent.fluidContainer();
         switch (raw.loaderKind()) {
             case NORMAL -> {
                 if (kind == ModelKind.NONE && !elements.isEmpty()) {
@@ -186,6 +219,10 @@ final class ItemModelRepository {
                 Map<Integer, ExtraFaceData> combinedLayerData = new HashMap<>(layerFaceData);
                 combinedLayerData.putAll(raw.layerFaceData());
                 layerFaceData = Map.copyOf(combinedLayerData);
+            }
+            case FLUID_CONTAINER -> {
+                kind = ModelKind.FLUID_CONTAINER;
+                fluidContainer = raw.fluidContainer();
             }
             case COMPOSITE -> {
                 kind = ModelKind.COMPOSITE;
@@ -211,7 +248,8 @@ final class ItemModelRepository {
                         selected.layerFaceData(),
                         rootTransform.compose(selected.rootTransform()),
                         Map.copyOf(visibility),
-                        selected.meshFaces()
+                        selected.meshFaces(),
+                        selected.fluidContainer()
                 );
             }
             case OBJ -> {
@@ -233,7 +271,8 @@ final class ItemModelRepository {
                 layerFaceData,
                 rootTransform,
                 Map.copyOf(visibility),
-                meshFaces
+                meshFaces,
+                fluidContainer
         );
     }
 
@@ -290,7 +329,12 @@ final class ItemModelRepository {
                 json.has("transform") ? parseRootTransform(json.get("transform")) : null,
                 parseVisibility(json),
                 separateGuiModel,
-                objSpec
+                objSpec,
+                loaderKind == LoaderKind.FLUID_CONTAINER ? new FluidContainer(
+                        ItemModelId.parse(requiredString(json, "fluid")),
+                        optionalBoolean(json, "flip_gas", false),
+                        optionalBoolean(json, "cover_is_mask", true),
+                        optionalBoolean(json, "apply_fluid_luminosity", true)) : null
         );
     }
 
@@ -302,6 +346,7 @@ final class ItemModelRepository {
         return switch (loader) {
             case "neoforge:composite" -> LoaderKind.COMPOSITE;
             case "neoforge:item_layers" -> LoaderKind.ITEM_LAYERS;
+            case "neoforge:fluid_container" -> LoaderKind.FLUID_CONTAINER;
             case "neoforge:separate_transforms" -> LoaderKind.SEPARATE_TRANSFORMS;
             case ObjItemRenderIntegration.MODEL_LOADER -> LoaderKind.OBJ;
             case FusionItemRenderIntegration.MODEL_LOADER -> {
@@ -990,7 +1035,8 @@ final class ItemModelRepository {
             Map<Integer, ExtraFaceData> layerFaceData,
             ModelTransform rootTransform,
             Map<String, Boolean> visibility,
-            List<MeshFace> meshFaces
+            List<MeshFace> meshFaces,
+            FluidContainer fluidContainer
     ) {
 
         static ResolvedModel generatedRoot() {
@@ -1005,7 +1051,8 @@ final class ItemModelRepository {
                     Map.of(),
                     ModelTransform.IDENTITY,
                     Map.of(),
-                    List.of()
+                    List.of(),
+                    null
             );
         }
 
@@ -1063,7 +1110,8 @@ final class ItemModelRepository {
             ModelTransform rootTransform,
             Map<String, Boolean> visibility,
             RawModel separateGuiModel,
-            ObjSpec objSpec
+            ObjSpec objSpec,
+            FluidContainer fluidContainer
     ) {
     }
 
@@ -1084,7 +1132,8 @@ final class ItemModelRepository {
         COMPOSITE,
         ITEM_LAYERS,
         SEPARATE_TRANSFORMS,
-        OBJ
+        OBJ,
+        FLUID_CONTAINER
     }
 
     enum ModelKind {
@@ -1092,7 +1141,11 @@ final class ItemModelRepository {
         GENERATED,
         ELEMENTS,
         COMPOSITE,
-        MESH
+        MESH,
+        FLUID_CONTAINER
+    }
+
+    record FluidContainer(ItemModelId fluidId, boolean flipGas, boolean coverIsMask, boolean applyLuminosity) {
     }
 
     enum GuiLight {

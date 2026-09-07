@@ -8,8 +8,9 @@ import java.util.TreeMap;
 /**
  * The archive-backed inputs required to render one resolved item model.
  * Tint values use Minecraft's {@code 0xAARRGGBB} convention and are keyed by tint index.
+ * A null fluid ID uses the fluid-container model's default. Tint index 1 overrides its captured fluid tint.
  */
-public record ItemRenderRequest(ItemModelId modelId, int size, Map<Integer, Integer> tintColors) {
+public record ItemRenderRequest(ItemModelId modelId, int size, Map<Integer, Integer> tintColors, ItemModelId fluidId) {
 
     public static final int MAXIMUM_SIZE = 512;
 
@@ -31,7 +32,16 @@ public record ItemRenderRequest(ItemModelId modelId, int size, Map<Integer, Inte
     }
 
     public ItemRenderRequest(ItemModelId modelId, int size) {
-        this(modelId, size, Map.of());
+        this(modelId, size, Map.of(), null);
+    }
+
+    public ItemRenderRequest(ItemModelId modelId, int size, Map<Integer, Integer> tintColors) {
+        this(modelId, size, tintColors, null);
+    }
+
+    /** Selects the captured fluid in a container stack; null uses the model's default fluid. */
+    public ItemRenderRequest withFluid(ItemModelId fluidId) {
+        return new ItemRenderRequest(this.modelId, this.size, this.tintColors, fluidId);
     }
 
     public static ItemRenderRequest of(String modelId, int size) {
