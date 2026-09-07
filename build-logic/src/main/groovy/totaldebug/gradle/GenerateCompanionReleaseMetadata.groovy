@@ -33,6 +33,10 @@ abstract class GenerateCompanionReleaseMetadata extends DefaultTask {
         Files.writeString(output, "version=${version}\nartifact=TotalDebugCompanion.jar\ndownloadUri=${uri}\nsha256=${hash}\n")
     }
 
+    static String downloadUriFor(String version) {
+        "https://github.com/Minecraft-TA/TotalDebug/releases/download/v${version}/TotalDebugCompanion.jar"
+    }
+
     static String sha256(File file) {
         def digest = MessageDigest.getInstance('SHA-256')
         file.withInputStream { input ->

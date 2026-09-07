@@ -44,7 +44,7 @@ neoForge {
                 )
             }
             if (explicitCompanionJar.isPresent()) {
-                systemProperty 'totaldebug.companionJar', file(explicitCompanionJar.get()).absolutePath
+                systemProperty 'totaldebug.companionJar', rootProject.file(explicitCompanionJar.get()).absolutePath
             } else if (!usePublishedCompanion.get()) {
                 systemProperties.put('totaldebug.companionJar', companionExecutable.elements.map { it.iterator().next().asFile.absolutePath })
             }
@@ -130,7 +130,6 @@ configurations {
 tasks.register('packagingTest', Test) {
     testClassesDirs = sourceSets.packagingTest.output.classesDirs
     classpath = sourceSets.packagingTest.runtimeClasspath
-    inputs.file(modJar.flatMap { it.archiveFile }).withPropertyName('packagedMod')
     jvmArgumentProviders.add(new totaldebug.gradle.PackagedModArgumentProvider(modJar.flatMap { it.archiveFile }))
 }
 tasks.named('check') { dependsOn tasks.named('packagingTest') }
@@ -144,7 +143,7 @@ def releaseMetadata = tasks.register('generateCompanionReleaseMetadata', totalde
     companionJar = layout.file(companionExecutable.elements.map { it.iterator().next().asFile })
     getReleaseVersion().set(releaseVersion)
     publishedVersion = providers.gradleProperty('mod_version')
-    downloadUri = releaseVersion.map { "https://github.com/Minecraft-TA/TotalDebug/releases/download/v${it}/TotalDebugCompanion.jar" }
+    downloadUri = releaseVersion.map { totaldebug.gradle.GenerateCompanionReleaseMetadata.downloadUriFor(it) }
     outputFile = layout.buildDirectory.file('generated/release/companion-release.properties')
 }
 def releaseJar = tasks.register('releaseJar', totaldebug.gradle.ReleaseModJar) {

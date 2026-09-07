@@ -51,7 +51,7 @@ def releaseCheck = tasks.register('releaseCheck', totaldebug.gradle.VerifyReleas
     modJar = layout.file(releaseMod.elements.map { it.iterator().next().asFile })
     companionJar = layout.file(executable.elements.map { it.iterator().next().asFile })
     releaseVersion = selectedReleaseVersion
-    downloadUri = selectedReleaseVersion.map { "https://github.com/Minecraft-TA/TotalDebug/releases/download/v${it}/TotalDebugCompanion.jar" }
+    downloadUri = selectedReleaseVersion.map { totaldebug.gradle.GenerateCompanionReleaseMetadata.downloadUriFor(it) }
     outputDirectory = layout.buildDirectory.dir('release-checksums')
 }
 tasks.register('releaseBundle', Sync) {
