@@ -267,28 +267,30 @@ final class SoftwareItemRenderer {
                 double u1 = (double) (x + 1) / width;
                 double v0 = (double) y / height;
                 double v1 = (double) (y + 1) / height;
+                double edgeU = (x + 0.5) / width;
+                double edgeV = (y + 0.5) / height;
                 if (x == 0 || (texture.getRGB(x - 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y1, back), new Vec3(x0, y1, front), new Vec3(x0, y0, front)},
-                            new double[][]{{u0, v0}, {u0, v1}, {u0, v1}, {u0, v0}},
+                            new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
                 if (x == width - 1 || (texture.getRGB(x + 1, y) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x1, y0, front), new Vec3(x1, y1, front), new Vec3(x1, y1, back), new Vec3(x1, y0, back)},
-                            new double[][]{{u1, v0}, {u1, v1}, {u1, v1}, {u1, v0}},
+                            new double[][]{{edgeU, v0}, {edgeU, v1}, {edgeU, v1}, {edgeU, v0}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
                 if (y == 0 || (texture.getRGB(x, y - 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y0, back), new Vec3(x0, y0, front), new Vec3(x1, y0, front), new Vec3(x1, y0, back)},
-                            new double[][]{{u0, v0}, {u0, v0}, {u1, v0}, {u1, v0}},
+                            new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
                 if (y == height - 1 || (texture.getRGB(x, y + 1) >>> 24) == 0) {
                     addTexturedQuad(triangles,
                             new Vec3[]{new Vec3(x0, y1, front), new Vec3(x0, y1, back), new Vec3(x1, y1, back), new Vec3(x1, y1, front)},
-                            new double[][]{{u0, v1}, {u0, v1}, {u1, v1}, {u1, v1}},
+                            new double[][]{{u0, edgeV}, {u0, edgeV}, {u1, edgeV}, {u1, edgeV}},
                             texture, tint, renderSize, guiTransform, rootTransform, guiLight, true, faceData);
                 }
             }
@@ -451,7 +453,9 @@ final class SoftwareItemRenderer {
                 double firstWeight = edge(triangle.second(), triangle.third(), sampleX, sampleY) / area;
                 double secondWeight = edge(triangle.third(), triangle.first(), sampleX, sampleY) / area;
                 double thirdWeight = edge(triangle.first(), triangle.second(), sampleX, sampleY) / area;
-                if (firstWeight < -1.0e-7 || secondWeight < -1.0e-7 || thirdWeight < -1.0e-7) {
+                if (!coversSample(firstWeight, triangle.second(), triangle.third(), area)
+                        || !coversSample(secondWeight, triangle.third(), triangle.first(), area)
+                        || !coversSample(thirdWeight, triangle.first(), triangle.second(), area)) {
                     continue;
                 }
 
@@ -488,6 +492,20 @@ final class SoftwareItemRenderer {
 
     private static double edge(Vertex start, Vertex end, double x, double y) {
         return (x - start.x()) * (end.y() - start.y()) - (y - start.y()) * (end.x() - start.x());
+    }
+
+    private static boolean coversSample(double weight, Vertex start, Vertex end, double area) {
+        if (weight > 1.0e-7) {
+            return true;
+        }
+        if (weight < -1.0e-7) {
+            return false;
+        }
+        // Include only top and left edges so adjacent triangles never blend a shared sample twice.
+        double winding = Math.signum(area);
+        double dy = (end.y() - start.y()) * winding;
+        double dx = (end.x() - start.x()) * winding;
+        return dy > 0 || (dy == 0 && dx < 0);
     }
 
     private static int colorize(int source, int tint, double brightness) {
