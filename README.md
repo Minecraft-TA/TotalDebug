@@ -41,7 +41,7 @@ Close Minecraft and run:
 
 The target is the Minecraft directory containing `mods/` and `config/`. Save `totaldebugInstanceDir=C:/path/to/instance/minecraft` in your user `~/.gradle/gradle.properties` to omit it from later commands.
 
-Deployment installs `mods/total_debug.jar` and `total-debug/companion-app/TotalDebugCompanion.jar`, and configures `decompilation.companionDevelopmentJar` to use the mutable Companion build. Remove any version-named `total_debug-*.jar` first. Other mods, scripts and state are preserved. Restart Minecraft after deployment.
+Deployment replaces `mods/total_debug.jar` and `total-debug/companion-app/TotalDebugCompanion.jar`, and configures `decompilation.companionDevelopmentJar` to use the mutable Companion build. After installation succeeds, it removes older version-named TotalDebug JARs such as `total_debug-2.0.0.jar`. Other mods, scripts and state are preserved. Restart Minecraft after deployment.
 
 For later Companion-only changes, run `:companion:shadowJar`, close its window and press F6. Each launch uses an immutable copy so the running app does not lock the build output.
 

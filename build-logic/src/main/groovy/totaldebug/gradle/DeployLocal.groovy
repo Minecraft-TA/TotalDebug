@@ -75,15 +75,14 @@ abstract class DeployLocal extends DefaultTask {
             config.set('decompilation.companionDevelopmentJar', developmentPath)
             updatedConfig = new TomlWriter().writeToString(config)
         }
+        List<Path> obsoleteJars
         try (var jars = Files.list(root.resolve('mods'))) {
-            def duplicates = jars.filter { path ->
+            obsoleteJars = jars.filter { path ->
                 String name = path.fileName.toString().toLowerCase(Locale.ROOT)
-                name.startsWith('total_debug-') && name.endsWith('.jar')
+                name ==~ /total_debug-[0-9][a-z0-9.+-]*\.jar/
             }.sorted().toList()
-            if (!duplicates.isEmpty()) {
-                throw new GradleException("Remove these version-named TotalDebug JARs manually before deploying to mods/total_debug.jar: ${duplicates}")
-            }
         }
+        obsoleteJars.each { DeployLocal.validateDestination(root, it) }
 
         logger.lifecycle('Deploying TotalDebug to {}', root)
         Map<Path, Path> staged = [:]
@@ -107,6 +106,10 @@ abstract class DeployLocal extends DefaultTask {
             staged.each { destination, temporary ->
                 Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
                 logger.lifecycle('Installed {}', destination)
+            }
+            obsoleteJars.each { previous ->
+                Files.delete(previous)
+                logger.lifecycle('Removed obsolete TotalDebug JAR {}', previous)
             }
         } catch (IOException exception) {
             throw new GradleException('Deployment failed. Files already reported as installed remain updated. Close Minecraft and retry; no installed file is truncated in place.', exception)

@@ -109,23 +109,46 @@ class LocalDeploymentTest {
     }
 
     @Test
-    void rejectsVersionNamedModsWithoutChangingAnything() throws Exception {
+    void replacesVersionNamedModsAndRemovesCopiesDuringCachedUpdates() throws Exception {
         Path previous = this.instance.resolve("mods/total_debug-1.0.jar");
+        Path anotherVersion = this.instance.resolve("mods/total_debug-2.0.0-SNAPSHOT.jar");
+        Path unrelated = this.instance.resolve("mods/total_debug-addon.jar");
         Files.writeString(previous, "old mod");
-        BuildResult result = run(true, this.instance.toString());
-        assertTrue(result.getOutput().contains("Remove these version-named TotalDebug JARs manually"));
-        assertEquals("old mod", Files.readString(previous));
-        assertFalse(Files.exists(this.instance.resolve("mods/total_debug.jar")));
+        Files.writeString(anotherVersion, "another old mod");
+        Files.writeString(unrelated, "keep addon");
+        run(false, this.instance.toString());
+        assertFalse(Files.exists(previous));
+        assertFalse(Files.exists(anotherVersion));
+        assertEquals("new mod", Files.readString(this.instance.resolve("mods/total_debug.jar")));
+        assertEquals("new companion", Files.readString(this.instance.resolve("total-debug/companion-app/TotalDebugCompanion.jar")));
+        assertEquals("keep addon", Files.readString(unrelated));
+
+        Files.writeString(previous, "old copy reintroduced");
+        assertTrue(run(false, this.instance.toString()).getOutput().contains("Reusing configuration cache."));
+        assertFalse(Files.exists(previous));
+    }
+
+    @Test
+    void rejectsVersionNamedDirectoriesBeforeInstalling() throws Exception {
+        Path directory = this.instance.resolve("mods/total_debug-1.0.jar");
+        Files.createDirectory(directory);
+        Files.writeString(directory.resolve("keep.txt"), "keep");
+        assertTrue(run(true, this.instance.toString()).getOutput().contains("Deployment target must be a regular file"));
+        assertEquals("keep", Files.readString(directory.resolve("keep.txt")));
         assertFalse(Files.exists(this.instance.resolve("total-debug")));
+        assertFalse(Files.exists(this.instance.resolve("mods/total_debug.jar")));
     }
 
     @Test
     void validatesBothInputsBeforeReplacingEitherJar() throws Exception {
         Path mod = this.instance.resolve("mods/total_debug.jar");
+        Path versionNamed = this.instance.resolve("mods/total_debug-1.0.jar");
         Files.writeString(mod, "old mod");
+        Files.writeString(versionNamed, "old versioned mod");
         Files.delete(this.bundle.resolve("TotalDebugCompanion.jar"));
         assertTrue(run(true, this.instance.toString()).getOutput().contains("Missing bundle JAR:"));
         assertEquals("old mod", Files.readString(mod));
+        assertEquals("old versioned mod", Files.readString(versionNamed));
     }
 
     @Test
