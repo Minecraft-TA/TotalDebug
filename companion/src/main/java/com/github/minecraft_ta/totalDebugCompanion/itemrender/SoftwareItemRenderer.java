@@ -38,54 +38,73 @@ final class SoftwareItemRenderer {
     BufferedImage render(ItemRenderRequest request) throws IOException {
         ResolvedModel model = this.models.resolve(request.modelId());
         BufferedImage result = new BufferedImage(request.size(), request.size(), BufferedImage.TYPE_INT_ARGB);
+        if (model.kind() == ItemModelRepository.ModelKind.GENERATED
+                && model.guiTransform().isIdentity() && model.rootTransform().isIdentity()) {
+            renderFlatGenerated(model, request, result);
+            return result;
+        }
+        List<Triangle> triangles = new ArrayList<>();
         double[] opaqueDepth = new double[request.size() * request.size()];
         java.util.Arrays.fill(opaqueDepth, Double.NEGATIVE_INFINITY);
-        renderModel(
+        collectModel(
                 model,
                 request,
-                result,
-                opaqueDepth,
+                triangles,
                 model.guiTransform(),
                 model.guiLight(),
                 ModelTransform.IDENTITY
         );
+        renderTriangles(result, opaqueDepth, triangles);
         return result;
     }
 
-    private void renderModel(
+    private void collectModel(
             ResolvedModel model,
             ItemRenderRequest request,
-            BufferedImage target,
-            double[] opaqueDepth,
+            List<Triangle> triangles,
             Transform transform,
             GuiLight guiLight,
             ModelTransform inheritedRootTransform
     ) throws IOException {
         ModelTransform rootTransform = inheritedRootTransform.compose(model.rootTransform());
         switch (model.kind()) {
-            case GENERATED -> renderGenerated(model, request, target, opaqueDepth, transform, rootTransform, guiLight);
-            case ELEMENTS -> renderElements(model, request, target, opaqueDepth, transform, rootTransform, guiLight);
-            case MESH -> renderMesh(model, request, target, opaqueDepth, transform, rootTransform, guiLight);
+            case GENERATED -> collectGenerated(model, request, triangles, transform, rootTransform, guiLight);
+            case ELEMENTS -> collectElements(model, request, triangles, transform, rootTransform, guiLight);
+            case MESH -> collectMesh(model, request, triangles, transform, rootTransform, guiLight);
             case COMPOSITE -> {
                 for (ResolvedModel part : model.parts()) {
-                    renderModel(part, request, target, opaqueDepth, transform, guiLight, rootTransform);
+                    collectModel(part, request, triangles, transform, guiLight, rootTransform);
                 }
             }
             case NONE -> throw noGeometry(model, "no renderable geometry");
         }
     }
 
-    private void renderGenerated(
+    private void renderFlatGenerated(ResolvedModel model, ItemRenderRequest request, BufferedImage target) throws IOException {
+        if (!model.hasTexture("layer0")) {
+            throw noGeometry(model, "generated model has no layer0 texture");
+        }
+        for (int layerIndex = 0; layerIndex < GENERATED_LAYERS.size(); layerIndex++) {
+            String layer = GENERATED_LAYERS.get(layerIndex);
+            if (!model.hasTexture(layer)) {
+                break;
+            }
+            BufferedImage texture = this.models.texture(model.resolveTexture('#' + layer));
+            ExtraFaceData faceData = model.layerFaceData().getOrDefault(layerIndex, ExtraFaceData.DEFAULT);
+            int tint = multiplyArgb(request.tintColor(layerIndex), faceData.color());
+            drawScaledLayer(target, texture, tint);
+        }
+    }
+
+    private void collectGenerated(
             ResolvedModel model,
             ItemRenderRequest request,
-            BufferedImage target,
-            double[] opaqueDepth,
+            List<Triangle> triangles,
             Transform transform,
             ModelTransform rootTransform,
             GuiLight guiLight
     ) throws IOException {
         boolean foundLayer = false;
-        List<Triangle> triangles = new ArrayList<>();
         for (int layerIndex = 0; layerIndex < GENERATED_LAYERS.size(); layerIndex++) {
             String layer = GENERATED_LAYERS.get(layerIndex);
             if (!model.hasTexture(layer)) {
@@ -95,37 +114,30 @@ final class SoftwareItemRenderer {
             BufferedImage texture = this.models.texture(model.resolveTexture('#' + layer));
             ExtraFaceData faceData = model.layerFaceData().getOrDefault(layerIndex, ExtraFaceData.DEFAULT);
             int tint = multiplyArgb(request.tintColor(layerIndex), faceData.color());
-            if (transform.isIdentity() && rootTransform.isIdentity()) {
-                drawScaledLayer(target, texture, tint);
-            } else {
-                addGeneratedLayer(
-                        triangles,
-                        texture,
-                        tint,
-                        request.size(),
-                        transform,
-                        rootTransform,
-                        guiLight,
-                        faceData
-                );
-            }
+            addGeneratedLayer(
+                    triangles,
+                    texture,
+                    tint,
+                    request.size(),
+                    transform,
+                    rootTransform,
+                    guiLight,
+                    faceData
+            );
         }
         if (!foundLayer) {
             throw noGeometry(model, "generated model has no layer0 texture");
         }
-        renderTriangles(target, opaqueDepth, triangles);
     }
 
-    private void renderElements(
+    private void collectElements(
             ResolvedModel model,
             ItemRenderRequest request,
-            BufferedImage target,
-            double[] opaqueDepth,
+            List<Triangle> triangles,
             Transform transform,
             ModelTransform rootTransform,
             GuiLight guiLight
     ) throws IOException {
-        List<Triangle> triangles = new ArrayList<>();
         for (Element element : model.elements()) {
             for (Map.Entry<ItemModelRepository.Direction, Face> faceEntry : element.faces().entrySet()) {
                 Face face = faceEntry.getValue();
@@ -154,19 +166,17 @@ final class SoftwareItemRenderer {
                 triangles.add(new Triangle(vertices[0], vertices[2], vertices[3], texture, tint, brightness));
             }
         }
-        renderTriangles(target, opaqueDepth, triangles);
     }
 
-    private void renderMesh(
+    private void collectMesh(
             ResolvedModel model,
             ItemRenderRequest request,
-            BufferedImage target,
-            double[] opaqueDepth,
+            List<Triangle> triangles,
             Transform transform,
             ModelTransform rootTransform,
             GuiLight guiLight
     ) throws IOException {
-        List<Triangle> triangles = new ArrayList<>(model.meshFaces().size() * 2);
+        int initialTriangleCount = triangles.size();
         ModelTransform objTransform = rootTransform.isIdentity()
                 ? rootTransform
                 : rootTransform.around(new Vec3(0.5, 0.5, 0.5));
@@ -201,10 +211,9 @@ final class SoftwareItemRenderer {
                 triangles.add(new Triangle(vertices[0], vertices[2], vertices[3], texture, tint, brightness));
             }
         }
-        if (triangles.isEmpty()) {
+        if (triangles.size() == initialTriangleCount) {
             throw noGeometry(model, "OBJ model has no visible faces");
         }
-        renderTriangles(target, opaqueDepth, triangles);
     }
 
     private static void addGeneratedLayer(
