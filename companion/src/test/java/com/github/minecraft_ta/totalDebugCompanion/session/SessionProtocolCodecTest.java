@@ -1,0 +1,82 @@
+package com.github.minecraft_ta.totalDebugCompanion.session;
+
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.ClientHelloMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.ServerHelloMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.session.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.messages.debugger.DebugTargetMessage;
+import com.github.tth05.scnet.util.ByteBufferInputStream;
+import com.github.tth05.scnet.util.ByteBufferOutputStream;
+import org.junit.jupiter.api.Test;
+
+import java.nio.ByteBuffer;
+import java.util.HexFormat;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class SessionProtocolCodecTest {
+    private static final HexFormat HEX = HexFormat.of();
+
+    @Test
+    void clientHelloReadsTheSharedGoldenBytes() {
+        byte[] golden = HEX.parseHex("0000000b00000003616263000000017000000001640000000177");
+        ClientHelloMessage message = new ClientHelloMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
+
+        assertEquals(CompanionProtocol.VERSION, message.protocolVersion());
+        assertEquals("abc", message.token());
+        assertEquals("p", message.profileId());
+        assertEquals("d", message.dataDirectory());
+        assertEquals("w", message.workspaceDirectory());
+    }
+
+    @Test
+    void serverHelloMatchesTheSharedGoldenBytes() {
+        ServerHelloMessage message = ServerHelloMessage.accept();
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        message.write(output);
+
+        assertArrayEquals(
+                HEX.parseHex("0000000b0100000000"),
+                writtenBytes(output)
+        );
+    }
+
+    @Test
+    void runtimeInventoryReadsTheSharedGoldenBytes() {
+        RuntimeInventoryMessage message = new RuntimeInventoryMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
+                HEX.parseHex("000000010000000269640000000466696c6500000000")
+        )));
+
+        assertEquals(RuntimeInventoryMessage.AVAILABLE, message.state());
+        assertEquals("id", message.inventoryId());
+        assertEquals("file", message.inventoryFile());
+        assertEquals("", message.detail());
+    }
+
+    @Test
+    void debugTargetReadsTheSharedGoldenBytes() {
+        DebugTargetMessage message = new DebugTargetMessage();
+
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(
+                HEX.parseHex("0000000269640000000467616d6501000000000000002a")
+        )));
+
+        assertEquals("id", message.targetId());
+        assertEquals("game", message.displayName());
+        assertEquals(DebugTargetMessage.LOCAL_JVM, message.targetKind());
+        assertEquals(42, message.processId());
+    }
+
+    private static byte[] writtenBytes(ByteBufferOutputStream output) {
+        ByteBuffer buffer = output.getBuffer().duplicate();
+        buffer.flip();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
+    }
+}

@@ -1,0 +1,9 @@
+.idea
+build
+out
+.gradle
+workspace
+jdt-language-server-latest
+*.hprof
+.codex/
+.codex-remote-attachments/

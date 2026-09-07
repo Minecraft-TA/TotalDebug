@@ -1,0 +1,39 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Build with Gradle
+        shell: pwsh
+        run: |
+          $releaseVersion = '${{ github.ref_name }}' -replace '^v', ''
+          ./gradlew.bat --no-daemon clean build "-PreleaseVersion=$releaseVersion"
+          $jar = 'build/libs/TotalDebugCompanion.jar'
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $jar).Hash.ToLowerInvariant()
+          "$hash  TotalDebugCompanion.jar" | Set-Content -Encoding ascii -NoNewline "$jar.sha256"
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          overwrite_files: false
+          files: |
+            build/libs/TotalDebugCompanion.jar
+            build/libs/TotalDebugCompanion.jar.sha256
+          fail_on_unmatched_files: true

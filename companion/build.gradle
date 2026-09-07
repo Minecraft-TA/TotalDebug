@@ -1,0 +1,316 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
+abstract class GenerateThirdPartyNotices extends DefaultTask {
+    @InputFiles
+    @PathSensitive(PathSensitivity.NONE)
+    abstract ConfigurableFileCollection getDependencyArchives()
+
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+
+    @Inject
+    abstract FileSystemOperations getFileOperations()
+
+    @TaskAction
+    void generate() {
+        def staged = Files.createTempDirectory(temporaryDir.toPath(), 'notices-')
+        try {
+            def inventory = []
+            def names = new HashSet<String>()
+            dependencyArchives.files.findAll { it.name.endsWith('.jar') }.sort { it.name }.each { archive ->
+                if (!names.add(archive.name)) {
+                    throw new GradleException("Cannot namespace duplicate dependency filename: ${archive.name}")
+                }
+                def entries = []
+                def namespace = staged.resolve(archive.name)
+                new ZipFile(archive).withCloseable { zip ->
+                    zip.entries().each { entry ->
+                        def lower = entry.name.toLowerCase(Locale.ROOT)
+                        def filename = lower.substring(lower.lastIndexOf('/') + 1)
+                        if (!entry.directory && !lower.endsWith('.class')
+                                && (filename.contains('license') || filename.contains('notice')
+                                || filename.startsWith('copying') || filename.startsWith('copyright')
+                                || filename == 'about.html' || lower.startsWith('about_files/')
+                                || lower.contains('/licenses/') || lower.contains('/legal/'))) {
+                            def target = namespace.resolve(entry.name).normalize()
+                            if (!target.startsWith(namespace)) {
+                                throw new GradleException("Invalid notice path in ${archive.name}: ${entry.name}")
+                            }
+                            Files.createDirectories(target.parent)
+                            zip.getInputStream(entry).withCloseable { input ->
+                                Files.copy(input, target)
+                            }
+                            entries.add(entry.name)
+                        }
+                    }
+                }
+                inventory.add([archive: archive.name,
+                               sha256: HexFormat.of().formatHex(MessageDigest.getInstance('SHA-256').digest(archive.bytes)),
+                               notices: entries.sort()])
+            }
+            Files.writeString(staged.resolve('INDEX.json'),
+                    JsonOutput.prettyPrint(JsonOutput.toJson(inventory)) + '\n')
+            fileOperations.sync { from staged; into outputDirectory }
+            logger.lifecycle("Preserved notices from ${inventory.size()} dependency archives")
+        } finally {
+            fileOperations.delete { delete staged }
+        }
+    }
+}
+
+abstract class GenerateParchmentParameterIndex extends DefaultTask {
+    private static final int MAGIC = 0x5444504E
+    private static final int FORMAT_VERSION = 1
+
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getParchmentArchive()
+
+    @Input
+    abstract Property<String> getMinecraftVersion()
+
+    @Input
+    abstract Property<String> getMappingsVersion()
+
+    @OutputFile
+    abstract RegularFileProperty getOutputFile()
+
+    @TaskAction
+    void generate() {
+        def archive = new ZipFile(parchmentArchive.get().asFile)
+        def data
+        try {
+            def entry = archive.getEntry('parchment.json')
+            if (entry == null) {
+                throw new GradleException('Parchment archive does not contain parchment.json')
+            }
+            data = archive.getInputStream(entry).withReader('UTF-8') { reader ->
+                new JsonSlurper().parse(reader)
+            }
+        } finally {
+            archive.close()
+        }
+
+        def methods = data.classes.collectMany { mappedClass ->
+            (mappedClass.methods ?: []).findAll { method -> method.parameters }
+                    .collect { method ->
+                        [
+                                owner     : mappedClass.name,
+                                name      : method.name,
+                                descriptor: method.descriptor,
+                                parameters: method.parameters.sort { parameter -> parameter.index },
+                        ]
+                    }
+        }.sort { left, right ->
+            left.owner <=> right.owner ?:
+                    left.name <=> right.name ?:
+                    left.descriptor <=> right.descriptor
+        }
+
+        def output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.withDataOutputStream { stream ->
+            stream.writeInt(MAGIC)
+            stream.writeInt(FORMAT_VERSION)
+            stream.writeUTF(minecraftVersion.get())
+            stream.writeUTF(mappingsVersion.get())
+            stream.writeInt(methods.size())
+            methods.each { method ->
+                stream.writeUTF(method.owner)
+                stream.writeUTF(method.name)
+                stream.writeUTF(method.descriptor)
+                stream.writeInt(method.parameters.size())
+                method.parameters.each { parameter ->
+                    stream.writeInt(parameter.index as int)
+                    stream.writeUTF(parameter.name)
+                }
+            }
+        }
+    }
+}
+
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.6.1'
+}
+
+group = "com.github.minecraft_ta"
+version = providers.gradleProperty('releaseVersion').orElse('2.0.0').get()
+
+def useMavenLocal = providers.gradleProperty('totaldebugUseMavenLocal')
+        .map { value -> value.toBoolean() }.orElse(false)
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'Parchment'
+        url = uri('https://maven.parchmentmc.org')
+        content {
+            includeGroup 'org.parchmentmc.data'
+        }
+    }
+    maven {
+        url = uri('https://packagecloud.io/tth05/repo/maven2')
+        content {
+            includeGroup 'com.github.tth05'
+            includeModule 'com.github.minecraft_ta', 'totaldebug-storage'
+            includeModule 'com.github.minecraft_ta', 'totaldebug-evaluation'
+        }
+    }
+    if (useMavenLocal.get()) {
+        exclusiveContent {
+            forRepository { mavenLocal() }
+            filter {
+                includeGroup 'com.github.tth05'
+                includeModule 'com.github.minecraft_ta', 'totaldebug-storage'
+                includeModule 'com.github.minecraft_ta', 'totaldebug-evaluation'
+            }
+        }
+    }
+}
+
+configurations {
+    parchmentData
+}
+
+dependencies {
+    implementation("com.github.minecraft_ta:totaldebug-storage:" + storage_version)
+    implementation("com.github.minecraft_ta:totaldebug-evaluation:" + evaluation_version)
+    parchmentData("org.parchmentmc.data:parchment-${parchment_minecraft_version}:${parchment_mappings_version}")
+
+    implementation platform('io.modelcontextprotocol.sdk:mcp-bom:2.0.1')
+    implementation('io.modelcontextprotocol.sdk:mcp')
+    implementation('org.apache.tomcat.embed:tomcat-embed-core:11.0.24')
+
+    implementation('net.java.dev.jna:jna:5.19.1')
+    implementation("com.github.tth05:jindex:${jindex_version}")
+    implementation("com.github.tth05:SCNet:${scnet_version}")
+
+    implementation('com.formdev:flatlaf:3.7.2')
+    implementation('com.formdev:flatlaf-intellij-themes:3.7.2')
+    implementation('com.formdev:flatlaf-extras:3.7.2')
+    // Version numbers here track the font release, not FlatLaf.
+    implementation('com.formdev:flatlaf-fonts-inter:4.1')
+    implementation('com.formdev:flatlaf-fonts-jetbrains-mono:2.304')
+    implementation('com.fifesoft:rsyntaxtextarea:4.0.1')
+    implementation('com.fifesoft:autocomplete:3.3.3')
+
+    implementation('org.apache.commons:commons-compress:1.28.0')
+    implementation('com.google.code.gson:gson:2.14.0')
+    implementation('org.ow2.asm:asm:9.9.1')
+    implementation("org.vineflower:vineflower:${vineflower_version}:slim")
+    implementation("com.microsoft.java:com.microsoft.java.debug.core:${java_debug_version}")
+    implementation('org.eclipse.jdt:org.eclipse.jdt.core:3.46.0') {
+        exclude group: "org.eclipse.platform", module: "org.eclipse.equinox.app"
+        exclude group: "org.eclipse.platform", module: "org.eclipse.core.filesystem"
+        exclude group: "org.eclipse.platform", module: "org.eclipse.core.commands"
+    }
+    compileOnly('org.osgi:org.osgi.service.component.annotations:1.5.1')
+
+    testImplementation('org.junit.jupiter:junit-jupiter:6.1.3')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher:6.1.3')
+}
+
+def generatedParchmentResources = layout.buildDirectory.dir('generated/resources/parchment')
+def generateParchmentParameterIndex = tasks.register(
+        'generateParchmentParameterIndex',
+        GenerateParchmentParameterIndex
+) {
+    parchmentArchive.fileProvider(configurations.named('parchmentData').flatMap { configuration ->
+        configuration.elements.map { files ->
+            if (files.size() != 1) {
+                throw new GradleException("Expected one Parchment data artifact, found ${files.size()}")
+            }
+            files.iterator().next().asFile
+        }
+    })
+    minecraftVersion = project.parchment_minecraft_version
+    mappingsVersion = project.parchment_mappings_version
+    outputFile = generatedParchmentResources.map {
+        it.file('totaldebug/parchment-parameters.bin')
+    }
+}
+
+sourceSets.main.resources.srcDir(generatedParchmentResources)
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('jar') {
+    archiveClassifier = 'plain'
+}
+
+def thirdPartyNotices = tasks.register('generateThirdPartyNotices', GenerateThirdPartyNotices) {
+    dependencyArchives.from(configurations.runtimeClasspath)
+    outputDirectory = layout.buildDirectory.dir('generated-resources/third-party-notices')
+}
+
+tasks.named('processResources') {
+    from(thirdPartyNotices) { into 'META-INF/third-party' }
+    from('src/main/java/com/github/minecraft_ta/totalDebugCompanion/jdt/completion/jdtLs/LICENSE') {
+        into 'META-INF/third-party/vendored-jdt-ls'
+    }
+}
+
+tasks.named('shadowJar') {
+    dependsOn generateParchmentParameterIndex
+    archiveFileName = "${rootProject.name}.jar"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    mergeServiceFiles()
+    filesMatching('META-INF/services/**') {
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    }
+    failOnDuplicateEntries = true
+    exclude 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.SF'
+    manifest {
+        attributes 'Main-Class': 'com.github.minecraft_ta.totalDebugCompanion.CompanionApp'
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn generateParchmentParameterIndex
+}
+
+tasks.named('build') {
+    dependsOn tasks.named('shadowJar')
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// Brings the UI up without a Minecraft session so themes and icons can be eyeballed.
+tasks.register('uiHarness', JavaExec) {
+    group = 'application'
+    description = 'Runs the Companion UI without a Minecraft session (see UiDevHarness).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiDevHarness'
+}
+
+tasks.register('uiContactSheet', JavaExec) {
+    group = 'verification'
+    description = 'Renders every named Companion UI state in both themes.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.UiCaptureSuite'
+}
+
+// Runs the debugger engine against real child JVMs without starting the Companion UI.
+tasks.register('debuggerHarness', JavaExec) {
+    group = 'verification'
+    description = 'Runs the reusable real-JDWP debugger scenario suite (see DebuggerDevHarness).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.minecraft_ta.totalDebugCompanion.DebuggerDevHarness'
+}
