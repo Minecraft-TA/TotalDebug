@@ -39,13 +39,12 @@ class LocalDeploymentTest {
         Files.writeString(this.developmentJar, "new companion");
         Files.writeString(this.project.resolve("settings.gradle"), "rootProject.name = 'deployment-test'\n");
         Files.writeString(this.project.resolve("build.gradle"), """
+                plugins { id 'totaldebug.deployment' }
                 tasks.register('localBundle')
-                apply from: '%s'
                 tasks.named('deployLocal') {
                     developmentCompanionJar = layout.projectDirectory.file('mutable/TotalDebugCompanion.jar')
                 }
-                """.formatted(Path.of(System.getProperty("totaldebug.deploymentScript"))
-                .toUri().toString()));
+                """);
     }
 
     @Test
@@ -174,6 +173,7 @@ class LocalDeploymentTest {
         // Never inherit a developer's real deployment target, including the missing-setting test.
         arguments.add("-PtotaldebugInstanceDir=" + (directory == null ? "" : directory));
         GradleRunner runner = GradleRunner.create()
+                .withPluginClasspath()
                 .withProjectDir(this.project.toFile())
                 .withArguments(arguments);
         return shouldFail ? runner.buildAndFail() : runner.build();

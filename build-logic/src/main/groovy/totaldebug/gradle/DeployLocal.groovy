@@ -1,15 +1,16 @@
+package totaldebug.gradle
+
+import org.gradle.api.*
+import org.gradle.api.file.*
+import org.gradle.api.provider.*
+import org.gradle.api.tasks.*
+import javax.inject.Inject
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-
 import com.electronwill.nightconfig.toml.TomlParser
 import com.electronwill.nightconfig.toml.TomlWriter
-
-buildscript {
-    repositories { mavenCentral() }
-    dependencies { classpath 'com.electronwill.night-config:toml:3.8.3' }
-}
 
 /** Installs our binaries and configures the development JAR; never syncs the instance directory. */
 @org.gradle.work.DisableCachingByDefault(because = 'Deployment updates an external Minecraft instance')
@@ -128,12 +129,4 @@ abstract class DeployLocal extends DefaultTask {
             }
         }
     }
-}
-
-tasks.register('deployLocal', DeployLocal) {
-    group = 'development'
-    description = 'Builds and installs both local JARs into -PtotaldebugInstanceDir (Minecraft must be closed).'
-    dependsOn tasks.named('localBundle')
-    bundleDirectory = layout.buildDirectory.dir('local-bundle')
-    instanceDirectory = providers.gradleProperty('totaldebugInstanceDir')
 }

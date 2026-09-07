@@ -2,7 +2,9 @@
 
 Use Java 21 and the checked-in Gradle wrapper.
 
-TotalDebug works with three sibling repositories: TotalDebugCompanion, SCNet and JIndex. When changing a shared protocol, index API or transport contract, inspect and verify the affected consumers. For coordinated dependency builds and deployment, follow [docs/BUILD_RELEASE.md](docs/BUILD_RELEASE.md) and [README.md](README.md).
+The mod and Companion share this Gradle build. Changes to protocol, storage or evaluation require checking both application consumers. SCNet and JIndex remain external libraries. For artifact packaging, release preparation or deployment, read [docs/BUILD_RELEASE.md](docs/BUILD_RELEASE.md).
+
+Use the owning module's test task for feedback. Root check includes packaging and build-logic functional tests; deployment and installation are explicit tasks that affect external directories.
 
 Keep one current implementation. Remove superseded development code directly instead of adding migrations, compatibility adapters or no-op fallbacks. Report the exact unmet requirement when an operation cannot run.
 

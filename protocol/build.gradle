@@ -1,0 +1,7 @@
+plugins { id 'totaldebug.java-conventions'; id 'java-test-fixtures' }
+base { archivesName = 'totaldebug-protocol' }
+dependencies {
+    api libs.scnet
+    compileOnly libs.gson
+    testImplementation libs.gson
+}

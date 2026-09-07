@@ -1,14 +1,42 @@
 pluginManagement {
-    repositories {
-        gradlePluginPortal()
+    includeBuild('build-logic')
+    repositories { gradlePluginPortal(); mavenCentral() }
+    def moddevVersion = '2.0.144'
+    plugins {
+        id 'net.neoforged.moddev' version moddevVersion
+        id 'net.neoforged.moddev.repositories' version moddevVersion
     }
 }
-
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+    id 'net.neoforged.moddev.repositories'
 }
-
+dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'Parchment'
+            url = uri('https://maven.parchmentmc.org')
+            content { includeGroup 'org.parchmentmc.data' }
+        }
+        maven {
+            name = 'JEI'
+            url = uri('https://maven.blamejared.com')
+            content { includeGroup 'mezz.jei' }
+        }
+        maven {
+            name = 'tth05'
+            url = uri('https://packagecloud.io/tth05/repo/maven2')
+            content { includeGroup 'com.github.tth05' }
+        }
+        if (providers.gradleProperty('totaldebugUseMavenLocal').map { it.toBoolean() }.getOrElse(false)) {
+            exclusiveContent {
+                forRepository { mavenLocal() }
+                filter { includeGroup 'com.github.tth05' }
+            }
+        }
+    }
+}
 rootProject.name = 'TotalDebug'
-include 'storage'
-
-include 'evaluation'
+include 'mod', 'companion', 'protocol', 'storage', 'evaluation'

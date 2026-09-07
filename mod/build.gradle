@@ -1,76 +1,16 @@
 plugins {
-    id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.144'
+    id 'totaldebug.java-conventions'
+    id 'net.neoforged.moddev'
     id 'idea'
 }
-
-version = mod_version
-group = 'com.github.minecraft_ta'
-
-base {
-    archivesName = 'total_debug'
-}
-
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
-}
-
-def useMavenLocal = providers.gradleProperty('totaldebugUseMavenLocal')
-        .map { value -> value.toBoolean() }.orElse(false)
-
-repositories {
-    mavenCentral()
-    maven {
-        name = 'Parchment'
-        url = uri('https://maven.parchmentmc.org')
-        content {
-            includeGroup 'org.parchmentmc.data'
-        }
-    }
-    maven {
-        name = 'JEI'
-        url = uri('https://maven.blamejared.com')
-        content {
-            includeGroup 'mezz.jei'
-        }
-    }
-    maven {
-        name = 'tth05'
-        url = uri('https://packagecloud.io/tth05/repo/maven2')
-        content {
-            includeGroup 'com.github.tth05'
-        }
-    }
-    if (useMavenLocal.get()) {
-        exclusiveContent {
-            forRepository { mavenLocal() }
-            filter { includeGroup 'com.github.tth05' }
-        }
-    }
-}
-
+base { archivesName = 'total_debug' }
 def explicitCompanionJar = providers.gradleProperty('totaldebugCompanionJar')
-def usePublishedCompanion = providers.gradleProperty('totaldebugUsePublishedCompanion')
-        .map { value -> value.toBoolean() }
-        .orElse(false)
-def codexHome = providers.gradleProperty('codexHome')
-        .orElse(providers.environmentVariable('CODEX_HOME'))
-        .orElse(providers.systemProperty('user.home').map { home -> "${home}/.codex" })
-def siblingCompanionDirectory = layout.projectDirectory.dir('../TotalDebugCompanion')
-def siblingCompanionBuildFile = siblingCompanionDirectory.file('build.gradle')
-def siblingCompanionWrapper = siblingCompanionDirectory.file(
-        System.getProperty('os.name', '').toLowerCase(Locale.ROOT).startsWith('windows')
-                ? 'gradlew.bat'
-                : 'gradlew'
-)
-def siblingCompanionJar = siblingCompanionDirectory.file('build/libs/TotalDebugCompanion.jar')
-def useSiblingCompanion = !explicitCompanionJar.isPresent()
-        && !usePublishedCompanion.get()
-        && siblingCompanionBuildFile.asFile.isFile()
-        && siblingCompanionWrapper.asFile.isFile()
-def developmentCompanionJar = explicitCompanionJar.isPresent()
-        ? file(explicitCompanionJar.get())
-        : useSiblingCompanion ? siblingCompanionJar.asFile : null
+def usePublishedCompanion = providers.gradleProperty('totaldebugUsePublishedCompanion').map { it.toBoolean() }.orElse(false)
+def companionExecutable = configurations.create('companionExecutable') {
+    canBeConsumed = false
+    canBeResolved = true
+}
+dependencies { add('companionExecutable', project(path: ':companion', configuration: 'executableElements')) }
 def minecraftDebugPort = providers.gradleProperty('totaldebugMinecraftDebugPort').map { value ->
     int port
     try {
@@ -85,17 +25,17 @@ def minecraftDebugPort = providers.gradleProperty('totaldebugMinecraftDebugPort'
 }
 
 neoForge {
-    version = project.neo_version
+    version = libs.versions.neoforge.get()
 
     parchment {
-        minecraftVersion = project.parchment_minecraft_version
-        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = libs.versions.minecraft.get()
+        mappingsVersion = libs.versions.parchment.get()
     }
 
     runs {
         client {
             client()
-            systemProperty 'totaldebug.workspaceRoot', layout.projectDirectory.asFile.absolutePath
+            systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             if (minecraftDebugPort.isPresent()) {
                 jvmArgument(
                         "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,"
@@ -104,14 +44,14 @@ neoForge {
             }
             if (explicitCompanionJar.isPresent()) {
                 systemProperty 'totaldebug.companionJar', file(explicitCompanionJar.get()).absolutePath
-            } else if (useSiblingCompanion) {
-                systemProperty 'totaldebug.companionJar', siblingCompanionJar.asFile.absolutePath
+            } else if (!usePublishedCompanion.get()) {
+                systemProperties.put('totaldebug.companionJar', companionExecutable.elements.map { it.iterator().next().asFile.absolutePath })
             }
         }
 
         server {
             server()
-            systemProperty 'totaldebug.workspaceRoot', layout.projectDirectory.asFile.absolutePath
+            systemProperty 'totaldebug.workspaceRoot', rootDir.absolutePath
             programArgument '--nogui'
         }
     }
@@ -125,34 +65,10 @@ neoForge {
     addModdingDependenciesTo sourceSets.test
 }
 
-def buildSiblingCompanion = tasks.register('buildSiblingCompanion', Exec) {
-    group = 'development'
-    description = 'Builds the sibling TotalDebugCompanion JAR used by development clients.'
-    onlyIf { useSiblingCompanion }
-    dependsOn ':storage:publishToMavenLocal', ':evaluation:publishToMavenLocal'
-    workingDir siblingCompanionDirectory.asFile
-    commandLine siblingCompanionWrapper.asFile.absolutePath, 'shadowJar', '--console=plain'
-    args "-PtotaldebugUseMavenLocal=${useMavenLocal.get()}"
-}
 
-tasks.named('build').configure {
-    if (useSiblingCompanion) {
-        dependsOn buildSiblingCompanion
-    }
+if (!explicitCompanionJar.isPresent() && !usePublishedCompanion.get()) {
+    tasks.named('prepareClientRun') { dependsOn companionExecutable }
 }
-
-tasks.named('prepareClientRun').configure {
-    if (useSiblingCompanion) {
-        dependsOn buildSiblingCompanion
-    }
-}
-
-tasks.named('runClient').configure {
-    if (useSiblingCompanion) {
-        dependsOn buildSiblingCompanion
-    }
-}
-
 dependencies {
     implementation project(':evaluation')
     jarJar project(':evaluation')
@@ -160,14 +76,14 @@ dependencies {
     implementation project(':storage')
     jarJar project(':storage')
     additionalRuntimeClasspath project(':storage')
-    compileOnly 'net.java.dev.jna:jna:5.14.0'
-    compileOnly "mezz.jei:jei-1.21.1-neoforge-api:${jei_version}"
-    implementation 'org.ow2.asm:asm:9.8'
-    implementation 'org.ow2.asm:asm-tree:9.8'
+    compileOnly libs.jna.mod
+    compileOnly libs.jei.api
+    implementation libs.asm.mod
+    implementation libs.asm.tree
 
     def embeddedLibraries = [
-            "com.github.tth05:SCNet:${scnet_version}",
-            "io.github.classgraph:classgraph:${classgraph_version}",
+            libs.scnet,
+            libs.classgraph,
     ]
     embeddedLibraries.each { library ->
         implementation library
@@ -175,15 +91,11 @@ dependencies {
         additionalRuntimeClasspath library
     }
 
-    testImplementation platform('org.junit:junit-bom:6.1.3')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testImplementation 'org.ow2.asm:asm:9.8'
-    testImplementation "mezz.jei:jei-1.21.1-neoforge-api:${jei_version}"
-    testImplementation gradleTestKit()
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation libs.asm.mod
+    testImplementation libs.jei.api
 }
 
-def minimumNeoForgeVersion = project.neo_version.toString()
+def minimumNeoForgeVersion = libs.versions.neoforge.get()
 
 tasks.named('processResources').configure {
     inputs.property('neo_version', minimumNeoForgeVersion)
@@ -201,55 +113,23 @@ modJar.configure {
     )
 }
 
-if (developmentCompanionJar != null) {
-    def localBundle = tasks.register('localBundle', Sync) {
-        group = 'build'
-        description = 'Builds and collects the current local TotalDebug and Companion JARs.'
-        dependsOn modJar
-        if (useSiblingCompanion) {
-            dependsOn buildSiblingCompanion
-        }
-        inputs.file(developmentCompanionJar).withPropertyName('companionJar').withPathSensitivity(PathSensitivity.NONE)
-        from(modJar.flatMap { it.archiveFile }) {
-            rename { 'total_debug.jar' }
-        }
-        from(developmentCompanionJar) {
-            rename { 'TotalDebugCompanion.jar' }
-        }
-        into(layout.buildDirectory.dir('local-bundle'))
-    }
 
-    apply from: 'gradle/local-deployment.gradle'
-    tasks.named('deployLocal').configure {
-        getDevelopmentCompanionJar().set(developmentCompanionJar)
-    }
-
-    tasks.register('installCodexCompanionMcp', Copy) {
-        group = 'development'
-        description = 'Builds and installs the current Companion MCP sidecar for Codex.'
-        dependsOn localBundle
-        from(layout.buildDirectory.file('local-bundle/TotalDebugCompanion.jar'))
-        into(codexHome.map { home -> new File(home, 'mcp/totaldebug-companion') })
-    }
+configurations.create('modElements') { canBeConsumed = true; canBeResolved = false }
+artifacts { modElements modJar }
+sourceSets { packagingTest }
+neoForge.addModdingDependenciesTo sourceSets.packagingTest
+configurations {
+    packagingTestImplementation.extendsFrom testImplementation
+    packagingTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
-
-tasks.named('test', Test).configure {
-    useJUnitPlatform()
-    // Exercise NeoForge's real UnionFileSystem, which needs the same access as its launcher.
-    jvmArgs '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
-    dependsOn modJar
+tasks.register('packagingTest', Test) {
+    testClassesDirs = sourceSets.packagingTest.output.classesDirs
+    classpath = sourceSets.packagingTest.runtimeClasspath
     inputs.file(modJar.flatMap { it.archiveFile }).withPropertyName('packagedMod')
-    systemProperty 'totaldebug.packagedMod', modJar.get().archiveFile.get().asFile.absolutePath
-    systemProperty 'totaldebug.deploymentScript', layout.projectDirectory.file('gradle/local-deployment.gradle').asFile.absolutePath
+    jvmArgumentProviders.add(new totaldebug.gradle.PackagedModArgumentProvider(modJar.flatMap { it.archiveFile }))
 }
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+tasks.named('check') { dependsOn tasks.named('packagingTest') }
+tasks.named('test', Test) {
+    jvmArgs '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'
 }
-
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
-    }
-}
+idea { module { downloadSources = true; downloadJavadoc = true } }

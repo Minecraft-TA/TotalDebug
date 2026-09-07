@@ -1,0 +1,21 @@
+plugins { id 'groovy-gradle-plugin' }
+java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
+dependencies {
+    implementation libs.nightconfig.toml
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.launcher
+}
+tasks.withType(Test).configureEach { useJUnitPlatform(); maxParallelForks = 1 }
+sourceSets { functionalTest }
+configurations {
+    functionalTestImplementation.extendsFrom testImplementation
+    functionalTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+dependencies { functionalTestImplementation gradleTestKit() }
+gradlePlugin { testSourceSets sourceSets.functionalTest }
+tasks.register('functionalTest', Test) {
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
+}
+tasks.named('check') { dependsOn tasks.named('functionalTest') }

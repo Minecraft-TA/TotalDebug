@@ -1,0 +1,40 @@
+plugins { id 'base'; id 'totaldebug.deployment' }
+def executable = configurations.create('companionExecutable') {
+    canBeConsumed = false
+    canBeResolved = true
+}
+def modArtifact = configurations.create('modArtifact') {
+    canBeConsumed = false
+    canBeResolved = true
+}
+dependencies {
+    add('companionExecutable', project(path: ':companion', configuration: 'executableElements'))
+    add('modArtifact', project(path: ':mod', configuration: 'modElements'))
+}
+def modulePaths = [':mod', ':companion', ':protocol', ':storage', ':evaluation']
+tasks.register('test') { dependsOn modulePaths.collect { "${it}:test" } }
+tasks.named('check') {
+    dependsOn modulePaths.collect { "${it}:check" }
+    dependsOn gradle.includedBuild('build-logic').task(':check')
+}
+tasks.named('assemble') { dependsOn ':mod:assemble', ':companion:assemble' }
+def localBundle = tasks.register('localBundle', Sync) {
+    group = 'build'
+    description = 'Collects the current mod and Companion executable.'
+    from(modArtifact) { rename { 'total_debug.jar' } }
+    from(executable) { rename { 'TotalDebugCompanion.jar' } }
+    into(layout.buildDirectory.dir('local-bundle'))
+}
+tasks.named('deployLocal') {
+    bundleDirectory = localBundle.map { it.destinationDir }
+    developmentCompanionJar = layout.file(executable.elements.map { it.iterator().next().asFile })
+}
+def codexHome = providers.gradleProperty('codexHome')
+        .orElse(providers.environmentVariable('CODEX_HOME'))
+        .orElse(providers.systemProperty('user.home').map { "${it}/.codex" })
+tasks.register('installCodexCompanionMcp', Copy) {
+    group = 'development'
+    description = 'Installs Companion as the Codex MCP sidecar.'
+    from(executable)
+    into(codexHome.map { "${it}/mcp/totaldebug-companion" })
+}

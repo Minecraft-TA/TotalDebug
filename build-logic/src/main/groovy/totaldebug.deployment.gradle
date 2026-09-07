@@ -1,0 +1,7 @@
+import totaldebug.gradle.DeployLocal
+tasks.register('deployLocal', DeployLocal) {
+    group = 'development'
+    description = 'Installs the local pair into the explicitly selected Minecraft instance.'
+    bundleDirectory = layout.buildDirectory.dir('local-bundle')
+    instanceDirectory = providers.gradleProperty('totaldebugInstanceDir')
+}

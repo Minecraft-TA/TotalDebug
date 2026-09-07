@@ -1,0 +1,15 @@
+plugins { id 'java-library' }
+group = 'com.github.minecraft_ta'
+version = providers.gradleProperty('releaseVersion').orElse(providers.gradleProperty('mod_version')).get()
+java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+def catalog = extensions.getByType(VersionCatalogsExtension).named('libs')
+dependencies {
+    testImplementation platform(catalog.findLibrary('junit-bom').get())
+    testImplementation catalog.findLibrary('junit-jupiter').get()
+    testRuntimeOnly catalog.findLibrary('junit-launcher').get()
+}
+tasks.withType(Test).configureEach { useJUnitPlatform(); maxParallelForks = 1 }
