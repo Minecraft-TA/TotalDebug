@@ -25,7 +25,7 @@ final class AtlasSpriteResolver {
     private static final int MAXIMUM_PALETTE_PIXELS = 65536;
 
     private final ResourcePackStack resources;
-    private List<JsonObject> sources;
+    private List<Source> sources;
 
     AtlasSpriteResolver(ResourcePackStack resources) {
         this.resources = resources;
@@ -36,34 +36,43 @@ final class AtlasSpriteResolver {
         boolean removed = false;
         Set<String> unsupported = new LinkedHashSet<>();
         try {
-            for (JsonObject source : sources()) {
-                String type = ItemModelId.parse(string(source, "type")).toString();
+            for (Source source : sources()) {
                 Sprite candidate = null;
-                switch (type) {
-                    case "minecraft:paletted_permutations" -> candidate = permutation(source, spriteId);
-                    case "minecraft:single" -> {
-                        ItemModelId resource = ItemModelId.parse(string(source, "resource"));
-                        ItemModelId id = source.has("sprite") ? ItemModelId.parse(string(source, "sprite")) : resource;
-                        if (id.equals(spriteId)) {
-                            candidate = new Sprite(resource, null, null);
+                switch (source) {
+                    case PaletteSource palette -> {
+                        for (ItemModelId base : palette.textures()) {
+                            if (!spriteId.namespace().equals(base.namespace())) {
+                                continue;
+                            }
+                            for (PalettePermutation permutation : palette.permutations()) {
+                                String path = spriteId.path();
+                                if (path.length() == base.path().length() + permutation.suffix().length()
+                                        && path.startsWith(base.path()) && path.endsWith(permutation.suffix())) {
+                                    candidate = new Sprite(base, palette.paletteKey(), permutation.palette());
+                                }
+                            }
                         }
                     }
-                    case "minecraft:directory" -> {
-                        String prefix = string(source, "prefix");
+                    case SingleSource single -> {
+                        if (single.spriteId().equals(spriteId)) {
+                            candidate = single.sprite();
+                        }
+                    }
+                    case DirectorySource directory -> {
+                        String prefix = directory.prefix();
                         if (spriteId.path().startsWith(prefix) && spriteId.path().length() > prefix.length()) {
-                            String path = string(source, "source") + "/" + spriteId.path().substring(prefix.length());
+                            String path = directory.path() + "/" + spriteId.path().substring(prefix.length());
                             candidate = new Sprite(new ItemModelId(spriteId.namespace(), path), null, null);
                         }
                     }
-                    case "minecraft:filter" -> {
-                        JsonObject pattern = source.getAsJsonObject("pattern");
-                        if (selected != null && matches(pattern, "namespace", spriteId.namespace())
-                                && matches(pattern, "path", spriteId.path())) {
+                    case FilterSource filter -> {
+                        if (selected != null && matches(filter.namespace(), spriteId.namespace())
+                                && matches(filter.path(), spriteId.path())) {
                             selected = null;
                             removed = true;
                         }
                     }
-                    default -> unsupported.add(type);
+                    case UnsupportedSource unknown -> unsupported.add(unknown.type());
                 }
                 // Vanilla only registers a single/directory/palette source when its base PNG exists.
                 if (candidate != null && this.resources.contains(candidate.resource().textureResourcePath())) {
@@ -133,16 +142,16 @@ final class AtlasSpriteResolver {
         this.sources = null;
     }
 
-    private List<JsonObject> sources() throws IOException {
+    private List<Source> sources() throws IOException {
         if (this.sources == null) {
-            List<JsonObject> parsed = new ArrayList<>();
+            List<Source> parsed = new ArrayList<>();
             for (byte[] resource : this.resources.readStack(ATLAS_PATH, MAXIMUM_ATLAS_BYTES)) {
                 JsonObject json = JsonParser.parseString(new String(resource, StandardCharsets.UTF_8)).getAsJsonObject();
                 for (JsonElement entry : json.getAsJsonArray("sources")) {
                     if (parsed.size() >= MAXIMUM_SOURCE_ENTRIES) {
                         throw new JsonParseException("atlas sources exceed the " + MAXIMUM_SOURCE_ENTRIES + " entry limit");
                     }
-                    parsed.add(entry.getAsJsonObject());
+                    parsed.add(parseSource(entry.getAsJsonObject()));
                 }
             }
             this.sources = List.copyOf(parsed);
@@ -150,29 +159,50 @@ final class AtlasSpriteResolver {
         return this.sources;
     }
 
-    private static Sprite permutation(JsonObject source, ItemModelId spriteId) {
+    private static Source parseSource(JsonObject source) {
+        String type = ItemModelId.parse(string(source, "type")).toString();
+        return switch (type) {
+            case "minecraft:paletted_permutations" -> parsePaletteSource(source);
+            case "minecraft:single" -> {
+                ItemModelId resource = ItemModelId.parse(string(source, "resource"));
+                ItemModelId id = source.has("sprite") ? ItemModelId.parse(string(source, "sprite")) : resource;
+                yield new SingleSource(id, new Sprite(resource, null, null));
+            }
+            case "minecraft:directory" -> new DirectorySource(string(source, "source"), string(source, "prefix"));
+            case "minecraft:filter" -> {
+                JsonObject pattern = source.getAsJsonObject("pattern");
+                yield new FilterSource(parsePattern(pattern, "namespace"), parsePattern(pattern, "path"));
+            }
+            default -> new UnsupportedSource(type);
+        };
+    }
+
+    private static PaletteSource parsePaletteSource(JsonObject source) {
         JsonObject permutations = source.getAsJsonObject("permutations");
         var textures = source.getAsJsonArray("textures");
         if (permutations.size() > MAXIMUM_SOURCE_ENTRIES || textures.size() > MAXIMUM_SOURCE_ENTRIES
                 || (long) permutations.size() * textures.size() > MAXIMUM_SOURCE_ENTRIES) {
             throw new JsonParseException("palette source exceeds the " + MAXIMUM_SOURCE_ENTRIES + " entry limit");
         }
-        Sprite selected = null;
+        ItemModelId paletteKey = ItemModelId.parse(string(source, "palette_key"));
+        List<ItemModelId> parsedTextures = new ArrayList<>(textures.size());
         for (JsonElement texture : textures) {
-            ItemModelId base = ItemModelId.parse(texture.getAsString());
-            for (Map.Entry<String, JsonElement> permutation : permutations.entrySet()) {
-                String suffix = "_" + permutation.getKey();
-                if (spriteId.namespace().equals(base.namespace()) && spriteId.path().equals(base.path() + suffix)) {
-                    selected = new Sprite(base, ItemModelId.parse(string(source, "palette_key")),
-                            ItemModelId.parse(permutation.getValue().getAsString()));
-                }
-            }
+            parsedTextures.add(ItemModelId.parse(texture.getAsString()));
         }
-        return selected;
+        List<PalettePermutation> parsedPermutations = new ArrayList<>(permutations.size());
+        for (Map.Entry<String, JsonElement> permutation : permutations.entrySet()) {
+            parsedPermutations.add(new PalettePermutation("_" + permutation.getKey(),
+                    ItemModelId.parse(permutation.getValue().getAsString())));
+        }
+        return new PaletteSource(List.copyOf(parsedTextures), paletteKey, List.copyOf(parsedPermutations));
     }
 
-    private static boolean matches(JsonObject pattern, String key, String value) {
-        return !pattern.has(key) || Pattern.compile(string(pattern, key)).matcher(value).find();
+    private static Pattern parsePattern(JsonObject json, String key) {
+        return json.has(key) ? Pattern.compile(string(json, key)) : null;
+    }
+
+    private static boolean matches(Pattern pattern, String value) {
+        return pattern == null || pattern.matcher(value).find();
     }
 
     private static String string(JsonObject object, String key) {
@@ -181,6 +211,31 @@ final class AtlasSpriteResolver {
             throw new JsonParseException(key + " must be a string");
         }
         return value.getAsString();
+    }
+
+    private sealed interface Source {
+    }
+
+    private record SingleSource(ItemModelId spriteId, Sprite sprite) implements Source {
+    }
+
+    private record DirectorySource(String path, String prefix) implements Source {
+    }
+
+    private record PaletteSource(
+            List<ItemModelId> textures,
+            ItemModelId paletteKey,
+            List<PalettePermutation> permutations
+    ) implements Source {
+    }
+
+    private record PalettePermutation(String suffix, ItemModelId palette) {
+    }
+
+    private record FilterSource(Pattern namespace, Pattern path) implements Source {
+    }
+
+    private record UnsupportedSource(String type) implements Source {
     }
 
     record Sprite(ItemModelId resource, ItemModelId paletteKey, ItemModelId palette) {

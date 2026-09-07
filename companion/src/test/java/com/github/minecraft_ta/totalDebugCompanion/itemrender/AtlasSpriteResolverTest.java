@@ -139,6 +139,53 @@ class AtlasSpriteResolverTest {
         }
     }
 
+    @Test
+    void missingLaterSourceKeepsTheEarlierSpriteDefinition() throws Exception {
+        png("test:present", 0xFF123456);
+        atlas("""
+                {"type":"single","resource":"test:present","sprite":"test:alias"},
+                {"type":"single","resource":"test:missing","sprite":"test:alias"}
+                """);
+        try (ResourcePackStack resources = roots()) {
+            assertEquals(0xFF123456, new ItemModelRepository(resources)
+                    .texture(ItemModelId.parse("test:alias")).image().getRGB(0, 0));
+        }
+    }
+
+    @Test
+    void clearingRepositoryCachesReloadsAtlasDefinitions() throws Exception {
+        png("test:first", 0xFFFF0000);
+        png("test:second", 0xFF00FF00);
+        atlas("{\"type\":\"single\",\"resource\":\"test:first\",\"sprite\":\"test:alias\"}");
+        try (ResourcePackStack resources = roots()) {
+            ItemModelRepository repository = new ItemModelRepository(resources);
+            ItemModelId alias = ItemModelId.parse("test:alias");
+            assertEquals(0xFFFF0000, repository.texture(alias).image().getRGB(0, 0));
+
+            atlas("{\"type\":\"single\",\"resource\":\"test:second\",\"sprite\":\"test:alias\"}");
+            repository.clearCaches();
+
+            assertEquals(0xFF00FF00, repository.texture(alias).image().getRGB(0, 0));
+        }
+    }
+
+    @Test
+    void laterBaseTextureWinsWhenPaletteSuffixesProduceTheSameSpriteId() throws Exception {
+        png("test:trim", 0xFF112233);
+        png("test:trim_gold", 0xFF112233);
+        png("test:key", 0xFF112233);
+        png("test:red", 0xFFFF0000);
+        png("test:green", 0xFF00FF00);
+        atlas("""
+                {"type":"paletted_permutations","textures":["test:trim","test:trim_gold"],
+                 "palette_key":"test:key","permutations":{"gold_gold":"test:red","gold":"test:green"}}
+                """);
+        try (ResourcePackStack resources = roots()) {
+            assertEquals(0xFF00FF00, new ItemModelRepository(resources)
+                    .texture(ItemModelId.parse("test:trim_gold_gold")).image().getRGB(0, 0));
+        }
+    }
+
     private ResourcePackStack roots() throws Exception {
         return ResourcePackStack.open(List.of(new ItemRenderResourceRoot(pack)));
     }
