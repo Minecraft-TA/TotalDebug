@@ -335,6 +335,17 @@ final class SoftwareItemRenderer {
         Vec3 normal = transformed[1].subtract(transformed[0])
                 .cross(transformed[2].subtract(transformed[0]))
                 .normalize();
+        Vec3 localNormal = modelVertices[1].subtract(modelVertices[0])
+                .cross(modelVertices[2].subtract(modelVertices[0])).normalize();
+        Vec3 outward = applyGuiTransform(rootTransform.apply(modelVertices[0].add(localNormal)), guiTransform)
+                .subtract(transformed[0]);
+        if (normal.dot(outward) < 0) {
+            normal = normal.scale(-1);
+        }
+        // Generated sprites are closed extrusions. Their hidden opposite faces must not blend again.
+        if (normal.z() <= 0) {
+            return;
+        }
         double brightness = brightness(guiLight, shade, normal, faceData);
         triangles.add(new Triangle(vertices[0], vertices[1], vertices[2], texture, tint, brightness));
         triangles.add(new Triangle(vertices[0], vertices[2], vertices[3], texture, tint, brightness));
