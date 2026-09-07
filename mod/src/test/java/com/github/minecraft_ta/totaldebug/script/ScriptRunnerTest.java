@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,9 +25,63 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ScriptRunnerTest {
+    @Test
+    void concurrentCloseDoesNotWaitForTheFirstCallersResultCallback() throws Exception {
+        Object serviceMonitor = new Object();
+        CountDownLatch compiled = new CountDownLatch(1);
+        CountDownLatch closingCallback = new CountDownLatch(1);
+        CountDownLatch secondCloseFinished = new CountDownLatch(1);
+        ExecutorService worker = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
+        ScheduledExecutorService monitor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
+        try (ScriptRunner runner = new ScriptRunner(
+                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, (id, result) -> {
+            if (result.status() == ExecutionStatus.COMPILATION_COMPLETED) compiled.countDown();
+            if (result.status() == ExecutionStatus.RUN_EXCEPTION) {
+                closingCallback.countDown();
+                synchronized (serviceMonitor) { }
+            }
+        }, Duration.ofMillis(50), worker, monitor)) {
+            runner.runScript(70, script("ConcurrentCloseFixture", "return 42;"), ScriptExecutionEnvironment.POST_TICK);
+            assertTrue(compiled.await(5, TimeUnit.SECONDS));
+            worker.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            Thread first = daemonThread(runner::close);
+            Thread second = daemonThread(() -> {
+                runner.close();
+                secondCloseFinished.countDown();
+            });
+            try {
+                synchronized (serviceMonitor) {
+                    first.start();
+                    assertTrue(closingCallback.await(3, TimeUnit.SECONDS));
+                    second.start();
+                    assertTrue(secondCloseFinished.await(3, TimeUnit.SECONDS), "Second close waited for a result callback");
+                }
+            } finally {
+                first.join(5_000);
+                second.join(5_000);
+            }
+        }
+    }
+
+    @Test
+    void closingStopsTheLoadingWorker() throws Exception {
+        ExecutorService worker = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
+        ScheduledExecutorService monitor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = new ScriptRunner(
+                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, statuses,
+                Duration.ofMillis(50), worker, monitor)) {
+            runner.runScript(71, script("CloseCompilerFixture", "return 42;"), ScriptExecutionEnvironment.THREAD);
+            assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
+        }
+        assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS), "Compiler cleanup did not finish");
+
+    }
+
     @Test
     void threadRunReturnsLogOutput() throws Exception {
         StatusRecorder statuses = new StatusRecorder();
@@ -69,14 +124,14 @@ public class ScriptRunnerTest {
         try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
             runner.runScript(
                     9,
-                    """
+                    compile("NoResultFixture", """
                     public class NoResultFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                         public Object run() {
                             log("done");
                             return noResult();
                         }
                     }
-                    """,
+                    """),
                     ScriptExecutionEnvironment.THREAD
             );
 
@@ -424,11 +479,9 @@ public class ScriptRunnerTest {
         ExecutorService compilerExecutor = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
         ScheduledExecutorService stopExecutor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         return new ScriptRunner(
-                ScriptCompilerClasspath.fromSources(java.util.List.of()),
                 ScriptRunnerTest.class.getClassLoader(),
                 tickScheduler,
                 resultSink,
-                new InMemoryJavaCompiler(),
                 grace,
                 compilerExecutor,
                 stopExecutor
@@ -449,8 +502,8 @@ public class ScriptRunnerTest {
         assertTrue(runner.isExecutionStarted(scriptId), "script execution did not start");
     }
 
-    private static String script(String className, String body) {
-        return """
+    private static ScriptBytecode script(String className, String body) {
+        return compile(className, """
                 public class %s extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
@@ -460,11 +513,11 @@ public class ScriptRunnerTest {
                         return null;
                     }
                 }
-                """.formatted(className, body);
+                """.formatted(className, body));
     }
 
-    private static String normalEditorValueScript() {
-        return """
+    private static ScriptBytecode normalEditorValueScript() {
+        return compile("ResultFixture", """
                 public class ResultFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
@@ -472,11 +525,11 @@ public class ScriptRunnerTest {
                         return java.util.Map.of("answer", 42);
                     }
                 }
-                """;
+                """);
     }
 
-    private static String valueReturningScript() {
-        return """
+    private static ScriptBytecode valueReturningScript() {
+        return compile("McpValueFixture", """
                 public class McpValueFixture extends com.github.minecraft_ta.totaldebug.script.ScriptProgram {
                     @Override
                     public Object run() throws Throwable {
@@ -484,7 +537,15 @@ public class ScriptRunnerTest {
                         return java.util.Map.of("answer", 42);
                     }
                 }
-                """;
+                """);
+    }
+
+    private static ScriptBytecode compile(String name, String source) {
+        try (var compiler = new InMemoryJavaCompiler()) {
+            return new ScriptBytecode(name, compiler.compile(source, name, ""));
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static void assertAnswerMap(ExecutionValue value) {

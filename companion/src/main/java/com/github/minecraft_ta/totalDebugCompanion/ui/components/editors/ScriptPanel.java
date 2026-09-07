@@ -10,9 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
@@ -128,7 +126,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
         runButton.addActionListener(e -> runScript(false));
         runServerButton.addActionListener(e -> runScript(true));
-        stopButton.addActionListener(e -> CompanionApp.send(new StopScriptMessage(this.scriptId)));
+        stopButton.addActionListener(e -> CompanionApp.stopScript(this.scriptId));
 
         headerBar.add(runButton);
         headerBar.add(runServerButton);
@@ -146,7 +144,11 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupAutocompletion();
         setupFormatting();
 
-        CompanionApp.SERVER.getMessageBus().listenAlways(ExecutionResultMessage.class, this, (m) -> {
+        CompanionApp.SERVER.getMessageBus().listenAlways(ExecutionResultMessage.class, this, this::acceptResult);
+    }
+
+    private void acceptResult(ExecutionResultMessage m) {
+        SwingUtilities.invokeLater(() -> {
             if (m.scriptId() != this.scriptId)
                 return;
 
@@ -193,12 +195,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         this.bottomInformationBar.setProcessInfoText("Compiling...");
         this.lastGeneratedSource = generated;
         clearRunOutput();
-        if (!CompanionApp.send(new RunScriptMessage(
+        if (!CompanionApp.runScript(
                 this.scriptId,
                 this.lastGeneratedSource.source(),
                 server,
-                (ScriptExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem()
-        ))) {
+                (ScriptExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem(),
+                result -> acceptResult(new ExecutionResultMessage(this.scriptId, result))
+        )) {
             setRunButtonsState(true);
             this.bottomInformationBar.setFailureInfoText(
                     "Minecraft disconnected before the script was submitted."
@@ -331,7 +334,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         this.saveTimer.setRepeats(false);
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
-                CompanionApp.send(new StopScriptMessage(this.scriptId));
+                CompanionApp.stopScript(this.scriptId);
                 this.saveTimer.stop();
             }
         });

@@ -18,6 +18,10 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescripto
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
@@ -87,6 +91,7 @@ public final class CompanionApp {
     private static volatile CodeInsightService codeInsightService;
     private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
     private static RuntimeIndexService runtimeIndexService;
+    private static final ScriptCompilationService scriptCompiler = new ScriptCompilationService(CompanionApp::send);
     private static volatile String evaluationClasspath;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;
@@ -198,6 +203,7 @@ public final class CompanionApp {
 
                 @Override
                 public void disconnected() {
+                    scriptCompiler.runtimeDisconnected();
                     updateGameStatus(new ServiceStatus(
                             ServiceStatus.State.INACTIVE,
                             "Offline",
@@ -255,6 +261,7 @@ public final class CompanionApp {
                 RuntimePhase.run("close.decompilation", CompanionApp::closeDecompilationService);
                 RuntimePhase.run("close.references", CompanionApp::closeReferenceSearchService);
                 RuntimePhase.run("close.code-insight", CompanionApp::closeCodeInsightService);
+                RuntimePhase.run("close.script-compiler", scriptCompiler::close);
                 RuntimePhase.run("close.index", CompanionClassIndex::close);
                 RuntimePhase.run("close.ui", CompanionApp::stopUiAfterFailure);
                 try (var state = RuntimePhase.start("close.state")) {
@@ -334,6 +341,7 @@ public final class CompanionApp {
             closeDecompilationService();
             closeReferenceSearchService();
             invalidateCodeInsightService();
+            scriptCompiler.bind(null);
             CompanionClassIndex.close();
             activeIndexFile = null;
             activeRuntimeSignature = null;
@@ -408,6 +416,7 @@ public final class CompanionApp {
         if (currentInsightService != null) {
             currentInsightService.rebind(snapshot::index, sourceCatalog);
         }
+        scriptCompiler.bind(snapshot);
         CompanionClassIndex.replace(snapshot.index());
         decompilationService = replacement;
         referenceSearchService = new ReferenceSearchService(
@@ -722,6 +731,18 @@ public final class CompanionApp {
     public static boolean send(AbstractMessage message) {
         CompanionSession current = session;
         return current != null && current.send(message);
+    }
+
+    public static boolean runScript(int id, String source, boolean serverSide,
+                                    ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
+        CompanionSession current = session;
+        if (current == null || !current.isConnected()) return false;
+        scriptCompiler.submit(id, source, serverSide, environment, failureHandler);
+        return true;
+    }
+
+    public static boolean stopScript(int id) {
+        return scriptCompiler.cancel(id) || send(new StopScriptMessage(id));
     }
 
     public static void openClass(String binaryName, int targetType, String targetIdentifier) {

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import java.util.function.Consumer;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -98,7 +100,7 @@ class CompanionMcpSidecarTest {
             CodeModeJobService.Transport waitingTransport = new CodeModeJobService.Transport() {
                 @Override
                 public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
-                                    CodeModeJobService.ExecutionEnvironment environment) {
+                                    CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
                     submitted.complete(null);
                 }
 
@@ -212,7 +214,7 @@ class CompanionMcpSidecarTest {
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment
+                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
         ) {
         }
 

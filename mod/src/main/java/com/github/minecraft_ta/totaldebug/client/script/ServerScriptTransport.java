@@ -31,6 +31,9 @@ interface ServerScriptTransport {
             if (connection == null) {
                 return Availability.unsupported("Join a world to run server-side scripts");
             }
+            if (Minecraft.getInstance().getSingleplayerServer() == null) {
+                return Availability.unsupported("Dedicated-server scripts require the server's class sources in Companion, which are not available");
+            }
             if (!connection.hasChannel(RunServerScriptPayload.TYPE)
                     || !connection.hasChannel(StopServerScriptPayload.TYPE)
                     || !connection.hasChannel(ForwardedCompanionPayload.TYPE)) {

@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.evaluation;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -9,6 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 class ScriptClassLoaderTest {
     private final InMemoryJavaCompiler compiler = new InMemoryJavaCompiler();
+
+    @AfterEach
+    void closeCompiler() throws IOException {
+        this.compiler.close();
+    }
 
     @Test
     void definesEveryClassFromOneCompilationAndAllowsTheSameNamesInAnotherRun() throws Exception {

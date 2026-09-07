@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResultAssembler;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
-import com.github.minecraft_ta.totaldebug.script.ScriptCompilerClasspath;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
@@ -16,7 +15,6 @@ import com.github.minecraft_ta.totaldebug.script.ExecutionResultSink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
@@ -92,7 +90,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
         RunServerScriptPayload payload;
         try {
-            payload = new RunServerScriptPayload(run.executionId(), message.scriptText(), environment);
+            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment);
         } catch (IllegalArgumentException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
                     exception.getMessage()), ExecutionSide.SERVER);
@@ -110,12 +108,12 @@ public final class ClientScriptService implements AutoCloseable {
         ScriptRunner activeRunner;
         try {
             activeRunner = runner();
-        } catch (IOException | RuntimeException exception) {
-            TotalDebug.LOGGER.error("Unable to prepare the live script compiler", exception);
+        } catch (RuntimeException exception) {
+            TotalDebug.LOGGER.error("Unable to prepare the live script runner", exception);
             sendUntrackedResult(
                     message.scriptId(),
                     ExecutionStatus.COMPILATION_FAILED,
-                    "Unable to prepare the live script compiler: " + exception.getMessage()
+                    "Unable to prepare the live script runner: " + exception.getMessage()
             );
             return;
         }
@@ -123,7 +121,7 @@ public final class ClientScriptService implements AutoCloseable {
         if (run == null) {
             return;
         }
-        activeRunner.runScript(run.executionId(), message.scriptText(), environment);
+        activeRunner.runScript(run.executionId(), message.bytecode(), environment);
     }
 
     public synchronized void stopScript(int scriptId) {
@@ -188,20 +186,11 @@ public final class ClientScriptService implements AutoCloseable {
         }
     }
 
-    private synchronized ScriptRunner runner() throws IOException {
+    private synchronized ScriptRunner runner() {
         if (this.runner != null) {
             return this.runner;
         }
-        ScriptCompilerClasspath classpath = ScriptCompilerClasspath.discover();
-        TotalDebug.LOGGER.info(
-                "Resolved the live script compiler classpath from {} runtime sources using Java {} at {}",
-                classpath.sources().size(),
-                System.getProperty("java.version"),
-                System.getProperty("java.home")
-        );
-        TotalDebug.LOGGER.debug("Live script compiler sources: {}", classpath.sources());
         this.runner = new ScriptRunner(
-                classpath,
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
                 (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT)

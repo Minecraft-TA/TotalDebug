@@ -6,9 +6,8 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCodec;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
-import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
-import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
 import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.minecraft.world.level.block.Block;
@@ -27,46 +26,33 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-/** Compiles, defines, runs, and cooperatively cancels live Java scripts. */
+/** Defines, runs, and cooperatively cancels scripts compiled by Companion. */
 public final class ScriptRunner implements AutoCloseable {
     static final Duration DEFAULT_STOP_GRACE = Duration.ofSeconds(1);
-    private static final Pattern SCRIPT_CLASS_PATTERN = Pattern.compile(
-            "\\bpublic\\s+(?:final\\s+)?class\\s+"
-                    + "([\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*)"
-                    + "\\s+extends\\s+(?:com\\.github\\.minecraft_ta\\.totaldebug\\.script\\.)?ScriptProgram\\b"
-    );
-
-    private final ScriptCompilerClasspath classpath;
     private final ClassLoader parentClassLoader;
     private final ScriptTickScheduler tickScheduler;
     private final ExecutionResultSink resultSink;
-    private final InMemoryJavaCompiler compiler;
     private final Duration stopGrace;
-    private final ExecutorService compilerExecutor;
+    private final ExecutorService loaderExecutor;
     private final ScheduledExecutorService stopExecutor;
     private final Map<Integer, ScriptRun> runs = new ConcurrentHashMap<>();
     private volatile boolean closed;
     private volatile boolean moduleAccessLogged;
 
     public ScriptRunner(
-            ScriptCompilerClasspath classpath,
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
             ExecutionResultSink resultSink
     ) {
         this(
-                classpath,
                 parentClassLoader,
                 tickScheduler,
                 resultSink,
-                new InMemoryJavaCompiler(),
                 DEFAULT_STOP_GRACE,
                 Executors.newSingleThreadExecutor(runnable -> daemonThread(
                         runnable,
-                        "TotalDebug script compiler"
+                        "TotalDebug script loader"
                 )),
                 Executors.newSingleThreadScheduledExecutor(runnable -> daemonThread(
                         runnable,
@@ -76,41 +62,37 @@ public final class ScriptRunner implements AutoCloseable {
     }
 
     ScriptRunner(
-            ScriptCompilerClasspath classpath,
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
             ExecutionResultSink resultSink,
-            InMemoryJavaCompiler compiler,
             Duration stopGrace,
-            ExecutorService compilerExecutor,
+            ExecutorService loaderExecutor,
             ScheduledExecutorService stopExecutor
     ) {
-        this.classpath = Objects.requireNonNull(classpath, "classpath");
         this.parentClassLoader = Objects.requireNonNull(parentClassLoader, "parentClassLoader");
         this.tickScheduler = Objects.requireNonNull(tickScheduler, "tickScheduler");
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
-        this.compiler = Objects.requireNonNull(compiler, "compiler");
         this.stopGrace = Objects.requireNonNull(stopGrace, "stopGrace");
         if (stopGrace.isNegative() || stopGrace.isZero()) {
             throw new IllegalArgumentException("stopGrace must be positive");
         }
-        this.compilerExecutor = Objects.requireNonNull(compilerExecutor, "compilerExecutor");
+        this.loaderExecutor = Objects.requireNonNull(loaderExecutor, "loaderExecutor");
         this.stopExecutor = Objects.requireNonNull(stopExecutor, "stopExecutor");
     }
 
     public void runScript(
             int scriptId,
-            String sourceCode,
+            ScriptBytecode bytecode,
             ScriptExecutionEnvironment environment
     ) {
-        Objects.requireNonNull(sourceCode, "sourceCode");
+        Objects.requireNonNull(bytecode, "bytecode");
         Objects.requireNonNull(environment, "environment");
         if (this.closed) {
             sendCompilationFailure(scriptId, "The script runner is closed");
             return;
         }
 
-        ScriptRun run = new ScriptRun(scriptId, sourceCode, environment);
+        ScriptRun run = new ScriptRun(scriptId, bytecode, environment);
         if (this.runs.putIfAbsent(scriptId, run) != null) {
             sendCompilationFailure(
                     scriptId,
@@ -120,10 +102,10 @@ public final class ScriptRunner implements AutoCloseable {
         }
 
         try {
-            Future<?> future = this.compilerExecutor.submit(() -> compileAndSchedule(run));
-            run.installCompilationFuture(future);
+            Future<?> future = this.loaderExecutor.submit(() -> loadAndSchedule(run));
+            run.installLoadingFuture(future);
         } catch (RuntimeException exception) {
-            run.finish(ExecutionStatus.COMPILATION_FAILED, "Unable to start script compilation: " + exception);
+            run.finish(ExecutionStatus.COMPILATION_FAILED, "Unable to start script loading: " + exception);
         }
     }
 
@@ -145,31 +127,17 @@ public final class ScriptRunner implements AutoCloseable {
         return run != null && run.isExecutionStarted();
     }
 
-    private void compileAndSchedule(ScriptRun run) {
+    private void loadAndSchedule(ScriptRun run) {
         if (run.isTerminalOrCancelled()) {
             return;
         }
 
-        String className;
-        try {
-            className = extractScriptClassName(run.sourceCode);
-        } catch (IllegalArgumentException exception) {
-            run.finish(ExecutionStatus.COMPILATION_FAILED, exception.getMessage());
-            return;
-        }
-
+        String className = run.bytecode.primaryClass();
         CompiledScript compiledScript;
         try {
-            Map<String, byte[]> bytecode = this.classpath.compile(this.compiler, run.sourceCode, className);
-            if (run.isTerminalOrCancelled()) {
-                return;
-            }
-            ScriptClassLoader classLoader = new ScriptClassLoader(this.parentClassLoader, bytecode);
+            ScriptClassLoader classLoader = new ScriptClassLoader(this.parentClassLoader, run.bytecode.classes());
             logModuleAccessOnce(classLoader);
             compiledScript = CompiledScript.load(classLoader, className);
-        } catch (InMemoryCompilationException exception) {
-            run.finish(ExecutionStatus.COMPILATION_FAILED, exception.getMessage());
-            return;
         } catch (Throwable throwable) {
             run.finish(ExecutionResult.failure(
                     ExecutionStatus.COMPILATION_FAILED,
@@ -251,16 +219,6 @@ public final class ScriptRunner implements AutoCloseable {
             );
             this.moduleAccessLogged = true;
         }
-    }
-
-    private static String extractScriptClassName(String sourceCode) {
-        Matcher matcher = SCRIPT_CLASS_PATTERN.matcher(sourceCode);
-        if (!matcher.find()) {
-            throw new IllegalArgumentException(
-                    "Script source must contain a public class that directly extends ScriptProgram"
-            );
-        }
-        return matcher.group(1);
     }
 
     private static Throwable unwrapInvocationException(Throwable throwable) {
@@ -351,12 +309,14 @@ public final class ScriptRunner implements AutoCloseable {
 
     @Override
     public void close() {
-        if (this.closed) {
-            return;
+        synchronized (this) {
+            if (this.closed) {
+                return;
+            }
+            this.closed = true;
         }
-        this.closed = true;
         stopAll();
-        this.compilerExecutor.shutdownNow();
+        this.loaderExecutor.shutdown();
         this.stopExecutor.shutdown();
     }
 
@@ -364,24 +324,24 @@ public final class ScriptRunner implements AutoCloseable {
         private final Object lock = new Object();
         private final ArrayDeque<ExecutionResult> pendingResults = new ArrayDeque<>();
         private final int scriptId;
-        private final String sourceCode;
+        private final ScriptBytecode bytecode;
         private final ScriptExecutionEnvironment environment;
-        private Future<?> compilationFuture;
+        private Future<?> loadingFuture;
         private Thread executionThread;
         private boolean executionStarted;
         private boolean cancellationRequested;
         private boolean terminal;
         private boolean deliveringResults;
 
-        private ScriptRun(int scriptId, String sourceCode, ScriptExecutionEnvironment environment) {
+        private ScriptRun(int scriptId, ScriptBytecode bytecode, ScriptExecutionEnvironment environment) {
             this.scriptId = scriptId;
-            this.sourceCode = sourceCode;
+            this.bytecode = bytecode;
             this.environment = environment;
         }
 
-        private void installCompilationFuture(Future<?> future) {
+        private void installLoadingFuture(Future<?> future) {
             synchronized (this.lock) {
-                this.compilationFuture = future;
+                this.loadingFuture = future;
                 if (this.terminal || this.cancellationRequested) {
                     future.cancel(true);
                 }
@@ -445,8 +405,8 @@ public final class ScriptRunner implements AutoCloseable {
                     return;
                 }
                 this.cancellationRequested = true;
-                if (this.compilationFuture != null) {
-                    this.compilationFuture.cancel(true);
+                if (this.loadingFuture != null) {
+                    this.loadingFuture.cancel(true);
                 }
                 if (!this.executionStarted) {
                     cancelBeforeStart = true;

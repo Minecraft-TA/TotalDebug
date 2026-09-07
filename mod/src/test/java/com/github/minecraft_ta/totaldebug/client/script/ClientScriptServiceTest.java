@@ -1,16 +1,16 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import java.util.Map;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
-import com.github.tth05.scnet.util.ByteBufferInputStream;
-import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import org.junit.jupiter.api.Test;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -176,17 +176,8 @@ class ClientScriptServiceTest {
     }
 
     private static RunScriptMessage serverRun(int scriptId) {
-        ByteBufferOutputStream output = new ByteBufferOutputStream();
-        output.writeInt(scriptId);
-        output.writeString("public class Test extends com.github.minecraft_ta.totaldebug.script.ScriptProgram "
-                + "{ public Object run() { return null; } }");
-        output.writeBoolean(true);
-        output.writeString("THREAD");
-        ByteBuffer bytes = output.getBuffer().duplicate();
-        bytes.flip();
-        RunScriptMessage message = new RunScriptMessage();
-        message.read(new ByteBufferInputStream(bytes));
-        return message;
+        return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
+                "inventory", true, ScriptExecutionEnvironment.THREAD);
     }
 
     private record Status(int scriptId, ExecutionResult status) {

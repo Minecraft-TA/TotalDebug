@@ -7,13 +7,11 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import com.github.minecraft_ta.totaldebug.script.ScriptCompilerClasspath;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +30,6 @@ public final class ServerScriptService {
     private final TickTaskScheduler tickTasks;
     private final Map<UUID, RunnerSession> runners = new ConcurrentHashMap<>();
     private final ExecutorService resultEncoder = createResultEncoder();
-    private ScriptCompilerClasspath compilerClasspath;
 
     public ServerScriptService(TickTaskScheduler tickTasks) {
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
@@ -58,17 +55,17 @@ public final class ServerScriptService {
         ScriptRunner runner;
         try {
             runner = runnerFor(server, player);
-        } catch (IOException | RuntimeException exception) {
-            TotalDebug.LOGGER.error("Unable to prepare the server live-script compiler", exception);
+        } catch (RuntimeException exception) {
+            TotalDebug.LOGGER.error("Unable to prepare the server live-script runner", exception);
             sendCompilationFailure(
                     server,
                     player,
                     payload.scriptId(),
-                    "Unable to prepare the server live-script compiler: " + exception.getMessage()
+                    "Unable to prepare the server live-script runner: " + exception.getMessage()
             );
             return;
         }
-        runner.runScript(payload.scriptId(), payload.sourceCode(), payload.environment());
+        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment());
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {
@@ -96,7 +93,7 @@ public final class ServerScriptService {
         this.runners.clear();
     }
 
-    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player) throws IOException {
+    private synchronized ScriptRunner runnerFor(MinecraftServer server, ServerPlayer player) {
         UUID playerId = player.getUUID();
         RunnerSession existing = this.runners.get(playerId);
         if (existing != null && existing.player() == player) {
@@ -106,29 +103,13 @@ public final class ServerScriptService {
             existing.runner().close();
         }
 
-        ScriptCompilerClasspath classpath = compilerClasspath();
         ScriptRunner created = new ScriptRunner(
-                classpath,
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.SERVER, phase, task),
                 (scriptId, result) -> sendResult(server, player, scriptId, result)
         );
         this.runners.put(playerId, new RunnerSession(player, created));
         return created;
-    }
-
-    private synchronized ScriptCompilerClasspath compilerClasspath() throws IOException {
-        if (this.compilerClasspath == null) {
-            this.compilerClasspath = ScriptCompilerClasspath.discover();
-            TotalDebug.LOGGER.info(
-                    "Resolved the server live-script compiler classpath from {} runtime sources using Java {} at {}",
-                    this.compilerClasspath.sources().size(),
-                    System.getProperty("java.version"),
-                    System.getProperty("java.home")
-            );
-            TotalDebug.LOGGER.debug("Server live-script compiler sources: {}", this.compilerClasspath.sources());
-        }
-        return this.compilerClasspath;
     }
 
     private void sendCompilationFailure(

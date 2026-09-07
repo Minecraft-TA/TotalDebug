@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.script.ScriptProgram;
 import com.github.minecraft_ta.totaldebug.script.FailingAnnotationProcessor;
 
 import net.minecraft.world.level.block.Block;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.objectweb.asm.ClassReader;
@@ -13,6 +14,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -33,6 +35,11 @@ class InMemoryJavaCompilerTest {
     Path temporaryDirectory;
 
     private final InMemoryJavaCompiler compiler = new InMemoryJavaCompiler();
+
+    @AfterEach
+    void closeCompiler() throws IOException {
+        this.compiler.close();
+    }
 
     @Test
     void compilesAgainstMinecraftFromAnExplicitClasspath() throws Exception {

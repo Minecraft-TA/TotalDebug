@@ -14,7 +14,9 @@ The index describes selected runtime archives and prepared class files. It does 
 
 ## Scripts and evaluation
 
-Saved scripts contain imports and Java statements. Use `return` to produce a structured value, and `log` or `logln` for output. The client and server execution choices target their respective game contexts. Server execution follows the server's script configuration and operator restrictions.
+Saved scripts contain imports and Java statements. Use `return` to produce a structured value, and `log` or `logln` for output. Companion compiles scripts using its existing runtime index and sends the generated classes to Minecraft for execution. Wait for the current runtime index to become ready before running a script.
+
+The client and integrated-server execution choices target their respective game contexts. Server execution follows the server's script configuration and operator restrictions. Dedicated-server scripts require that server's class sources in Companion; transferring those sources is not implemented. Compiled scripts are limited to 1 MiB, with a 30,000-byte compressed limit for server runs.
 
 Evaluate Everywhere supports expressions and compiled Java statement bodies. The interpreter supports common Java operations but is not a complete Java compile-time binder. Generic overload binding and some conditional type inference can differ from compiler behavior.
 

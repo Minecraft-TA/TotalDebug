@@ -4,9 +4,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvi
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -45,12 +43,13 @@ public final class SnippetExecutionService implements AutoCloseable {
         int id = nextId();
         CompletableFuture<ExecutionResult> completion = new CompletableFuture<>();
         this.runs.put(id, completion);
-        boolean sent = CompanionApp.send(new RunScriptMessage(
+        boolean sent = CompanionApp.runScript(
                 id,
                 source.source(),
                 side == Side.SERVER,
-                environment
-        ));
+                environment,
+                result -> acceptResult(new ExecutionResultMessage(id, result))
+        );
         if (!sent) {
             this.runs.remove(id, completion);
             throw new IllegalStateException("Minecraft disconnected while the expression was submitted");
@@ -68,7 +67,7 @@ public final class SnippetExecutionService implements AutoCloseable {
 
     private void cancel(int id) {
         if (this.runs.containsKey(id)) {
-            CompanionApp.send(new StopScriptMessage(id));
+            CompanionApp.stopScript(id);
         }
     }
 
@@ -102,7 +101,7 @@ public final class SnippetExecutionService implements AutoCloseable {
         this.closed = true;
         CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this);
         for (Map.Entry<Integer, CompletableFuture<ExecutionResult>> entry : this.runs.entrySet()) {
-            CompanionApp.send(new StopScriptMessage(entry.getKey()));
+            CompanionApp.stopScript(entry.getKey());
             entry.getValue().completeExceptionally(new IllegalStateException("Snippet execution service closed"));
         }
         this.runs.clear();

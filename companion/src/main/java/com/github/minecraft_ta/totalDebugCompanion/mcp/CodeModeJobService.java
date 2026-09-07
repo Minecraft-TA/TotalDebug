@@ -3,9 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.tth05.scnet.Server;
@@ -26,6 +24,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
+import java.util.function.Consumer;
 
 /** Owns asynchronous MCP code jobs while execution remains inside the Minecraft JVM. */
 public final class CodeModeJobService implements AutoCloseable {
@@ -62,14 +61,16 @@ public final class CodeModeJobService implements AutoCloseable {
                             int scriptId,
                             String source,
                             ExecutionSide side,
-                            ExecutionEnvironment environment
+                            ExecutionEnvironment environment,
+                            Consumer<ExecutionResult> failureHandler
                     ) {
-                        boolean sent = CompanionApp.send(new RunScriptMessage(
+                        boolean sent = CompanionApp.runScript(
                                 scriptId,
                                 source,
                                 side == ExecutionSide.SERVER,
-                                environment.toWireValue()
-                        ));
+                                environment.toWireValue(),
+                                failureHandler
+                        );
                         if (!sent) {
                             throw new IllegalStateException("Minecraft disconnected while the code job was submitted");
                         }
@@ -77,7 +78,7 @@ public final class CodeModeJobService implements AutoCloseable {
 
                     @Override
                     public void cancel(int scriptId) {
-                        if (!CompanionApp.send(new StopScriptMessage(scriptId))) {
+                        if (!CompanionApp.stopScript(scriptId)) {
                             throw new IllegalStateException("Minecraft disconnected before cancellation was sent");
                         }
                     }
@@ -173,7 +174,7 @@ public final class CodeModeJobService implements AutoCloseable {
         this.jobsByScriptId.put(scriptId, jobId);
 
         try {
-            this.transport.execute(scriptId, generated.source(), side, environment);
+            this.transport.execute(scriptId, generated.source(), side, environment, result -> acceptResult(scriptId, result));
         } catch (RuntimeException exception) {
             job.finish(
                     JobState.FAILED,
@@ -438,7 +439,8 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     interface Transport {
-        void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment);
+        void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment,
+                     Consumer<ExecutionResult> failureHandler);
 
         void cancel(int scriptId);
     }

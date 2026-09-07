@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
+import java.util.Map;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -28,7 +30,9 @@ class ScriptProtocolCodecTest {
         message.read(new ByteBufferInputStream(ByteBuffer.wrap(golden)));
 
         assertEquals(7, message.scriptId());
-        assertEquals("public class X {}", message.scriptText());
+        assertEquals("X", message.bytecode().primaryClass());
+        assertArrayEquals(new byte[]{1, 2, 3}, message.bytecode().classes().get("X"));
+        assertEquals("inventory", message.inventoryId());
         assertTrue(message.serverSide());
         assertEquals("POST_TICK", message.executionEnvironment());
     }
@@ -92,7 +96,8 @@ class ScriptProtocolCodecTest {
     void runScriptMatchesTheSharedGoldenBytes() {
         RunScriptMessage message = new RunScriptMessage(
                 7,
-                "public class X {}",
+                new ScriptBytecode("X", Map.of("X", new byte[]{1, 2, 3})),
+                "inventory",
                 true,
                 ScriptExecutionEnvironment.POST_TICK
         );
