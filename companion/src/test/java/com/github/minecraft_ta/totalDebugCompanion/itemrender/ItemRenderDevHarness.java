@@ -54,13 +54,13 @@ public final class ItemRenderDevHarness {
         List<ItemModelId> models;
         ItemRenderBatchResult batch;
         try (ItemRenderBackend backend = ItemRenderBackend.openResourceRoots(options.resourceRoots())) {
-            models = backend.discoverItemModels();
+            models = options.models().isEmpty() ? backend.discoverItemModels() : options.models();
             if (!options.namespaces().isEmpty()) {
                 models = models.stream()
                         .filter(model -> options.namespaces().contains(model.namespace()))
                         .toList();
             }
-            System.out.println("Discovered " + models.size() + " item-model files");
+            System.out.println("Selected " + models.size() + " item-model files");
 
             List<ItemRenderRequest> requests = models.stream()
                     .map(model -> new ItemRenderRequest(model, options.size()))
@@ -144,7 +144,8 @@ public final class ItemRenderDevHarness {
             ReportStats stats
     ) {
         JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", 1);
+        root.addProperty("schemaVersion", 2);
+        root.addProperty("measurement", "model-file requests, not ItemStack coverage or pixel parity");
         root.addProperty("generatedAt", generatedAt.toString());
         root.addProperty("renderSize", size);
 
@@ -159,6 +160,8 @@ public final class ItemRenderDevHarness {
         totals.addProperty("models", batch.entries().size());
         totals.addProperty("rendered", batch.succeededCount());
         totals.addProperty("failed", batch.failedCount());
+        totals.addProperty("visible", batch.visibleCount());
+        totals.addProperty("empty", batch.succeededCount() - batch.visibleCount());
         totals.addProperty("coveragePercent", percentage(batch.succeededCount(), batch.entries().size()));
         root.add("totals", totals);
 
@@ -201,6 +204,7 @@ public final class ItemRenderDevHarness {
     ) {
         StringBuilder output = new StringBuilder();
         output.append("Item render diagnostic\n");
+        output.append("Counts describe model-file requests, not ItemStack coverage or pixel parity.\n");
         output.append("Generated: ").append(generatedAt).append('\n');
         output.append("Render size: ").append(size).append(" px\n");
         output.append("Resource roots: ").append(resourceRoots.size()).append("\n\n");
@@ -212,10 +216,12 @@ public final class ItemRenderDevHarness {
         output.append("Models: ").append(batch.entries().size()).append('\n');
         output.append("Rendered: ").append(batch.succeededCount()).append('\n');
         output.append("Failed: ").append(batch.failedCount()).append('\n');
-        output.append("Coverage: ").append(formatPercentage(
+        output.append("Models without failure: ").append(formatPercentage(
                 batch.succeededCount(),
                 batch.entries().size()
         )).append("\n");
+        output.append("With visible pixels: ").append(batch.visibleCount()).append('\n');
+        output.append("Empty successful images: ").append(batch.succeededCount() - batch.visibleCount()).append('\n');
         output.append("Elapsed: ").append(formatSeconds(batch.elapsedNanos())).append('\n');
         output.append("Throughput: ").append(String.format(
                 Locale.ROOT,
@@ -251,7 +257,7 @@ public final class ItemRenderDevHarness {
 
     private static String toCsv(ItemRenderBatchResult batch) {
         StringBuilder output = new StringBuilder(
-                "model,namespace,status,failure_kind,failure_detail,message,elapsed_micros\n"
+                "model,namespace,status,failure_kind,failure_detail,message,visible_pixels,elapsed_micros\n"
         );
         for (ItemRenderBatchResult.Entry entry : batch.entries()) {
             FailureInfo failure = FailureInfo.from(entry.failure());
@@ -261,6 +267,7 @@ public final class ItemRenderDevHarness {
                     .append(csv(failure.kind())).append(',')
                     .append(csv(failure.detail())).append(',')
                     .append(csv(failure.message())).append(',')
+                    .append(entry.visiblePixels()).append(',')
                     .append(nanosToMicros(entry.elapsedNanos())).append('\n');
         }
         return output.toString();
@@ -368,11 +375,13 @@ public final class ItemRenderDevHarness {
     }
 
     private static void printHelp() {
-        System.out.println("Usage: ./gradlew itemRenderHarness --args=\"OPTIONS\"");
+        System.out.println("Usage: ./gradlew :companion:itemRenderHarness --args=\"OPTIONS\"");
         System.out.println("  --root=PATH[!/PREFIX]  Add a pack root in low-to-high priority order");
+        System.out.println("  --roots-file=PATH JSON array of ordered resource roots, inserted at this position");
         System.out.println("  --mods=PATH       Add every .jar in a mod directory, sorted by filename");
         System.out.println("  --output=PATH     Report directory, default build/reports/item-render");
         System.out.println("  --namespace=ID    Include one namespace, repeat to include more");
+        System.out.println("  --model=ID        Render an exact model ID instead of scanning, repeat for more");
         System.out.println("  --size=PIXELS     Render size from 1 to 512, default 32");
         System.out.println("  --progress=N      Print progress every N models, 0 disables it");
         System.out.println("  --write-images    Retain and write every successful image");
@@ -465,6 +474,7 @@ public final class ItemRenderDevHarness {
     private record Options(
             List<ItemRenderResourceRoot> resourceRoots,
             Set<String> namespaces,
+            List<ItemModelId> models,
             Path outputDirectory,
             int size,
             int progressInterval,
@@ -475,6 +485,7 @@ public final class ItemRenderDevHarness {
         private static Options parse(String[] arguments) throws IOException {
             List<ItemRenderResourceRoot> roots = new ArrayList<>();
             Set<String> namespaces = new LinkedHashSet<>();
+            Set<ItemModelId> models = new LinkedHashSet<>();
             Path output = Path.of("build", "reports", "item-render");
             int size = DEFAULT_SIZE;
             int progress = DEFAULT_PROGRESS_INTERVAL;
@@ -488,6 +499,11 @@ public final class ItemRenderDevHarness {
                     writeImages = true;
                 } else if (argument.startsWith("--root=")) {
                     roots.add(parseRoot(value(argument)));
+                } else if (argument.startsWith("--roots-file=")) {
+                    for (var root : com.google.gson.JsonParser.parseString(
+                            Files.readString(Path.of(value(argument)), StandardCharsets.UTF_8)).getAsJsonArray()) {
+                        roots.add(parseRoot(root.getAsString()));
+                    }
                 } else if (argument.startsWith("--mods=")) {
                     addModArchives(roots, Path.of(value(argument)));
                 } else if (argument.startsWith("--output=")) {
@@ -496,6 +512,8 @@ public final class ItemRenderDevHarness {
                     String namespace = value(argument);
                     new ItemModelId(namespace, "item/validation");
                     namespaces.add(namespace);
+                } else if (argument.startsWith("--model=")) {
+                    models.add(ItemModelId.parse(value(argument)));
                 } else if (argument.startsWith("--size=")) {
                     size = Integer.parseInt(value(argument));
                 } else if (argument.startsWith("--progress=")) {
@@ -505,7 +523,7 @@ public final class ItemRenderDevHarness {
                 }
             }
             if (!help && roots.isEmpty()) {
-                throw new IllegalArgumentException("At least one --root or --mods option is required");
+                throw new IllegalArgumentException("At least one --root, --roots-file or --mods option is required");
             }
             if (size < 1 || size > ItemRenderRequest.MAXIMUM_SIZE) {
                 throw new IllegalArgumentException("--size must be between 1 and " + ItemRenderRequest.MAXIMUM_SIZE);
@@ -516,6 +534,7 @@ public final class ItemRenderDevHarness {
             return new Options(
                     List.copyOf(roots),
                     Set.copyOf(namespaces),
+                    List.copyOf(models),
                     output,
                     size,
                     progress,

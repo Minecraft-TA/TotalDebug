@@ -136,6 +136,7 @@ public final class ItemRenderBackend implements AutoCloseable {
                         request,
                         options.retainImages() ? image : null,
                         null,
+                        visiblePixels(image),
                         elapsedNanos(entryStart)
                 );
             } catch (Exception failure) {
@@ -143,6 +144,7 @@ public final class ItemRenderBackend implements AutoCloseable {
                         request,
                         null,
                         failure,
+                        0,
                         elapsedNanos(entryStart)
                 );
             }
@@ -188,5 +190,17 @@ public final class ItemRenderBackend implements AutoCloseable {
 
     private static long elapsedNanos(long start) {
         return Math.max(0L, System.nanoTime() - start);
+    }
+
+    private static int visiblePixels(BufferedImage image) {
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 }

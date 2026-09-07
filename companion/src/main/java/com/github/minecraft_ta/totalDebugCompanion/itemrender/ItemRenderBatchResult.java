@@ -23,6 +23,11 @@ public record ItemRenderBatchResult(List<Entry> entries, long elapsedNanos) {
         return this.entries.size() - succeededCount();
     }
 
+    /** Successful requests whose image contains at least one nontransparent pixel. */
+    public long visibleCount() {
+        return this.entries.stream().filter(entry -> entry.visiblePixels() > 0).count();
+    }
+
     public Duration elapsed() {
         return Duration.ofNanos(this.elapsedNanos);
     }
@@ -32,6 +37,7 @@ public record ItemRenderBatchResult(List<Entry> entries, long elapsedNanos) {
             ItemRenderRequest request,
             BufferedImage image,
             Exception failure,
+            int visiblePixels,
             long elapsedNanos
     ) {
 
@@ -39,6 +45,10 @@ public record ItemRenderBatchResult(List<Entry> entries, long elapsedNanos) {
             Objects.requireNonNull(request, "request");
             if (image != null && failure != null) {
                 throw new IllegalArgumentException("A failed entry cannot contain an image");
+            }
+            if (visiblePixels < 0 || visiblePixels > request.size() * request.size()
+                    || (failure != null && visiblePixels != 0)) {
+                throw new IllegalArgumentException("Invalid visible pixel count: " + visiblePixels);
             }
             if (elapsedNanos < 0) {
                 throw new IllegalArgumentException("elapsedNanos must be non-negative");
