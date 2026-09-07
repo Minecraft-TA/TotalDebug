@@ -86,6 +86,37 @@ final class ResourcePackStack implements AutoCloseable {
         return Optional.empty();
     }
 
+    /** Reads additive resources in pack order, with a byte limit for the whole stack. */
+    List<byte[]> readStack(String resourcePath, int maximumBytes) throws IOException {
+        validateResourcePath(resourcePath);
+        if (maximumBytes < 1) {
+            throw new IllegalArgumentException("maximumBytes must be positive");
+        }
+        List<byte[]> result = new ArrayList<>();
+        long total = 0;
+        for (ResourceRoot root : this.roots) {
+            Optional<byte[]> bytes = root.read(resourcePath, maximumBytes);
+            if (bytes.isPresent()) {
+                total += bytes.get().length;
+                if (total > maximumBytes) {
+                    throw resourceLimit(resourcePath + " resource stack", maximumBytes);
+                }
+                result.add(bytes.get());
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    boolean contains(String resourcePath) throws IOException {
+        validateResourcePath(resourcePath);
+        for (int index = this.roots.size() - 1; index >= 0; index--) {
+            if (this.roots.get(index).contains(resourcePath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public void close() throws IOException {
         IOException failure = null;
@@ -158,6 +189,8 @@ final class ResourcePackStack implements AutoCloseable {
 
     private interface ResourceRoot extends AutoCloseable {
 
+        boolean contains(String resourcePath) throws IOException;
+
         Optional<byte[]> read(String resourcePath, int maximumBytes) throws IOException;
 
         List<String> list(String prefix, String suffix) throws IOException;
@@ -168,6 +201,13 @@ final class ResourcePackStack implements AutoCloseable {
     }
 
     private record DirectoryRoot(ItemRenderResourceRoot descriptor) implements ResourceRoot {
+
+        @Override
+        public boolean contains(String resourcePath) {
+            Path packRoot = this.descriptor.path().resolve(this.descriptor.prefix()).normalize();
+            Path resource = packRoot.resolve(resourcePath).normalize();
+            return resource.startsWith(packRoot) && Files.isRegularFile(resource);
+        }
 
         @Override
         public Optional<byte[]> read(String resourcePath, int maximumBytes) throws IOException {
@@ -213,6 +253,12 @@ final class ResourcePackStack implements AutoCloseable {
         private ArchiveRoot(ItemRenderResourceRoot descriptor) throws IOException {
             this.descriptor = descriptor;
             this.archive = new ZipFile(descriptor.path().toFile());
+        }
+
+        @Override
+        public boolean contains(String resourcePath) {
+            ZipEntry entry = this.archive.getEntry(this.descriptor.entryPath(resourcePath));
+            return entry != null && !entry.isDirectory();
         }
 
         @Override

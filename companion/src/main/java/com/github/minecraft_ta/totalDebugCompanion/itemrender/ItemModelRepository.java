@@ -32,11 +32,13 @@ final class ItemModelRepository {
     private static final ItemModelId BUILTIN_ENTITY = ItemModelId.parse("builtin/entity");
 
     private final ResourcePackStack resources;
+    private final AtlasSpriteResolver atlasSprites;
     private final Map<ItemModelId, ResolvedModel> modelCache = new HashMap<>();
     private final Map<ItemModelId, BufferedImage> textureCache = new HashMap<>();
 
     ItemModelRepository(ResourcePackStack resources) {
         this.resources = resources;
+        this.atlasSprites = new AtlasSpriteResolver(resources);
     }
 
     ResolvedModel resolve(ItemModelId modelId) throws IOException {
@@ -53,6 +55,16 @@ final class ItemModelRepository {
             return cached;
         }
 
+        AtlasSpriteResolver.Sprite sprite = this.atlasSprites.resolve(textureId);
+        BufferedImage decoded = readTextureImage(sprite.resource());
+        BufferedImage frame = sprite.generated()
+                ? this.atlasSprites.applyPalette(sprite, decoded, this::readTextureImage)
+                : textureFrame(sprite.resource(), decoded);
+        this.textureCache.put(textureId, frame);
+        return frame;
+    }
+
+    private BufferedImage readTextureImage(ItemModelId textureId) throws IOException {
         byte[] png = this.resources.readRequired(textureId.textureResourcePath(), MAXIMUM_TEXTURE_BYTES);
         BufferedImage decoded;
         try (ByteArrayInputStream input = new ByteArrayInputStream(png)) {
@@ -73,14 +85,13 @@ final class ItemModelRepository {
             );
         }
 
-        BufferedImage frame = textureFrame(textureId, decoded);
-        this.textureCache.put(textureId, frame);
-        return frame;
+        return decoded;
     }
 
     void clearCaches() {
         this.modelCache.clear();
         this.textureCache.clear();
+        this.atlasSprites.clearCache();
     }
 
     private ResolvedModel resolve(ItemModelId modelId, LinkedHashSet<ItemModelId> resolving) throws IOException {
