@@ -35,6 +35,8 @@ Reports count archive model files processed without failure. They separately cou
 
 The historical ATM10 Sky scan at renderer revision `2e4fde1` processed 40,674 of 43,913 archive model files without failure, or 92.62 percent. Comparisons must preserve the ordered resource roots and model denominator, and separately inspect representative images and failure categories.
 
+The [September 2026 validation](ITEM_RENDER_VALIDATION.md) records the reconstructed baseline, per-category improvements, pixel comparisons and remaining unsupported cases.
+
 ## Fractional Fusion texture regions
 
 Fusion 1.2.12 gives an item quad an isolated tile from a connecting texture. `TextureRegion` keeps the source image and exact pixel bounds so the renderer can sample tiles whose dimensions are not whole pixels.
