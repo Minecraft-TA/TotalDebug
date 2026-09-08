@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.message.RunScriptPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
@@ -12,12 +13,12 @@ public final class RunScriptMessage extends AbstractMessage {
     public RunScriptMessage() {
     }
 
-    public RunScriptMessage(int scriptId, String scriptText, boolean serverSide, ScriptExecutionEnvironment executionEnvironment) {
-        this(scriptId, scriptText, serverSide, executionEnvironment.name());
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, ScriptExecutionEnvironment executionEnvironment) {
+        this(scriptId, bytecode, inventoryId, serverSide, executionEnvironment.name());
     }
 
-    public RunScriptMessage(int scriptId, String scriptText, boolean serverSide, String executionEnvironment) {
-        this.payload = new RunScriptPayload(scriptId, scriptText, serverSide, executionEnvironment);
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment) {
+        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, serverSide, executionEnvironment);
     }
 
     @Override
@@ -34,8 +35,12 @@ public final class RunScriptMessage extends AbstractMessage {
         return this.payload.scriptId();
     }
 
-    public String scriptText() {
-        return this.payload.scriptText();
+    public ScriptBytecode bytecode() {
+        return this.payload.bytecode();
+    }
+
+    public String inventoryId() {
+        return this.payload.inventoryId();
     }
 
     public boolean serverSide() {

@@ -389,7 +389,7 @@ class ScriptBytecodeTransformerTest {
     void rejectsPrivateSuperclassConstructor() {
         InMemoryCompilationException exception = assertThrows(
                 InMemoryCompilationException.class,
-                () -> new InMemoryJavaCompiler().compile(
+                () -> compileScript(
                         source(same(
                                 "private superclass constructor",
                                 "return new Child().getClass().getSimpleName();",
@@ -407,7 +407,7 @@ class ScriptBytecodeTransformerTest {
     @Test
     void rejectsPackagePrivateSuperclassConstructor() {
         InMemoryCompilationException exception = assertThrows(InMemoryCompilationException.class,
-                () -> new InMemoryJavaCompiler().compile(source(same("package constructor", "return null;", null,
+                () -> compileScript(source(same("package constructor", "return null;", null,
                         "public static class Child extends Types.PackageConstructorBase { }")),
                         "audit.scripts.ScriptCase", runtimeDirectory.toString()));
         assertTrue(exception.getMessage().contains("cannot call package-private superclass constructor"));
@@ -457,7 +457,7 @@ class ScriptBytecodeTransformerTest {
 
     private static void verifyTransformed(Probe probe, String source) throws Throwable {
         String name = "audit.scripts.ScriptCase";
-        Map<String, byte[]> transformed = new InMemoryJavaCompiler().compile(source, name, runtimeDirectory.toString());
+        Map<String, byte[]> transformed = compileScript(source, name, runtimeDirectory.toString());
         assertEquals(probe.whenTrue(), execute(transformed, name, true), "transformed true branch");
         assertEquals(probe.whenFalse(), execute(transformed, name, false), "transformed false branch");
     }
@@ -472,6 +472,12 @@ class ScriptBytecodeTransformerTest {
 
     private static Probe same(String name, String body, Object expected) {
         return new Probe(name, body, expected, expected);
+    }
+
+    private static Map<String, byte[]> compileScript(String source, String name, String classpath) throws Exception {
+        try (var compiler = new InMemoryJavaCompiler()) {
+            return compiler.compile(source, name, classpath);
+        }
     }
 
     private static Probe same(String name, String body, Object expected, String declarations) {

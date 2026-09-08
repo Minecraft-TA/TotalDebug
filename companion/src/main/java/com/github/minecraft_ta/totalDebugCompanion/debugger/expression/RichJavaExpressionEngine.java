@@ -18,6 +18,8 @@ import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +137,15 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                 this.actionResult = new DebugEngine.BreakpointActionResult(previous.source(),
                         new DebugEngine.EvaluationResult(result.value(), result.type(), 0, 0, result.scalar()), previous.error());
             }
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            this.compiled.close();
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
         }
     }
 

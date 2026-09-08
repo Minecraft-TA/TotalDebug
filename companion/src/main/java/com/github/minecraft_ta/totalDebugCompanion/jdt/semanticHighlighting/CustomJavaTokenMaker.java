@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import org.eclipse.jdt.core.compiler.CharOperation;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -9,6 +10,7 @@ import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.fife.ui.rsyntaxtextarea.modes.JavaTokenMaker;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Segment;
 import javax.swing.text.TextAction;
@@ -20,40 +22,91 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
 
     private static final char[] VAR_CHAR_ARRAY = {'v', 'a', 'r'};
 
-    private final Object tokenTypeLock = new Object();
-    private Map<Integer, Integer> overwrittenTokenTypes;
+    private final DocumentChangeListener documentListener = this::documentChanged;
+    private RSyntaxDocument document;
+    private Map<Integer, SemanticToken> overwrittenTokenTypes;
 
-    private volatile int lastVisitedVersion;
-
-    public void setASTKey(String identifier, JComponent textComponent) {
+    public void setASTKey(String identifier, RSyntaxTextArea textArea) {
+        trackDocument(textArea);
         ASTCache.addChangeListener(identifier, (ast, version) -> {
-            lastVisitedVersion = version;
+            var snapshot = ASTCache.getSnapshot(identifier);
+            if (snapshot == null || snapshot.unit() != ast) {
+                return;
+            }
 
             var tokenTypes = new HashMap<Integer, Integer>();
             ast.accept(new SemanticTokensVisitor(tokenTypes));
 
-            if (version != lastVisitedVersion)
-                return;
-
             var editorTokenTypes = new HashMap<Integer, Integer>();
             tokenTypes.forEach((generatedOffset, tokenType) -> {
-                int editorOffset = ASTCache.toEditorOffset(identifier, generatedOffset);
+                int editorOffset = snapshot.sourceMap().toEditorOffset(generatedOffset);
                 if (editorOffset >= 0) {
                     editorTokenTypes.put(editorOffset, tokenType);
                 }
             });
-            setSemanticTokenTypes(editorTokenTypes, textComponent);
+            SwingUtilities.invokeLater(() -> {
+                if (ASTCache.getFromCache(identifier) == ast && snapshot.contents().equals(textArea.getText())) {
+                    setSemanticTokenTypes(editorTokenTypes, textArea);
+                }
+            });
         });
     }
 
-    public void setSemanticTokenTypes(Map<Integer, Integer> tokenTypes, JComponent textComponent) {
-        synchronized (this.tokenTypeLock) {
-            this.overwrittenTokenTypes = Map.copyOf(tokenTypes);
+    public void setSemanticTokenTypes(Map<Integer, Integer> tokenTypes, RSyntaxTextArea textArea) {
+        trackDocument(textArea);
+        var tokens = new HashMap<Integer, SemanticToken>();
+        // Use the lexer's spans; it combines some qualified names, such as Thread.State.
+        for (Token token : this.document) {
+            Integer type = tokenTypes.get(token.getOffset());
+            if (type != null && token.isPaintable()) {
+                tokens.put(token.getOffset(), new SemanticToken(token.getLexeme(), type));
+            }
         }
-        if (textComponent instanceof RSyntaxTextArea textArea) {
-            invalidateTokenCache((RSyntaxDocument) textArea.getDocument());
+        this.overwrittenTokenTypes = tokens;
+        invalidateTokenCache(this.document);
+        textArea.repaint();
+    }
+
+    private void trackDocument(RSyntaxTextArea textArea) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("Semantic highlighting must be updated on the event dispatch thread");
         }
-        SwingUtilities.invokeLater(textComponent::repaint);
+        RSyntaxDocument current = (RSyntaxDocument) textArea.getDocument();
+        if (this.document != current) {
+            if (this.document != null) {
+                this.document.removeDocumentListener(this.documentListener);
+            }
+            this.document = current;
+            this.overwrittenTokenTypes = null;
+            current.addDocumentListener(this.documentListener);
+        }
+    }
+
+    private void documentChanged(DocumentEvent event) {
+        if (event.getType() == DocumentEvent.EventType.CHANGE || this.overwrittenTokenTypes == null) {
+            return;
+        }
+        int offset = event.getOffset();
+        int length = event.getLength();
+        boolean insertion = event.getType() == DocumentEvent.EventType.INSERT;
+        var shifted = new HashMap<Integer, SemanticToken>();
+        // Keep untouched names aligned while the asynchronous parse catches up.
+        this.overwrittenTokenTypes.forEach((start, token) -> {
+            int end = start + token.text().length();
+            if (insertion) {
+                if (offset <= start) {
+                    shifted.put(start + length, token);
+                } else if (offset >= end) {
+                    shifted.put(start, token);
+                }
+            } else if (end <= offset) {
+                shifted.put(start, token);
+            } else if (start >= offset + length) {
+                shifted.put(start - length, token);
+            }
+        });
+        this.overwrittenTokenTypes = shifted;
+        invalidateTokenCache(this.document);
     }
 
     private static void invalidateTokenCache(RSyntaxDocument document) {
@@ -74,22 +127,26 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
         if (this.overwrittenTokenTypes == null)
             return firstToken;
 
-        synchronized (this.tokenTypeLock) {
-            while (currentToken != null) {
-                //Exclude "var" from being highlighted
-                if (currentToken.getType() == TokenTypes.DATA_TYPE && CharOperation.equals(VAR_CHAR_ARRAY, currentToken.getTextArray(), currentToken.getTextOffset(), currentToken.getTextOffset() + currentToken.length())) {
-                    currentToken.setType(TokenTypes.IDENTIFIER);
-                } else if (currentToken.getType() != TokenTypes.NULL) {
-                    var token = this.overwrittenTokenTypes.get(currentToken.getOffset());
-                    if (token != null)
-                        currentToken.setType(token);
-                }
-
-                currentToken = currentToken.getNextToken();
+        while (currentToken != null) {
+            //Exclude "var" from being highlighted
+            if (currentToken.getType() == TokenTypes.DATA_TYPE && CharOperation.equals(VAR_CHAR_ARRAY, currentToken.getTextArray(), currentToken.getTextOffset(), currentToken.getTextOffset() + currentToken.length())) {
+                currentToken.setType(TokenTypes.IDENTIFIER);
+            } else if (currentToken.getType() == TokenTypes.IDENTIFIER
+                    || currentToken.getType() == TokenTypes.FUNCTION
+                    || currentToken.getType() == TokenTypes.RESERVED_WORD
+                    || currentToken.getType() == TokenTypes.RESERVED_WORD_2) {
+                var token = this.overwrittenTokenTypes.get(currentToken.getOffset());
+                if (token != null && token.text().equals(currentToken.getLexeme()))
+                    currentToken.setType(token.type());
             }
+
+            currentToken = currentToken.getNextToken();
         }
 
         return firstToken;
+    }
+
+    private record SemanticToken(String text, int type) {
     }
 
     @Override

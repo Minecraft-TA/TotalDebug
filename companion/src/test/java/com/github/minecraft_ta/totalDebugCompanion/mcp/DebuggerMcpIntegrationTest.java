@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -200,7 +202,7 @@ class DebuggerMcpIntegrationTest {
         return values.stream().filter(v -> name.equals(v.get("name"))).findFirst().orElseThrow();
     }
     private static final class NoOpTransport implements CodeModeJobService.Transport {
-        public void execute(int id, String source, CodeModeJobService.ExecutionSide side, CodeModeJobService.ExecutionEnvironment environment) { }
+        public void execute(int id, String source, CodeModeJobService.ExecutionSide side, CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) { }
         public void cancel(int id) { }
     }
 }

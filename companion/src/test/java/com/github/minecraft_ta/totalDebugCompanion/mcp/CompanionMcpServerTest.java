@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -243,7 +245,7 @@ class CompanionMcpServerTest {
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment
+                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
         ) {
         }
 

@@ -21,6 +21,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
@@ -250,6 +251,13 @@ public final class CompanionAppClient implements AutoCloseable {
         this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
             if (!isAuthenticated()) {
                 failSession("Companion sent a script request before authentication", null);
+                return;
+            }
+            RuntimeInventoryMessage inventory = this.runtimeInventoryState;
+            if (inventory.state() != RuntimeInventoryMessage.AVAILABLE
+                    || !inventory.inventoryId().equals(message.inventoryId())) {
+                sendExecutionResult(message.scriptId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
+                        "The script was compiled against a different runtime inventory. Wait for Companion to load the current index."));
                 return;
             }
             this.scriptRequestHandler.accept(message);

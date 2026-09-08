@@ -607,6 +607,12 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         } finally {
             this.state.set(State.CLOSED);
             this.listeners.clear();
+            try {
+                this.expressionEngine.close();
+            } catch (RuntimeException failure) {
+                if (closeFailure == null) closeFailure = failure;
+                else closeFailure.addSuppressed(failure);
+            }
         }
         if (closeFailure != null) {
             throw closeFailure;

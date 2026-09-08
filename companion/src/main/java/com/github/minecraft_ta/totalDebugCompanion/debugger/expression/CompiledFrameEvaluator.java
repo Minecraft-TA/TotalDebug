@@ -6,11 +6,15 @@ import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 import com.sun.jdi.*;
 import org.eclipse.jdt.core.dom.*;
+
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.*;
 import java.util.function.Supplier;
 
 /** Compiles a whole fragment before installing or invoking any of it in the debuggee. */
-final class CompiledFrameEvaluator {
+final class CompiledFrameEvaluator implements Closeable {
+    private final InMemoryJavaCompiler compiler = new InMemoryJavaCompiler();
     private final Supplier<String> classpath;
     private final RichJavaExpressionEngine.VariableNameResolver names;
     private final RichJavaExpressionEngine.TypeScopeResolver scopes;
@@ -80,7 +84,7 @@ final class CompiledFrameEvaluator {
                 + "public Object run() throws Throwable {\n" + declarations
                 + "try { if (Boolean.TRUE.booleanValue()) {\n" + body + "\n} return this;\n"
                 + "} finally {\n" + writes + "}\n}\n}";
-        Map<String, byte[]> classes = new InMemoryJavaCompiler().compile(generated, binaryName, preparedClasspath);
+        Map<String, byte[]> classes = this.compiler.compile(generated, binaryName, preparedClasspath);
         DebuggerEvaluationRunner.checkpoint();
         Method install = bridge.concreteMethodByName("install",
                 "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Class;");
@@ -135,6 +139,11 @@ final class CompiledFrameEvaluator {
         if (failure instanceof Exception exception) throw exception;
         if (failure instanceof Error error) throw error;
         return result;
+    }
+
+    @Override
+    public void close() throws IOException {
+        this.compiler.close();
     }
 
     private static String captureMethods() {

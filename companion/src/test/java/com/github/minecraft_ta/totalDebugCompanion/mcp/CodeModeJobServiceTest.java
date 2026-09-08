@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -397,7 +398,7 @@ class CodeModeJobServiceTest {
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment
+                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
         ) {
             this.executions.add(new Execution(scriptId, source, side, environment));
         }

@@ -94,6 +94,16 @@ public class ASTCache {
         }
     }
 
+    public static Snapshot getSnapshot(String key) {
+        synchronized (CACHE) {
+            Entry entry = CACHE.get(key);
+            return entry == null ? null : new Snapshot(entry.unit, entry.contents, entry.sourceMap);
+        }
+    }
+
+    public record Snapshot(CompilationUnit unit, String contents, JavaSourceMap sourceMap) {
+    }
+
     public static String getContents(String key) {
         synchronized (CACHE) {
             var entry = CACHE.get(key);
