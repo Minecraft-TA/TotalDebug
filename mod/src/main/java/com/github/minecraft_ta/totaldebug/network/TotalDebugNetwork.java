@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class TotalDebugNetwork {
-    public static final String PROTOCOL_VERSION = "3";
+    public static final String PROTOCOL_VERSION = "4";
 
     private final ForwardedCompanionPayloadSink forwardedCompanionPayloads = new ForwardedCompanionPayloadSink();
 
@@ -22,8 +22,16 @@ public final class TotalDebugNetwork {
         return this.forwardedCompanionPayloads.install(receiver);
     }
 
+    private Consumer<ServerManifestPayload> manifestReceiver = payload -> {};
+
+    public void setManifestReceiver(Consumer<ServerManifestPayload> receiver) {
+        this.manifestReceiver = Objects.requireNonNull(receiver);
+    }
+
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION).optional();
+        registrar.playToClient(ServerManifestPayload.TYPE, ServerManifestPayload.STREAM_CODEC,
+                (payload, context) -> this.manifestReceiver.accept(payload));
         registrar.playToClient(
                 ForwardedCompanionPayload.TYPE,
                 ForwardedCompanionPayload.STREAM_CODEC,

@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -48,6 +49,8 @@ public final class CompanionSession implements AutoCloseable {
 
         default void runtimeInventory(RuntimeInventoryMessage message) {
         }
+
+        default void serverManifest(ServerManifestMessage message) {}
 
         default void debugTarget(DebugTargetMessage message) {
         }
@@ -130,6 +133,7 @@ public final class CompanionSession implements AutoCloseable {
     private void registerHandlers() {
         this.server.getMessageBus().listenAlways(ClientHelloMessage.class, this::handleHello);
         this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
+        this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> com.github.minecraft_ta.totalDebugCompanion.CompanionApp.openClass(message.binaryName(), message.targetType(), message.targetIdentifier()));
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->

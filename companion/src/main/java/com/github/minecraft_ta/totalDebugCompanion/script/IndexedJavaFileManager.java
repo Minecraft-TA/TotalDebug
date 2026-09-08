@@ -2,6 +2,10 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source;
 import com.github.tth05.jindex.ClassIndex;
+import com.github.minecraft_ta.totaldebug.evaluation.ClassDeclarations;
+import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
+import java.io.ByteArrayInputStream;
+import java.util.function.Supplier;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.IndexedPackage;
 
@@ -27,12 +31,15 @@ import java.util.zip.ZipFile;
 /** Borrows Companion's index and opens only the archives javac actually reads. */
 final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
     private final ClassIndex index;
+    private final Supplier<ServerManifest> serverManifest;
+    private final Map<Integer, String> archiveHashes = new HashMap<>();
     private final Map<Integer, Path> sources = new HashMap<>();
     private final Map<Integer, JarFile> archives = new HashMap<>();
 
-    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources) {
+    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources, Supplier<ServerManifest> serverManifest) {
         super(standard);
         this.index = index;
+        this.serverManifest = serverManifest;
         for (Source source : sources) {
             // --release supplies the platform classes from javac's own standard manager.
             if (!"jrt:/".equals(source.logicalUri())) this.sources.put(source.sourceId(), source.path());
@@ -116,7 +123,7 @@ final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJav
         @Override
         public InputStream openInputStream() throws IOException {
             String resource = this.name.replace('.', '/') + ".class";
-            if (Files.isDirectory(this.path)) return Files.newInputStream(this.path.resolve(resource));
+            if (Files.isDirectory(this.path)) return checked(Files.newInputStream(this.path.resolve(resource)));
             JarFile archive = archives.get(this.sourceId);
             if (archive == null) {
                 archive = new JarFile(this.path.toFile(), false, ZipFile.OPEN_READ, Runtime.Version.parse("21"));
@@ -124,7 +131,22 @@ final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJav
             }
             var entry = archive.getJarEntry(resource);
             if (entry == null) throw new IOException("Runtime index points to a missing class: " + this.path + " / " + resource);
-            return archive.getInputStream(entry);
+            return checked(archive.getInputStream(entry));
+        }
+
+        private InputStream checked(InputStream input) throws IOException {
+            ServerManifest manifest = serverManifest.get();
+            if (manifest == null) return input;
+            try (input) {
+                byte[] bytes = input.readAllBytes();
+                String hash = archiveHashes.get(this.sourceId);
+                if (hash == null) {
+                    hash = Files.isDirectory(this.path) ? "" : ClassDeclarations.archiveFingerprint(this.path);
+                    archiveHashes.put(this.sourceId, hash);
+                }
+                manifest.requireCompatible(this.name, hash, bytes);
+                return new ByteArrayInputStream(bytes);
+            }
         }
     }
 }

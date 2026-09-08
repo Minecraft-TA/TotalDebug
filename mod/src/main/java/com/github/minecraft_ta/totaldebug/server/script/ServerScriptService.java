@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totaldebug.server.script;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
+import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResult;
@@ -12,14 +15,19 @@ import com.github.minecraft_ta.totaldebug.tick.TickDomain;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -27,12 +35,52 @@ import java.util.concurrent.TimeUnit;
 /** Owns isolated server-side script runners for the players that requested them. */
 public final class ServerScriptService {
     private static final int MAX_PENDING_RESULT_ENCODINGS = 4;
+    private final ExecutorService manifestWorker = Executors.newSingleThreadExecutor(runnable -> {
+        var thread = new Thread(runnable, "TotalDebug server manifest");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private CompletableFuture<byte[]> manifest;
+    private final Map<UUID, ManifestSession> manifestSessions = new ConcurrentHashMap<>();
+    private record ManifestSession(ServerPlayer player, String id) {}
+
     private final TickTaskScheduler tickTasks;
     private final Map<UUID, RunnerSession> runners = new ConcurrentHashMap<>();
     private final ExecutorService resultEncoder = createResultEncoder();
 
     public ServerScriptService(TickTaskScheduler tickTasks) {
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
+    }
+
+    public synchronized void sendManifest(ServerPlayer player) {
+        if (!player.connection.hasChannel(ServerManifestPayload.TYPE)) return;
+        MinecraftServer server = Objects.requireNonNull(player.getServer());
+        var session = new ManifestSession(player, UUID.randomUUID().toString());
+        this.manifestSessions.put(player.getUUID(), session);
+        player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable("Preparing server class manifest")));
+        if (this.manifest == null) {
+            this.manifest = CompletableFuture.supplyAsync(() -> {
+                try {
+                    var sources = TotalDebug.get().runtimeSources();
+                    return sources.withCurrentSources(() -> ServerManifest.scan(sources.paths()).encode());
+                } catch (IOException exception) {
+                    throw new CompletionException(exception);
+                }
+            }, this.manifestWorker);
+        }
+        this.manifest.whenComplete((bytes, failure) -> server.execute(() -> {
+            if (this.manifestSessions.get(player.getUUID()) != session) return;
+            if (failure != null) {
+                this.manifestSessions.remove(player.getUUID(), session);
+                TotalDebug.LOGGER.error("Unable to prepare server class manifest", failure);
+                player.connection.send(new ServerManifestPayload(ServerManifestMessage.unavailable(
+                        "Unable to prepare server class manifest; see the server log")));
+                return;
+            }
+            for (var message : ServerManifestMessage.split(session.id(), bytes)) {
+                player.connection.send(new ServerManifestPayload(message));
+            }
+        }));
     }
 
     public void runScript(ServerPlayer player, RunServerScriptPayload payload) {
@@ -49,6 +97,14 @@ public final class ServerScriptService {
         if (!decision.allowed()) {
             sendCompilationFailure(server, player, payload.scriptId(),
                     decision.rejectionReason());
+            return;
+        }
+
+        ManifestSession manifestSession = this.manifestSessions.get(player.getUUID());
+        if (manifestSession == null || manifestSession.player() != player
+                || !manifestSession.id().equals(payload.serverSessionId())) {
+            sendCompilationFailure(server, player, payload.scriptId(),
+                    "The server session changed. Wait for the current handshake and compile again.");
             return;
         }
 
@@ -78,6 +134,8 @@ public final class ServerScriptService {
 
     public void removePlayer(ServerPlayer player) {
         Objects.requireNonNull(player, "player");
+        this.manifestSessions.computeIfPresent(player.getUUID(), (id, manifest) ->
+                manifest.player() == player ? null : manifest);
         RunnerSession session = this.runners.get(player.getUUID());
         if (session != null
                 && session.player() == player
@@ -86,7 +144,9 @@ public final class ServerScriptService {
         }
     }
 
-    public void stopAll() {
+    public synchronized void stopAll() {
+        this.manifestSessions.clear();
+        this.manifest = null;
         for (RunnerSession session : new ArrayList<>(this.runners.values())) {
             session.runner().close();
         }

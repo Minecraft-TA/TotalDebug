@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Server;
+import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import com.github.tth05.scnet.message.IMessageProcessor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -17,11 +18,37 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(10)
 class ProtocolBindingsTest {
+    @Test
+    void companionReceivesAChunkedManifestThroughItsRegisteredTransport() throws Exception {
+        try (Server server = endpoint(ProtocolBindings::registerCompanion)) {
+            var received = new CompletableFuture<byte[]>();
+            var assembler = new ServerManifestMessage.Assembler();
+            server.getMessageBus().listenAlways(ServerManifestMessage.class, message -> {
+                byte[] result = assembler.accept(message);
+                if (result != null) received.complete(result);
+            });
+            byte[] bytes = new byte[ServerManifestMessage.CHUNK_BYTES + 19];
+            try (SocketChannel socket = SocketChannel.open(server.getLocalAddress())) {
+                for (var message : ServerManifestMessage.split("session", bytes)) {
+                    var output = new ByteBufferOutputStream();
+                    message.write(output);
+                    var buffer = output.getBuffer().duplicate();
+                    buffer.flip();
+                    byte[] encoded = new byte[buffer.remaining()];
+                    buffer.get(encoded);
+                    write(socket, CompanionProtocol.SERVER_MANIFEST, encoded);
+                }
+                assertArrayEquals(bytes, received.get(5, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     @Test
     void modIgnoresOutgoingOnlyIdsWithoutDecodingTheirPayload() throws Exception {
         try (Server server = endpoint(ProtocolBindings::registerMod)) {

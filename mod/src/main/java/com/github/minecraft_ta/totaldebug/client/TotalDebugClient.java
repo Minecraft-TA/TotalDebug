@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import java.util.Optional;
 public final class TotalDebugClient {
     private static volatile TotalDebugClient instance;
 
+    private final CompanionAppClient companionApp;
     private final ClientCodeOpenService codeOpen;
     private final OpenCodeOperation openCode;
     private final CodeViewInput codeViewInput;
@@ -31,6 +33,8 @@ public final class TotalDebugClient {
                 totalDebugDirectory,
                 TotalDebugConfig.CLIENT.companionDevelopmentJar.get()
         );
+        this.companionApp = companionApp;
+        TotalDebug.get().network().setManifestReceiver(payload -> companionApp.acceptServerManifest(payload.message()));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.codeOpen = new ClientCodeOpenService(companionApp);
         this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {
@@ -85,6 +89,7 @@ public final class TotalDebugClient {
     }
 
     public void onServerDisconnect() {
+        this.companionApp.acceptServerManifest(ServerManifestMessage.unavailable("Disconnected from the game server"));
         this.scripts.onServerDisconnect();
     }
 }

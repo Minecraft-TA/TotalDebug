@@ -177,7 +177,7 @@ class ClientScriptServiceTest {
 
     private static RunScriptMessage serverRun(int scriptId) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
-                "inventory", true, ScriptExecutionEnvironment.THREAD);
+                "inventory", true, ScriptExecutionEnvironment.THREAD.name(), "server-session");
     }
 
     private record Status(int scriptId, ExecutionResult status) {

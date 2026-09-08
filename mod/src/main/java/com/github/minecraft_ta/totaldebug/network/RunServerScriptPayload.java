@@ -21,12 +21,13 @@ import java.util.zip.GZIPOutputStream;
 public record RunServerScriptPayload(
         int scriptId,
         ScriptBytecode bytecode,
-        ScriptExecutionEnvironment environment
+        ScriptExecutionEnvironment environment,
+        String serverSessionId
 ) implements CustomPacketPayload {
     /** Leaves room below Minecraft's 32 KiB server-bound custom-payload limit. */
     public static final int MAX_BYTECODE_BYTES = 30_000;
     public static final Type<RunServerScriptPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(TotalDebug.MOD_ID, "run_server_script_v2")
+            ResourceLocation.fromNamespaceAndPath(TotalDebug.MOD_ID, "run_server_script_v3")
     );
     public static final StreamCodec<FriendlyByteBuf, RunServerScriptPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -34,7 +35,7 @@ public record RunServerScriptPayload(
             int scriptId = buffer.readInt();
             ScriptBytecode bytecode = decodeBytecode(buffer.readByteArray(MAX_BYTECODE_BYTES));
             ScriptExecutionEnvironment environment = ScriptExecutionEnvironment.fromWireName(buffer.readUtf(32));
-            return new RunServerScriptPayload(scriptId, bytecode, environment);
+            return new RunServerScriptPayload(scriptId, bytecode, environment, buffer.readUtf(64));
         }
 
         @Override
@@ -42,12 +43,16 @@ public record RunServerScriptPayload(
             buffer.writeInt(payload.scriptId);
             buffer.writeByteArray(encodeBytecode(payload.bytecode));
             buffer.writeUtf(payload.environment.name(), 32);
+            buffer.writeUtf(payload.serverSessionId, 64);
         }
     };
 
     public RunServerScriptPayload {
         Objects.requireNonNull(bytecode, "bytecode");
         Objects.requireNonNull(environment, "environment");
+        if (serverSessionId == null || serverSessionId.isBlank() || serverSessionId.length() > 64) {
+            throw new IllegalArgumentException("Missing server handshake identity");
+        }
         if (encodeBytecode(bytecode).length > MAX_BYTECODE_BYTES) {
             throw new IllegalArgumentException("Compressed server script exceeds " + MAX_BYTECODE_BYTES + " bytes");
         }

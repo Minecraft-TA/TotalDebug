@@ -33,6 +33,7 @@ class ScriptProtocolCodecTest {
         assertEquals("X", message.bytecode().primaryClass());
         assertArrayEquals(new byte[]{1, 2, 3}, message.bytecode().classes().get("X"));
         assertEquals("inventory", message.inventoryId());
+        assertEquals("s", message.serverSessionId());
         assertTrue(message.serverSide());
         assertEquals("POST_TICK", message.executionEnvironment());
     }
@@ -99,7 +100,7 @@ class ScriptProtocolCodecTest {
                 new ScriptBytecode("X", Map.of("X", new byte[]{1, 2, 3})),
                 "inventory",
                 true,
-                ScriptExecutionEnvironment.POST_TICK
+                ScriptExecutionEnvironment.POST_TICK.name(), "s"
         );
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 

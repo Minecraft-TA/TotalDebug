@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client.script;
 import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
+import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -31,10 +32,8 @@ interface ServerScriptTransport {
             if (connection == null) {
                 return Availability.unsupported("Join a world to run server-side scripts");
             }
-            if (Minecraft.getInstance().getSingleplayerServer() == null) {
-                return Availability.unsupported("Dedicated-server scripts require the server's class sources in Companion, which are not available");
-            }
-            if (!connection.hasChannel(RunServerScriptPayload.TYPE)
+            if (!connection.hasChannel(ServerManifestPayload.TYPE)
+                    || !connection.hasChannel(RunServerScriptPayload.TYPE)
                     || !connection.hasChannel(StopServerScriptPayload.TYPE)
                     || !connection.hasChannel(ForwardedCompanionPayload.TYPE)) {
                 return Availability.unsupported("The current server does not support TotalDebug server-side scripts");

@@ -16,7 +16,13 @@ The index describes selected runtime archives and prepared class files. It does 
 
 Saved scripts contain imports and Java statements. Use `return` to produce a structured value, and `log` or `logln` for output. Companion compiles scripts using its existing runtime index and sends the generated classes to Minecraft for execution. Wait for the current runtime index to become ready before running a script.
 
-The client and integrated-server execution choices target their respective game contexts. Server execution follows the server's script configuration and operator restrictions. Dedicated-server scripts require that server's class sources in Companion; transferring those sources is not implemented. Compiled scripts are limited to 1 MiB, with a 30,000-byte compressed limit for server runs.
+The client and server execution choices target their respective game contexts. Integrated and dedicated servers publish an ordered class manifest after joining. Companion keeps the client index and compiles against local class files. Matching archives pass directly; otherwise each class read by the compiler must have matching declarations on the server. Missing classes and changed declarations fail with the class name. Method implementations may differ, but fields, signatures, inheritance, access, generic metadata and compile-time constants must match. This is an exact class-level check, so even an unused declaration change can reject that class.
+
+The server builds its compressed manifest in the background once per server lifetime and reuses it for subsequent connections. Each player connection receives a fresh handshake identity. Disconnecting invalidates pending server compilations, and the receiving server rejects bytecode carrying an old identity. Open Companion before or after joining; the client replays the current handshake. There is no second index or automatic download of server class files.
+
+The manifest describes prepared filesystem class files, not final post-Mixin or agent-transformed definitions. It does not guarantee identical behavior or validate types named dynamically through reflection. Server-only types remain unavailable to client-index completion. Source inspection and remote debugger support are separate from compilation.
+
+Server execution follows the server's script configuration and operator restrictions. Install matching TotalDebug builds on both endpoints and use the matching Companion build. Compiled scripts are limited to 1 MiB, with a 30,000-byte compressed limit for server runs.
 
 Evaluate Everywhere supports expressions and compiled Java statement bodies. The interpreter supports common Java operations but is not a complete Java compile-time binder. Generic overload binding and some conditional type inference can differ from compiler behavior.
 

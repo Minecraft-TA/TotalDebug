@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
@@ -37,6 +38,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -45,6 +47,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -170,6 +173,42 @@ public final class CompanionAppClient implements AutoCloseable {
 
     public void setProgressListener(Consumer<CompanionStartupProgress> listener) {
         this.progressListener = Objects.requireNonNull(listener, "listener");
+    }
+
+    private final Object serverManifestLock = new Object();
+    private final List<ServerManifestMessage> serverManifest = new ArrayList<>();
+
+    public void acceptServerManifest(ServerManifestMessage message) {
+        synchronized (this.serverManifestLock) {
+            if (message.offset() == 0) this.serverManifest.clear();
+            // Replay the bounded current transfer when Companion opens after joining the server.
+            if (this.serverManifest.size() >= ServerManifestMessage.MAX_BYTES / ServerManifestMessage.CHUNK_BYTES + 1) {
+                this.serverManifest.clear();
+                message = ServerManifestMessage.unavailable("Invalid server manifest transfer");
+            }
+            this.serverManifest.add(message);
+            enqueueServerManifest(message);
+        }
+    }
+
+    private void sendServerManifest() {
+        synchronized (this.serverManifestLock) {
+            if (this.serverManifest.isEmpty()) {
+                enqueueServerManifest(ServerManifestMessage.unavailable(
+                        "No server handshake is available. Join a server running matching TotalDebug."));
+            } else {
+                for (var message : this.serverManifest) enqueueServerManifest(message);
+            }
+        }
+    }
+
+    private void enqueueServerManifest(ServerManifestMessage message) {
+        if (!isAuthenticated() || !this.client.isConnected()) return;
+        try {
+            this.client.getMessageProcessor().enqueueMessage(message);
+        } catch (RejectedExecutionException exception) {
+            TotalDebug.LOGGER.debug("Companion disconnected during server manifest delivery", exception);
+        }
     }
 
     public void sendExecutionResult(int scriptId, ExecutionResult result) {
@@ -328,6 +367,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.sessionToken = null;
         authentication.complete(null);
         sendDebugTarget();
+        sendServerManifest();
         startRuntimeInventoryPreparation(false);
     }
 

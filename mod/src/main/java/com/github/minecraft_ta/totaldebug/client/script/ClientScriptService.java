@@ -90,7 +90,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
         RunServerScriptPayload payload;
         try {
-            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment);
+            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment, message.serverSessionId());
         } catch (IllegalArgumentException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
                     exception.getMessage()), ExecutionSide.SERVER);

@@ -5,9 +5,9 @@ import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
 /** Field order and encoding are shared by both endpoints. */
-public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment) {
+public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId) {
     public static RunScriptPayload read(ByteBufferInputStream input) {
-        return new RunScriptPayload(input.readInt(), ScriptBytecode.read(input), input.readString(), input.readBoolean(), input.readString());
+        return new RunScriptPayload(input.readInt(), ScriptBytecode.read(input), input.readString(), input.readBoolean(), input.readString(), input.readString());
     }
     public void write(ByteBufferOutputStream output) {
         output.writeInt(this.scriptId);
@@ -15,5 +15,6 @@ public record RunScriptPayload(int scriptId, ScriptBytecode bytecode, String inv
         output.writeString(this.inventoryId);
         output.writeBoolean(this.serverSide);
         output.writeString(this.executionEnvironment);
+        output.writeString(this.serverSessionId);
     }
 }

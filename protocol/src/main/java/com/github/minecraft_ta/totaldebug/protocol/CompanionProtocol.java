@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol;
 
 public final class CompanionProtocol {
-    public static final int VERSION = 12;
+    public static final int VERSION = 13;
 
     public static final short READY = 1;
     public static final short OPEN_CLASS = 2;
@@ -14,6 +14,9 @@ public final class CompanionProtocol {
     public static final short RUNTIME_INVENTORY = 23;
     public static final short RETRY_RUNTIME_INVENTORY = 24;
     public static final short DEBUG_TARGET = 25;
+
+    // 26 and 27 belong to programmable-object messages.
+    public static final short SERVER_MANIFEST = 28;
 
     private CompanionProtocol() {
     }

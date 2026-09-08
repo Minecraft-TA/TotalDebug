@@ -27,6 +27,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -221,6 +222,11 @@ public final class CompanionApp {
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
+                }
+
+                @Override
+                public void serverManifest(ServerManifestMessage message) {
+                    scriptCompiler.acceptServerManifest(message);
                 }
 
                 @Override
