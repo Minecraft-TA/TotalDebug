@@ -4,6 +4,8 @@
 
 ## Run diagnostics
 
+For the production Companion integration, see [Items and blocks](GAME_EXPLORER.md). It captures registered entries and resource layers, adds Items/Blocks to Search Everywhere, and opens a separate explorer window. The diagnostic runner below remains useful for renderer coverage and image checks.
+
 From the repository root, use the checked-in wrapper with JDK 21:
 
 ```powershell

@@ -55,6 +55,38 @@ public final class ItemRenderBackend implements AutoCloseable {
         return open(List.of(resourceRoots));
     }
 
+    /** Resolves atlas aliases and palette inputs to their actual texture-pack paths. */
+    public synchronized List<String> textureResources(String spriteId) throws IOException {
+        ensureOpen();
+        var sprite = this.models.resolveSprite(ItemModelId.parse(spriteId));
+        List<String> paths = new ArrayList<>();
+        paths.add(sprite.resource().textureResourcePath());
+        if (sprite.paletteKey() != null) paths.add(sprite.paletteKey().textureResourcePath());
+        if (sprite.palette() != null) paths.add(sprite.palette().textureResourcePath());
+        return List.copyOf(paths);
+    }
+
+    public record Inspection(BufferedImage image, List<String> resources, Exception failure) { }
+
+    /** Resolves afresh so even cached models report every resource, including OBJ materials and atlas inputs. */
+    public synchronized Inspection inspect(ItemRenderRequest request) {
+        ensureOpen();
+        Objects.requireNonNull(request, "request");
+        this.models.clearCaches();
+        this.resources.beginRecordingReads();
+        BufferedImage image = null;
+        Exception failure = null;
+        List<String> dependencies;
+        try {
+            image = this.renderer.render(request);
+        } catch (IOException | RuntimeException exception) {
+            failure = exception;
+        } finally {
+            dependencies = this.resources.finishRecordingReads();
+        }
+        return new Inspection(image, dependencies, failure);
+    }
+
     /** Returns a caller-owned ARGB image. Mutating it cannot corrupt the backend cache. */
     public synchronized BufferedImage render(ItemRenderRequest request) throws IOException {
         ensureOpen();

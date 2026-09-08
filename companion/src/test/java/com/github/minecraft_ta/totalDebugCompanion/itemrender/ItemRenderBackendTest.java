@@ -531,6 +531,13 @@ class ItemRenderBackendTest {
             BufferedImage rendered = backend.render(ItemRenderRequest.of("test:item/obj", 32));
             assertEquals(0xFF20D050, rendered.getRGB(16, 16));
             assertTrue(opaquePixels(rendered) > 900);
+            var inspection = backend.inspect(ItemRenderRequest.of("test:item/obj", 32));
+            assertEquals(null, inspection.failure());
+            assertTrue(inspection.resources().containsAll(List.of(
+                    "assets/test/models/item/obj.json", "assets/test/models/item/obj_base.json",
+                    "assets/test/models/item/plane.obj", "assets/test/models/item/plane.mtl",
+                    "assets/test/textures/item/green.png"
+            )), "Inspection must report resources even after the renderer cache is warm");
         }
     }
 

@@ -400,6 +400,14 @@ public final class CompanionAppClient implements AutoCloseable {
                             published.file().toString()
                     );
                     sendRuntimeInventoryState();
+                    try {
+                        TotalDebug.LOGGER.info("Capturing Companion item/block registry and resource packs in the background");
+                        GameCatalogPublisher.publish(new com.github.minecraft_ta.totaldebug.storage.InstancePaths(
+                                this.dataDirectory).gameCatalog(), published.id());
+                        TotalDebug.LOGGER.info("Published Companion item and block catalog");
+                    } catch (IOException | RuntimeException failure) {
+                        TotalDebug.LOGGER.warn("Unable to capture Companion item and block catalog", failure);
+                    }
                 } catch (IOException | RuntimeException exception) {
                     TotalDebug.LOGGER.error("Unable to publish the Companion runtime inventory", exception);
                     String detail = exception.getMessage();

@@ -50,6 +50,10 @@ final class ItemModelRepository {
         return resolve(modelId, new LinkedHashSet<>());
     }
 
+    AtlasSpriteResolver.Sprite resolveSprite(ItemModelId spriteId) throws IOException {
+        return this.atlasSprites.resolve(spriteId);
+    }
+
     TextureRegion texture(ItemModelId textureId) throws IOException {
         TextureRegion cached = this.textureCache.get(textureId);
         if (cached != null) {
