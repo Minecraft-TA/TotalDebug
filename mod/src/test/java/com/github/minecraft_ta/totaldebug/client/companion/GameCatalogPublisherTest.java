@@ -2,6 +2,10 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.storage.GameCatalog;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.core.Direction;
+import net.minecraft.util.RandomSource;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
@@ -14,12 +18,42 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class GameCatalogPublisherTest {
     @TempDir Path directory;
+
+    @Test void capturesTintedFacesAcrossRenderPassesOncePerIndexWithTheInventorySeed() {
+        var queriedFaces = new java.util.ArrayList<Direction>();
+        var queriedColors = new java.util.ArrayList<Integer>();
+        BakedModel first = tintModel(queriedFaces, 0);
+        BakedModel second = tintModel(queriedFaces, 7);
+        var colors = GameCatalogPublisher.captureTints(List.of(first, second), index -> {
+            queriedColors.add(index);
+            return index == 0 ? 0xFF80A755 : 0x80112233;
+        });
+        assertEquals(Map.of(0, 0xFF80A755, 7, 0x80112233), colors);
+        assertEquals(List.of(0, 7), queriedColors, "Duplicate faces must not repeat item-color callbacks");
+        assertEquals(14, queriedFaces.size());
+        assertEquals(2, queriedFaces.stream().filter(java.util.Objects::isNull).count());
+        for (var direction : Direction.values())
+            assertEquals(2, queriedFaces.stream().filter(face -> face == direction).count());
+    }
+
+    private static BakedModel tintModel(List<Direction> queriedFaces, int tint) {
+        return (BakedModel) java.lang.reflect.Proxy.newProxyInstance(BakedModel.class.getClassLoader(),
+                new Class<?>[]{BakedModel.class}, (proxy, method, args) -> {
+                    if (!method.getName().equals("getQuads")) throw new AssertionError(method);
+                    assertNull(args[0], "Inventory quads have no placed block state");
+                    queriedFaces.add((Direction) args[1]);
+                    assertEquals(RandomSource.create(42).nextInt(), ((RandomSource) args[2]).nextInt());
+                    return List.of(new BakedQuad(new int[32], tint, Direction.SOUTH, null, true),
+                            new BakedQuad(new int[32], -1, Direction.SOUTH, null, true));
+                });
+    }
 
     @Test void capturesPackOverridesAdditiveAtlasesAndMetadataWithoutInheritingDiscardedMetadata() throws Exception {
         Path base = directory.resolve("base"), override = directory.resolve("override"), metadata = directory.resolve("metadata");
@@ -35,6 +69,7 @@ class GameCatalogPublisherTest {
             GameCatalogPublisher.writeResources(archive, "runtime", capture(), manager);
         }
         var catalog = GameCatalog.read(archive);
+        assertEquals(Map.of(0, 0xFF80A755), catalog.entries().getFirst().tintColors());
         assertEquals(List.of("base", "override"), catalog.resources().get(texture));
         assertEquals(List.of("base", "override"), catalog.resources().get("assets/minecraft/atlases/blocks.json"));
         assertFalse(catalog.resources().containsKey(texture + ".mcmeta"), "Lower texture metadata must not leak into an override");
@@ -49,7 +84,9 @@ class GameCatalogPublisherTest {
     }
 
     private static GameCatalogPublisher.RegistryCapture capture() {
-        return new GameCatalogPublisher.RegistryCapture(List.of(), "en_us", List.of());
+        var entry = new GameCatalog.Entry(GameCatalog.Kind.ITEM, "minecraft:birch_leaves", "Birch Leaves", "Minecraft", "1.21.1",
+                "net.minecraft.world.item.BlockItem", "minecraft:birch_leaves", "minecraft:item/birch_leaves", Map.of(), Map.of(0, 0xFF80A755));
+        return new GameCatalogPublisher.RegistryCapture(List.of(entry), "en_us", List.of());
     }
 
     private static MultiPackResourceManager manager(Path... roots) {

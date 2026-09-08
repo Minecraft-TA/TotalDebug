@@ -24,11 +24,11 @@ public final class CatalogFixtures {
                 RuntimeInventory.SourceKind.DIRECTORY, directory, "fixture", new RuntimeInventory.RuntimeModule(
                 "example", "Example Mod", RuntimeInventory.ModuleKind.MOD)))).write(paths.inventory());
         var item = new GameCatalog.Entry(GameCatalog.Kind.ITEM, "example:tool", "Ruby Tool", "Example Mod", "1.0",
-                "example.ToolItem", "example:tool", "example:item/tool", Map.of("Maximum stack size", "1", "Maximum durability", "500"));
+                "example.ToolItem", "example:tool", "example:item/tool", Map.of("Maximum stack size", "1", "Maximum durability", "500"), Map.of());
         var block = new GameCatalog.Entry(GameCatalog.Kind.BLOCK, "example:tool", "Ruby Tool Block", "Example Mod", "1.0",
-                "example.ToolBlock", "example:tool", "example:item/tool", Map.of("Default hardness", "3.0"));
+                "example.ToolBlock", "example:tool", "example:item/tool", Map.of("Default hardness", "3.0"), Map.of());
         var localized = new GameCatalog.Entry(GameCatalog.Kind.ITEM, "other:gem", "Rötlicher Kristall", "Other Mod", "2.0",
-                "other.Gem", "", "other:item/gem", Map.of());
+                "other.Gem", "", "other:item/gem", Map.of(), Map.of());
         Map<String, byte[]> files = new LinkedHashMap<>();
         add(files, "layers/0/assets/minecraft/models/item/generated.json", "{\"parent\":\"builtin/generated\",\"gui_light\":\"front\"}");
         add(files, "layers/0/assets/example/models/item/tool.json", "{\"parent\":\"example:item/base\"}");
@@ -41,7 +41,7 @@ public final class CatalogFixtures {
         Map<String, List<String>> resources = new LinkedHashMap<>();
         for (String file : files.keySet()) resources.put(file.substring("layers/0/".length()), List.of("Example Mod"));
         resources.put("assets/example/textures/item/tool.png", List.of("Example Mod", "Ruby resource pack"));
-        var catalog = new GameCatalog(1, "fixture-runtime", "2026-09-08T12:00:00Z", "en_us", List.of(item, block, localized), resources, List.of());
+        var catalog = new GameCatalog(GameCatalog.CURRENT_FORMAT, "fixture-runtime", "2026-09-08T12:00:00Z", "en_us", List.of(item, block, localized), resources, List.of());
         add(files, GameCatalog.MANIFEST, GameCatalog.GSON.toJson(catalog));
         try (var zip = new ZipOutputStream(Files.newOutputStream(paths.gameCatalog()))) {
             for (var file : files.entrySet()) {

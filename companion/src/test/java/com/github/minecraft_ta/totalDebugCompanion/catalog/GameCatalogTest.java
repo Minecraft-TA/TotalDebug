@@ -10,12 +10,20 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class GameCatalogTest {
     @TempDir Path directory;
+    private static final Map<String, Integer> LEAF_COLORS = Map.of(
+            "minecraft:acacia_leaves", 0xFF48B518, "minecraft:birch_leaves", 0xFF80A755, "example:violet_leaves", 0xFFAD55CC);
 
     @Test void resolvesInheritedModelsAtlasAliasesOverridesAndExportBytesOffline() throws Exception {
         var paths = CatalogFixtures.create(directory);
@@ -54,5 +62,59 @@ class GameCatalogTest {
     @Test void rejectsResourceTraversal() {
         assertThrows(IllegalArgumentException.class, () -> GameCatalog.validateResourcePath("assets/example/../../secret"));
         assertThrows(IllegalArgumentException.class, () -> GameCatalog.validateResourcePath("assets/C:/secret"));
+    }
+
+    @Test void usesCapturedLeafColorsForItemAndBlockPreviews() throws Exception {
+        var snapshot = leafCapture();
+        for (var entry : snapshot.catalog().entries()) {
+            var image = snapshot.inspect(entry).preview();
+            assertNotNull(image);
+            int expected = LEAF_COLORS.get(entry.id());
+            assertEquals(expected, image.getRGB(64, 128), entry.kind() + " " + entry.id());
+            assertEquals(0xFFFFFFFF, image.getRGB(192, 128), "Faces without a tint index must keep their texture color");
+        }
+    }
+
+    private CatalogSnapshot leafCapture() throws Exception {
+        var entries = new java.util.ArrayList<GameCatalog.Entry>();
+        for (String id : LEAF_COLORS.keySet()) {
+            for (var kind : GameCatalog.Kind.values()) {
+                // Deserialize the captured wire shape so this regression exercises persistence too.
+                entries.add(GameCatalog.GSON.fromJson("""
+                        {"kind":"%s","id":"%s","name":"Leaves","modName":"Test","modVersion":"1",
+                         "className":"TestLeaves","counterpart":"%s","model":"example:item/leaves",
+                         "properties":{},"tintColors":{"0":%d}}
+                        """.formatted(kind, id, id, LEAF_COLORS.get(id)), GameCatalog.Entry.class));
+            }
+        }
+        Map<String, byte[]> files = new LinkedHashMap<>();
+        files.put("assets/example/models/item/leaves.json", "{\"parent\":\"example:block/leaves\"}".getBytes());
+        files.put("assets/example/models/block/leaves.json", """
+                {"gui_light":"front","textures":{"all":"example:block/leaves"},"elements":[
+                  {"from":[0,0,8],"to":[8,16,8],"faces":{"south":{"texture":"#all","tintindex":0}}},
+                  {"from":[8,0,8],"to":[16,16,8],"faces":{"south":{"texture":"#all"}}}
+                ]}
+                """.getBytes());
+        var texture = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        texture.setRGB(0, 0, 0xFFFFFFFF);
+        var png = new java.io.ByteArrayOutputStream();
+        ImageIO.write(texture, "png", png);
+        files.put("assets/example/textures/block/leaves.png", png.toByteArray());
+        Map<String, List<String>> resources = new LinkedHashMap<>();
+        files.keySet().forEach(path -> resources.put(path, List.of("fixture")));
+        var catalog = new GameCatalog(GameCatalog.CURRENT_FORMAT, "fixture", "now", "en_us", entries, resources, List.of());
+        Path archive = directory.resolve("leaves.zip");
+        try (var zip = new ZipOutputStream(Files.newOutputStream(archive))) {
+            for (var file : files.entrySet()) {
+                zip.putNextEntry(new ZipEntry("layers/0/" + file.getKey()));
+                zip.write(file.getValue());
+                zip.closeEntry();
+            }
+            zip.putNextEntry(new ZipEntry(GameCatalog.MANIFEST));
+            zip.write(GameCatalog.GSON.toJson(catalog).getBytes());
+            zip.closeEntry();
+        }
+        var attributes = Files.readAttributes(archive, BasicFileAttributes.class);
+        return new CatalogSnapshot(archive, GameCatalog.read(archive), attributes.size(), attributes.lastModifiedTime());
     }
 }

@@ -3,7 +3,10 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.GameCatalog;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -19,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.IntUnaryOperator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -95,7 +99,7 @@ final class GameCatalogPublisher {
                 }
                 if (!packs.equals(manager.listPacks().toList()))
                     throw new IOException("Resource packs changed during capture; retry after resource reload finishes");
-                GameCatalog catalog = new GameCatalog(1, inventoryId, Instant.now().toString(), capture.language(),
+                GameCatalog catalog = new GameCatalog(GameCatalog.CURRENT_FORMAT, inventoryId, Instant.now().toString(), capture.language(),
                         capture.entries(), resources, capture.warnings());
                 zip.putNextEntry(new ZipEntry(GameCatalog.MANIFEST));
                 zip.write(GameCatalog.GSON.toJson(catalog).getBytes(StandardCharsets.UTF_8));
@@ -107,6 +111,7 @@ final class GameCatalogPublisher {
     private static RegistryCapture captureRegistries(Minecraft minecraft) {
         var entries = new ArrayList<GameCatalog.Entry>();
         var warnings = new ArrayList<String>();
+        var itemTints = new java.util.HashMap<Item, Map<Integer, Integer>>();
         for (var item : BuiltInRegistries.ITEM) {
             String id = BuiltInRegistries.ITEM.getKey(item).toString();
             try {
@@ -121,12 +126,15 @@ final class GameCatalogPublisher {
                 }
                 String counterpart = item instanceof BlockItem blockItem
                         ? BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString() : "";
+                var baked = minecraft.getItemRenderer().getItemModelShaper().getItemModel(stack);
+                var tints = captureTints(baked.getRenderPasses(stack, true), index -> minecraft.getItemColors().getColor(stack, index));
+                itemTints.put(item, tints);
                 entries.add(entry(GameCatalog.Kind.ITEM, id, stack.getHoverName().getString(), item.getClass(),
-                        counterpart, model(minecraft, item), properties));
+                        counterpart, model(minecraft, item), properties, tints));
             } catch (RuntimeException failure) {
                 warnings.add("Item " + id + ": " + failure.getMessage());
                 entries.add(entry(GameCatalog.Kind.ITEM, id, id, item.getClass(), "", "",
-                        Map.of("Capture error", failure.toString())));
+                        Map.of("Capture error", failure.toString()), Map.of()));
             }
         }
         for (var block : BuiltInRegistries.BLOCK) {
@@ -142,16 +150,36 @@ final class GameCatalogPublisher {
                 for (var property : state.getProperties())
                     properties.put("State: " + property.getName(), property.getPossibleValues().toString());
                 Item item = block.asItem();
+                if (item != Items.AIR && !itemTints.containsKey(item))
+                    throw new IllegalStateException("Inventory preview colors were not captured for " + BuiltInRegistries.ITEM.getKey(item));
                 entries.add(entry(GameCatalog.Kind.BLOCK, id, block.getName().getString(), block.getClass(),
                         item == Items.AIR ? "" : BuiltInRegistries.ITEM.getKey(item).toString(),
-                        item == Items.AIR ? "" : model(minecraft, item), properties));
+                        item == Items.AIR ? "" : model(minecraft, item), properties,
+                        item == Items.AIR ? Map.of() : itemTints.get(item)));
             } catch (RuntimeException failure) {
                 warnings.add("Block " + id + ": " + failure.getMessage());
                 entries.add(entry(GameCatalog.Kind.BLOCK, id, id, block.getClass(), "", "",
-                        Map.of("Capture error", failure.toString())));
+                        Map.of("Capture error", failure.toString()), Map.of()));
             }
         }
         return new RegistryCapture(entries, minecraft.options.languageCode, warnings);
+    }
+
+    /** Uses the same face queries and seed as ItemRenderer.renderModelLists, without drawing anything. */
+    static Map<Integer, Integer> captureTints(List<BakedModel> passes, IntUnaryOperator color) {
+        var indices = new java.util.TreeSet<Integer>();
+        var random = RandomSource.create();
+        for (var model : passes) {
+            for (int side = 0; side <= Direction.values().length; side++) {
+                random.setSeed(42L);
+                Direction direction = side == Direction.values().length ? null : Direction.values()[side];
+                for (var quad : model.getQuads(null, direction, random))
+                    if (quad.isTinted()) indices.add(quad.getTintIndex());
+            }
+        }
+        var tints = new LinkedHashMap<Integer, Integer>();
+        for (int index : indices) tints.put(index, color.applyAsInt(index));
+        return Map.copyOf(tints);
     }
 
     private static String model(Minecraft minecraft, Item item) {
@@ -163,10 +191,11 @@ final class GameCatalogPublisher {
     }
 
     private static GameCatalog.Entry entry(GameCatalog.Kind kind, String id, String name, Class<?> type,
-                                           String counterpart, String model, Map<String, String> properties) {
+                                           String counterpart, String model, Map<String, String> properties,
+                                           Map<Integer, Integer> tintColors) {
         String namespace = id.substring(0, id.indexOf(':'));
         var mod = ModList.get().getModContainerById(namespace).map(container -> container.getModInfo());
         return new GameCatalog.Entry(kind, id, name, mod.map(info -> info.getDisplayName()).orElse(namespace),
-                mod.map(info -> info.getVersion().toString()).orElse(""), type.getName(), counterpart, model, properties);
+                mod.map(info -> info.getVersion().toString()).orElse(""), type.getName(), counterpart, model, properties, tintColors);
     }
 }

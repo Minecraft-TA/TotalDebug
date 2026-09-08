@@ -68,14 +68,14 @@ public record CatalogSnapshot(Path archive, GameCatalog catalog, long size, File
                 notes.add("No inventory model binding captured for this entry.");
             } else {
                 visit(asset(entry.model(), "models", ".json"), backend, resources, notes);
-                var rendered = backend.inspect(ItemRenderRequest.of(entry.model(), 256));
+                var rendered = backend.inspect(new ItemRenderRequest(ItemModelId.parse(entry.model()), 256, entry.tintColors()));
                 image = rendered.image();
                 resources.addAll(rendered.resources());
                 if (rendered.failure() != null) notes.add("Preview unavailable: " + rendered.failure().getMessage());
             }
         }
         checkCurrent();
-        notes.add("Preview uses the base inventory model. Runtime tints, predicates and custom renderers may change its appearance.");
+        notes.add("Preview uses the base inventory model and captured default-item colors. Other stack states, predicates and custom renderers may change its appearance.");
         return new Inspection(image, List.copyOf(resources), List.copyOf(notes));
     }
 

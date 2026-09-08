@@ -12,7 +12,7 @@ The updated client mod captures game data in the background after publishing its
 
 The snapshot lives at `total-debug/cache/runtime/game-catalog.zip` inside the selected game instance. It contains:
 
-- `catalog.json`: format 1, matching runtime inventory ID, capture time/language, registry entries, resource-provider lists and per-entry capture warnings.
+- `catalog.json`: format 2, matching runtime inventory ID, capture time/language, registry entries with default-item tint colors, resource-provider lists and per-entry capture warnings.
 - `layers/<n>/assets/...`: visible resource versions ordered from lowest to highest priority for each resource. This retains additive atlas definitions as well as texture/model overrides. Layer numbers are per-resource precedence positions, not global pack identifiers.
 
 Minecraft's resource manager determines visible layers and filtering. Effective `.mcmeta` is captured separately because Minecraft excludes metadata files from resource listings. Metadata from below an overridden texture is discarded; a metadata-only pack above that texture is retained. Publication replaces the ZIP atomically, so a failed capture leaves the previous complete snapshot available. Captures have a 64 MiB per-resource and 2 GiB total uncompressed limit; metadata is limited to 4 MiB per file.
@@ -21,9 +21,17 @@ The reader checks runtime identity and archive changes before using a snapshot. 
 
 Use **Browse > Refresh game data** while connected to republish the runtime inventory and capture changed resources. This uses the existing inventory refresh request and does not restart Minecraft. After the game log reports that the catalog was published, use **Reload saved capture** or reopen the explorer. Each open window keeps its capture time visible. Resource reads reject a replaced archive until the view is reloaded.
 
+Format 1 captures contain no item colors and must be captured again with both applications updated. Restart the game and Companion to load the updated code before refreshing. The reader reports this requirement instead of displaying untinted previews from an old capture.
+
+## Leaf and item colors
+
+Leaf textures are often grey. Minecraft colors their tinted faces through registered item-color providers; birch, spruce, acacia and modded leaves can use different colors. During capture, the mod gathers tint indices from the default inventory model's GUI render passes, including directional and unculled faces, with Minecraft's inventory random seed. It queries each index once against the default stack and stores the resulting ARGB colors. Block entries reuse the colors of their inventory item.
+
+The explorer passes those captured colors to the offline renderer. Faces without a tint index keep their texture colors. The capture does not infer a foliage color from a registry name or model parent. A provider failure becomes an explicit capture error rather than a guessed color.
+
 ## First-slice boundaries
 
-- Previews use the captured base inventory model binding. Runtime tint providers, stack-dependent predicates, custom renderers and live world state are not reproduced. Unsupported rendering is reported explicitly. Blocks without an item form still expose their blockstate/model references but have no inventory preview.
+- Previews use the captured base inventory model binding and default-item tint colors. Other stack components, predicates, custom renderers and live world state can change their appearance. Unsupported rendering is reported explicitly. Blocks without an item form still expose their blockstate/model references but have no inventory preview.
 - Properties describe the default stack/state at capture time. World-dependent mining behavior, placed block entities, tooltip callbacks, recipes, drops and gameplay relationships are outside this slice.
 - Resource references may include alternate blockstate models and overridden declarations. The list is useful for finding source assets, not a claim that every listed texture contributes pixels to the selected preview. Dependencies of an unsupported custom loader can remain incomplete.
 - Captured resources identify their game pack provider and can be opened from the capture ZIP. The explorer does not infer an original filesystem archive path from a pack's display ID.
@@ -38,5 +46,7 @@ Run from the repository root with JDK 21:
 ```
 
 `GameCatalogPublisherTest` uses Minecraft's actual resource manager and directory packs to verify precedence, additive atlas layers and metadata-only overrides. `GameCatalogTest` checks offline rendering, inherited models, atlas aliases, exact export bytes, localized/scoped search and stale-capture rejection. `GameExplorerWindowTest` checks source navigation without closing the overview and writes an isolated fixture screenshot to `companion/build/ui-screenshots/game-explorer.png`.
+
+Tint regressions check capture across multiple render passes, duplicate and arbitrary indices, the inventory seed, persistence, distinct acacia/birch/custom colors in item and block previews, and preservation of untinted faces. Storage tests reject captures without the required tint format and validate immutable tint maps.
 
 The automated fixture checks do not replace a fresh ATM10 capture and a visual check of representative real items before deployment.

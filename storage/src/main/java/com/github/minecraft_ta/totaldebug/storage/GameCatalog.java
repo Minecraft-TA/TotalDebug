@@ -16,12 +16,14 @@ import java.util.zip.ZipFile;
 public record GameCatalog(int format, String inventoryId, String capturedAt, String language,
                           List<Entry> entries, Map<String, List<String>> resources, List<String> warnings) {
     public static final String MANIFEST = "catalog.json";
+    public static final int CURRENT_FORMAT = 2;
     public static final Gson GSON = new GsonBuilder().create();
 
     public enum Kind { ITEM, BLOCK }
 
     public record Entry(Kind kind, String id, String name, String modName, String modVersion,
-                        String className, String counterpart, String model, Map<String, String> properties) {
+                        String className, String counterpart, String model, Map<String, String> properties,
+                        Map<Integer, Integer> tintColors) {
         public Entry {
             Objects.requireNonNull(kind);
             Objects.requireNonNull(id);
@@ -33,6 +35,9 @@ public record GameCatalog(int format, String inventoryId, String capturedAt, Str
             Objects.requireNonNull(counterpart);
             Objects.requireNonNull(model);
             properties = Map.copyOf(properties);
+            tintColors = Map.copyOf(tintColors);
+            if (tintColors.keySet().stream().anyMatch(index -> index < 0))
+                throw new IllegalArgumentException("Captured tint indices must be non-negative");
         }
 
         public String namespace() { return id.substring(0, id.indexOf(':')); }
@@ -41,7 +46,7 @@ public record GameCatalog(int format, String inventoryId, String capturedAt, Str
     }
 
     public GameCatalog {
-        if (format != 1) throw new IllegalArgumentException("Unsupported game catalog format: " + format);
+        validateFormat(format);
         Objects.requireNonNull(inventoryId);
         Objects.requireNonNull(capturedAt);
         Objects.requireNonNull(language);
@@ -77,10 +82,18 @@ public record GameCatalog(int format, String inventoryId, String capturedAt, Str
             if (entry == null || entry.getSize() > 64 * 1024 * 1024)
                 throw new IOException("Missing or oversized game catalog");
             try (var reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
-                return Objects.requireNonNull(GSON.fromJson(reader, GameCatalog.class));
+                var manifest = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+                validateFormat(manifest.get("format").getAsInt());
+                return Objects.requireNonNull(GSON.fromJson(manifest, GameCatalog.class));
             }
         } catch (RuntimeException failure) {
             throw new IOException("Invalid game catalog: " + failure.getMessage(), failure);
         }
+    }
+
+    private static void validateFormat(int format) {
+        if (format != CURRENT_FORMAT)
+            throw new IllegalArgumentException("Unsupported game catalog format: " + format
+                    + "; expected " + CURRENT_FORMAT + " with captured item tints. Update both applications, then use Browse > Refresh game data.");
     }
 }
