@@ -24,16 +24,14 @@ class ServerManifestTest {
             byte[] original = compiler.compile(source, "Api", "").get("Api");
             var manifest = ServerManifest.scan(List.of(jar("server.jar", Map.of("Api", original))));
             byte[] body = compiler.compile(source.replace("return 1", "return 2000"), "Api", "").get("Api");
-            manifest.requireCompatible("Api", "", body);
+            assertEquals(ClassDeclarations.fingerprint(original), ClassDeclarations.fingerprint(body));
             for (String changed : List.of(source.replace("LIMIT = 7", "LIMIT = 8"),
                     source.replace("int value()", "long value()"),
                     source.replace("class Api", "class Api implements java.io.Serializable"),
                     source.replace("public int value", "private int value"))) {
                 byte[] bytes = compiler.compile(changed, "Api", "").get("Api");
-                IOException failure = assertThrows(IOException.class, () -> manifest.requireCompatible("Api", "", bytes));
-                assertTrue(failure.getMessage().contains("declarations differ for Api"));
+                assertNotEquals(ClassDeclarations.fingerprint(original), ClassDeclarations.fingerprint(bytes));
             }
-            assertThrows(IOException.class, () -> manifest.requireCompatible("Missing", "", original));
             assertEquals(manifest, ServerManifest.decode(manifest.encode()));
         }
     }
@@ -49,15 +47,21 @@ class ServerManifestTest {
     }
 
     @Test
-    void serverSourceOrderWinsEvenWhenLaterArchiveMatchesClientExactly() throws Exception {
+    void baselineAndNamesDoNotReadClassBodiesAndRequestedDetailsAreCachedOnce() throws Exception {
+        Path broken = jar("broken.jar", Map.of("Broken", new byte[]{1, 2, 3}));
+        var brokenCatalog = new ServerManifest.Catalog(List.of(broken));
+        assertEquals(1, ServerManifest.decode(brokenCatalog.baseline()).sources().size());
+        assertEquals(Map.of("Broken", ""), ServerManifest.readClasses(broken, false));
+        assertThrows(RuntimeException.class, () -> brokenCatalog.details(0));
         try (var compiler = new InMemoryJavaCompiler()) {
-            byte[] client = compiler.compile("public class Api { public int value; }", "Api", "").get("Api");
-            byte[] server = compiler.compile("public class Api { public long value; }", "Api", "").get("Api");
-            Path first = jar("first.jar", Map.of("Api", server));
-            Path second = jar("second.jar", Map.of("Api", client));
-            var manifest = ServerManifest.scan(List.of(first, second));
-            assertThrows(IOException.class, () -> manifest.requireCompatible("Api", ClassDeclarations.archiveFingerprint(second), client));
-            manifest.requireCompatible("Api", ClassDeclarations.archiveFingerprint(first), server);
+            Path valid = jar("valid.jar", compiler.compile("public class Api {}", "Api", ""));
+            var catalog = new ServerManifest.Catalog(List.of(valid));
+            byte[] details = catalog.details(0);
+            assertTrue(ServerManifest.decodeDetails(details).containsKey("Api"));
+            Files.delete(valid);
+            assertSame(details, catalog.details(0), "Second player must reuse the cached encoded source");
+            var cached = catalog;
+            assertThrows(IOException.class, () -> cached.details(1));
         }
     }
 
@@ -78,12 +82,13 @@ class ServerManifestTest {
                     output.closeEntry();
                 }
             }
-            var manifest = ServerManifest.scan(List.of(archive));
-            manifest.requireCompatible("Api", "", release);
-            assertThrows(IOException.class, () -> manifest.requireCompatible("Api", "", base));
+            var details = ServerManifest.readClasses(archive, true);
+            assertEquals(Map.of("Api", ClassDeclarations.fingerprint(release)), details);
+            assertEquals(Map.of("Api", ""), ServerManifest.readClasses(archive, false));
+            assertEquals(details, ServerManifest.decodeDetails(ServerManifest.encodeDetails(details)));
             Path classes = Files.createDirectory(directory.resolve("classes"));
             Files.write(classes.resolve("Api.class"), release);
-            assertEquals(manifest.classes(), ServerManifest.scan(List.of(classes)).classes());
+            assertEquals(details, ServerManifest.readClasses(classes, true));
         }
     }
 

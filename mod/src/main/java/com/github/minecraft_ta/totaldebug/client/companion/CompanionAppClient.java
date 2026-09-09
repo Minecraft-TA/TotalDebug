@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
@@ -175,11 +176,21 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener = Objects.requireNonNull(listener, "listener");
     }
 
+    private Consumer<ServerSourceRequestMessage> serverSourceRequestHandler = message -> {};
+
+    public void setServerSourceRequestHandler(Consumer<ServerSourceRequestMessage> handler) {
+        this.serverSourceRequestHandler = Objects.requireNonNull(handler);
+    }
+
     private final Object serverManifestLock = new Object();
     private final List<ServerManifestMessage> serverManifest = new ArrayList<>();
 
     public void acceptServerManifest(ServerManifestMessage message) {
         synchronized (this.serverManifestLock) {
+            if (!message.baseline()) {
+                enqueueServerManifest(message);
+                return;
+            }
             if (message.offset() == 0) this.serverManifest.clear();
             // Replay the bounded current transfer when Companion opens after joining the server.
             if (this.serverManifest.size() >= ServerManifestMessage.MAX_BYTES / ServerManifestMessage.CHUNK_BYTES + 1) {
@@ -286,6 +297,13 @@ public final class CompanionAppClient implements AutoCloseable {
                 return;
             }
             this.ready.complete(null);
+        });
+        this.client.getMessageBus().listenAlways(ServerSourceRequestMessage.class, message -> {
+            if (!isAuthenticated()) {
+                failSession("Companion requested server details before authentication", null);
+                return;
+            }
+            this.serverSourceRequestHandler.accept(message);
         });
         this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
             if (!isAuthenticated()) {
