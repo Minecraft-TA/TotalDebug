@@ -23,7 +23,6 @@ public record InstancePaths(Path home) {
     public Path cache() { return home.resolve("cache"); }
     public Path runtime() { return cache().resolve("runtime"); }
     public Path inventory() { return runtime().resolve("inventory.json"); }
-    public Path gameCatalog() { return runtime().resolve("game-catalog.zip"); }
     public Path sources() { return runtime().resolve("sources"); }
     public Path index() { return runtime().resolve("index.jindex"); }
     public Path decompiled() { return cache().resolve("decompiled"); }

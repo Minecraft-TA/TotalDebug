@@ -6,9 +6,6 @@ import com.github.tth05.jindex.LiteralSearchResult;
 import com.github.tth05.jindex.SearchOptions;
 import com.github.tth05.jindex.SymbolKind;
 import com.github.tth05.jindex.SymbolSearchResult;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogSnapshot;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.GameCatalogService;
-import com.github.minecraft_ta.totaldebug.storage.GameCatalog;
 
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -25,8 +22,6 @@ public final class SearchEverywhereSearch {
         ALL("All"),
         CLASSES("Classes"),
         SYMBOLS("Symbols"),
-        ITEMS("Items"),
-        BLOCKS("Blocks"),
         TEXT("Text");
 
         private final String label;
@@ -40,15 +35,10 @@ public final class SearchEverywhereSearch {
         }
     }
 
-    public sealed interface Result permits ClassResult, SymbolResult, TextResult, GameResult {
+    public sealed interface Result permits ClassResult, SymbolResult, TextResult {
         String searchableName();
 
         int[] sourceIds();
-    }
-
-    public record GameResult(CatalogSnapshot snapshot, GameCatalog.Entry entry) implements Result {
-        @Override public String searchableName() { return entry.name(); }
-        @Override public int[] sourceIds() { return new int[0]; }
     }
 
     public record ClassResult(
@@ -133,11 +123,7 @@ public final class SearchEverywhereSearch {
             int limit,
             int[] sourceIds
     ) {
-        return search(index, query, category, limit, sourceIds, null, null);
-    }
-
-    public List<Result> search(ClassIndex index, String query, Category category, int limit, int[] sourceIds,
-                               CatalogSnapshot catalog, java.util.Set<String> moduleIds) {
+        Objects.requireNonNull(index, "index");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(category, "category");
         if (limit < 1) {
@@ -153,20 +139,19 @@ public final class SearchEverywhereSearch {
                 limit
         );
         ArrayList<Result> results = new ArrayList<>(limit * 2);
-        boolean ascii = query.chars().allMatch(character -> character < 128);
-        if (index != null && ascii && (category == Category.ALL || category == Category.CLASSES)) {
+        if (category == Category.ALL || category == Category.CLASSES) {
             IndexedClass[] classes = sourceIds == null
                     ? index.findClasses(query, options).results()
                     : index.findClasses(query, options, sourceIds).results();
             Arrays.stream(classes).map(SearchEverywhereSearch::classResult).forEach(results::add);
         }
-        if (index != null && ascii && (category == Category.ALL || category == Category.SYMBOLS)) {
+        if (category == Category.ALL || category == Category.SYMBOLS) {
             SymbolSearchResult[] symbols = sourceIds == null
                     ? index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD)).results()
                     : index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD), sourceIds).results();
             Arrays.stream(symbols).map(SearchEverywhereSearch::symbolResult).forEach(results::add);
         }
-        if (index != null && category == Category.TEXT) {
+        if (category == Category.TEXT) {
             LiteralSearchResult[] literals = sourceIds == null
                     ? index.findLiteralsContaining(query, limit).results()
                     : index.findLiteralsContaining(query, limit, sourceIds).results();
@@ -175,16 +160,8 @@ public final class SearchEverywhereSearch {
                     .forEach(results::add);
         }
 
-        if (catalog != null && (category == Category.ALL || category == Category.ITEMS || category == Category.BLOCKS)) {
-            GameCatalog.Kind kind = category == Category.ITEMS ? GameCatalog.Kind.ITEM
-                    : category == Category.BLOCKS ? GameCatalog.Kind.BLOCK : null;
-            GameCatalogService.search(catalog.catalog(), query, kind, moduleIds, limit).stream()
-                    .map(entry -> new GameResult(catalog, entry)).forEach(results::add);
-        }
         Comparator<Result> ranking = Comparator
-                .comparingInt((Result result) -> result instanceof GameResult game
-                        ? Math.min(matchRank(game.entry().id(), query), matchRank(result.searchableName(), query))
-                        : matchRank(result.searchableName(), query))
+                .comparingInt((Result result) -> matchRank(result.searchableName(), query))
                 .thenComparingInt(SearchEverywhereSearch::kindRank)
                 .thenComparing(Result::searchableName, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(SearchEverywhereSearch::stableIdentity);
@@ -228,7 +205,6 @@ public final class SearchEverywhereSearch {
 
     private static int kindRank(Result result) {
         return switch (result) {
-            case GameResult ignored -> 0;
             case ClassResult ignored -> 0;
             case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 1 : 2;
             case TextResult ignored -> 3;
@@ -237,7 +213,6 @@ public final class SearchEverywhereSearch {
 
     private static String stableIdentity(Result result) {
         return switch (result) {
-            case GameResult game -> game.entry().kind() + ":" + game.entry().id();
             case ClassResult type -> type.binaryName();
             case SymbolResult symbol -> symbol.ownerBinaryName() + '#' + symbol.name() + symbol.descriptor();
             case TextResult text -> text.value();

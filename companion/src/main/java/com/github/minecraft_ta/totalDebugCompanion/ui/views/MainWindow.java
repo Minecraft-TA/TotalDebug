@@ -79,20 +79,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
             }
         });
         menuBar.add(fileMenu);
-        var browseMenu = new JMenu("Browse");
-        browseMenu.add(new AbstractAction("Items and blocks…") {
-            @Override public void actionPerformed(ActionEvent event) { GameExplorerWindow.open(); }
-        });
-        browseMenu.add(new AbstractAction("Refresh game data") {
-            @Override public void actionPerformed(ActionEvent event) {
-                if (!CompanionApp.isConnected()) {
-                    JOptionPane.showMessageDialog(MainWindow.this, "Connect Minecraft to refresh the saved game data.");
-                    return;
-                }
-                CompanionApp.retryRuntimeIndex();
-            }
-        });
-        menuBar.add(browseMenu);
 
         this.evaluateExpressionAction = new AbstractAction("Evaluate Expression...", Icons.EVALUATE_EXPRESSION) {
             @Override

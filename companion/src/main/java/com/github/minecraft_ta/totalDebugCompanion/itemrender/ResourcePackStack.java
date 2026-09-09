@@ -20,15 +20,6 @@ final class ResourcePackStack implements AutoCloseable {
     private static final int COPY_BUFFER_SIZE = 16 * 1024;
 
     private final List<ResourceRoot> roots;
-    private Set<String> recordedReads;
-
-    void beginRecordingReads() { this.recordedReads = new LinkedHashSet<>(); }
-
-    List<String> finishRecordingReads() {
-        List<String> result = List.copyOf(this.recordedReads);
-        this.recordedReads = null;
-        return result;
-    }
 
     private ResourcePackStack(List<ResourceRoot> roots) {
         this.roots = roots;
@@ -89,7 +80,6 @@ final class ResourcePackStack implements AutoCloseable {
         for (int index = this.roots.size() - 1; index >= 0; index--) {
             Optional<byte[]> resource = this.roots.get(index).read(resourcePath, maximumBytes);
             if (resource.isPresent()) {
-                if (this.recordedReads != null) this.recordedReads.add(resourcePath);
                 return resource;
             }
         }
@@ -107,7 +97,6 @@ final class ResourcePackStack implements AutoCloseable {
         for (ResourceRoot root : this.roots) {
             Optional<byte[]> bytes = root.read(resourcePath, maximumBytes);
             if (bytes.isPresent()) {
-                if (this.recordedReads != null) this.recordedReads.add(resourcePath);
                 total += bytes.get().length;
                 if (total > maximumBytes) {
                     throw resourceLimit(resourcePath + " resource stack", maximumBytes);

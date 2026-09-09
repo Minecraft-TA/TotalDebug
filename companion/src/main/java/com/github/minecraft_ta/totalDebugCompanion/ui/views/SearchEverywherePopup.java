@@ -14,9 +14,6 @@ import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEvery
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.SymbolResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
-import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.GameResult;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogSnapshot;
-import com.github.minecraft_ta.totalDebugCompanion.catalog.GameCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -373,7 +370,7 @@ public class SearchEverywherePopup extends JFrame {
         this.categoryButtons.get(selected).setSelected(true);
         this.searchTextField.putClientProperty(
                 "JTextField.placeholderText",
-                selected == Category.TEXT ? "Search indexed string literals" : "Search names and registry IDs"
+                selected == Category.TEXT ? "Search indexed string literals" : "Search classes and symbols"
         );
         refreshResults();
     }
@@ -431,8 +428,7 @@ public class SearchEverywherePopup extends JFrame {
             this.pendingSearch.cancel(false);
             this.pendingSearch = null;
         }
-        boolean includesGame = this.category == Category.ALL || this.category == Category.ITEMS || this.category == Category.BLOCKS;
-        if (!CompanionClassIndex.isOpen() && !includesGame) {
+        if (!CompanionClassIndex.isOpen()) {
             showIndexStatus(CompanionApp.getRuntimeIndexStatus());
             return;
         }
@@ -444,10 +440,10 @@ public class SearchEverywherePopup extends JFrame {
             this.resultCount.setText(" ");
             showMessage(this.category == Category.TEXT
                     ? "Type to search indexed string literals"
-                    : "Type a name or registry ID to search");
+                    : "Type to search classes and symbols");
             return;
         }
-        if (!includesGame && this.category != Category.TEXT && !query.chars().allMatch(character -> character < 128)) {
+        if (this.category != Category.TEXT && !query.chars().allMatch(character -> character < 128)) {
             this.searchPending = false;
             this.resultModel.clear();
             this.resultCount.setText("0 results");
@@ -456,9 +452,6 @@ public class SearchEverywherePopup extends JFrame {
         }
 
         Category requestedCategory = this.category;
-        var requestedPaths = CompanionApp.hasProfile() ? CompanionApp.instancePaths() : null;
-        Set<String> requestedModules = this.selectedModuleIds.size() == this.modules.size()
-                ? null : Set.copyOf(this.selectedModuleIds);
         int[] sourceIds = this.selectedModuleIds.size() == this.modules.size()
                 ? null
                 : this.sourceCatalog.sourceIdsForModules(this.selectedModuleIds);
@@ -466,30 +459,12 @@ public class SearchEverywherePopup extends JFrame {
         this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
             try {
-                CatalogSnapshot catalog = null;
-                if (includesGame && requestedPaths != null) {
-                    try {
-                        catalog = GameCatalogService.INSTANCE.load(requestedPaths);
-                    } catch (java.io.IOException failure) {
-                        if (requestedCategory == Category.ITEMS || requestedCategory == Category.BLOCKS) {
-                            SwingUtilities.invokeLater(() -> {
-                                if (generation != this.searchGeneration.get()) return;
-                                this.pendingSearch = null;
-                                this.searchPending = false;
-                                this.resultModel.clear();
-                                this.resultCount.setText("Capture unavailable");
-                                showMessage(failure.getMessage());
-                            });
-                            return;
-                        }
-                    }
-                }
                 List<Result> results = this.search.search(
-                        CompanionClassIndex.isOpen() ? CompanionClassIndex.get() : null,
+                        CompanionClassIndex.get(),
                         query,
                         requestedCategory,
                         RESULT_LIMIT,
-                        sourceIds, catalog, requestedModules
+                        sourceIds
                 );
                 SwingUtilities.invokeLater(() -> applyResults(generation, results));
             } catch (RuntimeException failure) {
@@ -536,7 +511,7 @@ public class SearchEverywherePopup extends JFrame {
         failure.printStackTrace(System.err);
         this.resultModel.clear();
         this.resultCount.setText("Search failed");
-        showMessage("Unable to search: " + failure.getMessage());
+        showMessage("Unable to query the runtime index: " + failure.getMessage());
     }
 
     private void showIndexStatus(RuntimeIndexService.Status status) {
@@ -563,7 +538,6 @@ public class SearchEverywherePopup extends JFrame {
         }
         setVisible(false);
         switch (selected) {
-            case GameResult game -> GameExplorerWindow.open(game.snapshot(), game.entry());
             case ClassResult type -> MainWindow.INSTANCE.navigation().navigate(
                     new NavigationTarget.RuntimeClass(type.binaryName())
             );
@@ -583,8 +557,6 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private ModuleSummary moduleSummary(Result result) {
-        if (result instanceof GameResult game) return new ModuleSummary(
-                new PrimarySecondaryText(game.entry().modName(), game.entry().namespace()), game.entry().modVersion());
         var sources = Arrays.stream(result.sourceIds())
                 .mapToObj(this.sourceCatalog::sourceFor)
                 .distinct()
@@ -606,7 +578,6 @@ public class SearchEverywherePopup extends JFrame {
 
     private static String identity(Result result) {
         return switch (result) {
-            case GameResult game -> "G:" + game.entry().kind() + ":" + game.entry().id();
             case ClassResult type -> "C:" + type.binaryName();
             case SymbolResult symbol -> "S:" + symbol.ownerBinaryName() + '#' + symbol.name() + symbol.descriptor();
             case TextResult text -> "T:" + text.value();
@@ -680,11 +651,6 @@ public class SearchEverywherePopup extends JFrame {
                 }
                 case TextResult text -> {
                     presentation = new PrimarySecondaryText(textPreview(text.value()), "String literal");
-                    icon = Icons.VALUE;
-                }
-                case GameResult game -> {
-                    presentation = new PrimarySecondaryText(game.entry().name(),
-                            game.entry().kind() + "  " + game.entry().id());
                     icon = Icons.VALUE;
                 }
             }
