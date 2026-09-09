@@ -37,6 +37,36 @@ class ServerManifestTest {
     }
 
     @Test
+    void bodyOnlyNestedTypeReferencesDoNotChangeDeclarations() throws Exception {
+        try (var compiler = new InMemoryJavaCompiler()) {
+            String source = "import java.util.AbstractMap; public class Api { public Object value() { BODY } }";
+            String expected = ClassDeclarations.fingerprint(compiler.compile(
+                    source.replace("BODY", "return null;"), "Api", "").get("Api"));
+            for (String body : List.of("return new AbstractMap.SimpleEntry<>(1, 2);",
+                    "return \"time: \" + System.nanoTime();")) {
+                assertEquals(expected, ClassDeclarations.fingerprint(compiler.compile(
+                        source.replace("BODY", body), "Api", "").get("Api")), body);
+            }
+        }
+    }
+
+    @Test
+    void declaredNestedClassesAndTheirAccessRemainPartOfTheFingerprint() throws Exception {
+        try (var compiler = new InMemoryJavaCompiler()) {
+            String source = "public class Api { public static class Nested {} }";
+            var original = compiler.compile(source, "Api", "");
+            var changed = compiler.compile(source.replace("public static", "private static"), "Api", "");
+            for (String name : List.of("Api", "Api$Nested")) {
+                assertNotEquals(ClassDeclarations.fingerprint(original.get(name)),
+                        ClassDeclarations.fingerprint(changed.get(name)), name);
+            }
+            var removed = compiler.compile("public class Api {}", "Api", "");
+            assertNotEquals(ClassDeclarations.fingerprint(original.get("Api")),
+                    ClassDeclarations.fingerprint(removed.get("Api")));
+        }
+    }
+
+    @Test
     void genericSignaturesAndInheritedConstantsAreDeclarations() throws Exception {
         try (var compiler = new InMemoryJavaCompiler()) {
             String source = "public class Api { public java.util.List<String> values; }";

@@ -176,7 +176,9 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener = Objects.requireNonNull(listener, "listener");
     }
 
-    private Consumer<ServerSourceRequestMessage> serverSourceRequestHandler = message -> {};
+    private Consumer<ServerSourceRequestMessage> serverSourceRequestHandler = message ->
+            enqueueServerManifest(new ServerManifestMessage(message.sessionId(), message.requestId(), message.source(),
+                    "Server source request handler is not installed", 0, 0, new byte[0]));
 
     public void setServerSourceRequestHandler(Consumer<ServerSourceRequestMessage> handler) {
         this.serverSourceRequestHandler = Objects.requireNonNull(handler);

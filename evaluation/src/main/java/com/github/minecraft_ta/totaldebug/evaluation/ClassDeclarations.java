@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.evaluation;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +20,17 @@ public final class ClassDeclarations {
     public static String fingerprint(byte[] bytecode) {
         // A fresh constant pool omits constants used only by method bodies.
         var writer = new ClassWriter(0);
-        new ClassReader(bytecode).accept(writer, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        var reader = new ClassReader(bytecode);
+        reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+            @Override
+            public void visitInnerClass(String name, String outerName, String innerName, int access) {
+                // Referencing another nested type in a method body also creates an InnerClasses entry.
+                // Keep this class's own nesting/access metadata and its declared member classes only.
+                if (reader.getClassName().equals(name) || reader.getClassName().equals(outerName)) {
+                    super.visitInnerClass(name, outerName, innerName, access);
+                }
+            }
+        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         return HexFormat.of().formatHex(digest().digest(writer.toByteArray()));
     }
 

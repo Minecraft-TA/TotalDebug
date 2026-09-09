@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
+import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.github.minecraft_ta.totaldebug.tick.TickDomain;
@@ -43,7 +44,14 @@ public final class ServerScriptService {
         thread.setDaemon(true);
         return thread;
     }, new ThreadPoolExecutor.AbortPolicy());
-    private CompletableFuture<ServerManifest.Catalog> manifest;
+    private CompletableFuture<Manifest> manifest;
+
+    record Manifest(PreparedRuntimeSources sources, ServerManifest.Catalog catalog) {
+        byte[] details(int source) throws IOException {
+            return sources.withCurrentSources(() -> catalog.details(source));
+        }
+    }
+
     private final Map<UUID, ManifestSession> manifestSessions = new ConcurrentHashMap<>();
     private record ManifestSession(ServerPlayer player, String id) {}
 
@@ -65,13 +73,13 @@ public final class ServerScriptService {
             this.manifest = CompletableFuture.supplyAsync(() -> {
                 try (var phase = RuntimePhase.start("server.baseline")) {
                     var sources = TotalDebug.get().runtimeSources();
-                    return sources.withCurrentSources(() -> new ServerManifest.Catalog(sources.paths()));
+                    return sources.withCurrentSources(() -> new Manifest(sources, new ServerManifest.Catalog(sources.paths())));
                 } catch (IOException exception) {
                     throw new CompletionException(exception);
                 }
             }, this.manifestWorker);
         }
-        this.manifest.whenComplete((catalog, failure) -> server.execute(() -> {
+        this.manifest.whenComplete((manifest, failure) -> server.execute(() -> {
             if (this.manifestSessions.get(player.getUUID()) != session) return;
             if (failure != null) {
                 this.manifestSessions.remove(player.getUUID(), session);
@@ -80,7 +88,7 @@ public final class ServerScriptService {
                         "Unable to prepare server class manifest; see the server log")));
                 return;
             }
-            for (var message : ServerManifestMessage.split(session.id(), catalog.baseline())) {
+            for (var message : ServerManifestMessage.split(session.id(), manifest.catalog().baseline())) {
                 player.connection.send(new ServerManifestPayload(message));
             }
         }));
@@ -91,11 +99,10 @@ public final class ServerScriptService {
         if (session == null || session.player() != player || !session.id().equals(request.sessionId())
                 || this.manifest == null) return;
         MinecraftServer server = Objects.requireNonNull(player.getServer());
-        this.manifest.thenApplyAsync(catalog -> {
+        this.manifest.thenApplyAsync(manifest -> {
             if (this.manifestSessions.get(player.getUUID()) != session) return null;
             try (var phase = RuntimePhase.start("server.source-details")) {
-                var sources = TotalDebug.get().runtimeSources();
-                return sources.withCurrentSources(() -> catalog.details(request.source()));
+                return manifest.details(request.source());
             } catch (IOException exception) { throw new CompletionException(exception); }
         }, this.manifestWorker).whenComplete((bytes, failure) -> server.execute(() -> {
             if (this.manifestSessions.get(player.getUUID()) != session) return;
