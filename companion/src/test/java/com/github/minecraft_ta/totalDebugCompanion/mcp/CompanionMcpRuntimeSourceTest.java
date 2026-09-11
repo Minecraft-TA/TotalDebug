@@ -56,7 +56,7 @@ class CompanionMcpRuntimeSourceTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(Record.class),
@@ -68,7 +68,8 @@ class CompanionMcpRuntimeSourceTest {
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

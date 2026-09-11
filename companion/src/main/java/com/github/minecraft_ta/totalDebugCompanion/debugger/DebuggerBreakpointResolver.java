@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -18,7 +18,7 @@ public final class DebuggerBreakpointResolver {
     public static Optional<DebugEngine.SourceBreakpoint> resolve(
             DebugEngine.Source source, int line, String condition, String hitCondition
     ) {
-        return resolve(source, ASTCache.rawParse("DebuggerBreakpoint", source.contents()),
+        return resolve(source, JavaAst.parse("DebuggerBreakpoint", source.contents()),
                 line, condition, hitCondition);
     }
 

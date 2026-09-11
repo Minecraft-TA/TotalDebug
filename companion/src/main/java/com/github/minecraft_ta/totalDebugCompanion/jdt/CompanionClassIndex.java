@@ -4,19 +4,15 @@ import com.github.tth05.jindex.ClassIndex;
 
 import java.util.Objects;
 
+/** Process-wide lookup hook for JDT. Installed runtime resources own the native index. */
 public final class CompanionClassIndex {
     private static volatile ClassIndex classIndex;
 
     private CompanionClassIndex() {
     }
 
-    public static synchronized void replace(ClassIndex replacement) {
-        Objects.requireNonNull(replacement, "replacement");
-        ClassIndex previous = classIndex;
-        classIndex = replacement;
-        if (previous != null) {
-            previous.close();
-        }
+    public static void set(ClassIndex replacement) {
+        classIndex = Objects.requireNonNull(replacement, "replacement");
     }
 
     public static boolean isOpen() {
@@ -31,12 +27,7 @@ public final class CompanionClassIndex {
         return index;
     }
 
-    public static synchronized void close() {
-        ClassIndex index = classIndex;
+    public static void clear() {
         classIndex = null;
-        if (index != null) {
-            index.close();
-        }
     }
-
 }

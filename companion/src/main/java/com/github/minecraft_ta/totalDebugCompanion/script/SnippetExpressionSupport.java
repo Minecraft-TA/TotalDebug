@@ -7,7 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomCompletionRequestor;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -171,7 +171,7 @@ public final class SnippetExpressionSupport {
         String combined = combined(expression);
         int prefix = combined.length() - expression.length();
         JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.build(this.className, combined, mode(expression));
-        var ast = ASTCache.rawParse(this.className, generated.source());
+        var ast = JavaAst.parse(this.className, generated.source());
         List<DebugEngine.ExpressionToken> result = new ArrayList<>();
         ast.accept(new ASTVisitor() {
             @Override

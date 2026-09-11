@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.IType;
@@ -26,7 +26,7 @@ class JdtConfigurationTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(List.class),
@@ -42,7 +42,8 @@ class JdtConfigurationTest {
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test
@@ -73,7 +74,7 @@ class JdtConfigurationTest {
                 }
                 """;
 
-        var unit = ASTCache.rawParse("Renderer", source);
+        var unit = JavaAst.parse("Renderer", source);
         var syntaxErrors = Arrays.stream(unit.getProblems())
                 .filter(problem -> problem.isError() && (problem.getID() & IProblem.Syntax) != 0)
                 .map(IProblem::getMessage)
@@ -114,7 +115,7 @@ class JdtConfigurationTest {
                     }
                 }
                 """;
-        var unit = ASTCache.rawParse("Renderer", source);
+        var unit = JavaAst.parse("Renderer", source);
         int stringOffset = source.indexOf("String");
 
         var elements = assertDoesNotThrow(() -> unit.getTypeRoot().codeSelect(stringOffset, 0));
@@ -135,7 +136,7 @@ class JdtConfigurationTest {
                 }
                 """;
 
-        var unit = ASTCache.rawParse("Test", source);
+        var unit = JavaAst.parse("Test", source);
         var errors = Arrays.stream(unit.getProblems())
                 .filter(IProblem::isError)
                 .map(IProblem::getMessage)
@@ -159,7 +160,7 @@ class JdtConfigurationTest {
                 }
                 """;
 
-        var errors = Arrays.stream(ASTCache.rawParse("Test", source).getProblems())
+        var errors = Arrays.stream(JavaAst.parse("Test", source).getProblems())
                 .filter(IProblem::isError)
                 .map(IProblem::getMessage)
                 .toList();

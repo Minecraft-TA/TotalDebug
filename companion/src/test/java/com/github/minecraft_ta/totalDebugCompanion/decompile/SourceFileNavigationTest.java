@@ -51,12 +51,13 @@ final class SourceFileNavigationTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(classBytes(Object.class))));
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(classBytes(Object.class))));
     }
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

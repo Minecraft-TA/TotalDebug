@@ -17,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -232,8 +233,8 @@ class RuntimeIndexServiceTest {
         var paths = cachedFixture("closing");
         var loading = new CountDownLatch(1);
         var release = new CountDownLatch(1);
-        var loaded = new java.util.concurrent.atomic.AtomicReference<ClassIndex>();
-        var workerThread = new java.util.concurrent.atomic.AtomicReference<Thread>();
+        var loaded = new AtomicReference<ClassIndex>();
+        var workerThread = new AtomicReference<Thread>();
         var installations = new AtomicInteger();
         try (var service = new RuntimeIndexService(new Object(), snapshot -> installations.incrementAndGet(), file -> {
             workerThread.set(Thread.currentThread());
@@ -264,7 +265,7 @@ class RuntimeIndexServiceTest {
         var loading = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         var installed = new CountDownLatch(1);
-        var discarded = new java.util.concurrent.atomic.AtomicReference<ClassIndex>();
+        var discarded = new AtomicReference<ClassIndex>();
         var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
         try (var service = new RuntimeIndexService(new Object(), snapshot -> {
             snapshots.add(snapshot);
@@ -289,6 +290,37 @@ class RuntimeIndexServiceTest {
             release.countDown();
             snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
         }
+    }
+
+    @Test
+    void throwingReadyHandlerLeavesTheLoaderResponsibleForDisposal() throws Exception {
+        var paths = cachedFixture("rejected-handler");
+        var candidate = new AtomicReference<RuntimeIndexService.ReadySnapshot>();
+        var failed = new CountDownLatch(1);
+        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+            candidate.set(snapshot);
+            throw new IllegalStateException("Rejected installation");
+        })) {
+            service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
+            service.restore(paths.home());
+            assertTrue(failed.await(5, TimeUnit.SECONDS));
+            assertTrue(candidate.get().index().isDestroyed());
+        }
+    }
+
+    @Test
+    void acceptedSnapshotOutlivesItsLoader() throws Exception {
+        var paths = cachedFixture("accepted-handler");
+        var candidate = new AtomicReference<RuntimeIndexService.ReadySnapshot>();
+        var ready = new CountDownLatch(1);
+        try {
+            try (var service = new RuntimeIndexService(new Object(), candidate::set)) {
+                service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.READY) ready.countDown(); });
+                service.restore(paths.home());
+                assertTrue(ready.await(5, TimeUnit.SECONDS));
+            }
+            assertTrue(!candidate.get().index().isDestroyed());
+        } finally { if (candidate.get() != null) candidate.get().close(); }
     }
 
     private com.github.minecraft_ta.totaldebug.storage.InstancePaths cachedFixture(String id) throws Exception {

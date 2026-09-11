@@ -46,3 +46,11 @@ Contact sheets and individual captures are written under `companion/build/ui-scr
 ## Integrations and storage
 
 The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
+
+## Runtime ownership
+
+`CompanionApp` publishes one `RuntimeBinding` for the installed inventory. The binding groups its identity, source catalog, classpath, decompiler and reference search, and owns the native index after installation succeeds. `CompanionClassIndex` is only JDT's process-wide lookup hook; setting or clearing it never closes an index.
+
+The index loader retains ownership while a candidate is prepared. The application detaches the previous runtime, attaches the new compiler/insight bindings, and completes publication under the existing lifecycle lock. Debugger and UI follow-up runs afterward and cannot return an installed index to the loader's failure cleanup. Closing a runtime detaches its consumers before releasing the index, and is idempotent. A rejected candidate closes its own prepared consumers while leaving index disposal to the loader.
+
+The script compiler and code-insight worker remain application-lived. Open local editors retain the code-insight service, so a runtime changes its binding rather than replacing that service instance. Project admission and navigation invalidation retain their existing guards; the planned project-scope migration is a separate slice. Stateless JDT parsing is in `JavaAst`; editor analysis/listeners remain in `ASTCache`.

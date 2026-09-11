@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.decompile.CompanionDecompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import org.eclipse.jdt.core.dom.ASTNode;
@@ -53,7 +53,7 @@ final class CompanionMcpRuntimeSource {
         }
 
         String contents = decompiled.contents();
-        CompilationUnit unit = ASTCache.rawParse(COMPILATION_UNIT_NAME, contents);
+        CompilationUnit unit = JavaAst.parse(COMPILATION_UNIT_NAME, contents);
         AbstractTypeDeclaration type = findType(unit, decompiled.binaryName(), target.binaryName());
         ASTNode scope = switch (target.kind()) {
             case "class" -> type;

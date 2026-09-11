@@ -1,8 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
-import org.eclipse.jdt.core.dom.ASTParser;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 
 import java.util.*;
@@ -34,7 +32,7 @@ public class ASTCache {
             synchronized (CACHE) {
                 if (CACHE.get(key) != selected || selected.version != finalVersion) return;
             }
-            var ast = rawParse(className, source.text());
+            var ast = JavaAst.parse(className, source.text());
             List<BiConsumer<CompilationUnit, Integer>> listeners;
             synchronized (CACHE) {
                 var entry = CACHE.get(key);
@@ -54,15 +52,6 @@ public class ASTCache {
                 listener.accept(ast, finalVersion);
             }
         });
-    }
-
-    public static CompilationUnit rawParse(String className, String contents) {
-        ASTParser parser = JdtConfiguration.createParser();
-        parser.setSource(new CompilationUnitImpl(className, contents));
-        parser.setResolveBindings(true);
-        parser.setStatementsRecovery(true);
-        parser.setKind(ASTParser.K_COMPILATION_UNIT);
-        return (CompilationUnit) parser.createAST(null);
     }
 
     public static Runnable addChangeListener(String key, BiConsumer<CompilationUnit, Integer> listener) {
