@@ -439,6 +439,9 @@ public final class NavigationService {
 
     private <T extends IEditorPanel> CompletableFuture<T> openRuntimeEditor(
             RuntimeBinding runtime, Class<T> type, Predicate<T> matches, Supplier<T> create) {
+        if (runtime != null && runtime != captureContext().runtime()) {
+            return CompletableFuture.failedFuture(new CancellationException("Runtime changed"));
+        }
         // Dispose a stale same-file editor before the new one installs its AST listeners.
         tabs.closeMatching(editor -> type.isInstance(editor) && matches.test(type.cast(editor))
                 && editor.runtimeBinding() != runtime);
