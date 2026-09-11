@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import javax.swing.JLabel;
+import javax.swing.JPopupMenu;
+import javax.swing.Timer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
@@ -41,20 +44,25 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntConsumer;
 
 /** Applies one named UI state, waits until it is stable, and optionally captures it. */
 final class UiScenarioDriver {
-    private static final int READY_POLLS = 2;
-    private static final int TREE_READY_POLLS = 4;
+    private final int READY_POLLS = 2;
+    private final int TREE_READY_POLLS = 4;
 
-    private UiScenarioDriver() {
+    private final MainWindow mainWindow;
+    private final IntConsumer exit;
+    UiScenarioDriver(MainWindow mainWindow, IntConsumer exit) {
+        this.mainWindow = mainWindow;
+        this.exit = exit;
     }
 
-    static void schedule(UiRenderScenario scenario, String source, Path screenshot) {
+    void schedule(UiRenderScenario scenario, String source, Path screenshot) {
         ScenarioContext context = new ScenarioContext(source);
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
         int[] stableReadyPolls = {0};
-        javax.swing.Timer timer = new javax.swing.Timer(50, event -> {
+        Timer timer = new Timer(50, event -> {
             try {
                 advance(scenario, context);
                 if (context.workspaceReady() && ready(scenario, context)) {
@@ -62,11 +70,11 @@ final class UiScenarioDriver {
                     if (stableReadyPolls[0] < READY_POLLS) {
                         return;
                     }
-                    ((javax.swing.Timer) event.getSource()).stop();
+                    ((Timer) event.getSource()).stop();
                     if (screenshot != null) {
                         capture(screenshot);
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        exit.accept(0);
                     }
                     System.out.println("UI scenario ready: " + scenario.id());
                     return;
@@ -77,26 +85,26 @@ final class UiScenarioDriver {
                 }
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(2);
+                mainWindow.dispose();
+                exit.accept(2);
             }
         });
         timer.setInitialDelay(0);
         timer.start();
     }
 
-    private static void advance(UiRenderScenario scenario, ScenarioContext context) throws Exception {
+    private void advance(UiRenderScenario scenario, ScenarioContext context) throws Exception {
         expandTree();
         switch (scenario) {
             case MAIN -> selectCodeEditor(context);
             case INACTIVE_TABS -> context.once("select-resource", () -> {
-                int lastTab = MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
-                MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(lastTab);
+                int lastTab = mainWindow.getEditorTabs().getTabCount() - 1;
+                mainWindow.getEditorTabs().setSelectedIndex(lastTab);
             });
             case TAB_HOVER -> advanceTabHover(context);
             case EDITOR_CURRENT_LINE -> {
                 selectCodeEditor(context);
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 if (editor != null) {
                     int offset = context.source().indexOf("double ratio");
                     if (editor.getDocument().getLength() >= offset && editor.getCaretPosition() != offset) {
@@ -109,7 +117,7 @@ final class UiScenarioDriver {
             case DEBUGGER_LOCATION -> {
                 selectCodeEditor(context);
                 context.once("show-debugger-location", () -> {
-                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                    var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof CodeView codeView) {
                         int line = context.source().substring(0, context.source().indexOf("double ratio"))
                                 .split("\\n", -1).length;
@@ -131,20 +139,20 @@ final class UiScenarioDriver {
                     }
                 });
             }
-            case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(MainWindow.INSTANCE));
+            case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
             case BREAKPOINTS -> context.once(
                     "open-breakpoints",
-                    () -> BreakpointsWindowPreview.open(MainWindow.INSTANCE)
+                    () -> BreakpointsWindowPreview.open(mainWindow)
             );
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
                 var window = new com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow(
-                        MainWindow.INSTANCE, null, MainWindow.INSTANCE.editorContext(), MainWindow.INSTANCE::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
+                        mainWindow, null, mainWindow.editorContext(), mainWindow::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
                 var editor = findComponent(window, com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField.class);
                 editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
                         ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
                         : "getServer()");
                 window.showWindow();
-                window.setLocation(MainWindow.INSTANCE.getX() + 70, MainWindow.INSTANCE.getY() + 70);
+                window.setLocation(mainWindow.getX() + 70, mainWindow.getY() + 70);
             });
             case HIERARCHY_ONE -> advanceHierarchyPreview(
                     context,
@@ -157,22 +165,22 @@ final class UiScenarioDriver {
             case IMPLEMENTATION_CHOOSER -> advanceImplementationChooser(context);
             case SEARCH_EMPTY, SEARCH_RESULTS, MODULE_FILTER -> advanceSearch(scenario, context);
             case USAGES_RESULTS -> context.once("open-usages", () -> {
-                UsagesView view = new UsagesView(MainWindow.INSTANCE.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), CompanionApp.currentRuntime());
-                MainWindow.INSTANCE.getEditorTabs().openEditorTab(view)
+                UsagesView view = new UsagesView(mainWindow.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), mainWindow.editorContext().project().runtime());
+                mainWindow.getEditorTabs().openEditorTab(view)
                         .thenRun(() -> SwingUtilities.invokeLater(view::restartSearch));
             });
             case SETTINGS -> {
                 selectCodeEditor(context);
                 context.once("open-settings", () -> {
-                    SettingsWindow settings = new SettingsWindow(MainWindow.INSTANCE, CompanionApp.instanceState(), CompanionApp.getDebuggerController());
-                    settings.setLocation(MainWindow.INSTANCE.getX() + 250, MainWindow.INSTANCE.getY() + 80);
+                    SettingsWindow settings = new SettingsWindow(mainWindow, mainWindow.editorContext().project().state(), mainWindow.editorContext().debugger());
+                    settings.setLocation(mainWindow.getX() + 250, mainWindow.getY() + 80);
                     settings.setVisible(true);
                 });
             }
             case SERVICE_STATUS -> advanceServiceStatus(context);
             case INDEXING -> {
                 selectCodeEditor(context);
-                context.once("indexing", () -> MainWindow.INSTANCE.setRuntimeIndexStatus(
+                context.once("indexing", () -> mainWindow.setRuntimeIndexStatus(
                         new RuntimeIndexService.Status(
                                 RuntimeIndexService.Phase.BUILDING,
                                 "Building class index",
@@ -183,7 +191,7 @@ final class UiScenarioDriver {
         }
     }
 
-    private static DebugEngine.Variable variable(
+    private DebugEngine.Variable variable(
             String name,
             String value,
             String type,
@@ -192,21 +200,21 @@ final class UiScenarioDriver {
         return new DebugEngine.Variable(name, name, name, value, type, kind, 0, 0, 0, 0);
     }
 
-    private static boolean ready(UiRenderScenario scenario, ScenarioContext context) {
+    private boolean ready(UiRenderScenario scenario, ScenarioContext context) {
         return switch (scenario) {
-            case MAIN -> MainWindow.INSTANCE.getEditorTabs().getSelectedIndex() == 0;
-            case INACTIVE_TABS -> MainWindow.INSTANCE.getEditorTabs().getSelectedIndex()
-                    == MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
+            case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
+            case INACTIVE_TABS -> mainWindow.getEditorTabs().getSelectedIndex()
+                    == mainWindow.getEditorTabs().getTabCount() - 1;
             case TAB_HOVER -> {
-                Component header = MainWindow.INSTANCE.getEditorTabs().getTabComponentAt(0);
+                Component header = mainWindow.getEditorTabs().getTabComponentAt(0);
                 CloseButton close = header instanceof Container container
                         ? findComponent(container, CloseButton.class)
                         : null;
                 yield header != null && !header.isOpaque() && close != null && close.isVisible();
             }
             case EDITOR_CURRENT_LINE -> {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-                IconRowHeader gutter = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                IconRowHeader gutter = findComponent(mainWindow, IconRowHeader.class);
                 yield editor != null && gutter != null
                         && editor.getCaretPosition() == context.source().indexOf("double ratio")
                         && gutter.isShowing();
@@ -214,7 +222,7 @@ final class UiScenarioDriver {
             case BREAKPOINT_EDITOR -> visibleMenuPopup() != null
                     && findLabelContaining(visibleMenuPopup(), "Line breakpoint") != null;
             case METHOD_BREAKPOINT -> {
-                var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 if (!(selected instanceof CodeView codeView)) {
                     yield false;
                 }
@@ -225,7 +233,7 @@ final class UiScenarioDriver {
                         .substring(0, context.source().indexOf("double ratio"))
                         .split("\\n", -1).length;
                 yield codeView.getDebugSource()
-                        .map(source -> CompanionApp.getDebuggerController()
+                        .map(source -> mainWindow.editorContext().debugger()
                                 .breakpoint(source.uri(), declarationLine))
                         .map(breakpoint -> breakpoint.request().isMethodEntry()
                                 && breakpoint.request().debuggerLine() == entryLine
@@ -233,7 +241,7 @@ final class UiScenarioDriver {
                                         .equals("(IZ)Ljava/util/List;"))
                         .orElse(false);
             }
-            case DEBUGGER_LOCATION -> MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView;
+            case DEBUGGER_LOCATION -> mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> findShowingWindow(com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow.class) != null;
@@ -259,7 +267,7 @@ final class UiScenarioDriver {
             }
             case MODULE_FILTER -> visibleMenuPopup() != null;
             case USAGES_RESULTS -> {
-                var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 javax.swing.JTree tree = selected instanceof UsagesView
                         ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class)
                         : null;
@@ -267,19 +275,19 @@ final class UiScenarioDriver {
             }
             case SETTINGS -> findShowingWindow(SettingsWindow.class) != null;
             case SERVICE_STATUS -> visibleMenuPopup() != null
-                    && findButton(MainWindow.INSTANCE, "Game: Connected") != null
-                    && findButton(MainWindow.INSTANCE, "MCP: Listening") != null;
-            case INDEXING -> findLabelContaining(MainWindow.INSTANCE, "Building class index") != null;
+                    && findButton(mainWindow, "Game: Connected") != null
+                    && findButton(mainWindow, "MCP: Listening") != null;
+            case INDEXING -> findLabelContaining(mainWindow, "Building class index") != null;
         };
     }
 
-    private static void advanceTabHover(ScenarioContext context) {
-        int lastTab = MainWindow.INSTANCE.getEditorTabs().getTabCount() - 1;
+    private void advanceTabHover(ScenarioContext context) {
+        int lastTab = mainWindow.getEditorTabs().getTabCount() - 1;
         if (lastTab < 1) {
             return;
         }
-        context.once("select-last-tab", () -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(lastTab));
-        Component header = MainWindow.INSTANCE.getEditorTabs().getTabComponentAt(0);
+        context.once("select-last-tab", () -> mainWindow.getEditorTabs().setSelectedIndex(lastTab));
+        Component header = mainWindow.getEditorTabs().getTabComponentAt(0);
         if (header != null) {
             context.once("hover-first-tab", () -> header.dispatchEvent(new MouseEvent(
                     header,
@@ -295,10 +303,10 @@ final class UiScenarioDriver {
         }
     }
 
-    private static void advanceBreakpointEditor(ScenarioContext context) throws Exception {
+    private void advanceBreakpointEditor(ScenarioContext context) throws Exception {
         selectCodeEditor(context);
-        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-        LineNumberList lineNumbers = findComponent(MainWindow.INSTANCE, LineNumberList.class);
+        RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+        LineNumberList lineNumbers = findComponent(mainWindow, LineNumberList.class);
         if (editor == null || lineNumbers == null) {
             return;
         }
@@ -326,15 +334,15 @@ final class UiScenarioDriver {
         });
     }
 
-    private static void advanceMethodBreakpoint(ScenarioContext context) throws Exception {
+    private void advanceMethodBreakpoint(ScenarioContext context) throws Exception {
         selectCodeEditor(context);
-        var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+        var selected = mainWindow.getEditorTabs().getSelectedEditor();
         if (!(selected instanceof CodeView codeView)
                 || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
             return;
         }
-        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-        LineNumberList lineNumbers = findComponent(MainWindow.INSTANCE, LineNumberList.class);
+        RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+        LineNumberList lineNumbers = findComponent(mainWindow, LineNumberList.class);
         if (editor == null || lineNumbers == null) {
             return;
         }
@@ -356,20 +364,20 @@ final class UiScenarioDriver {
         )));
     }
 
-    private static void advanceServiceStatus(ScenarioContext context) {
+    private void advanceServiceStatus(ScenarioContext context) {
         context.once("publish-service-status", () -> {
-            MainWindow.INSTANCE.setGameStatus(new ServiceStatus(
+            mainWindow.setGameStatus(new ServiceStatus(
                     ServiceStatus.State.AVAILABLE,
                     "Connected",
                     "Minecraft is connected and authenticated."
             ));
-            MainWindow.INSTANCE.setMcpStatus(new ServiceStatus(
+            mainWindow.setMcpStatus(new ServiceStatus(
                     ServiceStatus.State.AVAILABLE,
                     "Listening",
                     "MCP is listening at http://127.0.0.1:32123/mcp"
             ));
         });
-        JButton mcp = findButton(MainWindow.INSTANCE, "MCP: Listening");
+        JButton mcp = findButton(mainWindow, "MCP: Listening");
         if (mcp != null) {
             context.once("open-mcp-status", () -> {
                 mcp.getModel().setRollover(true);
@@ -379,13 +387,13 @@ final class UiScenarioDriver {
         }
     }
 
-    private static void advanceImplementationChooser(ScenarioContext context) {
+    private void advanceImplementationChooser(ScenarioContext context) {
         selectCodeEditor(context);
-        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+        RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
         if (editor == null) {
             return;
         }
-        if (!(MainWindow.INSTANCE.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)
+        if (!(mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)
                 || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
             return;
         }
@@ -401,10 +409,10 @@ final class UiScenarioDriver {
         });
     }
 
-    private static void advanceHierarchyPreview(ScenarioContext context, int declarationOffset) throws Exception {
+    private void advanceHierarchyPreview(ScenarioContext context, int declarationOffset) throws Exception {
         selectCodeEditor(context);
-        RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-        IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+        RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+        IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
         if (editor == null || iconRow == null) {
             return;
         }
@@ -432,16 +440,16 @@ final class UiScenarioDriver {
         dispatchMouseMove(iconRow, target);
     }
 
-    private static void advanceSearch(UiRenderScenario scenario, ScenarioContext context) {
+    private void advanceSearch(UiRenderScenario scenario, ScenarioContext context) {
         selectCodeEditor(context);
-        context.once("open-search", MainWindow.INSTANCE::openSearchEverywhere);
+        context.once("open-search", mainWindow::openSearchEverywhere);
         SearchEverywherePopup popup = findShowingWindow(SearchEverywherePopup.class);
         if (popup == null) {
             return;
         }
         context.once("position-search", () -> popup.setLocation(
-                MainWindow.INSTANCE.getX() + 220,
-                MainWindow.INSTANCE.getY() + 70
+                mainWindow.getX() + 220,
+                mainWindow.getY() + 70
         ));
         if (scenario == UiRenderScenario.SEARCH_RESULTS) {
             FlatIconTextField field = findComponent(popup, FlatIconTextField.class);
@@ -459,12 +467,12 @@ final class UiScenarioDriver {
         }
     }
 
-    private static void selectCodeEditor(ScenarioContext context) {
-        context.once("select-code", () -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(0));
+    private void selectCodeEditor(ScenarioContext context) {
+        context.once("select-code", () -> mainWindow.getEditorTabs().setSelectedIndex(0));
     }
 
-    private static void expandTree() {
-        LazyFileJTree tree = findComponent(MainWindow.INSTANCE, LazyFileJTree.class);
+    private void expandTree() {
+        LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
         if (tree == null) {
             return;
         }
@@ -473,16 +481,16 @@ final class UiScenarioDriver {
         }
     }
 
-    private static javax.swing.JPopupMenu visibleMenuPopup() {
+    private JPopupMenu visibleMenuPopup() {
         return Arrays.stream(javax.swing.MenuSelectionManager.defaultManager().getSelectedPath())
-                .filter(javax.swing.JPopupMenu.class::isInstance)
-                .map(javax.swing.JPopupMenu.class::cast)
-                .filter(javax.swing.JPopupMenu::isShowing)
+                .filter(JPopupMenu.class::isInstance)
+                .map(JPopupMenu.class::cast)
+                .filter(JPopupMenu::isShowing)
                 .findFirst()
                 .orElse(null);
     }
 
-    private static <T extends java.awt.Window> T findShowingWindow(Class<T> type) {
+    private <T extends java.awt.Window> T findShowingWindow(Class<T> type) {
         return Arrays.stream(java.awt.Window.getWindows())
                 .filter(type::isInstance)
                 .map(type::cast)
@@ -491,7 +499,7 @@ final class UiScenarioDriver {
                 .orElse(null);
     }
 
-    private static <T extends Component> T findComponent(Container root, Class<T> type) {
+    private <T extends Component> T findComponent(Container root, Class<T> type) {
         for (Component component : root.getComponents()) {
             if (type.isInstance(component)) {
                 return type.cast(component);
@@ -506,15 +514,15 @@ final class UiScenarioDriver {
         return null;
     }
 
-    private static javax.swing.JLabel findLabelContaining(Container root, String expectedText) {
+    private JLabel findLabelContaining(Container root, String expectedText) {
         for (Component component : root.getComponents()) {
-            if (component instanceof javax.swing.JLabel label
+            if (component instanceof JLabel label
                     && label.getText() != null
                     && label.getText().contains(expectedText)) {
                 return label;
             }
             if (component instanceof Container child) {
-                javax.swing.JLabel match = findLabelContaining(child, expectedText);
+                JLabel match = findLabelContaining(child, expectedText);
                 if (match != null) {
                     return match;
                 }
@@ -523,7 +531,7 @@ final class UiScenarioDriver {
         return null;
     }
 
-    private static JButton findButton(Container root, String text) {
+    private JButton findButton(Container root, String text) {
         for (Component component : root.getComponents()) {
             if (component instanceof JButton button && text.equals(button.getText())) {
                 return button;
@@ -538,7 +546,7 @@ final class UiScenarioDriver {
         return null;
     }
 
-    private static void dispatchMouseMove(Component component, Point point) {
+    private void dispatchMouseMove(Component component, Point point) {
         long now = System.currentTimeMillis();
         component.dispatchEvent(new MouseEvent(
                 component,
@@ -564,34 +572,34 @@ final class UiScenarioDriver {
         ));
     }
 
-    private static void capture(Path target) throws Exception {
+    private void capture(Path target) throws Exception {
         Files.createDirectories(target.toAbsolutePath().getParent());
         BufferedImage image = new BufferedImage(
-                MainWindow.INSTANCE.getWidth(),
-                MainWindow.INSTANCE.getHeight(),
+                mainWindow.getWidth(),
+                mainWindow.getHeight(),
                 BufferedImage.TYPE_INT_ARGB
         );
         Graphics2D graphics = image.createGraphics();
-        MainWindow.INSTANCE.paintAll(graphics);
+        mainWindow.paintAll(graphics);
         for (java.awt.Window window : java.awt.Window.getWindows()) {
-            if (window == MainWindow.INSTANCE || !window.isShowing()) {
+            if (window == mainWindow || !window.isShowing()) {
                 continue;
             }
             Graphics2D popupGraphics = (Graphics2D) graphics.create();
             popupGraphics.translate(
-                    window.getX() - MainWindow.INSTANCE.getX(),
-                    window.getY() - MainWindow.INSTANCE.getY()
+                    window.getX() - mainWindow.getX(),
+                    window.getY() - mainWindow.getY()
             );
             window.paintAll(popupGraphics);
             popupGraphics.dispose();
         }
-        OffscreenPopupFactory.paintActivePopups(graphics, MainWindow.INSTANCE);
+        OffscreenPopupFactory.paintActivePopups(graphics, mainWindow);
         graphics.dispose();
         ImageIO.write(image, "png", target.toFile());
         System.out.println("UI screenshot: " + target.toAbsolutePath());
     }
 
-    private static final class ScenarioContext {
+    private final class ScenarioContext {
         private final String source;
         private final Set<String> completedActions = new HashSet<>();
         private int previousTreeRows = -1;
@@ -612,7 +620,7 @@ final class UiScenarioDriver {
         }
 
         private boolean workspaceReady() {
-            LazyFileJTree tree = findComponent(MainWindow.INSTANCE, LazyFileJTree.class);
+            LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
             if (tree == null || tree.getRowCount() == 0) {
                 return false;
             }

@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
-import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.scnet.message.impl.DefaultMessageBus;
 import org.junit.jupiter.api.Test;
@@ -25,59 +24,36 @@ import static org.junit.jupiter.api.Assertions.*;
 class ScriptPanelDisposalTest {
     @TempDir Path directory;
 
-    @Test
-    void panelsOwnTheirPopupsAndUnsubscribeOnDirectDisposal() throws Exception {
-        String classpath = System.getProperty("totaldebug.testClasspath", System.getProperty("java.class.path"));
-        Path log = directory.resolve("probe.log");
-        Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-Djava.awt.headless=false", "-cp", classpath, getClass().getName(), directory.toString())
-                .redirectErrorStream(true).redirectOutput(log.toFile()).start();
-        try {
-            assertTrue(process.waitFor(25, TimeUnit.SECONDS), () -> read(log));
-            assertEquals(0, process.exitValue(), () -> read(log));
-        } finally { if (process.isAlive()) process.destroyForcibly(); }
-    }
-
-    public static void main(String[] args) {
-        try {
-            Path root = Path.of(args[0]);
-            Path appHome = Files.createDirectories(root.resolve("app"));
-            var launch = CompanionApp.class.getDeclaredField("launchConfiguration");
-            launch.setAccessible(true);
-            launch.set(null, new CompanionLaunchConfiguration(appHome));
-            GlobalConfig.getInstance().loadFrom(appHome);
-            CompanionApp.configureWithoutSession(CompanionProfile.forGame(Files.createDirectories(root.resolve("game"))));
-            CompanionApp.configureLookAndFeel();
-            CompanionApp.configureTokenMakers();
-            try (var session = CompanionApp.session()) {
-                var server = session.server();
-                var bus = new TrackingBus();
-                server.setMessageBus(bus);
-                SwingUtilities.invokeAndWait(() -> {
-                    var first = (ScriptPanel) new ScriptView(MainWindow.INSTANCE.editorContext(), "First").getComponent();
-                    var second = (ScriptPanel) new ScriptView(MainWindow.INSTANCE.editorContext(), "Second").getComponent();
-                    Window firstCompletion = popup(first, "codeCompletionPopup");
-                    Window firstSignature = popup(first, "signatureHelpPopup");
-                    Window secondCompletion = popup(second, "codeCompletionPopup");
-                    assertNotSame(firstCompletion, secondCompletion);
-                    firstCompletion.pack();
-                    firstSignature.pack();
-                    secondCompletion.pack();
-                    assertEquals(2, bus.owners.size());
-                    try (var replacement = new Server()) {
-                        first.dispose();
-                        first.dispose();
-                        assertFalse(firstCompletion.isDisplayable());
-                        assertFalse(firstSignature.isDisplayable());
-                        assertTrue(secondCompletion.isDisplayable());
-                        assertEquals(1, bus.owners.size());
-                        second.dispose();
-                        assertTrue(bus.owners.isEmpty());
-                    }
-                });
-            }
-            System.exit(0);
-        } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
+    @Test void panelsOwnTheirPopupsAndUnsubscribeOnDirectDisposal() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("app"));
+        GlobalConfig.getInstance().loadFrom(home);
+        CompanionApp.configureLookAndFeel();
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            var bus = new TrackingBus();
+            app.session().server().setMessageBus(bus);
+            SwingUtilities.invokeAndWait(() -> {
+                MainWindow window = app.createWindow();
+                var first = (ScriptPanel) new ScriptView(window.editorContext(), "First").getComponent();
+                var second = (ScriptPanel) new ScriptView(window.editorContext(), "Second").getComponent();
+                Window firstCompletion = popup(first, "codeCompletionPopup");
+                Window firstSignature = popup(first, "signatureHelpPopup");
+                Window secondCompletion = popup(second, "codeCompletionPopup");
+                assertNotSame(firstCompletion, secondCompletion);
+                firstCompletion.pack();
+                firstSignature.pack();
+                secondCompletion.pack();
+                assertEquals(2, bus.owners.size());
+                first.dispose();
+                first.dispose();
+                assertFalse(firstCompletion.isDisplayable());
+                assertFalse(firstSignature.isDisplayable());
+                assertTrue(secondCompletion.isDisplayable());
+                assertEquals(1, bus.owners.size());
+                second.dispose();
+                assertTrue(bus.owners.isEmpty());
+            });
+        }
     }
 
     private static Window popup(ScriptPanel panel, String name) {

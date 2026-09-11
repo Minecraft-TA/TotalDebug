@@ -1,8 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -28,7 +27,7 @@ import java.util.function.Supplier;
 /** Loopback MCP host for Companion code mode. */
 public final class CompanionMcpServer implements AutoCloseable {
     private static final String MCP_ENDPOINT = "/mcp";
-    static final int MCP_PORT = 32_123;
+    public static final int MCP_PORT = 32_123;
     private static final int MAX_REQUEST_BYTES = 1_048_576;
 
     private final Path dataDirectory;
@@ -45,13 +44,11 @@ public final class CompanionMcpServer implements AutoCloseable {
     private String endpointUrl;
     private boolean closed;
 
-    public CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs) {
-        this(dataDirectory, jobs, MCP_PORT);
-    }
-
-    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port) {
-        this(dataDirectory, jobs, port, new DebuggerMcpService(CompanionApp::getDebuggerController,
-                name -> CompanionApp.getDecompilationService().loadDebugSource(name)), CompanionApp::requireProject);
+    public CompanionMcpServer(CompanionApplication application, CodeModeJobService jobs, int port) {
+        this(application.appPaths().home(), jobs, port,
+                new DebuggerMcpService(application::getDebuggerController,
+                        name -> application.requireProject().requireRuntime().decompiler().loadDebugSource(name)),
+                application::requireProject);
     }
 
     CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger, Supplier<ProjectScope> project) {
@@ -60,10 +57,10 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.endpointDescriptor = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpEndpoint();
         this.jobs = Objects.requireNonNull(jobs, "jobs");
         this.debugger = Objects.requireNonNull(debugger, "debugger");
-        this.runtimeSource = new CompanionMcpRuntimeSource(CompanionApp::getDecompilationService);
+        this.runtimeSource = new CompanionMcpRuntimeSource(() -> this.project.get().requireRuntime().decompiler());
         this.search = new CompanionMcpSearchService(
-                CompanionClassIndex::get,
-                sourceId -> CompanionApp.getRuntimeSourceCatalog().moduleFor(sourceId)
+                () -> this.project.get().requireRuntime().snapshot().index(),
+                sourceId -> this.project.get().requireRuntime().sources().moduleFor(sourceId)
         );
         if (port < 0 || port > 65_535) {
             throw new IllegalArgumentException("port is out of range");
@@ -205,7 +202,7 @@ public final class CompanionMcpServer implements AutoCloseable {
         return Map.of(
                 "companion_available", true,
                 "minecraft_connected", this.jobs.isAvailable(),
-                "debugger_connected", CompanionApp.isDebuggerConnected()
+                "debugger_connected", this.debugger.isConnected()
         );
     }
 

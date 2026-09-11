@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import javax.swing.JLabel;
+import javax.swing.Timer;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
@@ -9,6 +11,10 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import java.util.concurrent.atomic.AtomicBoolean;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
@@ -58,9 +64,8 @@ import javax.tools.ToolProvider;
  * ./gradlew :companion:uiContactSheet
  * </pre>
  *
- * <p>Lives in {@code src/test} on purpose: production static-initialisation order is delicate here
- * (see {@code SearchEverywherePopupProcessTest} and commit fbaa744), so this must not become
- * something the shipped jar can load. It deliberately calls the same
+ * <p>Lives in {@code src/test}: it constructs a real application with generated sample data.
+ * It calls the same
  * {@link CompanionApp#configureLookAndFeel()} the real startup path uses rather than re-implementing
  * it, so what you see is what the app does.
  *
@@ -69,6 +74,28 @@ import javax.tools.ToolProvider;
  * <p>Press F9 for FlatLaf's component inspector, F10 for the UI defaults inspector.
  */
 public final class UiDevHarness {
+    private static CompanionApplication application;
+    private static MainWindow mainWindow;
+    private static final AtomicBoolean finishing = new AtomicBoolean();
+
+    private static void finishHarness(int result) {
+        if (!finishing.compareAndSet(false, true)) return;
+        Thread.ofPlatform().name("UI harness shutdown").start(() -> {
+            try { if (application != null) application.close(); }
+            finally { System.exit(result); }
+        });
+    }
+
+    private static void installRuntimeFixture(Path indexFile, Path classes) throws Exception {
+        ClassIndex index = ClassIndex.fromFile(indexFile.toString());
+        var source = new RuntimeSnapshotBytecodeSource.Source(0, classes, classes.toUri().toASCIIString(),
+                new RuntimeInventory.RuntimeModule("ui-development", "UI development classes", RuntimeInventory.ModuleKind.LIBRARY));
+        var sources = List.of(source);
+        var snapshot = new RuntimeIndexService.ReadySnapshot("ui-development", "ui-dev", indexFile, sources, index);
+        try { application.installRuntimeSnapshot(snapshot, RuntimeSnapshotBytecodeSource.fromIndexedSources(sources, index)); }
+        catch (RuntimeException failure) { snapshot.close(); throw failure; }
+    }
+
 
     /** Exercises every token type the editor palette maps, so theming regressions are visible. */
     private static Path writeSampleSource(Path target) throws java.io.IOException {
@@ -260,8 +287,8 @@ public final class UiDevHarness {
     }
 
     private static void scheduleSearchEverywhereInteractionVerification() {
-        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
-            MainWindow.INSTANCE.openSearchEverywhere();
+        Timer openTimer = new Timer(500, event -> {
+            mainWindow.openSearchEverywhere();
             SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
                     .filter(SearchEverywherePopup.class::isInstance)
                     .map(SearchEverywherePopup.class::cast)
@@ -271,8 +298,8 @@ public final class UiDevHarness {
             // This fixture sends synthetic events; native focus belongs to the user's other windows.
             var focusListeners = popup.getWindowFocusListeners();
             for (var listener : focusListeners) popup.removeWindowFocusListener(listener);
-            javax.swing.Timer firstQuery = new javax.swing.Timer(250, queryEvent -> {
-                popup.setLocation(MainWindow.INSTANCE.getX() + 220, MainWindow.INSTANCE.getY() + 70);
+            Timer firstQuery = new Timer(250, queryEvent -> {
+                popup.setLocation(mainWindow.getX() + 220, mainWindow.getY() + 70);
                 FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
                 if (search == null) {
                     throw new IllegalStateException("Search Everywhere query field was not found");
@@ -280,7 +307,7 @@ public final class UiDevHarness {
                 search.setText("Theme");
 
                 long resultsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                javax.swing.Timer verifyResults = new javax.swing.Timer(50, verifyEvent -> {
+                Timer verifyResults = new Timer(50, verifyEvent -> {
                     @SuppressWarnings("rawtypes")
                     JList results = findComponent(popup, JList.class);
                     if (results == null || results.getModel().getSize() == 0 || !results.isShowing()) {
@@ -288,7 +315,7 @@ public final class UiDevHarness {
                         throw new IllegalStateException("Initial Search Everywhere results did not become visible");
                     }
 
-                    ((javax.swing.Timer) verifyEvent.getSource()).stop();
+                    ((Timer) verifyEvent.getSource()).stop();
                     int previousResultCount = results.getModel().getSize();
                     search.setText("ThemeSampleImpl");
                     if (!results.isShowing() || results.getModel().getSize() != previousResultCount) {
@@ -309,20 +336,20 @@ public final class UiDevHarness {
                     }
 
                     long updatedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                    javax.swing.Timer verifyUpdated = new javax.swing.Timer(50, updatedEvent -> {
+                    Timer verifyUpdated = new Timer(50, updatedEvent -> {
                         if (results.getModel().getSize() != 1 || !results.isShowing()) {
                             if (System.nanoTime() < updatedDeadline) return;
                             throw new IllegalStateException("Updated Search Everywhere results did not remain visible");
                         }
-                        ((javax.swing.Timer) updatedEvent.getSource()).stop();
+                        ((Timer) updatedEvent.getSource()).stop();
                         for (var listener : focusListeners) popup.addWindowFocusListener(listener);
                         var lostFocus = new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS);
                         for (var listener : focusListeners) listener.windowLostFocus(lostFocus);
                         if (popup.isVisible()) throw new IllegalStateException("Losing focus must dismiss Search Everywhere");
                         System.out.println("Search Everywhere interaction verification passed");
                         popup.dispose();
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        finishHarness(0);
                     });
                     verifyUpdated.start();
                 });
@@ -336,7 +363,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleMethodNavigationVerification() {
-        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> CompanionApp.openClass(
+        Timer openTimer = new Timer(500, event -> application.openClass(
                 "sample.ThemeSampleImpl",
                 org.eclipse.jdt.core.IJavaElement.METHOD,
                 "Lsample/ThemeSampleImpl;.apply(Lsample/ThemeSample;)V"
@@ -345,9 +372,9 @@ public final class UiDevHarness {
         openTimer.start();
 
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
-        javax.swing.Timer verifyTimer = new javax.swing.Timer(100, event -> {
+        Timer verifyTimer = new Timer(100, event -> {
             try {
-                var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 if (selected instanceof CodeView codeView
                         && codeView.getTitle().equals("ThemeSampleImpl")) {
                     RSyntaxTextArea editor = findComponent(
@@ -359,10 +386,10 @@ public final class UiDevHarness {
                     int lineStart = editor.getLineStartOffset(line);
                     String lineText = editor.getText(lineStart, editor.getLineEndOffset(line) - lineStart);
                     if (lineText.contains(" apply(")) {
-                        ((javax.swing.Timer) event.getSource()).stop();
+                        ((Timer) event.getSource()).stop();
                         System.out.println("METHOD_NAVIGATION_OK line=" + (line + 1) + " caret=" + caret);
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        finishHarness(0);
                     }
                 }
                 if (System.nanoTime() >= deadline) {
@@ -396,8 +423,8 @@ public final class UiDevHarness {
                 }
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(2);
+                mainWindow.dispose();
+                finishHarness(2);
             }
         });
         verifyTimer.setInitialDelay(0);
@@ -472,7 +499,7 @@ public final class UiDevHarness {
      * actually refreshes.
      */
     private static void startThemeCycling() {
-        javax.swing.Timer timer = new javax.swing.Timer(8000, null);
+        Timer timer = new Timer(8000, null);
         timer.addActionListener(event -> {
             var themes = com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme.available();
             var current = com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current();
@@ -484,9 +511,9 @@ public final class UiDevHarness {
     }
 
     private static void scheduleCodeVisionClickVerification(String source) {
-        javax.swing.Timer clickTimer = new javax.swing.Timer(1400, event -> {
+        Timer clickTimer = new Timer(1400, event -> {
             try {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 if (editor == null) {
                     throw new IllegalStateException("Code editor was not found");
                 }
@@ -499,20 +526,20 @@ public final class UiDevHarness {
                 );
 
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
-                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                Timer resultTimer = new Timer(250, resultEvent -> {
+                    var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof UsagesView) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("CODE_VISION_CLICK_OK");
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("CODE_VISION_CLICK_MISSED selected="
                                 + (selected == null ? "null" : selected.getClass().getName()));
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(2);
+                        mainWindow.dispose();
+                        finishHarness(2);
                     }
                     dispatchMouseMove(editor, target);
                     dispatchLeftClick(editor, target);
@@ -521,8 +548,8 @@ public final class UiDevHarness {
                 resultTimer.start();
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(3);
+                mainWindow.dispose();
+                finishHarness(3);
             }
         });
         clickTimer.setRepeats(false);
@@ -530,10 +557,10 @@ public final class UiDevHarness {
     }
 
     private static void scheduleGutterClickVerification(String source) {
-        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+        Timer setupTimer = new Timer(1400, event -> {
             try {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
                 if (editor == null || iconRow == null) {
                     throw new IllegalStateException("Code editor gutter was not found");
                 }
@@ -546,18 +573,18 @@ public final class UiDevHarness {
                 );
                 target.x = iconRow.getWidth() / 2;
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                Timer resultTimer = new Timer(250, resultEvent -> {
                     if (isShowing(ImplementationChooserPopup.class)) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("GUTTER_CLICK_OK");
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("GUTTER_CLICK_MISSED");
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(2);
+                        mainWindow.dispose();
+                        finishHarness(2);
                     }
                     dispatchMouseMove(iconRow, target);
                     dispatchLeftClick(iconRow, target);
@@ -566,8 +593,8 @@ public final class UiDevHarness {
                 resultTimer.start();
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(3);
+                mainWindow.dispose();
+                finishHarness(3);
             }
         });
         setupTimer.setRepeats(false);
@@ -575,10 +602,10 @@ public final class UiDevHarness {
     }
 
     private static void scheduleSingleGutterNavigationVerification(String source) {
-        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+        Timer setupTimer = new Timer(1400, event -> {
             try {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
                 if (editor == null || iconRow == null) {
                     throw new IllegalStateException("Code editor gutter was not found");
                 }
@@ -591,20 +618,20 @@ public final class UiDevHarness {
                 );
                 target.x = iconRow.getWidth() / 2;
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
-                    var selected = MainWindow.INSTANCE.getEditorTabs().getSelectedEditor();
+                Timer resultTimer = new Timer(250, resultEvent -> {
+                    var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof CodeView codeView && "SingleActionImpl".equals(codeView.getTitle())) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("GUTTER_DIRECT_NAVIGATION_OK");
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(0);
+                        mainWindow.dispose();
+                        finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("GUTTER_DIRECT_NAVIGATION_MISSED selected="
                                 + (selected == null ? "null" : selected.getTitle()));
-                        MainWindow.INSTANCE.dispose();
-                        System.exit(2);
+                        mainWindow.dispose();
+                        finishHarness(2);
                     }
                     dispatchMouseMove(iconRow, target);
                     dispatchLeftClick(iconRow, target);
@@ -613,8 +640,8 @@ public final class UiDevHarness {
                 resultTimer.start();
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(3);
+                mainWindow.dispose();
+                finishHarness(3);
             }
         });
         setupTimer.setRepeats(false);
@@ -623,10 +650,10 @@ public final class UiDevHarness {
 
     private static void scheduleGutterHover(String source, int declarationOffset, boolean verify) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer hoverTimer = new javax.swing.Timer(150, event -> {
+        Timer hoverTimer = new Timer(150, event -> {
             try {
-                RSyntaxTextArea editor = findComponent(MainWindow.INSTANCE, RSyntaxTextArea.class);
-                IconRowHeader iconRow = findComponent(MainWindow.INSTANCE, IconRowHeader.class);
+                RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
                 if (editor == null || iconRow == null) {
                     return;
                 }
@@ -639,7 +666,7 @@ public final class UiDevHarness {
                 }
 
                 if (verify) {
-                    ((javax.swing.Timer) event.getSource()).stop();
+                    ((Timer) event.getSource()).stop();
                 }
                 Rectangle2D declaration = editor.modelToView2D(declarationOffset);
                 var viewport = (javax.swing.JViewport) SwingUtilities.getAncestorOfClass(
@@ -665,8 +692,8 @@ public final class UiDevHarness {
                 }
             } catch (Exception exception) {
                 exception.printStackTrace(System.err);
-                MainWindow.INSTANCE.dispose();
-                System.exit(3);
+                mainWindow.dispose();
+                finishHarness(3);
             }
         });
         hoverTimer.setInitialDelay(1000);
@@ -679,18 +706,18 @@ public final class UiDevHarness {
 
     private static <T extends java.awt.Window> void scheduleWindowVerification(Class<T> type, String successMessage) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+        Timer timer = new Timer(100, event -> {
             if (isShowing(type)) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.out.println(successMessage);
-                MainWindow.INSTANCE.dispose();
-                System.exit(0);
+                mainWindow.dispose();
+                finishHarness(0);
             }
             if (System.nanoTime() >= deadline) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.err.println(successMessage.replace("_OK", "_MISSED"));
-                MainWindow.INSTANCE.dispose();
-                System.exit(2);
+                mainWindow.dispose();
+                finishHarness(2);
             }
         });
         timer.start();
@@ -698,18 +725,18 @@ public final class UiDevHarness {
 
     private static void scheduleHierarchyRowLayoutVerification() {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+        Timer timer = new Timer(100, event -> {
             HierarchyPreviewPopup popup = Arrays.stream(java.awt.Window.getWindows())
                     .filter(HierarchyPreviewPopup.class::isInstance)
                     .map(HierarchyPreviewPopup.class::cast)
                     .filter(java.awt.Window::isShowing)
                     .findFirst()
                     .orElse(null);
-            javax.swing.JLabel declaration = popup == null
+            JLabel declaration = popup == null
                     ? null
                     : findLabelContaining(popup, "OverrideChild.overrideMe");
             if (declaration != null) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 PrimarySecondaryLabel declarationPresentation = (PrimarySecondaryLabel) declaration.getParent();
                 Container row = declarationPresentation.getParent();
                 PrimarySecondaryLabel modulePresentation = Arrays.stream(row.getComponents())
@@ -718,7 +745,7 @@ public final class UiDevHarness {
                         .filter(presentation -> presentation != declarationPresentation)
                         .findFirst()
                         .orElseThrow();
-                javax.swing.JLabel module = firstLabel(modulePresentation);
+                JLabel module = firstLabel(modulePresentation);
                 Point declarationOrigin = SwingUtilities.convertPoint(declaration, 0, 0, row);
                 Point moduleOrigin = SwingUtilities.convertPoint(module, 0, 0, row);
                 int declarationBaseline = declarationOrigin.y
@@ -740,32 +767,32 @@ public final class UiDevHarness {
                             modulePresentation.getPreferredSize(),
                             moduleBaseline
                     );
-                    MainWindow.INSTANCE.dispose();
-                    System.exit(4);
+                    mainWindow.dispose();
+                    finishHarness(4);
                 }
                 System.out.println("HIERARCHY_ROW_LAYOUT_OK");
-                MainWindow.INSTANCE.dispose();
-                System.exit(0);
+                mainWindow.dispose();
+                finishHarness(0);
             }
             if (System.nanoTime() >= deadline) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.err.println("HIERARCHY_ROW_LAYOUT_MISSED");
-                MainWindow.INSTANCE.dispose();
-                System.exit(2);
+                mainWindow.dispose();
+                finishHarness(2);
             }
         });
         timer.start();
     }
 
-    private static javax.swing.JLabel findLabelContaining(Container root, String expectedText) {
+    private static JLabel findLabelContaining(Container root, String expectedText) {
         for (Component component : root.getComponents()) {
-            if (component instanceof javax.swing.JLabel label
+            if (component instanceof JLabel label
                     && label.getText() != null
                     && label.getText().contains(expectedText)) {
                 return label;
             }
             if (component instanceof Container child) {
-                javax.swing.JLabel match = findLabelContaining(child, expectedText);
+                JLabel match = findLabelContaining(child, expectedText);
                 if (match != null) {
                     return match;
                 }
@@ -774,10 +801,10 @@ public final class UiDevHarness {
         return null;
     }
 
-    private static javax.swing.JLabel firstLabel(Container root) {
+    private static JLabel firstLabel(Container root) {
         return Arrays.stream(root.getComponents())
-                .filter(javax.swing.JLabel.class::isInstance)
-                .map(javax.swing.JLabel.class::cast)
+                .filter(JLabel.class::isInstance)
+                .map(JLabel.class::cast)
                 .findFirst()
                 .orElseThrow();
     }
@@ -879,7 +906,9 @@ public final class UiDevHarness {
                 root,
                 workspace
         );
-        CompanionApp.configureWithoutSession(profile, indexFile, List.of(sampleClasses), "ui-dev");
+        application = new CompanionApplication(new CompanionLaunchConfiguration(root), "ui-development");
+        application.openProject(profile).join();
+        installRuntimeFixture(indexFile, sampleClasses);
         writeSampleSource(sample);
 
         GlobalConfig.getInstance().loadFrom(root);
@@ -891,7 +920,7 @@ public final class UiDevHarness {
                 .map(UiRenderScenario::parse)
                 .orElse(UiRenderScenario.MAIN);
         if (scenario == UiRenderScenario.BREAKPOINT_EDITOR) {
-            CompanionApp.getDebuggerController().configureBreakpoint(
+            application.getDebuggerController().configureBreakpoint(
                     decompiledSample.debugSource(),
                     sampleEntryLine,
                     "count > 2",
@@ -899,13 +928,13 @@ public final class UiDevHarness {
             ).join();
         }
         if (scenario == UiRenderScenario.DEBUGGER_LOCATION) {
-            CompanionApp.getDebuggerController().configureBreakpoint(
+            application.getDebuggerController().configureBreakpoint(
                     decompiledSample.debugSource(),
                     sampleEntryLine + 2,
                     "",
                     ""
             ).join();
-            CompanionApp.getDebuggerController().configureBreakpoint(
+            application.getDebuggerController().configureBreakpoint(
                     decompiledSample.debugSource(),
                     sampleEntryLine + 5,
                     "",
@@ -935,32 +964,33 @@ public final class UiDevHarness {
         System.out.println("F9 = component inspector, F10 = UI defaults inspector");
 
         SwingUtilities.invokeAndWait(() -> {
+            mainWindow = application.createWindow();
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(MainWindow.INSTANCE.editorContext(), 
+            mainWindow.getEditorTabs().openEditorTab(new CodeView(mainWindow.editorContext(), 
                     decompiledSample,
                     0,
                     EditorLocation.forRuntimeClass(
                             "com.github.minecraft_ta.totaldebug.ThemeSample",
                             sampleClasses.toUri().toASCIIString()
-                    ), CompanionApp.currentRuntime()
+                    ), mainWindow.editorContext().project().runtime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
-                    new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1), CompanionApp.currentRuntime()
+            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+                    new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1), mainWindow.editorContext().project().runtime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
-                    new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1), CompanionApp.currentRuntime()
+            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+                    new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1), mainWindow.editorContext().project().runtime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
-                    new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1), CompanionApp.currentRuntime()
+            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+                    new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1), mainWindow.editorContext().project().runtime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
-                    new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), CompanionApp.currentRuntime()
+            mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
+                    new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), mainWindow.editorContext().project().runtime()
             ));
             boolean interactionVerification = Arrays.asList(args).stream()
                     .anyMatch(argument -> argument.startsWith("--verify-"));
             if (interactionVerification) {
-                SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.getEditorTabs().setSelectedIndex(0));
+                SwingUtilities.invokeLater(() -> mainWindow.getEditorTabs().setSelectedIndex(0));
             }
             if (Arrays.asList(args).contains("--verify-code-vision-click")) {
                 scheduleCodeVisionClickVerification(CodeView.readCode(sample));
@@ -989,8 +1019,8 @@ public final class UiDevHarness {
             if (Arrays.asList(args).contains("--cycle-themes")) {
                 startThemeCycling();
             }
-            MainWindow.INSTANCE.setSize(1280, 720);
-            if (MainWindow.INSTANCE.isAutoRequestFocus()) {
+            mainWindow.setSize(1280, 720);
+            if (mainWindow.isAutoRequestFocus()) {
                 throw new IllegalStateException("Showing the main window must not automatically request focus");
             }
             boolean verifySearchEverywhere = Arrays.asList(args).contains(
@@ -1003,24 +1033,26 @@ public final class UiDevHarness {
                 scheduleMethodNavigationVerification();
             }
             if (backgroundMode) {
-                MainWindow.INSTANCE.setAutoRequestFocus(false);
-                MainWindow.INSTANCE.setFocusableWindowState(false);
-                MainWindow.INSTANCE.setLocation(-20_000, -20_000);
-                MainWindow.INSTANCE.setVisible(true);
+                mainWindow.setAutoRequestFocus(false);
+                mainWindow.setFocusableWindowState(false);
+                mainWindow.setLocation(-20_000, -20_000);
+                mainWindow.setVisible(true);
             } else {
-                MainWindow.INSTANCE.setVisible(true);
-                UIUtils.centerJFrame(MainWindow.INSTANCE, MainWindow.INSTANCE);
+                mainWindow.setVisible(true);
+                UIUtils.centerJFrame(mainWindow, mainWindow);
             }
             ToolTipManager.sharedInstance().setInitialDelay(200);
-            MainWindow.INSTANCE.setRuntimeIndexStatus(new RuntimeIndexService.Status(
+            mainWindow.setRuntimeIndexStatus(new RuntimeIndexService.Status(
                     RuntimeIndexService.Phase.READY,
                     "Runtime index ready",
                     null
             ));
             if (!interactionVerification) {
-                UiScenarioDriver.schedule(scenario, CodeView.readCode(sample), screenshot);
+                new UiScenarioDriver(mainWindow, UiDevHarness::finishHarness).schedule(scenario, CodeView.readCode(sample), screenshot);
             }
         });
+        application.awaitExit();
+        finishHarness(0);
     }
 
     private static java.util.Optional<String> argument(String[] args, String prefix) {

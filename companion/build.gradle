@@ -105,6 +105,7 @@ tasks.named('assemble') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
     systemProperty 'totaldebug.testClasspath', sourceSets.test.runtimeClasspath.asPath
 }
 

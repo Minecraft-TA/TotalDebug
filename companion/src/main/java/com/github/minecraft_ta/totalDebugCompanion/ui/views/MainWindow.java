@@ -9,7 +9,8 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -42,9 +43,8 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-public class MainWindow extends JFrame implements AWTEventListener {
+public class MainWindow extends JFrame implements AWTEventListener, CompanionUi {
 
-    public static final MainWindow INSTANCE = CompanionApp.createMainWindow();
 
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
@@ -182,10 +182,17 @@ public class MainWindow extends JFrame implements AWTEventListener {
             Toolkit.getDefaultToolkit().removeAWTEventListener(this);
             closeProjectWindows();
             editorTabs.closeMatching(editor -> true);
-            statusBar.setEditor(null);
+            statusBar.dispose();
         }
         super.dispose();
     }
+
+    @Override public boolean canExit() { return editorTabs.canCloseAll(); }
+    @Override public void setSwitching(boolean switching) { setEnabled(!switching); }
+    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); }
+    @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
+    @Override public void focus() { UIUtils.focusWindow(this); }
+    @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
         return new EditorContext(this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
@@ -406,21 +413,21 @@ public class MainWindow extends JFrame implements AWTEventListener {
         return this.navigationService;
     }
 
-    public void refreshProfile() {
+    @Override public void refreshProfile() {
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
 
-    public boolean prepareProjectSwitch() {
+    @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         if (!this.editorTabs.canCloseAll()) return false;
         setEnabled(false);
         return true;
     }
 
-    public boolean closeProjectViews() {
+    @Override public boolean closeProjectViews() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         this.editorTabs.closeMatching(editor -> true);
         if (this.editorTabs.getTabCount() != 0) return false;
@@ -460,7 +467,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.debuggerState.setVisible(hasProfile);
     }
 
-    public void setGameStatus(ServiceStatus status) {
+    @Override public void setGameStatus(ServiceStatus status) {
         this.statusBar.setGameStatus(status);
         if (status.state() != ServiceStatus.State.AVAILABLE && this.snippetExecutions != null) {
             this.snippetExecutions.runtimeDisconnected();
@@ -468,11 +475,11 @@ public class MainWindow extends JFrame implements AWTEventListener {
         refreshActions();
     }
 
-    public void setMcpStatus(ServiceStatus status) {
+    @Override public void setMcpStatus(ServiceStatus status) {
         this.statusBar.setMcpStatus(status);
     }
 
-    public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
+    @Override public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
         this.statusBar.setRuntimeStatus(status);
     }
 }

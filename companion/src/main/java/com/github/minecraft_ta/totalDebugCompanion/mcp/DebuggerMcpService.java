@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -26,6 +25,13 @@ final class DebuggerMcpService {
                        DebuggerSessionController.SourceLoader sources) {
         this.controller = Objects.requireNonNull(controller, "controller");
         this.sources = Objects.requireNonNull(sources, "sources");
+    }
+
+    boolean isConnected() {
+        DebuggerSessionController session = controller.get();
+        if (session == null) return false;
+        var phase = session.status().phase();
+        return phase == DebuggerSessionController.Phase.RUNNING || phase == DebuggerSessionController.Phase.PAUSED;
     }
 
     Map<String, Object> call(String tool, Map<String, Object> args, ProjectScope project) throws IOException {

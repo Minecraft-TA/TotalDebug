@@ -15,7 +15,7 @@ class CompanionAppDataDirectoryTest {
 
     @Test
     void cleanScriptHomeDoesNotPersistGeneratedRuntimeSources() throws Exception {
-        CompanionApp.setupDataDirectories(this.appHome, true);
+        CompanionApplication.setupDataDirectories(this.appHome);
 
         assertTrue(Files.isDirectory(this.appHome.resolve("scripts")));
         assertFalse(Files.exists(this.appHome.resolve("decompiled-files")));
