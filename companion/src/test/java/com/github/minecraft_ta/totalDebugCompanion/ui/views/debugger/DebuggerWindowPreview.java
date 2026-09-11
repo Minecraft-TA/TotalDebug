@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -19,7 +20,7 @@ public final class DebuggerWindowPreview {
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         DebuggerActions actions = new DebuggerActions(controller);
         DebuggerShortcuts shortcuts = new DebuggerShortcuts(actions);
-        DebuggerWindow window = new DebuggerWindow(owner, controller, actions, shortcuts, (frame, activateEditor) -> {
+        DebuggerWindow window = new DebuggerWindow(InstanceState.inMemory(), owner, controller, actions, shortcuts, (frame, activateEditor) -> {
         });
         window.addWindowListener(new WindowAdapter() {
             @Override

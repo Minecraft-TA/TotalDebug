@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -37,16 +38,16 @@ class DebuggerInspectorTest {
     @Test
     void evaluatesAutomaticExpressionsOncePerFrameRevision() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
+        InstanceState state = InstanceState.inMemory();
         boolean previousPreviews = config.automaticDebuggerPreviews();
         AtomicInteger inspections = new AtomicInteger();
         AtomicInteger explicitEvaluations = new AtomicInteger();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of("counter()"));
+            state.setDebuggerWatches(List.of("counter()"));
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
-                DebuggerInspector inspector = new DebuggerInspector(
+                DebuggerInspector inspector = new DebuggerInspector(state,
                         controller,
                         target -> {
                         },
@@ -74,7 +75,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -85,17 +85,15 @@ class DebuggerInspectorTest {
     void publishesOneEditorSnapshotAfterAllRootPreviewsResolve() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger publications = new AtomicInteger();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(true);
             DebuggerEditorPresentation.clear();
             Runnable removeListener = DebuggerEditorPresentation.addListener(snapshot -> publications.incrementAndGet());
             publications.set(0);
             SwingUtilities.invokeAndWait(() -> {
-                DebuggerInspector inspector = new DebuggerInspector(
+                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(),
                         controller,
                         target -> {
                         },
@@ -112,7 +110,6 @@ class DebuggerInspectorTest {
             });
             removeListener.run();
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -123,11 +120,9 @@ class DebuggerInspectorTest {
     void retainsExpressionPreviewAcrossUnrelatedTreeRebuilds() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger previewRequests = new AtomicInteger();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -175,7 +170,7 @@ class DebuggerInspectorTest {
                         );
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of());
@@ -192,7 +187,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -203,11 +197,9 @@ class DebuggerInspectorTest {
     void loadsLargeChildrenInExplicitBoundedPages() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         List<Integer> starts = new ArrayList<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -254,7 +246,7 @@ class DebuggerInspectorTest {
                         return CompletableFuture.failedFuture(new AssertionError("Unexpected inspection"));
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of(variable("items", 50, 450)));
@@ -278,7 +270,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -289,11 +280,9 @@ class DebuggerInspectorTest {
     void loadsNamedObjectFieldsOnceWithoutPagingArguments() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         List<List<Integer>> requests = new ArrayList<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -335,7 +324,7 @@ class DebuggerInspectorTest {
                         return CompletableFuture.failedFuture(new AssertionError("Unexpected inspection"));
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of(new DebugEngine.Variable(
@@ -353,7 +342,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -423,13 +411,11 @@ class DebuggerInspectorTest {
     void replacingAndClosingAnInspectorReleasesValuesIncludingLateResults() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger owners = new AtomicInteger();
         AtomicInteger retains = new AtomicInteger();
         CompletableFuture<DebuggerValueLease> late = new CompletableFuture<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 var runtime = runtime(new AtomicInteger(), new AtomicInteger(), List.of(), 77, reference -> {
@@ -438,7 +424,7 @@ class DebuggerInspectorTest {
                     owners.incrementAndGet();
                     return CompletableFuture.completedFuture(owners::decrementAndGet);
                 });
-                DebuggerInspector inspector = new DebuggerInspector(controller, ignored -> { }, runtime);
+                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, ignored -> { }, runtime);
                 try {
                     inspector.beginFrame(FRAME);
                     inspector.showVariables(FRAME, List.of());
@@ -462,7 +448,6 @@ class DebuggerInspectorTest {
                 }
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();

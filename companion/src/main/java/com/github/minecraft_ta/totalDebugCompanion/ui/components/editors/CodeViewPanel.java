@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
@@ -19,7 +19,6 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
@@ -75,8 +74,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private CodeInsightService.SearchHandle actionSearch;
     private final DebuggerLineHighlights debuggerLineHighlights;
 
-    public CodeViewPanel(CodeView codeView) {
-        super(codeView.getPath().toString(), codeView.getTitle());
+    public CodeViewPanel(EditorContext context, CodeView codeView) {
+        super(context, codeView.getPath().toString(), codeView.getTitle());
         this.editorPane.setEditable(false);
         this.editorPane.setBorder(new CompoundBorder(
                 this.editorPane.getBorder(),
@@ -84,10 +83,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         ));
         enableSearch();
 
-        this.insightService = CompanionApp.getCodeInsightService();
-        this.implementationChooser = new ImplementationChooserPopup(MainWindow.INSTANCE, this.insightService);
+        this.insightService = context.insights();
+        this.implementationChooser = new ImplementationChooserPopup(context.owner(), this.insightService, target -> context.navigation().navigate(target));
         this.implementationChooser.setListFont(this.editorPane.getFont());
-        this.hierarchyPreview = new HierarchyPreviewPopup(MainWindow.INSTANCE, this.insightService);
+        this.hierarchyPreview = new HierarchyPreviewPopup(context.owner(), this.insightService);
         this.hierarchyPreview.setContentFont(this.editorPane.getFont());
 
         this.codeVisionLayerUI = new CodeVisionLayerUI(this.editorPane, new CodeVisionLayerUI.Handler() {
@@ -108,7 +107,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
             @Override
             public void showDebuggerValue(DebuggerInlineValueHints.ValueHint value) {
-                MainWindow.INSTANCE.showDebuggerValue(value.frame(), value.value().variable());
+                context.inspectVariable().accept(value.frame(), value.value().variable());
             }
         });
         this.codeVisionLayer = new JLayer<>(this.editorLayer, this.codeVisionLayerUI);
@@ -185,7 +184,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.breakpointMarkers = null;
             this.debuggerListener = null;
         } else {
-            DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+            DebuggerSessionController debugger = context.debugger();
             debugger.registerSource(this.debugSource);
             this.breakpointMarkers = new BreakpointGutterMarkers(
                     editorGutter,
@@ -337,7 +336,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.hierarchyPreview.dispose();
             this.breakpointEditor.dispose();
             if (this.debuggerListener != null) {
-                CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
+                context.debugger().removeListener(this.debuggerListener);
             }
             this.removeInlineAstListener.run();
             this.removeDebuggerPresentationListener.run();
@@ -425,7 +424,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void toggleBreakpointAtLine(int displayedLine) {
-        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        DebuggerSessionController debugger = context.debugger();
         Optional<DebugEngine.SourceBreakpoint> request;
         try {
             DebuggerSessionController.Breakpoint existing = debugger.breakpoint(
@@ -455,7 +454,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void toggleBreakpointEnabledAtLine(int displayedLine) {
-        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        DebuggerSessionController debugger = context.debugger();
         debugger.toggleBreakpointEnabled(this.debugSource, displayedLine)
                 .whenComplete((enabled, failure) -> SwingUtilities.invokeLater(() -> {
                     if (failure != null) {
@@ -469,7 +468,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void showBreakpointEditor(int displayedLine, Component invoker, Point location) {
-        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
+        DebuggerSessionController debugger = context.debugger();
         DebuggerSessionController.Breakpoint managed = debugger.breakpoint(
                 this.debugSource.uri(),
                 displayedLine
@@ -593,7 +592,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private void showUsages(CodeSymbol symbol) {
-        MainWindow.INSTANCE.navigation().navigate(new NavigationTarget.SymbolUsages(symbol));
+        context.navigation().navigate(new NavigationTarget.SymbolUsages(symbol));
     }
 
     private void showImplementations(CodeSymbol symbol, int anchorOffset) {

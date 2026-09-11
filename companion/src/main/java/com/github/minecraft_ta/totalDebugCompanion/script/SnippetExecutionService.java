@@ -2,7 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import java.util.Map;
@@ -17,12 +19,16 @@ public final class SnippetExecutionService implements AutoCloseable {
     private final Map<Integer, CompletableFuture<ExecutionResult>> runs = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
-    public SnippetExecutionService() {
-        CompanionApp.SERVER.getMessageBus().listenAlways(
-                ExecutionResultMessage.class,
-                this,
-                this::acceptResult
-        );
+    private final CompanionSession session;
+    private final ScriptExecutionService scripts;
+    private final ProjectScope project;
+    private final Consumer<ExecutionResultMessage> listener = this::acceptResult;
+
+    public SnippetExecutionService(CompanionSession session, ScriptExecutionService scripts, ProjectScope project) {
+        this.session = session;
+        this.scripts = scripts;
+        this.project = project;
+        session.addExecutionResultListener(this.listener);
     }
 
     public Execution execute(
@@ -36,14 +42,15 @@ public final class SnippetExecutionService implements AutoCloseable {
         if (this.closed) {
             throw new IllegalStateException("Snippet execution service is closed");
         }
-        if (!CompanionApp.SERVER.isClientConnected()) {
+        if (!scripts.isConnected()) {
             throw new IllegalStateException("Minecraft is not connected");
         }
         source.requireExecutableSize();
         int id = nextId();
         CompletableFuture<ExecutionResult> completion = new CompletableFuture<>();
         this.runs.put(id, completion);
-        boolean sent = CompanionApp.runScript(
+        boolean sent = scripts.run(
+                project,
                 id,
                 source.source(),
                 side == Side.SERVER,
@@ -67,7 +74,7 @@ public final class SnippetExecutionService implements AutoCloseable {
 
     private void cancel(int id) {
         if (this.runs.containsKey(id)) {
-            CompanionApp.stopScript(id);
+            scripts.stop(id);
         }
     }
 
@@ -99,9 +106,9 @@ public final class SnippetExecutionService implements AutoCloseable {
             return;
         }
         this.closed = true;
-        CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this);
+        session.removeExecutionResultListener(this.listener);
         for (Map.Entry<Integer, CompletableFuture<ExecutionResult>> entry : this.runs.entrySet()) {
-            CompanionApp.stopScript(entry.getKey());
+            scripts.stop(entry.getKey());
             entry.getValue().completeExceptionally(new IllegalStateException("Snippet execution service closed"));
         }
         this.runs.clear();

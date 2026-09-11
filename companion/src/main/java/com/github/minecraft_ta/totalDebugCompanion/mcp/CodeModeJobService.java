@@ -2,11 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
-import com.github.tth05.scnet.Server;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,7 +32,8 @@ public final class CodeModeJobService implements AutoCloseable {
     static final int MAX_RETAINED_JOBS = 256;
     static final int MAX_WAIT_MILLISECONDS = 120_000;
 
-    private final Server server;
+    private final CompanionSession session;
+    private Consumer<ExecutionResultMessage> resultListener;
     private final ExecutorService statusExecutor;
     private final BooleanSupplier available;
     private final Transport transport;
@@ -43,12 +45,14 @@ public final class CodeModeJobService implements AutoCloseable {
     private volatile boolean closed;
 
     public CodeModeJobService(
-            Server server,
+            CompanionSession session,
+            ScriptExecutionService scripts,
+            Supplier<ProjectScope> project,
             BooleanSupplier available,
             Supplier<Map<String, Object>> runtimeContext
     ) {
         this(
-                Objects.requireNonNull(server, "server"),
+                Objects.requireNonNull(session, "session"),
                 Executors.newSingleThreadExecutor(runnable -> {
                     Thread thread = new Thread(runnable, "Companion code-mode status");
                     thread.setDaemon(true);
@@ -64,7 +68,8 @@ public final class CodeModeJobService implements AutoCloseable {
                             ExecutionEnvironment environment,
                             Consumer<ExecutionResult> failureHandler
                     ) {
-                        boolean sent = CompanionApp.runScript(
+                        boolean sent = scripts.run(
+                                project.get(),
                                 scriptId,
                                 source,
                                 side == ExecutionSide.SERVER,
@@ -78,7 +83,7 @@ public final class CodeModeJobService implements AutoCloseable {
 
                     @Override
                     public void cancel(int scriptId) {
-                        if (!CompanionApp.stopScript(scriptId)) {
+                        if (!scripts.stop(scriptId)) {
                             throw new IllegalStateException("Minecraft disconnected before cancellation was sent");
                         }
                     }
@@ -86,14 +91,15 @@ public final class CodeModeJobService implements AutoCloseable {
                 runtimeContext,
                 Clock.systemUTC()
         );
-        server.getMessageBus().listenAlways(ExecutionResultMessage.class, this, message -> {
+        this.resultListener = message -> {
             int scriptId = message.scriptId();
             ExecutionResult result = message.result();
             try {
                 this.statusExecutor.execute(() -> acceptResult(scriptId, result));
             } catch (RejectedExecutionException ignored) {
             }
-        });
+        };
+        session.addExecutionResultListener(this.resultListener);
     }
 
     CodeModeJobService(
@@ -121,14 +127,14 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     private CodeModeJobService(
-            Server server,
+            CompanionSession session,
             ExecutorService statusExecutor,
             BooleanSupplier available,
             Transport transport,
             Supplier<Map<String, Object>> runtimeContext,
             Clock clock
     ) {
-        this.server = server;
+        this.session = session;
         this.statusExecutor = statusExecutor;
         this.available = Objects.requireNonNull(available, "available");
         this.transport = Objects.requireNonNull(transport, "transport");
@@ -355,8 +361,8 @@ public final class CodeModeJobService implements AutoCloseable {
             return;
         }
         this.closed = true;
-        if (this.server != null) {
-            this.server.getMessageBus().unregister(ExecutionResultMessage.class, this);
+        if (this.session != null) {
+            this.session.removeExecutionResultListener(this.resultListener);
         }
         if (this.statusExecutor != null) {
             this.statusExecutor.shutdownNow();

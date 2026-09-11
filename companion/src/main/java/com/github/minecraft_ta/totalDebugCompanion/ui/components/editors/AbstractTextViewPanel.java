@@ -9,7 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHe
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -83,7 +83,6 @@ public abstract class AbstractTextViewPanel extends JPanel {
             }
         });
         this.editorPane.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_NONE);
-        installNavigationHistoryMenu();
 
         add(this.editorLayer, BorderLayout.CENTER);
         applyTheme();
@@ -97,15 +96,15 @@ public abstract class AbstractTextViewPanel extends JPanel {
         });
     }
 
-    private void installNavigationHistoryMenu() {
+    public final void installNavigationHistoryMenu(NavigationService navigation) {
         JPopupMenu menu = this.editorPane.getPopupMenu();
         menu.addSeparator();
-        JMenuItem back = menu.add(MainWindow.INSTANCE.navigation().backAction());
+        JMenuItem back = menu.add(navigation.backAction());
         back.setAccelerator(KeyStroke.getKeyStroke(
                 KeyEvent.VK_LEFT,
                 InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK
         ));
-        JMenuItem forward = menu.add(MainWindow.INSTANCE.navigation().forwardAction());
+        JMenuItem forward = menu.add(navigation.forwardAction());
         forward.setAccelerator(KeyStroke.getKeyStroke(
                 KeyEvent.VK_RIGHT,
                 InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK

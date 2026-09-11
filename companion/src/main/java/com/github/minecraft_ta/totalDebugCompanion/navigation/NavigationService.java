@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import java.util.function.Predicate;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
@@ -45,15 +45,21 @@ public final class NavigationService {
     private final MainWindow window;
     private final EditorTabs tabs;
     private final FileTreeView fileTree;
+    private final Supplier<EditorContext> editors;
     private volatile ProjectScope project;
     private final NavigationState emptyNavigation = new NavigationState();
     private NavigationState state() { var scope = project; return scope == null ? emptyNavigation : scope.navigation(); }
     private record Context(ProjectScope project, RuntimeBinding runtime) { }
+    private ProjectScope requireProject() {
+        var scope = project;
+        if (scope == null) throw new IllegalStateException("No Minecraft project is loaded");
+        return scope;
+    }
     private Context captureContext() { var scope = project; return new Context(scope, scope == null ? null : scope.runtime()); }
     private boolean isCurrent(Context captured) {
-        return captured.project() == project && (project == null
-                ? !CompanionApp.isSwitching()
-                : project.isActive() && project.runtime() == captured.runtime());
+        ProjectScope selected = project;
+        return captured.project() == selected && (selected == null
+                || selected.isActive() && selected.runtime() == captured.runtime());
     }
     private final Action backAction = new AbstractAction("Back") {
         @Override
@@ -68,8 +74,9 @@ public final class NavigationService {
         }
     };
 
-    public NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree) {
-        this.project = CompanionApp.currentScope();
+    public NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree, ProjectScope project, Supplier<EditorContext> editors) {
+        this.project = project;
+        this.editors = editors;
         this.window = Objects.requireNonNull(window, "window");
         this.tabs = Objects.requireNonNull(tabs, "tabs");
         this.fileTree = Objects.requireNonNull(fileTree, "fileTree");
@@ -98,6 +105,22 @@ public final class NavigationService {
         );
         reportFailure(navigation, target);
         return navigation;
+    }
+
+    public void revealPackage(String packageName, String ownerClassName) {
+        if (ownerClassName == null || ownerClassName.isBlank()) {
+            reportNavigationFailure("JDT could not resolve the class owning package " + packageName);
+            return;
+        }
+        navigate(new NavigationTarget.RuntimePackage(packageName, ownerClassName));
+    }
+
+    private void reportNavigationFailure(String message) {
+        var editor = this.tabs.getSelectedEditor();
+        var informationBar = editor == null ? null : editor.getInformationBar();
+        if (informationBar != null) {
+            informationBar.setDefaultInfoText(message);
+        }
     }
 
     public Action backAction() {
@@ -140,7 +163,7 @@ public final class NavigationService {
     private CompletableFuture<Void> performNavigation(NavigationTarget target, Activation activation) {
         CompletableFuture<Void> navigation;
         try {
-            RuntimeBinding requestedRuntime = CompanionApp.currentRuntime();
+            RuntimeBinding requestedRuntime = project == null ? null : project.runtime();
             navigation = switch (target) {
                 case NavigationTarget.RuntimeClass runtimeClass -> openRuntimeSource(
                         runtimeClass.binaryName(),
@@ -180,12 +203,12 @@ public final class NavigationService {
                 case NavigationTarget.SymbolUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
                         UsagesView.class,
                         view -> view.symbol().equals(usages.symbol()),
-                        () -> new UsagesView(usages.symbol(), requestedRuntime)
+                        () -> new UsagesView(editors.get(), usages.symbol(), requestedRuntime)
                 ).thenAccept(UsagesView::restartSearch), activation);
                 case NavigationTarget.LiteralUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
                         LiteralUsagesView.class,
                         view -> view.literal().equals(usages.literal()),
-                        () -> new LiteralUsagesView(usages.literal(), requestedRuntime)
+                        () -> new LiteralUsagesView(editors.get(), usages.literal(), requestedRuntime)
                 ).thenAccept(LiteralUsagesView::restartSearch), activation);
                 case NavigationTarget.RuntimePackage runtimePackage -> revealPackage(runtimePackage);
                 case NavigationTarget.ModuleSearch search -> onEdt(() -> {
@@ -208,7 +231,7 @@ public final class NavigationService {
         }
         NavigationEntry destination = state().history.destination(
                 direction,
-                CompanionApp.getActiveRuntimeSignature()
+                (project == null ? null : project.runtimeSignature())
         );
         if (destination == null) {
             state().traversal.set(null);
@@ -312,7 +335,7 @@ public final class NavigationService {
     private NavigationEntry entry(NavigationTarget target, NavigationViewState state) {
         String runtimeSignature = null;
         if (NavigationEntry.requiresRuntime(target)) {
-            runtimeSignature = CompanionApp.getActiveRuntimeSignature();
+            runtimeSignature = (project == null ? null : project.runtimeSignature());
             if (runtimeSignature == null || runtimeSignature.isBlank()) {
                 return null;
             }
@@ -350,7 +373,7 @@ public final class NavigationService {
     private void reportFailure(CompletableFuture<Void> navigation, NavigationTarget target) {
         Context context = captureContext();
         navigation.whenComplete((ignored, failure) -> {
-            if (failure != null && isCurrent(context) && !CompanionApp.isSwitching()) {
+            if (failure != null && isCurrent(context)) {
                 showFailure(target, unwrap(failure));
             }
         });
@@ -358,7 +381,7 @@ public final class NavigationService {
 
     private void refreshHistoryActions() {
         SwingUtilities.invokeLater(() -> {
-            String runtimeSignature = CompanionApp.getActiveRuntimeSignature();
+            String runtimeSignature = (project == null ? null : project.runtimeSignature());
             boolean available = state().traversal.get() == null;
             this.backAction.setEnabled(available && state().history.canNavigate(
                     NavigationHistory.Direction.BACK,
@@ -384,13 +407,13 @@ public final class NavigationService {
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
-                if (!isCurrent(context) || service != CompanionApp.getDecompilationService()) {
+                if (!isCurrent(context) || service != requireProject().requireRuntime().decompiler()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
                 return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
-                        () -> new CodeView(source, offset, SourceFileNavigation.location(source), installed)
+                        () -> new CodeView(editors.get(), source, offset, SourceFileNavigation.location(source), installed)
                 ).thenAccept(view -> {
                     view.navigateToOffset(offset);
                     if (executionLine > 0) {
@@ -407,22 +430,21 @@ public final class NavigationService {
             return CompletableFuture.failedFuture(new IllegalArgumentException("File does not exist: " + path));
         }
         String fileName = path.getFileName().toString();
-        Path scripts = CompanionApp.instancePaths().scripts().toAbsolutePath().normalize();
+        Path scripts = requireProject().paths().scripts().toAbsolutePath().normalize();
         if (path.getParent().equals(scripts)
-                && fileName.endsWith(ScriptView.FILE_EXTENSION)
-                && CompanionApp.hasProfile()) {
+                && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
             String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,
                     view -> view.getTitle().equals(fileName),
-                    () -> new ScriptView(scriptName)
+                    () -> new ScriptView(editors.get(), scriptName)
             ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         if (fileName.endsWith(".java")) {
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     CodeView.class,
                     view -> view.getPath().equals(path),
-                    () -> new CodeView(path, target.offset())
+                    () -> new CodeView(editors.get(), path, target.offset())
             ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         return openResource(new LocalFileSource(path), activation);
@@ -433,7 +455,7 @@ public final class NavigationService {
         return onEdt(() -> openRuntimeEditor(installed,
                 ResourceView.class,
                 view -> view.source().identity().equals(source.identity()),
-                () -> new ResourceView(source, installed)
+                () -> new ResourceView(editors.get(), source, installed)
         ).thenApply(ignored -> null), activation);
     }
 
@@ -451,7 +473,7 @@ public final class NavigationService {
     private CompletableFuture<Void> revealPackage(NavigationTarget.RuntimePackage target) {
         var result = new CompletableFuture<Void>();
         Context context = captureContext();
-        CompanionApp.getCodeInsightService().locateClass(target.ownerClassName(), new CodeInsightService.Listener<>() {
+        editors.get().insights().locateClass(target.ownerClassName(), new CodeInsightService.Listener<>() {
             @Override
             public void onCompleted(RuntimeSnapshotBytecodeSource.Source source) {
                 if (!isCurrent(context)) { result.cancel(false); return; }
@@ -514,7 +536,7 @@ public final class NavigationService {
         Context context = captureContext();
         SwingUtilities.invokeLater(() -> {
             try {
-                if (!isCurrent(context) || CompanionApp.isSwitching()) {
+                if (!isCurrent(context)) {
                     result.completeExceptionally(new CancellationException("Project changed"));
                     return;
                 }
@@ -546,7 +568,7 @@ public final class NavigationService {
         }
         String message = "Unable to open " + label(target) + ": " + detail;
         SwingUtilities.invokeLater(() -> {
-            if (!isCurrent(context) || CompanionApp.isSwitching()) return;
+            if (!isCurrent(context)) return;
             JOptionPane.showMessageDialog(
                 this.window,
                 message,

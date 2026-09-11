@@ -14,6 +14,11 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
@@ -35,7 +40,7 @@ class CompanionSessionRejectionTest {
         AtomicInteger delivered = new AtomicInteger();
         try (CompanionSession session = new CompanionSession(token);
              Client client = configuredClient(null)) {
-            session.server().getMessageBus().listenAlways(ExecutionResultMessage.class,
+            session.addExecutionResultListener(
                     message -> delivered.incrementAndGet());
             client.getMessageProcessor().registerMessage(CompanionProtocol.EXECUTION_RESULT, TestExecutionResult.class);
             session.bindAndPublish(configuration);
@@ -147,6 +152,40 @@ class CompanionSessionRejectionTest {
             ready.get(2, TimeUnit.SECONDS);
             assertTrue(session.isConnected());
         }
+    }
+
+    @Test
+    void scriptAdmissionRejectsUnauthenticatedSocketsAndASwitchRace() throws Exception {
+        String token = "correct-token-value-1234567890abcdef";
+        var configuration = new CompanionLaunchConfiguration(temporaryDirectory);
+        Object lifecycle = new Object();
+        var scope = new ProjectScope(lifecycle, new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
+        try (var session = new CompanionSession(token);
+             var compiler = new ScriptCompilationService(message -> true, message -> true);
+             Client client = configuredClient(null)) {
+            var scripts = new ScriptExecutionService(session, compiler, session::isConnected);
+            session.bindAndPublish(configuration);
+            var response = connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION));
+            assertFalse(scripts.run(scope, 1, "source", false, ScriptExecutionEnvironment.THREAD, failure -> {}));
+            client.getMessageProcessor().enqueueMessage(new TestClientHello(token));
+            assertTrue(response.get(2, TimeUnit.SECONDS).accepted);
+            assertTrue(session.isConnected());
+            var result = new CompletableFuture<Boolean>();
+            Thread submitter = Thread.ofPlatform().unstarted(() -> {
+                try { result.complete(scripts.run(scope, 2, "source", false, ScriptExecutionEnvironment.THREAD, failure -> {})); }
+                catch (Throwable failure) { result.completeExceptionally(failure); }
+            });
+            synchronized (lifecycle) {
+                submitter.start();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                while (submitter.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) Thread.sleep(1);
+                assertEquals(Thread.State.BLOCKED, submitter.getState(), "Submission must be waiting at the scope gate");
+                scope.beginSwitch();
+            }
+            assertFalse(result.get(2, TimeUnit.SECONDS), "A gate rejection must preserve the boolean caller contract");
+            scope.cancelSwitch();
+            assertTrue(scope.isActive());
+        } finally { scope.retire(); scope.close(); }
     }
 
     private static Client configuredClient(String token) {

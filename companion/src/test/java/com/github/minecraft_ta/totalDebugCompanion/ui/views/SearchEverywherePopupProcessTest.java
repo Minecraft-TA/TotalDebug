@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.UiDevHarness;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import javax.swing.JLabel;
 import java.util.Collection;
@@ -109,8 +108,9 @@ class SearchEverywherePopupProcessTest {
                 verifyDisposal();
                 System.exit(0);
             }
+            var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close());
             SwingUtilities.invokeAndWait(() -> {
-                SearchEverywherePopup popup = new SearchEverywherePopup();
+                SearchEverywherePopup popup = new SearchEverywherePopup(null, service, () -> null, target -> {});
                 try {
                     if (java.util.Arrays.asList(arguments).contains("verify-category-cycling")) {
                         verifyCategoryCycling(popup);
@@ -124,18 +124,15 @@ class SearchEverywherePopupProcessTest {
         }
 
         private static void verifyDisposal() throws Exception {
-            var serviceField = CompanionApp.class.getDeclaredField("runtimeIndexService");
-            serviceField.setAccessible(true);
             var listenersField = RuntimeIndexService.class.getDeclaredField("listeners");
             listenersField.setAccessible(true);
             var messageField = SearchEverywherePopup.class.getDeclaredField("messageLabel");
             messageField.setAccessible(true);
             try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
-                serviceField.set(null, service);
                 for (int cycle = 0; cycle < 3; cycle++) {
                     var label = new AtomicReference<JLabel>();
                     SwingUtilities.invokeAndWait(() -> {
-                        var popup = new SearchEverywherePopup();
+                        var popup = new SearchEverywherePopup(null, service, () -> null, target -> {});
                         try {
                             assertEquals(1, ((Collection<?>) listenersField.get(service)).size());
                             label.set((JLabel) messageField.get(popup));
@@ -149,7 +146,7 @@ class SearchEverywherePopupProcessTest {
                     service.waiting("sent after disposal");
                     SwingUtilities.invokeAndWait(() -> assertEquals("unchanged after disposal", label.get().getText()));
                 }
-            } finally { serviceField.set(null, null); }
+            }
         }
 
         private static void verifyCategoryCycling(SearchEverywherePopup popup) {

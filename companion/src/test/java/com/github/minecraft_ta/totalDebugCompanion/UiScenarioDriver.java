@@ -138,7 +138,7 @@ final class UiScenarioDriver {
             );
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
                 var window = new com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow(
-                        MainWindow.INSTANCE, null); // This fixture renders the editor without an execution backend.
+                        MainWindow.INSTANCE, null, MainWindow.INSTANCE.editorContext(), MainWindow.INSTANCE::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
                 var editor = findComponent(window, com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField.class);
                 editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
                         ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
@@ -157,14 +157,14 @@ final class UiScenarioDriver {
             case IMPLEMENTATION_CHOOSER -> advanceImplementationChooser(context);
             case SEARCH_EMPTY, SEARCH_RESULTS, MODULE_FILTER -> advanceSearch(scenario, context);
             case USAGES_RESULTS -> context.once("open-usages", () -> {
-                UsagesView view = new UsagesView(new CodeSymbol.ClassSymbol("sample.ThemeSample"), CompanionApp.currentRuntime());
+                UsagesView view = new UsagesView(MainWindow.INSTANCE.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), CompanionApp.currentRuntime());
                 MainWindow.INSTANCE.getEditorTabs().openEditorTab(view)
                         .thenRun(() -> SwingUtilities.invokeLater(view::restartSearch));
             });
             case SETTINGS -> {
                 selectCodeEditor(context);
                 context.once("open-settings", () -> {
-                    SettingsWindow settings = new SettingsWindow(MainWindow.INSTANCE);
+                    SettingsWindow settings = new SettingsWindow(MainWindow.INSTANCE, CompanionApp.instanceState(), CompanionApp.getDebuggerController());
                     settings.setLocation(MainWindow.INSTANCE.getX() + 250, MainWindow.INSTANCE.getY() + 80);
                     settings.setVisible(true);
                 });

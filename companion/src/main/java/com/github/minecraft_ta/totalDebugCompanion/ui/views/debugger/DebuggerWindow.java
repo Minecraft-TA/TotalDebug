@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -28,36 +29,36 @@ public final class DebuggerWindow extends JFrame {
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void paused(DebuggerSessionController.PausedState state) {
-            javax.swing.SwingUtilities.invokeLater(() -> showWindow());
+            javax.swing.SwingUtilities.invokeLater(() -> { if (!disposed) showWindow(); });
         }
     };
     private boolean disposed;
 
     public DebuggerWindow(
-            Window owner,
+            InstanceState state, Window owner,
             DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             DebuggerShortcuts debuggerShortcuts,
             DebuggerPanel.FrameNavigation frameNavigation
     ) {
-        this(owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, () -> {
+        this(state, owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, () -> {
         });
     }
 
     public DebuggerWindow(
-            Window owner,
+            InstanceState state, Window owner,
             DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             DebuggerShortcuts debuggerShortcuts,
             DebuggerPanel.FrameNavigation frameNavigation,
             Runnable showBreakpoints
     ) {
-        this(owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, showBreakpoints, target -> {
+        this(state, owner, controller, debuggerActions, debuggerShortcuts, frameNavigation, showBreakpoints, target -> {
         });
     }
 
     public DebuggerWindow(
-            Window owner,
+            InstanceState state, Window owner,
             DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             DebuggerShortcuts debuggerShortcuts,
@@ -68,7 +69,7 @@ public final class DebuggerWindow extends JFrame {
         super("Minecraft Debugger");
         this.controller = controller;
         this.debuggerShortcuts = Objects.requireNonNull(debuggerShortcuts, "debuggerShortcuts");
-        this.panel = new DebuggerPanel(controller, debuggerActions, frameNavigation, showBreakpoints, navigation);
+        this.panel = new DebuggerPanel(state, controller, debuggerActions, frameNavigation, showBreakpoints, navigation);
         this.debuggerShortcuts.install(this);
         if (owner instanceof Frame frame) {
             setIconImages(frame.getIconImages());

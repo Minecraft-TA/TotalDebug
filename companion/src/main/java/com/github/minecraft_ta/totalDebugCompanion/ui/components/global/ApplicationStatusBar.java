@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
@@ -71,7 +70,10 @@ public final class ApplicationStatusBar extends JPanel {
             null
     );
 
-    public ApplicationStatusBar(Consumer<NavigationTarget> navigator) {
+    private final Runnable retryIndex;
+
+    public ApplicationStatusBar(Consumer<NavigationTarget> navigator, Runnable retryIndex) {
+        this.retryIndex = retryIndex;
         this.breadcrumbs = new BreadcrumbBar(Objects.requireNonNull(navigator, "navigator"));
         this.memberDebounce = new Timer(140, event -> refreshMember());
         this.memberDebounce.setRepeats(false);
@@ -258,7 +260,7 @@ public final class ApplicationStatusBar extends JPanel {
         if (this.runtimeStatus.phase() == RuntimeIndexService.Phase.FAILED) {
             popup.addSeparator();
             JMenuItem retry = new JMenuItem("Retry class indexing");
-            retry.addActionListener(event -> CompanionApp.retryRuntimeIndex());
+            retry.addActionListener(event -> retryIndex.run());
             popup.add(retry);
         }
         popup.show(

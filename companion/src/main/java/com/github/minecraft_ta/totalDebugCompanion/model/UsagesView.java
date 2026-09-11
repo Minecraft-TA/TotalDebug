@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -18,11 +18,11 @@ public final class UsagesView implements IEditorPanel {
     private final CodeSymbol symbol;
     private final UsagesViewPanel panel;
 
-    public UsagesView(CodeSymbol symbol, RuntimeBinding runtimeBinding) {
+    public UsagesView(EditorContext context, CodeSymbol symbol, RuntimeBinding runtimeBinding) {
         if (runtimeBinding == null) throw new IllegalStateException("Reference search is unavailable");
         this.runtimeBinding = runtimeBinding;
         this.symbol = Objects.requireNonNull(symbol, "symbol");
-        this.panel = new UsagesViewPanel(symbol, runtimeBinding.references());
+        this.panel = new UsagesViewPanel(symbol, runtimeBinding.references(), context.navigation()::navigate);
     }
 
     public CodeSymbol symbol() {

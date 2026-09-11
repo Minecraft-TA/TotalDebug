@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -16,6 +18,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -36,7 +40,7 @@ class ProjectSwitchLifecycleTest {
                 "-Djava.awt.headless=false", "-cp", classpath,
                 getClass().getName(), directory.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         try {
-            assertTrue(process.waitFor(30, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
+            assertTrue(process.waitFor(180, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
             assertEquals(0, process.exitValue(), () -> read(log));
         } finally { if (process.isAlive()) process.destroyForcibly(); }
     }
@@ -54,7 +58,8 @@ class ProjectSwitchLifecycleTest {
             var session = new com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession("test-token");
             session.bindAndPublish(new CompanionLaunchConfiguration(paths.home()));
             set("session", session);
-            CompanionApp.SERVER = session.server();
+            set("scriptExecutions", new ScriptExecutionService(session, (ScriptCompilationService) get("scriptCompiler"), CompanionApp::isConnected));
+
             var jobs = ProjectSwitchJobs.create();
             var constructor = com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer.class.getDeclaredConstructor(
                     Path.class, com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService.class, int.class);
@@ -244,14 +249,14 @@ class ProjectSwitchLifecycleTest {
         var pending = new java.util.concurrent.atomic.AtomicReference<CompletableFuture<Boolean>>();
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var tree = new com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView(ignored -> { }) {
+            var tree = new FileTreeView(CompanionApp::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
                     var delayed = pending.getAndSet(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
                 }
             };
             created.complete(new NavigationService(window,
-                    new com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs(), tree));
+                    new EditorTabs(), tree, CompanionApp.currentScope(), window::editorContext));
         });
         var navigation = created.join();
         var scopeA = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());

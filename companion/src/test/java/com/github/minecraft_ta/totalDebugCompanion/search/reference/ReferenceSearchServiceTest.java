@@ -40,7 +40,7 @@ class ReferenceSearchServiceTest {
             var handle = new AtomicReference<ReferenceSearchService.SearchHandle>();
             SwingUtilities.invokeAndWait(() -> {
                 panel.set(new UsagesViewPanel(
-                        new CodeSymbol.ClassSymbol("example.Target"), service));
+                        new CodeSymbol.ClassSymbol("example.Target"), service, ignored -> {}));
                 panel.get().restartSearch();
                 try {
                     var field = panel.get().getClass().getDeclaredField("activeSearch");

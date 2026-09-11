@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
+import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
@@ -90,15 +92,16 @@ public class SearchEverywherePopup extends JFrame {
     private final ModuleFilterPopup moduleFilterPopup;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
-    private final Consumer<RuntimeIndexService.Status> indexStatusListener = status -> SwingUtilities.invokeLater(() -> {
-        if (!isDisplayable()) return;
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-            refreshResults();
-        } else {
-            showIndexStatus(status);
-        }
-    });
+    private final Consumer<RuntimeIndexService.Status> indexStatusListener = this::indexStatusChanged;
+
+    private void indexStatusChanged(RuntimeIndexService.Status status) {
+        SwingUtilities.invokeLater(() -> {
+            if (!isDisplayable()) return;
+            RuntimeBinding installed = runtime.get();
+            if (installed != null) { syncRuntimeModules(installed); refreshResults(); }
+            else showIndexStatus(status);
+        });
+    }
 
     private RuntimeSourceCatalog sourceCatalog = RuntimeSourceCatalog.empty();
     private List<RuntimeInventory.RuntimeModule> modules = List.of();
@@ -110,7 +113,16 @@ public class SearchEverywherePopup extends JFrame {
     private Point dragWindowOrigin;
     private boolean manuallyPositioned;
 
-    SearchEverywherePopup() {
+    private final Window owner;
+    private final RuntimeIndexService indexLoader;
+    private final Supplier<RuntimeBinding> runtime;
+    private final Consumer<NavigationTarget> navigator;
+    SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
+                          Consumer<NavigationTarget> navigator) {
+        this.owner = owner;
+        this.indexLoader = indexLoader;
+        this.runtime = runtime;
+        this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
                 this.modules,
                 this.selectedModuleIds,
@@ -140,7 +152,7 @@ public class SearchEverywherePopup extends JFrame {
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
 
-        CompanionApp.addRuntimeIndexStatusListener(this.indexStatusListener);
+        indexLoader.addStatusListener(this.indexStatusListener);
 
         ((JPanel) getContentPane()).setBorder(PopupChrome.border());
         setUndecorated(true);
@@ -160,12 +172,11 @@ public class SearchEverywherePopup extends JFrame {
             toFront();
             return;
         }
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-        }
+        RuntimeBinding installed = runtime.get();
+        if (installed != null) syncRuntimeModules(installed);
         setVisible(true);
         if (!this.manuallyPositioned) {
-            UIUtils.centerJFrame(this);
+            UIUtils.centerJFrame(this, owner == null ? this : owner);
         }
         this.searchTextField.requestFocusInWindow();
         this.searchTextField.selectAll();
@@ -175,9 +186,8 @@ public class SearchEverywherePopup extends JFrame {
     void open(Set<String> moduleIds, String query) {
         Objects.requireNonNull(moduleIds, "moduleIds");
         Objects.requireNonNull(query, "query");
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-        }
+        RuntimeBinding installed = runtime.get();
+        if (installed != null) syncRuntimeModules(installed);
         setSelectedModules(moduleIds);
         this.searchTextField.setText(query);
         open();
@@ -185,7 +195,7 @@ public class SearchEverywherePopup extends JFrame {
 
     @Override
     public void dispose() {
-        CompanionApp.removeRuntimeIndexStatusListener(this.indexStatusListener);
+        indexLoader.removeStatusListener(this.indexStatusListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {
@@ -321,7 +331,9 @@ public class SearchEverywherePopup extends JFrame {
         this.moduleFilterButton.setIconTextGap(6);
         this.moduleFilterButton.setToolTipText("Filter search results by module");
         this.moduleFilterButton.addActionListener(event -> {
-            syncRuntimeModules();
+            RuntimeBinding installed = runtime.get();
+            if (installed == null) return;
+            syncRuntimeModules(installed);
             this.moduleFilterPopup.updateModules(this.modules, this.selectedModuleIds);
             this.moduleFilterPopup.show(
                     this.moduleFilterButton,
@@ -391,8 +403,8 @@ public class SearchEverywherePopup extends JFrame {
         refreshResults();
     }
 
-    private void syncRuntimeModules() {
-        RuntimeSourceCatalog currentCatalog = CompanionApp.getReferenceSearchService().sourceCatalog();
+    private void syncRuntimeModules(RuntimeBinding installed) {
+        RuntimeSourceCatalog currentCatalog = installed.sources();
         List<RuntimeInventory.RuntimeModule> currentModules = currentCatalog.modules();
         if (!currentModules.equals(this.modules)) {
             this.sourceCatalog = currentCatalog;
@@ -433,8 +445,9 @@ public class SearchEverywherePopup extends JFrame {
             this.pendingSearch.cancel(false);
             this.pendingSearch = null;
         }
-        if (!CompanionClassIndex.isOpen()) {
-            showIndexStatus(CompanionApp.getRuntimeIndexStatus());
+        RuntimeBinding installed = runtime.get();
+        if (installed == null) {
+            showIndexStatus(indexLoader.status());
             return;
         }
 
@@ -456,6 +469,7 @@ public class SearchEverywherePopup extends JFrame {
             return;
         }
 
+        if (sourceCatalog != installed.sources()) syncRuntimeModules(installed);
         Category requestedCategory = this.category;
         int[] sourceIds = this.selectedModuleIds.size() == this.modules.size()
                 ? null
@@ -464,16 +478,17 @@ public class SearchEverywherePopup extends JFrame {
         this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
             try {
+                if (runtime.get() != installed) return;
                 List<Result> results = this.search.search(
-                        CompanionClassIndex.get(),
+                        installed.snapshot().index(),
                         query,
                         requestedCategory,
                         RESULT_LIMIT,
                         sourceIds
                 );
-                SwingUtilities.invokeLater(() -> applyResults(generation, results));
+                SwingUtilities.invokeLater(() -> { if (runtime.get() == installed) applyResults(generation, results); });
             } catch (RuntimeException failure) {
-                SwingUtilities.invokeLater(() -> showSearchFailure(generation, failure));
+                SwingUtilities.invokeLater(() -> { if (runtime.get() == installed) showSearchFailure(generation, failure); });
             }
         }, 70, TimeUnit.MILLISECONDS);
     }
@@ -543,10 +558,10 @@ public class SearchEverywherePopup extends JFrame {
         }
         setVisible(false);
         switch (selected) {
-            case ClassResult type -> MainWindow.INSTANCE.navigation().navigate(
+            case ClassResult type -> navigator.accept(
                     new NavigationTarget.RuntimeClass(type.binaryName())
             );
-            case SymbolResult symbol -> MainWindow.INSTANCE.navigation().navigate(
+            case SymbolResult symbol -> navigator.accept(
                     new NavigationTarget.RuntimeDeclaration(symbol.kind() == SymbolKind.FIELD
                             ? new RuntimeMember.Field(symbol.ownerBinaryName(), symbol.name())
                             : new RuntimeMember.Method(
@@ -555,7 +570,7 @@ public class SearchEverywherePopup extends JFrame {
                                     symbol.descriptor()
                             ))
             );
-            case TextResult text -> MainWindow.INSTANCE.navigation().navigate(
+            case TextResult text -> navigator.accept(
                     new NavigationTarget.LiteralUsages(text.value())
             );
         }

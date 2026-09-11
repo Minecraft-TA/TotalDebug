@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -25,8 +25,11 @@ import java.util.function.Consumer;
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
 
-    public FileTreeView(Consumer<NavigationTarget> navigator) {
+    private final Supplier<ProjectScope> project;
+
+    public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
+        this.project = project;
         java.util.Objects.requireNonNull(navigator, "navigator");
 
         this.tree = new LazyFileJTree() {
@@ -83,7 +86,7 @@ public class FileTreeView extends JScrollPane {
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 3));
     }
 
-    private static void openItem(
+    private void openItem(
             LazyTreeNode node,
             TreeItem item,
             Consumer<NavigationTarget> navigator
@@ -95,15 +98,7 @@ public class FileTreeView extends JScrollPane {
         if (item instanceof DecompiledSourcesTreeItem.SourceItem source) {
             navigator.accept(new NavigationTarget.RuntimeClass(source.binaryName()));
         } else if (item instanceof FileSystemFileItem fileItem) {
-            String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
-            boolean scriptFile = lowerName.endsWith(ScriptView.FILE_EXTENSION);
-            if (scriptFile
-                    && node.getParent().getUserObject().getName().equals("scripts")
-                    && CompanionApp.hasProfile()) {
-                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-            } else {
-                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-            }
+            navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
         } else if (item instanceof ZipFileRootItem.Entry entry) {
             String entryPath = entry.getEntryPath();
             if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {
@@ -124,26 +119,28 @@ public class FileTreeView extends JScrollPane {
         }
     }
 
+    private RuntimeSourceCatalog sourceCatalog() {
+        var scope = project.get();
+        var runtime = scope == null ? null : scope.runtime();
+        return runtime == null ? RuntimeSourceCatalog.empty() : runtime.sources();
+    }
+
     public void reloadProfile() {
-        if (!CompanionApp.hasProfile()) {
+        var scope = project.get();
+        if (scope == null) {
             this.tree.setRootNodes();
             return;
         }
-
+        var binding = scope.runtime();
+        RuntimeSourceCatalog catalog = binding == null ? RuntimeSourceCatalog.empty() : binding.sources();
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
-        if (CompanionApp.hasProfile()) {
-            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(
-                    CompanionApp.instancePaths().scripts(),
-                    true
-            );
-            scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
-            rootItems.add(scripts);
-        }
-        if (!CompanionApp.getRuntimeSourceCatalog().modules().isEmpty()) {
-            rootItems.add(new DecompiledSourcesTreeItem(this.tree, CompanionApp.getDecompilationService()));
+        var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts(), true);
+        scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
+        rootItems.add(scripts);
+        if (!catalog.modules().isEmpty()) {
+            rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
         }
 
-        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
         if (!catalog.modules().isEmpty()) {
             var runtime = new DirectoryTreeItem("runtime") {
                 {
@@ -192,7 +189,7 @@ public class FileTreeView extends JScrollPane {
         if (packageName == null || packageName.isBlank()) {
             throw new IllegalArgumentException("A package name must not be blank");
         }
-        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
+        RuntimeSourceCatalog catalog = sourceCatalog();
         List<String> path = new ArrayList<>();
         if (catalog.sourcesForModule(source.module().id()).size() > 1) {
             path.add(RuntimeSourceTreeItem.nodeName(source));
@@ -213,7 +210,7 @@ public class FileTreeView extends JScrollPane {
     public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
         Path target = directory.toAbsolutePath().normalize();
         for (Path root : List.of(
-                CompanionApp.instancePaths().scripts()
+                project.get().paths().scripts()
         )) {
             if (!target.startsWith(root)) {
                 continue;
@@ -229,7 +226,7 @@ public class FileTreeView extends JScrollPane {
 
     public CompletableFuture<Boolean> revealArchiveDirectory(Path archive, String entryName) {
         Path normalizedArchive = archive.toAbsolutePath().normalize();
-        RuntimeSourceCatalog catalog = CompanionApp.getRuntimeSourceCatalog();
+        RuntimeSourceCatalog catalog = sourceCatalog();
         for (var module : catalog.modules()) {
             List<RuntimeSnapshotBytecodeSource.Source> sources = catalog.sourcesForModule(module.id());
             for (RuntimeSnapshotBytecodeSource.Source source : sources) {

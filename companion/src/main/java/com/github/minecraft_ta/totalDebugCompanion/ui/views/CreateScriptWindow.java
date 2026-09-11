@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
@@ -23,9 +23,9 @@ import java.util.function.Supplier;
 
 public class CreateScriptWindow extends JDialog {
 
-    public CreateScriptWindow(EditorTabs editorTabs) {
+    public CreateScriptWindow(EditorTabs editorTabs, EditorContext context) {
         super(SwingUtilities.getWindowAncestor(editorTabs));
-        if (!CompanionApp.hasProfile()) {
+        if (context.project() == null) {
             throw new IllegalStateException("Open a Minecraft profile before creating scripts");
         }
         var header = new JPanel();
@@ -35,7 +35,7 @@ public class CreateScriptWindow extends JDialog {
         textField.setPreferredSize(new Dimension(150, (int) textField.getPreferredSize().getHeight()));
 
         var verifyInput = (Predicate<String>) (s) -> JavaSnippetSource.isValidClassName(s)
-                && !Files.exists(CompanionApp.instancePaths().scripts()
+                && !Files.exists(context.project().paths().scripts()
                 .resolve(s + ScriptView.FILE_EXTENSION));
         var setIconAndVerify = (Supplier<Boolean>) () -> {
             var result = verifyInput.test(textField.getText());
@@ -46,7 +46,7 @@ public class CreateScriptWindow extends JDialog {
         textField.addActionListener((e) -> {
             if (!setIconAndVerify.get())
                 return;
-            editorTabs.openEditorTab(new ScriptView(textField.getText()));
+            editorTabs.openEditorTab(new ScriptView(context, textField.getText()));
             dispose();
         });
         textField.addKeyListener(new KeyAdapter() {
