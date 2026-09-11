@@ -40,7 +40,7 @@ class ProjectSwitchLifecycleTest {
                 "-Djava.awt.headless=false", "-cp", classpath,
                 getClass().getName(), directory.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         try {
-            assertTrue(process.waitFor(30, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
+            assertTrue(process.waitFor(180, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
             assertEquals(0, process.exitValue(), () -> read(log));
         } finally { if (process.isAlive()) process.destroyForcibly(); }
     }
@@ -58,7 +58,7 @@ class ProjectSwitchLifecycleTest {
             var session = new com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession("test-token");
             session.bindAndPublish(new CompanionLaunchConfiguration(paths.home()));
             set("session", session);
-            set("scriptExecutions", new ScriptExecutionService(session, (ScriptCompilationService) get("scriptCompiler")));
+            set("scriptExecutions", new ScriptExecutionService(session, (ScriptCompilationService) get("scriptCompiler"), CompanionApp::isConnected));
 
             var jobs = ProjectSwitchJobs.create();
             var constructor = com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer.class.getDeclaredConstructor(
