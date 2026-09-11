@@ -28,6 +28,11 @@ public final class UsagesView implements IEditorPanel {
     }
 
     @Override
+    public void dispose() {
+        this.panel.dispose();
+    }
+
+    @Override
     public String getTitle() {
         return "Usages: " + shortName(this.symbol);
     }

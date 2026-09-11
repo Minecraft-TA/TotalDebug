@@ -90,6 +90,16 @@ public class SearchEverywherePopup extends JFrame {
     private final ModuleFilterPopup moduleFilterPopup;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
+    private final Consumer<RuntimeIndexService.Status> indexStatusListener = status -> SwingUtilities.invokeLater(() -> {
+        if (!isDisplayable()) return;
+        if (CompanionClassIndex.isOpen()) {
+            syncRuntimeModules();
+            refreshResults();
+        } else {
+            showIndexStatus(status);
+        }
+    });
+
     private RuntimeSourceCatalog sourceCatalog = RuntimeSourceCatalog.empty();
     private List<RuntimeInventory.RuntimeModule> modules = List.of();
     private Category category = Category.ALL;
@@ -130,14 +140,7 @@ public class SearchEverywherePopup extends JFrame {
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
 
-        CompanionApp.addRuntimeIndexStatusListener(status -> SwingUtilities.invokeLater(() -> {
-            if (CompanionClassIndex.isOpen()) {
-                syncRuntimeModules();
-                refreshResults();
-            } else {
-                showIndexStatus(status);
-            }
-        }));
+        CompanionApp.addRuntimeIndexStatusListener(this.indexStatusListener);
 
         ((JPanel) getContentPane()).setBorder(PopupChrome.border());
         setUndecorated(true);
@@ -182,6 +185,7 @@ public class SearchEverywherePopup extends JFrame {
 
     @Override
     public void dispose() {
+        CompanionApp.removeRuntimeIndexStatusListener(this.indexStatusListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {
@@ -423,6 +427,7 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void refreshResults() {
+        if (this.searchExecutor.isShutdown()) return;
         long generation = this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {
             this.pendingSearch.cancel(false);

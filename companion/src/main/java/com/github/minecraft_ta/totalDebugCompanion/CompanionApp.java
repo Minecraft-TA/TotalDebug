@@ -1059,6 +1059,11 @@ public final class CompanionApp {
         }
     }
 
+    public static void removeRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
+        RuntimeIndexService service = runtimeIndexService;
+        if (service != null) service.removeStatusListener(listener);
+    }
+
     public static void retryRuntimeIndex() {
         RuntimeIndexService service = runtimeIndexService;
         if (service != null) {

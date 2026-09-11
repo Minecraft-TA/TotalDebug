@@ -136,6 +136,10 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
+    public void removeStatusListener(Consumer<Status> listener) {
+        this.listeners.remove(listener);
+    }
+
     public void restore(Path dataDirectory) {
         synchronized (this.lifecycleLock) {
             ensureOpen();

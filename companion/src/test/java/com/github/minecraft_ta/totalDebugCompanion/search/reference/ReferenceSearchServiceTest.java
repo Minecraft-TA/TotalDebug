@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.UsagesViewPanel;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.tth05.jindex.ReferenceKind;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,46 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReferenceSearchServiceTest {
+    @Test
+    void disposingAnUnattachedUsagePanelCancelsItsSearch() throws Exception {
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        try (var service = new ReferenceSearchService((query, limit) -> {
+            calls.incrementAndGet();
+            started.countDown();
+            try { release.await(5, TimeUnit.SECONDS); }
+            catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
+            return new ReferenceUsagePage(List.of(), false);
+        })) {
+            var panel = new AtomicReference<UsagesViewPanel>();
+            var handle = new AtomicReference<ReferenceSearchService.SearchHandle>();
+            SwingUtilities.invokeAndWait(() -> {
+                panel.set(new UsagesViewPanel(
+                        new CodeSymbol.ClassSymbol("example.Target"), service));
+                panel.get().restartSearch();
+                try {
+                    var field = panel.get().getClass().getDeclaredField("activeSearch");
+                    field.setAccessible(true);
+                    handle.set((ReferenceSearchService.SearchHandle) field.get(panel.get()));
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            SwingUtilities.invokeAndWait(() -> {
+                panel.get().dispose();
+                // Cancellation stops delivery; it does not pretend the running query has finished.
+                assertFalse(handle.get().isDone());
+                try {
+                    var cancelled = handle.get().getClass().getDeclaredField("cancelled");
+                    cancelled.setAccessible(true);
+                    assertTrue(((AtomicBoolean) cancelled.get(handle.get())).get());
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+                panel.get().restartSearch();
+            });
+            assertEquals(1, calls.get());
+        } finally { release.countDown(); }
+    }
+
     @Test
     void deliversBoundedResultsOnTheSwingEventThread() throws Exception {
         CountDownLatch completed = new CountDownLatch(1);

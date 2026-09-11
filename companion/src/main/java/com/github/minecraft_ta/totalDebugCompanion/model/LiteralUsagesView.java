@@ -33,6 +33,11 @@ public final class LiteralUsagesView implements IEditorPanel {
     }
 
     @Override
+    public void dispose() {
+        this.panel.dispose();
+    }
+
+    @Override
     public String getTitle() {
         return "Text: " + quotedPreview(this.literal);
     }
