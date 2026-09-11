@@ -34,6 +34,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -41,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -74,6 +76,7 @@ public final class UiDevHarness {
                 package sample;
 
                 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
                 /** Javadoc comment: doc colour. */
                 @FunctionalInterface
@@ -260,13 +263,16 @@ public final class UiDevHarness {
     private static void scheduleSearchEverywhereInteractionVerification() {
         javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
             MainWindow.INSTANCE.openSearchEverywhere();
-            javax.swing.Timer firstQuery = new javax.swing.Timer(250, queryEvent -> {
                 SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
                         .filter(SearchEverywherePopup.class::isInstance)
                         .map(SearchEverywherePopup.class::cast)
                         .filter(java.awt.Window::isShowing)
                         .findFirst()
                         .orElseThrow();
+            // This fixture sends synthetic events; native focus belongs to the user's other windows.
+            var focusListeners = popup.getWindowFocusListeners();
+            for (var listener : focusListeners) popup.removeWindowFocusListener(listener);
+            javax.swing.Timer firstQuery = new javax.swing.Timer(250, queryEvent -> {
                 popup.setLocation(MainWindow.INSTANCE.getX() + 220, MainWindow.INSTANCE.getY() + 70);
                 FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
                 if (search == null) {
@@ -274,15 +280,18 @@ public final class UiDevHarness {
                 }
                 search.setText("Theme");
 
-                javax.swing.Timer verifyResults = new javax.swing.Timer(450, verifyEvent -> {
+                long resultsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                javax.swing.Timer verifyResults = new javax.swing.Timer(50, verifyEvent -> {
                     @SuppressWarnings("rawtypes")
                     JList results = findComponent(popup, JList.class);
                     if (results == null || results.getModel().getSize() == 0 || !results.isShowing()) {
+                        if (System.nanoTime() < resultsDeadline) return;
                         throw new IllegalStateException("Initial Search Everywhere results did not become visible");
                     }
 
+                    ((javax.swing.Timer) verifyEvent.getSource()).stop();
                     int previousResultCount = results.getModel().getSize();
-                    search.setText("ThemeS");
+                    search.setText("ThemeSampleImpl");
                     if (!results.isShowing() || results.getModel().getSize() != previousResultCount) {
                         throw new IllegalStateException("Typing replaced visible results with a transient blank state");
                     }
@@ -300,19 +309,24 @@ public final class UiDevHarness {
                         );
                     }
 
-                    javax.swing.Timer verifyUpdated = new javax.swing.Timer(450, updatedEvent -> {
-                        if (results.getModel().getSize() == 0 || !results.isShowing()) {
+                    long updatedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                    javax.swing.Timer verifyUpdated = new javax.swing.Timer(50, updatedEvent -> {
+                        if (results.getModel().getSize() != 1 || !results.isShowing()) {
+                            if (System.nanoTime() < updatedDeadline) return;
                             throw new IllegalStateException("Updated Search Everywhere results did not remain visible");
                         }
+                        ((javax.swing.Timer) updatedEvent.getSource()).stop();
+                        for (var listener : focusListeners) popup.addWindowFocusListener(listener);
+                        var lostFocus = new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS);
+                        for (var listener : focusListeners) listener.windowLostFocus(lostFocus);
+                        if (popup.isVisible()) throw new IllegalStateException("Losing focus must dismiss Search Everywhere");
                         System.out.println("Search Everywhere interaction verification passed");
                         popup.dispose();
                         MainWindow.INSTANCE.dispose();
                         System.exit(0);
                     });
-                    verifyUpdated.setRepeats(false);
                     verifyUpdated.start();
                 });
-                verifyResults.setRepeats(false);
                 verifyResults.start();
             });
             firstQuery.setRepeats(false);
