@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -247,14 +249,14 @@ class ProjectSwitchLifecycleTest {
         var pending = new java.util.concurrent.atomic.AtomicReference<CompletableFuture<Boolean>>();
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var tree = new com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView(CompanionApp::currentScope, ignored -> { }) {
+            var tree = new FileTreeView(CompanionApp::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
                     var delayed = pending.getAndSet(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
                 }
             };
             created.complete(new NavigationService(window,
-                    new com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs(), tree, CompanionApp.currentScope(), window::editorContext));
+                    new EditorTabs(), tree, CompanionApp.currentScope(), window::editorContext));
         });
         var navigation = created.join();
         var scopeA = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
