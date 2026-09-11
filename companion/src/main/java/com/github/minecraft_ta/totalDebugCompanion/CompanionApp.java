@@ -424,9 +424,10 @@ public final class CompanionApp {
             } finally {
                 synchronized (lifecycleLock) {
                     if (old != null) old.cancelSwitch();
-                    switching = false;
+                    try {
+                        if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
+                    } finally { switching = false; }
                 }
-                if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
                 if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
             }
         }

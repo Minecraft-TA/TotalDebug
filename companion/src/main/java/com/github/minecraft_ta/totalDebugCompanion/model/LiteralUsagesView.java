@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
@@ -11,16 +12,21 @@ import java.awt.Component;
 import java.util.Objects;
 
 public final class LiteralUsagesView implements IEditorPanel {
+    private final RuntimeBinding runtimeBinding;
+    @Override public RuntimeBinding runtimeBinding() { return runtimeBinding; }
+
     private final String literal;
     private final UsagesViewPanel panel;
 
-    public LiteralUsagesView(String literal) {
+    public LiteralUsagesView(String literal, RuntimeBinding runtimeBinding) {
+        if (runtimeBinding == null) throw new IllegalStateException("Reference search is unavailable");
+        this.runtimeBinding = runtimeBinding;
         this.literal = Objects.requireNonNull(literal, "literal");
         this.panel = new UsagesViewPanel(
                 ReferenceQuery.stringLiteral(literal),
                 quotedPreview(literal),
                 Icons.VALUE,
-                CompanionApp.getReferenceSearchService()
+                runtimeBinding.references()
         );
     }
 

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import java.util.function.Predicate;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
@@ -108,14 +109,17 @@ public final class NavigationService {
     }
 
     public void runtimeChanged() {
-        state().traversal.set(null);
         Context context = captureContext();
+        var navigationState = state();
+        var traversal = navigationState.traversal.get();
+        if (traversal != null && traversal.runtime() != context.runtime()) navigationState.traversal.compareAndSet(traversal, null);
         SwingUtilities.invokeLater(() -> {
             if (!isCurrent(context)) return;
-            this.tabs.closeMatching(editor ->
-                editor instanceof CodeView view && view.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
-                        || editor instanceof ResourceView resource && resource.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
-                        || editor instanceof UsagesView || editor instanceof LiteralUsagesView);
+            this.tabs.closeMatching(editor -> editor.runtimeBinding() != context.runtime()
+                    && (editor.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
+                    || editor.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
+                    || editor.getNavigationTarget() instanceof NavigationTarget.SymbolUsages
+                    || editor.getNavigationTarget() instanceof NavigationTarget.LiteralUsages));
         });
         refreshHistoryActions();
     }
@@ -136,6 +140,7 @@ public final class NavigationService {
     private CompletableFuture<Void> performNavigation(NavigationTarget target, Activation activation) {
         CompletableFuture<Void> navigation;
         try {
+            RuntimeBinding requestedRuntime = CompanionApp.currentRuntime();
             navigation = switch (target) {
                 case NavigationTarget.RuntimeClass runtimeClass -> openRuntimeSource(
                         runtimeClass.binaryName(),
@@ -172,15 +177,15 @@ public final class NavigationService {
                         -1,
                         activation
                 );
-                case NavigationTarget.SymbolUsages usages -> onEdt(() -> this.tabs.focusOrCreateIfAbsent(
+                case NavigationTarget.SymbolUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
                         UsagesView.class,
                         view -> view.symbol().equals(usages.symbol()),
-                        () -> new UsagesView(usages.symbol())
+                        () -> new UsagesView(usages.symbol(), requestedRuntime)
                 ).thenAccept(UsagesView::restartSearch), activation);
-                case NavigationTarget.LiteralUsages usages -> onEdt(() -> this.tabs.focusOrCreateIfAbsent(
+                case NavigationTarget.LiteralUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
                         LiteralUsagesView.class,
                         view -> view.literal().equals(usages.literal()),
-                        () -> new LiteralUsagesView(usages.literal())
+                        () -> new LiteralUsagesView(usages.literal(), requestedRuntime)
                 ).thenAccept(LiteralUsagesView::restartSearch), activation);
                 case NavigationTarget.RuntimePackage runtimePackage -> revealPackage(runtimePackage);
                 case NavigationTarget.ModuleSearch search -> onEdt(() -> {
@@ -197,7 +202,7 @@ public final class NavigationService {
     private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
         Context context = captureContext();
         NavigationState navigationState = state();
-        Object traversal = new Object();
+        var traversal = new NavigationState.Traversal(context.runtime());
         if (!navigationState.traversal.compareAndSet(null, traversal)) {
             return CompletableFuture.completedFuture(null);
         }
@@ -372,18 +377,20 @@ public final class NavigationService {
             int executionLine,
             Activation activation
     ) {
-        var service = CompanionApp.getDecompilationService();
         Context context = captureContext();
+        RuntimeBinding installed = context.runtime();
+        if (installed == null) throw new IllegalStateException("Decompilation is unavailable");
+        var service = installed.decompiler();
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
                 if (!isCurrent(context) || service != CompanionApp.getDecompilationService()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
-                return this.tabs.focusOrCreateIfAbsent(
+                return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
-                        () -> new CodeView(source, offset, SourceFileNavigation.location(source))
+                        () -> new CodeView(source, offset, SourceFileNavigation.location(source), installed)
                 ).thenAccept(view -> {
                     view.navigateToOffset(offset);
                     if (executionLine > 0) {
@@ -422,11 +429,20 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation) {
-        return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
+        RuntimeBinding installed = source instanceof ArchiveEntrySource ? captureContext().runtime() : null;
+        return onEdt(() -> openRuntimeEditor(installed,
                 ResourceView.class,
                 view -> view.source().identity().equals(source.identity()),
-                () -> new ResourceView(source)
+                () -> new ResourceView(source, installed)
         ).thenApply(ignored -> null), activation);
+    }
+
+    private <T extends IEditorPanel> CompletableFuture<T> openRuntimeEditor(
+            RuntimeBinding runtime, Class<T> type, Predicate<T> matches, Supplier<T> create) {
+        // Dispose a stale same-file editor before the new one installs its AST listeners.
+        tabs.closeMatching(editor -> type.isInstance(editor) && matches.test(type.cast(editor))
+                && editor.runtimeBinding() != runtime);
+        return tabs.focusOrCreateIfAbsent(type, editor -> editor.runtimeBinding() == runtime && matches.test(editor), create);
     }
 
     private CompletableFuture<Void> revealPackage(NavigationTarget.RuntimePackage target) {

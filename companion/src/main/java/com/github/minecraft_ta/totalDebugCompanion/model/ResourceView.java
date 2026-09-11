@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
@@ -15,12 +16,16 @@ import java.awt.Component;
 import java.util.Objects;
 
 public final class ResourceView implements IEditorPanel {
+    private final RuntimeBinding runtimeBinding;
+    @Override public RuntimeBinding runtimeBinding() { return runtimeBinding; }
+
 
     private final ContentSource source;
     private final ResourceFileType fileType;
     private final ResourceViewPanel panel;
 
-    public ResourceView(ContentSource source) {
+    public ResourceView(ContentSource source, RuntimeBinding runtimeBinding) {
+        this.runtimeBinding = runtimeBinding;
         this.source = Objects.requireNonNull(source, "source");
         this.fileType = FileTypeResolver.resolve(source.displayName());
         this.panel = new ResourceViewPanel(source, this.fileType);

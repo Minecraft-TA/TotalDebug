@@ -251,6 +251,10 @@ class ProjectSwitchLifecycleTest {
         var newTraversal = navigation.goBack();
         javax.swing.SwingUtilities.invokeAndWait(() -> { });
         assertFalse(newTraversal.isDone());
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            navigation.runtimeChanged();
+            assertTrue(navigation.goBack().isDone(), "A late refresh of the same runtime must not unlock its active traversal");
+        });
         delayedA.complete(true);
         assertInstanceOf(CancellationException.class, assertThrows(ExecutionException.class,
                 () -> oldTraversal.get(3, TimeUnit.SECONDS)).getCause());

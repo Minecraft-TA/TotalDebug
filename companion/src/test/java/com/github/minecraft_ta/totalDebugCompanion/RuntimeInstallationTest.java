@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import javax.swing.SwingUtilities;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -48,7 +50,7 @@ class RuntimeInstallationTest {
             GlobalConfig.getInstance().loadFrom(root.resolve("app"));
             CompanionApp.configureLookAndFeel();
             SwingUtilities.invokeAndWait(() -> MainWindow.INSTANCE.getEditorTabs().openEditorTab(
-                    new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1))));
+                    new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), null)));
             var uiStarted = CompanionApp.class.getDeclaredField("uiStarted");
             uiStarted.setAccessible(true);
             uiStarted.set(null, true);
@@ -63,11 +65,29 @@ class RuntimeInstallationTest {
             close.setAccessible(true);
             try (var accepted = snapshot(root, "accepted"); var rejected = snapshot(root, "")) {
                 var bytes = RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index());
-                install.invoke(null, accepted, bytes);
+                var releaseRefresh = new CountDownLatch(1);
+                var refreshBlocked = new CountDownLatch(1);
+                ((ExecutorService) queue.get(null)).submit(() -> {
+                    refreshBlocked.countDown();
+                    try { assertTrue(releaseRefresh.await(10, TimeUnit.SECONDS)); }
+                    catch (InterruptedException failure) { throw new AssertionError(failure); }
+                });
+                assertTrue(refreshBlocked.await(3, TimeUnit.SECONDS));
+                var newView = new AtomicReference<ResourceView>();
+                try {
+                    install.invoke(null, accepted, bytes);
+                    SwingUtilities.invokeAndWait(() -> {
+                        var view = new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), CompanionApp.currentRuntime());
+                        newView.set(view);
+                        MainWindow.INSTANCE.getEditorTabs().openEditorTab(view);
+                    });
+                } finally { releaseRefresh.countDown(); }
                 ((ExecutorService) queue.get(null)).submit(() -> {}).get(10, TimeUnit.SECONDS);
                 SwingUtilities.invokeAndWait(() -> {});
-                SwingUtilities.invokeAndWait(() -> assertEquals(0, MainWindow.INSTANCE.getEditorTabs().getTabCount(),
-                        "Old runtime tabs must close even when breakpoint restoration fails"));
+                SwingUtilities.invokeAndWait(() -> {
+                    assertEquals(1, MainWindow.INSTANCE.getEditorTabs().getTabCount(), "Late invalidation must close only the old runtime tab");
+                    assertSame(newView.get(), MainWindow.INSTANCE.getEditorTabs().getSelectedEditor());
+                });
                 assertFalse(accepted.index().isDestroyed(), "Post-publication failure must not close the installed index");
                 var decompiler = CompanionApp.getDecompilationService();
                 var candidateBytes = RuntimeSnapshotBytecodeSource.fromIndexedSources(rejected.sources(), rejected.index());

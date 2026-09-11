@@ -157,7 +157,7 @@ final class UiScenarioDriver {
             case IMPLEMENTATION_CHOOSER -> advanceImplementationChooser(context);
             case SEARCH_EMPTY, SEARCH_RESULTS, MODULE_FILTER -> advanceSearch(scenario, context);
             case USAGES_RESULTS -> context.once("open-usages", () -> {
-                UsagesView view = new UsagesView(new CodeSymbol.ClassSymbol("sample.ThemeSample"));
+                UsagesView view = new UsagesView(new CodeSymbol.ClassSymbol("sample.ThemeSample"), CompanionApp.currentRuntime());
                 MainWindow.INSTANCE.getEditorTabs().openEditorTab(view)
                         .thenRun(() -> SwingUtilities.invokeLater(view::restartSearch));
             });
