@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
+import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import javax.swing.SwingUtilities;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -41,6 +45,13 @@ class RuntimeInstallationTest {
             config.set(null, new CompanionLaunchConfiguration(Files.createDirectories(root.resolve("app"))));
             CompanionApp.configureWithoutSession(new CompanionProfile("test", Files.createDirectories(root.resolve("data")),
                     Files.createDirectories(root.resolve("game"))));
+            GlobalConfig.getInstance().loadFrom(root.resolve("app"));
+            CompanionApp.configureLookAndFeel();
+            SwingUtilities.invokeAndWait(() -> MainWindow.INSTANCE.getEditorTabs().openEditorTab(
+                    new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1))));
+            var uiStarted = CompanionApp.class.getDeclaredField("uiStarted");
+            uiStarted.setAccessible(true);
+            uiStarted.set(null, true);
             // Force debugger restoration to fail after the index is published.
             CompanionApp.getDebuggerController().close();
             var install = CompanionApp.class.getDeclaredMethod("installRuntimeSnapshot", ReadySnapshot.class,
@@ -54,6 +65,9 @@ class RuntimeInstallationTest {
                 var bytes = RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index());
                 install.invoke(null, accepted, bytes);
                 ((ExecutorService) queue.get(null)).submit(() -> {}).get(10, TimeUnit.SECONDS);
+                SwingUtilities.invokeAndWait(() -> {});
+                SwingUtilities.invokeAndWait(() -> assertEquals(0, MainWindow.INSTANCE.getEditorTabs().getTabCount(),
+                        "Old runtime tabs must close even when breakpoint restoration fails"));
                 assertFalse(accepted.index().isDestroyed(), "Post-publication failure must not close the installed index");
                 var decompiler = CompanionApp.getDecompilationService();
                 var candidateBytes = RuntimeSnapshotBytecodeSource.fromIndexedSources(rejected.sources(), rejected.index());
@@ -65,6 +79,7 @@ class RuntimeInstallationTest {
                 close.invoke(null);
                 assertTrue(accepted.index().isDestroyed());
             }
+            SwingUtilities.invokeAndWait(MainWindow.INSTANCE::dispose);
             System.exit(0);
         } catch (Throwable failure) { failure.printStackTrace(); System.exit(1); }
     }

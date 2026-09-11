@@ -129,6 +129,13 @@ class ProjectSwitchLifecycleTest {
             Files.delete(b.dataDirectory().resolve("scripts"));
             Files.writeString(b.dataDirectory().resolve("scripts"), "restore fixture");
             verifyEditorSwitch(a, b, paths);
+            set("uiStarted", false);
+            var retired = CompanionApp.requireProject();
+            CompanionApp.getDebuggerController().close();
+            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
+            assertEquals(a, CompanionApp.currentProject(), "A broken debugger must not strand project selection");
+            assertEquals(ProjectScope.Phase.RETIRED, retired.phase());
+            assertThrows(IllegalStateException.class, () -> retired.state().setDebuggerWatches(List.of("closed")));
             client.close();
             mcp.close();
             session.close();

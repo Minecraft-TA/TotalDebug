@@ -391,17 +391,22 @@ public final class CompanionApp {
                 current = null;
                 if (runtimeIndexService != null) runtimeIndexService.clear();
             }
-            if (mcpServer != null) mcpServer.prepareProjectSwitch();
-            scriptCompiler.runtimeDisconnected();
-            if (session != null) session.disconnect();
-            getDebuggerController().clearTarget().join();
-            getDebuggerController().replaceBreakpointDefinitions(List.of()).join();
+            // Retirement is terminal. Attempt every detach and install the prepared replacement even if
+            // a broken debugger/connection cannot detach cleanly.
+            if (mcpServer != null) finishTransitionStep("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            finishTransitionStep("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
+            if (session != null) finishTransitionStep("Disconnect Minecraft", session::disconnect);
+            finishTransitionStep("Clear debugger target", () -> getDebuggerController().clearTarget().join());
+            finishTransitionStep("Clear debugger breakpoints", () -> getDebuggerController().replaceBreakpointDefinitions(List.of()).join());
             CompanionClassIndex.clear();
-            if (old != null) old.close();
+            if (old != null) {
+                try { old.close(); }
+                catch (IOException | RuntimeException failure) { reportTransitionFailure("Close retired project", failure); }
+            }
             com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache.clear();
             synchronized (lifecycleLock) { current = replacement; }
             installed = true;
-            restoreProjectState(replacement);
+            finishTransitionStep("Restore debugger preferences", () -> restoreProjectState(replacement));
             if (uiStarted) refreshUiProfile();
             updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Selected project is not connected to Minecraft."));
             try { projects.select(requested); }
@@ -425,6 +430,16 @@ public final class CompanionApp {
                 if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
             }
         }
+    }
+
+    private static void finishTransitionStep(String description, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException failure) { reportTransitionFailure(description, failure); }
+    }
+
+    private static void reportTransitionFailure(String description, Exception failure) {
+        System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
+                description + " failed while switching projects", failure);
     }
 
     private static void activateProfile(CompanionProfile requested) throws IOException {
@@ -515,6 +530,11 @@ public final class CompanionApp {
             }
             // A failed debugger/UI refresh must never return ownership of an installed index to its loader.
             breakpoints.join();
+            prewarmJavaParser();
+        } catch (RuntimeException failure) {
+            System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
+                    "Runtime installed, but debugger refresh failed", failure);
+        } finally {
             SwingUtilities.invokeLater(() -> {
                 if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
                 if (uiStarted) {
@@ -530,10 +550,6 @@ public final class CompanionApp {
                     MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
                 }
             });
-            prewarmJavaParser();
-        } catch (RuntimeException failure) {
-            System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
-                    "Runtime installed, but debugger refresh failed", failure);
         }
     }
 
