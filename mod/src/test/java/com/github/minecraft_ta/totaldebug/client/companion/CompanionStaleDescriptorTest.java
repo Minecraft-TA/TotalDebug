@@ -30,7 +30,7 @@ class CompanionStaleDescriptorTest {
         Path keyFile = paths.instanceKey();
         Files.writeString(
                 descriptorFile,
-                "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\n",
+                "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\nprojectPort=41732\n",
                 StandardCharsets.UTF_8
         );
         Files.writeString(keyFile, "a".repeat(64), StandardCharsets.US_ASCII);
@@ -68,7 +68,7 @@ class CompanionStaleDescriptorTest {
         Path keyFile = paths.instanceKey();
         Files.writeString(
                 descriptorFile,
-                "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\n",
+                "protocol=4\nport=41731\npid=" + ProcessHandle.current().pid() + "\nprojectPort=41732\n",
                 StandardCharsets.UTF_8
         );
         Files.writeString(keyFile, "a".repeat(64), StandardCharsets.US_ASCII);

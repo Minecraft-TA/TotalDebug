@@ -137,18 +137,10 @@ public final class CodeInsightService implements AutoCloseable {
                     return;
                 }
                 T result = this.task.run(this.binding);
-                dispatch(() -> {
-                    if (!this.cancelled.get()) {
-                        this.listener.onCompleted(result);
-                    }
-                });
+                dispatch(() -> this.listener.onCompleted(result));
             } catch (RuntimeException failure) {
                 if (!this.cancelled.get() && !Thread.currentThread().isInterrupted()) {
-                    dispatch(() -> {
-                        if (!this.cancelled.get()) {
-                            this.listener.onFailed(failure);
-                        }
-                    });
+                    dispatch(() -> this.listener.onFailed(failure));
                 }
             } finally {
                 operations.remove(this);
@@ -160,13 +152,12 @@ public final class CodeInsightService implements AutoCloseable {
             this.cancelled.set(true);
         }
 
-    }
-
-    private static void dispatch(Runnable callback) {
-        if (SwingUtilities.isEventDispatchThread()) {
-            callback.run();
-        } else {
-            SwingUtilities.invokeLater(callback);
+        private void dispatch(Runnable callback) {
+            SwingUtilities.invokeLater(() -> {
+                if (!this.cancelled.get() && this.binding == CodeInsightService.this.binding && !executor.isShutdown()) {
+                    callback.run();
+                }
+            });
         }
     }
 

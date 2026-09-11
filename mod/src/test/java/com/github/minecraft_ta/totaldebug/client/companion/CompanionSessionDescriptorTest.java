@@ -18,10 +18,10 @@ class CompanionSessionDescriptorTest {
     Path temporaryDirectory;
 
     @Test
-    void readsTheExactThreeFieldDescriptor() throws Exception {
+    void readsBothPortsAndTheProcessIdentity() throws Exception {
         Path descriptorFile = Files.writeString(
                 this.temporaryDirectory.resolve("session.properties"),
-                "protocol=3\nport=41731\npid=9912\n"
+                "protocol=3\nport=41731\npid=9912\nprojectPort=41732\n"
         );
 
         CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile);
@@ -29,6 +29,7 @@ class CompanionSessionDescriptorTest {
         assertEquals(3, descriptor.protocolVersion());
         assertEquals(41731, descriptor.port());
         assertEquals(9912, descriptor.processId());
+        assertEquals(41732, descriptor.projectPort());
         assertFalse(Files.readString(descriptorFile).contains("token"));
     }
 

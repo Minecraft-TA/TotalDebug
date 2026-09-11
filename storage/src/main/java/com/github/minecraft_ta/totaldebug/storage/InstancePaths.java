@@ -13,6 +13,16 @@ public record InstancePaths(Path home) {
         return new InstancePaths(gameDirectory.resolve("total-debug"));
     }
 
+    public static String profileId(Path gameDirectory) {
+        String identity = gameDirectory.toAbsolutePath().normalize().toString();
+        if (System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows"))
+            identity = identity.toLowerCase(java.util.Locale.ROOT);
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException failure) { throw new AssertionError(failure); }
+    }
+
     /** Installation stays with the game instance. */
     public static Path installationDirectory(Path gameDirectory) {
         return Objects.requireNonNull(gameDirectory).toAbsolutePath().normalize().resolve("total-debug").resolve("companion-app");

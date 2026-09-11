@@ -28,5 +28,4 @@ public record CompanionLaunchConfiguration(Path appHome) {
     public Path descriptorFile() { return paths().instanceDescriptor(); }
     public Path keyFile() { return paths().instanceKey(); }
     public Path lockFile() { return paths().instanceLock(); }
-    public Path profileFile() { return paths().profile(); }
 }

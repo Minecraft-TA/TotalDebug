@@ -485,9 +485,9 @@ public final class DebuggerSessionController implements AutoCloseable {
         });
     }
 
-    public void clearTarget() {
+    public CompletableFuture<Void> clearTarget() {
         this.queue.invalidateAdvisoryWork();
-        submit(() -> {
+        return submitFuture(() -> {
             DebugTargetDescriptor previous = this.target;
             this.target = null;
             if (this.engine != null) {

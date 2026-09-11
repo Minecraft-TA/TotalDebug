@@ -313,13 +313,11 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     public void runtimeDisconnected() {
-        if (this.statusExecutor != null && !this.closed) {
-            try {
-                this.statusExecutor.execute(this::markRuntimeDisconnected);
-                return;
-            } catch (RejectedExecutionException ignored) {
-            }
-        }
+        markRuntimeDisconnected();
+    }
+
+    public void prepareProjectSwitch() {
+        for (String jobId : List.copyOf(this.jobsByScriptId.values())) cancel(jobId);
         markRuntimeDisconnected();
     }
 

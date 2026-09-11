@@ -74,10 +74,13 @@ public final class NavigationService {
     public CompletableFuture<Void> navigate(NavigationTarget target, Activation activation) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
+        long generation = this.runtimeGeneration.get();
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                performNavigation(target, activation)
+                (generation == this.runtimeGeneration.get() ? performNavigation(target, activation)
+                        : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
                         .thenCompose(ignored -> captureDestination(target))
                         .thenAccept(destination -> {
+                            if (generation != this.runtimeGeneration.get()) return;
                             this.currentEntry = destination;
                             this.history.recordNewNavigation(origin);
                             refreshHistoryActions();
@@ -101,6 +104,13 @@ public final class NavigationService {
                 editor instanceof CodeView view && view.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
                         || editor instanceof ResourceView resource && resource.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
                         || editor instanceof UsagesView || editor instanceof LiteralUsagesView));
+        refreshHistoryActions();
+    }
+
+    public void projectChanged() {
+        this.runtimeGeneration.incrementAndGet();
+        this.currentEntry = null;
+        this.history.clear();
         refreshHistoryActions();
     }
 
@@ -196,7 +206,7 @@ public final class NavigationService {
                         })
         );
         navigation.whenComplete((ignored, failure) -> {
-            if (failure != null) {
+            if (failure != null && !(unwrap(failure) instanceof java.util.concurrent.CancellationException)) {
                 this.history.discard(direction, destination);
             }
             this.traversingHistory.set(false);
@@ -315,8 +325,9 @@ public final class NavigationService {
     }
 
     private void reportFailure(CompletableFuture<Void> navigation, NavigationTarget target) {
+        long generation = this.runtimeGeneration.get();
         navigation.whenComplete((ignored, failure) -> {
-            if (failure != null) {
+            if (failure != null && generation == this.runtimeGeneration.get() && !CompanionApp.isSwitchingProjects()) {
                 showFailure(target, unwrap(failure));
             }
         });
@@ -349,7 +360,7 @@ public final class NavigationService {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
                 if (generation != this.runtimeGeneration.get() || service != CompanionApp.getDecompilationService()) {
-                    return CompletableFuture.failedFuture(new IllegalStateException("Runtime changed during source navigation"));
+                    return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Runtime changed during source navigation"));
                 }
                 return this.tabs.focusOrCreateIfAbsent(
                         CodeView.class,
@@ -461,8 +472,13 @@ public final class NavigationService {
             Activation activation
     ) {
         var result = new CompletableFuture<Void>();
+        long generation = this.runtimeGeneration.get();
         SwingUtilities.invokeLater(() -> {
             try {
+                if (generation != this.runtimeGeneration.get() || CompanionApp.isSwitchingProjects()) {
+                    result.completeExceptionally(new java.util.concurrent.CancellationException("Project changed"));
+                    return;
+                }
                 operation.get().whenComplete((ignored, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
@@ -481,18 +497,23 @@ public final class NavigationService {
     }
 
     private void showFailure(NavigationTarget target, Throwable failure) {
+        if (failure instanceof java.util.concurrent.CancellationException) return;
+        long generation = this.runtimeGeneration.get();
         failure.printStackTrace(System.err);
         String detail = failure.getMessage();
         if (detail == null || detail.isBlank()) {
             detail = failure.getClass().getSimpleName();
         }
         String message = "Unable to open " + label(target) + ": " + detail;
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+        SwingUtilities.invokeLater(() -> {
+            if (generation != this.runtimeGeneration.get() || CompanionApp.isSwitchingProjects()) return;
+            JOptionPane.showMessageDialog(
                 this.window,
                 message,
                 "Navigation failed",
                 JOptionPane.ERROR_MESSAGE
-        ));
+            );
+        });
     }
 
     private static String label(NavigationTarget target) {

@@ -105,6 +105,7 @@ tasks.named('assemble') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    systemProperty 'totaldebug.testClasspath', sourceSets.test.runtimeClasspath.asPath
 }
 
 // Brings the UI up without a Minecraft session so themes and icons can be eyeballed.

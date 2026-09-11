@@ -18,6 +18,8 @@ The active endpoint is written to `<companion-app-home>/run/companion/mcp-endpoi
 
 Companion removes the descriptor when it closes. A Minecraft disconnect does not stop MCP.
 
+Project switching also preserves this endpoint and initialized MCP clients. Outstanding code jobs keep their original context and are marked disconnected after cancellation is requested. Project-bound requests reject stale results, and code/debugger mutations are admitted against the project generation in which the request started. Project list/open tools are not yet exposed through MCP.
+
 ## Response policy
 
 Each tool returns only the values needed to use that tool. Runtime paths, hashes, profile metadata, timestamps, and artifact locations do not appear in normal status or job responses.

@@ -1,0 +1,190 @@
+package com.github.minecraft_ta.totalDebugCompanion;
+
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import static org.junit.jupiter.api.Assertions.*;
+
+class ProjectSwitchLifecycleTest {
+    @TempDir Path directory;
+
+    @Test void switchesTheActualApplicationStateWithoutAWindowOrGame() throws Exception {
+        // Companion owns process-wide singletons. Exercise its real switch in a fresh JVM.
+        String classpath = System.getProperty("totaldebug.testClasspath", System.getProperty("java.class.path"));
+        Path log = directory.resolve("probe.log");
+        Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Djava.awt.headless=false", "-cp", classpath,
+                getClass().getName(), directory.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+        try {
+            assertTrue(process.waitFor(30, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
+            assertEquals(0, process.exitValue(), () -> read(log));
+        } finally { if (process.isAlive()) process.destroyForcibly(); }
+    }
+
+    public static void main(String[] args) {
+        try {
+            Path root = Path.of(args[0]);
+            AppPaths paths = new AppPaths(root.resolve("app"));
+            var registry = ProjectRegistry.open(paths);
+            set("launchConfiguration", new CompanionLaunchConfiguration(paths.home()));
+            set("projects", registry);
+            var createDebugger = CompanionApp.class.getDeclaredMethod("createDebuggerController");
+            createDebugger.setAccessible(true);
+            set("debuggerController", createDebugger.invoke(null));
+            var session = new com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession("test-token");
+            session.bindAndPublish(new CompanionLaunchConfiguration(paths.home()));
+            set("session", session);
+            CompanionApp.SERVER = session.server();
+            var jobs = new com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService(
+                    session.server(), CompanionApp::isConnected, Map::of);
+            var constructor = com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer.class.getDeclaredConstructor(
+                    Path.class, com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService.class, int.class);
+            constructor.setAccessible(true);
+            var mcp = (com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer) constructor.newInstance(paths.home(), jobs, 0);
+            mcp.start();
+            set("mcpServer", mcp);
+            String endpoint = mcp.endpointUrl();
+            var transport = io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
+                    .builder(endpoint.substring(0, endpoint.length() - 4)).endpoint("/mcp").build();
+            var client = io.modelcontextprotocol.client.McpClient.sync(transport).build();
+            client.initialize();
+            var a = profile(root, "A");
+            var b = profile(root, "B");
+            Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "A");
+            Files.writeString(b.dataDirectory().resolve("scripts/shared.tdscript"), "B");
+            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
+            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("watch A"));
+            CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
+            assertEquals(b, CompanionApp.currentProject());
+            assertTrue(CompanionApp.instanceState().debuggerWatches().isEmpty());
+            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("watch B"));
+            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
+            assertEquals(java.util.List.of("watch A"), CompanionApp.instanceState().debuggerWatches());
+            assertEquals("A", Files.readString(CompanionApp.instancePaths().scripts().resolve("shared.tdscript")));
+            assertEquals("B", Files.readString(b.dataDirectory().resolve("scripts/shared.tdscript")));
+            var missing = new CompanionProfile("missing", root.resolve("absent/total-debug"), root.resolve("absent"));
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> CompanionApp.openProject(missing).get(10, TimeUnit.SECONDS));
+            assertEquals(a, CompanionApp.currentProject());
+            assertFalse(Files.exists(missing.dataDirectory()));
+            Files.writeString(b.dataDirectory().resolve("state.json"), "invalid state");
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+            assertEquals(a, CompanionApp.currentProject());
+            assertEquals(a, ProjectRegistry.open(paths).selected());
+            Files.delete(b.dataDirectory().resolve("state.json"));
+            Files.delete(b.dataDirectory().resolve("scripts/shared.tdscript"));
+            Files.delete(b.dataDirectory().resolve("scripts"));
+            Files.writeString(b.dataDirectory().resolve("scripts"), "not a directory");
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+            assertEquals(a, CompanionApp.currentProject());
+            assertEquals(a, ProjectRegistry.open(paths).selected());
+            assertEquals(2, CompanionApp.projects().size());
+            assertFalse(CompanionApp.isSwitchingProjects());
+            assertEquals(endpoint, mcp.endpointUrl());
+            var status = client.callTool(new io.modelcontextprotocol.spec.McpSchema.CallToolRequest("status", Map.of()));
+            assertFalse(Boolean.TRUE.equals(status.isError()), "MCP must stay initialized through switches");
+            verifyEditorSwitch(a, b, paths);
+            client.close();
+            mcp.close();
+            session.close();
+            System.exit(0);
+        } catch (Throwable failure) {
+            failure.printStackTrace();
+            System.exit(1);
+        }
+    }
+
+    private static CompanionProfile profile(Path root, String id) throws Exception {
+        Path game = Files.createDirectories(root.resolve(id));
+        Path data = game.resolve("total-debug");
+        Files.createDirectories(data.resolve("scripts"));
+        return new CompanionProfile(id, data, game);
+    }
+
+    private static void verifyEditorSwitch(CompanionProfile a, CompanionProfile b, AppPaths paths) throws Exception {
+        Files.delete(b.dataDirectory().resolve("scripts"));
+        Files.createDirectory(b.dataDirectory().resolve("scripts"));
+        var allowed = new java.util.concurrent.atomic.AtomicBoolean();
+        var disposed = new java.util.concurrent.atomic.AtomicBoolean();
+        var panel = new javax.swing.JPanel();
+        var editor = new com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel() {
+            public String getTitle() { return "Unsaved A"; }
+            public String getTooltip() { return "A"; }
+            public javax.swing.Icon getIcon() { return null; }
+            public java.awt.Component getComponent() { return panel; }
+            public boolean canClose() {
+                if (!allowed.get()) return false;
+                assertEquals(a, CompanionApp.currentProject(), "Save must run before selecting B");
+                try { Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "saved A"); }
+                catch (java.io.IOException failure) { return false; }
+                return true;
+            }
+            public void dispose() { disposed.set(true); }
+        };
+        GlobalConfig.getInstance().loadFrom(((CompanionLaunchConfiguration) get("launchConfiguration")).appHome());
+        CompanionApp.configureLookAndFeel();
+        javax.swing.SwingUtilities.invokeAndWait(() ->
+                com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE.getEditorTabs().openEditorTab(editor));
+        set("uiStarted", true);
+        assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+        assertEquals(a, CompanionApp.currentProject());
+        assertFalse(disposed.get());
+        allowed.set(true);
+        byte[] savedRegistry = Files.readAllBytes(paths.projects());
+        Files.delete(paths.projects());
+        Files.createDirectory(paths.projects());
+        Files.writeString(paths.projects().resolve("occupied"), "x");
+        var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+        assertTrue(failure.getCause().getMessage().contains("Project opened, but its selection could not be saved"));
+        assertEquals(b, CompanionApp.currentProject());
+        assertTrue(CompanionApp.instanceState().debuggerWatches().isEmpty());
+        assertTrue(disposed.get());
+        assertEquals("saved A", Files.readString(a.dataDirectory().resolve("scripts/shared.tdscript")));
+        var window = com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE;
+        var treeField = window.getClass().getDeclaredField("fileTreeView");
+        treeField.setAccessible(true);
+        var treeView = (javax.swing.JScrollPane) treeField.get(window);
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var tree = (javax.swing.JTree) treeView.getViewport().getView();
+            var root = (javax.swing.tree.DefaultMutableTreeNode) tree.getModel().getRoot();
+            var scripts = (com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode) root.getChildAt(0);
+            assertEquals(b.dataDirectory().resolve("scripts").toString(), scripts.getUserObject().getTooltip());
+            assertEquals(0, window.getEditorTabs().getTabCount());
+        });
+        Files.delete(paths.projects().resolve("occupied"));
+        Files.delete(paths.projects());
+        Files.write(paths.projects(), savedRegistry);
+        assertEquals(a, ProjectRegistry.open(paths).selected());
+        CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
+        assertEquals(b, ProjectRegistry.open(paths).selected());
+        javax.swing.SwingUtilities.invokeAndWait(window::dispose);
+    }
+
+    private static Object get(String name) throws Exception {
+        var field = CompanionApp.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(null);
+    }
+
+    private static void set(String name, Object value) throws Exception {
+        var field = CompanionApp.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(null, value);
+    }
+
+    private static String read(Path file) {
+        try { return Files.readString(file); } catch (Exception failure) { return failure.toString(); }
+    }
+}
