@@ -374,6 +374,12 @@ public class MainWindow extends JFrame implements AWTEventListener {
     public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         if (!this.editorTabs.canCloseAll()) return false;
+        setEnabled(false);
+        return true;
+    }
+
+    public boolean closeProjectViews() {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         this.editorTabs.closeMatching(editor -> true);
         if (this.editorTabs.getTabCount() != 0) return false;
         for (Window window : getOwnedWindows()) window.dispose();

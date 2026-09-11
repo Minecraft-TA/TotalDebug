@@ -386,6 +386,11 @@ public final class CompanionApp {
                 if (!canSwitch[0]) throw new IOException("Project switch cancelled because an editor could not be saved");
             }
             if (old != null) old.state().saveNow();
+            if (uiStarted) {
+                boolean[] closed = {false};
+                SwingUtilities.invokeAndWait(() -> closed[0] = MainWindow.INSTANCE.closeProjectViews());
+                if (!closed[0]) throw new IOException("Project switch cancelled because an editor could not be closed");
+            }
             synchronized (lifecycleLock) {
                 if (old != null) old.retire();
                 current = null;

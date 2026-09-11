@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
+import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
@@ -22,6 +23,7 @@ import java.util.concurrent.CancellationException;
 import static org.junit.jupiter.api.Assertions.*;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 
 class ProjectSwitchLifecycleTest {
     @TempDir Path directory;
@@ -186,6 +188,26 @@ class ProjectSwitchLifecycleTest {
         assertEquals("still A", scopeBeforeVeto.admit(() -> "still A"));
         assertFalse(disposed.get());
         allowed.set(true);
+        CompanionApp.instanceState().saveNow();
+        Path stateFile = a.dataDirectory().resolve("state.json");
+        byte[] savedState = Files.readAllBytes(stateFile);
+        Files.delete(stateFile);
+        Files.createDirectory(stateFile);
+        Files.writeString(stateFile.resolve("occupied"), "x");
+        CompanionApp.instanceState().setDebuggerWatches(List.of("pending view state"));
+        try {
+            assertThrows(ExecutionException.class, () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+            assertSame(scopeBeforeVeto, CompanionApp.requireProject());
+            assertFalse(disposed.get(), "A failed state flush must preserve open views");
+            SwingUtilities.invokeAndWait(() -> {
+                assertSame(editor, MainWindow.INSTANCE.getEditorTabs().getSelectedEditor());
+                assertTrue(MainWindow.INSTANCE.isEnabled());
+            });
+        } finally {
+            Files.delete(stateFile.resolve("occupied"));
+            Files.delete(stateFile);
+            Files.write(stateFile, savedState);
+        }
         byte[] savedRegistry = Files.readAllBytes(paths.projects());
         Files.delete(paths.projects());
         Files.createDirectory(paths.projects());
