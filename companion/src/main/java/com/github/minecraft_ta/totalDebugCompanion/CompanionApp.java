@@ -531,6 +531,21 @@ public final class CompanionApp {
     }
 
     private static void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
+        SwingUtilities.invokeLater(() -> {
+            if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+            if (uiStarted) {
+                MainWindow.INSTANCE.navigation().runtimeChanged();
+                MainWindow.INSTANCE.refreshRuntimeSources();
+            }
+            List<PendingNavigation> queued;
+            synchronized (lifecycleLock) {
+                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+                queued = selected.drainNavigations();
+            }
+            for (PendingNavigation pending : queued) {
+                MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
+            }
+        });
         try {
             CompletableFuture<?> breakpoints;
             synchronized (lifecycleLock) {
@@ -544,22 +559,6 @@ public final class CompanionApp {
         } catch (RuntimeException failure) {
             System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
                     "Runtime installed, but debugger refresh failed", failure);
-        } finally {
-            SwingUtilities.invokeLater(() -> {
-                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
-                if (uiStarted) {
-                    MainWindow.INSTANCE.navigation().runtimeChanged();
-                    MainWindow.INSTANCE.refreshRuntimeSources();
-                }
-                List<PendingNavigation> queued;
-                synchronized (lifecycleLock) {
-                    if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
-                    queued = selected.drainNavigations();
-                }
-                for (PendingNavigation pending : queued) {
-                    MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
-                }
-            });
         }
     }
 
