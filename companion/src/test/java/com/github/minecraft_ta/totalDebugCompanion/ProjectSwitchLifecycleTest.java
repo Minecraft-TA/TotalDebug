@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -92,10 +94,32 @@ class ProjectSwitchLifecycleTest {
             assertEquals(a, CompanionApp.currentProject());
             assertEquals(a, ProjectRegistry.open(paths).selected());
             assertEquals(2, CompanionApp.projects().size());
-            assertFalse(CompanionApp.isSwitchingProjects());
+            assertFalse(CompanionApp.isSwitching());
             assertEquals(endpoint, mcp.endpointUrl());
             var status = client.callTool(new io.modelcontextprotocol.spec.McpSchema.CallToolRequest("status", Map.of()));
             assertFalse(Boolean.TRUE.equals(status.isError()), "MCP must stay initialized through switches");
+            // A failed state flush is reversible, just like the editor save veto.
+            Files.delete(b.dataDirectory().resolve("scripts"));
+            Files.createDirectory(b.dataDirectory().resolve("scripts"));
+            var scopeBeforeFlush = CompanionApp.requireProject();
+            CompanionApp.instanceState().saveNow();
+            Path stateFile = a.dataDirectory().resolve("state.json");
+            byte[] savedState = Files.readAllBytes(stateFile);
+            Files.delete(stateFile);
+            Files.createDirectory(stateFile);
+            Files.writeString(stateFile.resolve("occupied"), "x");
+            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("pending A"));
+            assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+            assertSame(scopeBeforeFlush, CompanionApp.requireProject());
+            assertTrue(scopeBeforeFlush.admit(() -> true));
+            assertFalse(CompanionApp.isSwitching());
+            Files.delete(stateFile.resolve("occupied"));
+            Files.delete(stateFile);
+            Files.write(stateFile, savedState);
+            CompanionApp.instanceState().saveNow();
+            Files.delete(b.dataDirectory().resolve("scripts"));
+            Files.writeString(b.dataDirectory().resolve("scripts"), "restore fixture");
             verifyEditorSwitch(a, b, paths);
             client.close();
             mcp.close();
@@ -139,12 +163,12 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() ->
                 com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE.getEditorTabs().openEditorTab(editor));
         set("uiStarted", true);
-        long generationBeforeVeto = CompanionApp.projectGeneration();
+        var scopeBeforeVeto = CompanionApp.requireProject();
         assertThrows(java.util.concurrent.ExecutionException.class,
                 () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
         assertEquals(a, CompanionApp.currentProject());
-        assertEquals(generationBeforeVeto, CompanionApp.projectGeneration());
-        assertEquals("still A", CompanionApp.inProject(generationBeforeVeto, () -> "still A"));
+        assertSame(scopeBeforeVeto, CompanionApp.requireProject());
+        assertEquals("still A", scopeBeforeVeto.admit(() -> "still A"));
         assertFalse(disposed.get());
         allowed.set(true);
         byte[] savedRegistry = Files.readAllBytes(paths.projects());
@@ -193,12 +217,16 @@ class ProjectSwitchLifecycleTest {
                     new com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs(), tree));
         });
         var navigation = created.join();
+        var scopeA = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
+        var scopeB = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
+        navigation.projectChanged(scopeA);
         for (String directory : java.util.List.of("A/one", "A/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
         var delayedA = new CompletableFuture<Boolean>();
         pending.set(delayedA);
         var oldTraversal = navigation.goBack();
-        javax.swing.SwingUtilities.invokeAndWait(navigation::projectChanged);
+        scopeA.retire();
+        javax.swing.SwingUtilities.invokeAndWait(() -> navigation.projectChanged(scopeB));
         assertFalse(oldTraversal.isDone(), "Old lookup is still awaiting a callback");
         for (String directory : java.util.List.of("B/one", "B/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);

@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.SourceFileNavigation;
@@ -42,10 +44,16 @@ public final class NavigationService {
     private final MainWindow window;
     private final EditorTabs tabs;
     private final FileTreeView fileTree;
-    private final NavigationHistory history = new NavigationHistory(100);
-    private final AtomicBoolean traversingHistory = new AtomicBoolean();
-    private volatile NavigationEntry currentEntry;
-    private final java.util.concurrent.atomic.AtomicLong runtimeGeneration = new java.util.concurrent.atomic.AtomicLong();
+    private volatile ProjectScope project;
+    private final NavigationState emptyNavigation = new NavigationState();
+    private NavigationState state() { var scope = project; return scope == null ? emptyNavigation : scope.navigation(); }
+    private record Context(ProjectScope project, RuntimeBinding runtime) { }
+    private Context captureContext() { var scope = project; return new Context(scope, scope == null ? null : scope.runtime()); }
+    private boolean isCurrent(Context captured) {
+        return captured.project() == project && (project == null
+                ? !CompanionApp.isSwitching()
+                : project.isActive() && project.runtime() == captured.runtime());
+    }
     private final Action backAction = new AbstractAction("Back") {
         @Override
         public void actionPerformed(ActionEvent event) {
@@ -60,6 +68,7 @@ public final class NavigationService {
     };
 
     public NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree) {
+        this.project = CompanionApp.currentScope();
         this.window = Objects.requireNonNull(window, "window");
         this.tabs = Objects.requireNonNull(tabs, "tabs");
         this.fileTree = Objects.requireNonNull(fileTree, "fileTree");
@@ -74,15 +83,15 @@ public final class NavigationService {
     public CompletableFuture<Void> navigate(NavigationTarget target, Activation activation) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
-        long generation = this.runtimeGeneration.get();
+        Context context = captureContext();
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                (generation == this.runtimeGeneration.get() ? performNavigation(target, activation)
+                (isCurrent(context) ? performNavigation(target, activation)
                         : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
                         .thenCompose(ignored -> captureDestination(target))
                         .thenAccept(destination -> {
-                            if (generation != this.runtimeGeneration.get()) return;
-                            this.currentEntry = destination;
-                            this.history.recordNewNavigation(origin);
+                            if (!isCurrent(context)) return;
+                            state().currentEntry = destination;
+                            state().history.recordNewNavigation(origin);
                             refreshHistoryActions();
                         })
         );
@@ -99,19 +108,20 @@ public final class NavigationService {
     }
 
     public void runtimeChanged() {
-        this.runtimeGeneration.incrementAndGet();
-        SwingUtilities.invokeLater(() -> this.tabs.closeMatching(editor ->
+        state().traversingHistory.set(false);
+        Context context = captureContext();
+        SwingUtilities.invokeLater(() -> {
+            if (!isCurrent(context)) return;
+            this.tabs.closeMatching(editor ->
                 editor instanceof CodeView view && view.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
                         || editor instanceof ResourceView resource && resource.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
-                        || editor instanceof UsagesView || editor instanceof LiteralUsagesView));
+                        || editor instanceof UsagesView || editor instanceof LiteralUsagesView);
+        });
         refreshHistoryActions();
     }
 
-    public void projectChanged() {
-        this.runtimeGeneration.incrementAndGet();
-        this.traversingHistory.set(false);
-        this.currentEntry = null;
-        this.history.clear();
+    public void projectChanged(ProjectScope project) {
+        this.project = project;
         refreshHistoryActions();
     }
 
@@ -185,36 +195,36 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
-        long generation = this.runtimeGeneration.get();
-        if (!this.traversingHistory.compareAndSet(false, true)) {
+        Context context = captureContext();
+        if (!state().traversingHistory.compareAndSet(false, true)) {
             return CompletableFuture.completedFuture(null);
         }
-        NavigationEntry destination = this.history.destination(
+        NavigationEntry destination = state().history.destination(
                 direction,
                 CompanionApp.getActiveRuntimeSignature()
         );
         if (destination == null) {
-            this.traversingHistory.set(false);
+            state().traversingHistory.set(false);
             refreshHistoryActions();
             return CompletableFuture.completedFuture(null);
         }
 
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                (generation == this.runtimeGeneration.get() ? performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
+                (isCurrent(context) ? performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
                         : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
-                        .thenCompose(ignored -> restoreSelectedEntry(destination))
+                        .thenCompose(ignored -> restoreSelectedEntry(destination, context))
                         .thenRun(() -> {
-                            if (generation != this.runtimeGeneration.get()) return;
-                            this.currentEntry = destination;
-                            this.history.complete(direction, destination, origin);
+                            if (!isCurrent(context)) return;
+                            state().currentEntry = destination;
+                            state().history.complete(direction, destination, origin);
                         })
         );
         navigation.whenComplete((ignored, failure) -> {
-            if (generation != this.runtimeGeneration.get()) return;
+            if (!isCurrent(context)) return;
             if (failure != null && !(unwrap(failure) instanceof java.util.concurrent.CancellationException)) {
-                this.history.discard(direction, destination);
+                state().history.discard(direction, destination);
             }
-            this.traversingHistory.set(false);
+            state().traversingHistory.set(false);
             refreshHistoryActions();
         });
         reportFailure(navigation, destination.target());
@@ -226,7 +236,7 @@ public final class NavigationService {
         SwingUtilities.invokeLater(() -> {
             try {
                 IEditorPanel editor = this.tabs.getSelectedEditor();
-                NavigationEntry current = this.currentEntry;
+                NavigationEntry current = state().currentEntry;
                 if (current != null && (!isEditorDestination(current.target())
                         || editor == null
                         || sameEditorDestination(
@@ -265,8 +275,9 @@ public final class NavigationService {
         return result;
     }
 
-    private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry) {
+    private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry, Context context) {
         return onEdt(() -> {
+            if (!isCurrent(context)) return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Project changed"));
             IEditorPanel editor = this.tabs.getSelectedEditor();
             if (!isEditorDestination(entry.target())) {
                 return CompletableFuture.completedFuture(null);
@@ -282,7 +293,7 @@ public final class NavigationService {
     }
 
     private void selectedEditorChanged(IEditorPanel editor) {
-        this.currentEntry = entryForEditor(editor);
+        state().currentEntry = entryForEditor(editor);
     }
 
     private NavigationEntry entryForEditor(IEditorPanel editor) {
@@ -330,9 +341,9 @@ public final class NavigationService {
     }
 
     private void reportFailure(CompletableFuture<Void> navigation, NavigationTarget target) {
-        long generation = this.runtimeGeneration.get();
+        Context context = captureContext();
         navigation.whenComplete((ignored, failure) -> {
-            if (failure != null && generation == this.runtimeGeneration.get() && !CompanionApp.isSwitchingProjects()) {
+            if (failure != null && isCurrent(context) && !CompanionApp.isSwitching()) {
                 showFailure(target, unwrap(failure));
             }
         });
@@ -341,12 +352,12 @@ public final class NavigationService {
     private void refreshHistoryActions() {
         SwingUtilities.invokeLater(() -> {
             String runtimeSignature = CompanionApp.getActiveRuntimeSignature();
-            boolean available = !this.traversingHistory.get();
-            this.backAction.setEnabled(available && this.history.canNavigate(
+            boolean available = !state().traversingHistory.get();
+            this.backAction.setEnabled(available && state().history.canNavigate(
                     NavigationHistory.Direction.BACK,
                     runtimeSignature
             ));
-            this.forwardAction.setEnabled(available && this.history.canNavigate(
+            this.forwardAction.setEnabled(available && state().history.canNavigate(
                     NavigationHistory.Direction.FORWARD,
                     runtimeSignature
             ));
@@ -360,11 +371,11 @@ public final class NavigationService {
             Activation activation
     ) {
         var service = CompanionApp.getDecompilationService();
-        long generation = this.runtimeGeneration.get();
+        Context context = captureContext();
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
-                if (generation != this.runtimeGeneration.get() || service != CompanionApp.getDecompilationService()) {
+                if (!isCurrent(context) || service != CompanionApp.getDecompilationService()) {
                     return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Runtime changed during source navigation"));
                 }
                 return this.tabs.focusOrCreateIfAbsent(
@@ -418,9 +429,11 @@ public final class NavigationService {
 
     private CompletableFuture<Void> revealPackage(NavigationTarget.RuntimePackage target) {
         var result = new CompletableFuture<Void>();
+        Context context = captureContext();
         CompanionApp.getCodeInsightService().locateClass(target.ownerClassName(), new CodeInsightService.Listener<>() {
             @Override
             public void onCompleted(RuntimeSnapshotBytecodeSource.Source source) {
+                if (!isCurrent(context)) { result.cancel(false); return; }
                 if (source == null) {
                     result.completeExceptionally(new IllegalStateException(
                             "Class " + target.ownerClassName() + " is not present in the runtime index"
@@ -477,10 +490,10 @@ public final class NavigationService {
             Activation activation
     ) {
         var result = new CompletableFuture<Void>();
-        long generation = this.runtimeGeneration.get();
+        Context context = captureContext();
         SwingUtilities.invokeLater(() -> {
             try {
-                if (generation != this.runtimeGeneration.get() || CompanionApp.isSwitchingProjects()) {
+                if (!isCurrent(context) || CompanionApp.isSwitching()) {
                     result.completeExceptionally(new java.util.concurrent.CancellationException("Project changed"));
                     return;
                 }
@@ -503,7 +516,7 @@ public final class NavigationService {
 
     private void showFailure(NavigationTarget target, Throwable failure) {
         if (failure instanceof java.util.concurrent.CancellationException) return;
-        long generation = this.runtimeGeneration.get();
+        Context context = captureContext();
         failure.printStackTrace(System.err);
         String detail = failure.getMessage();
         if (detail == null || detail.isBlank()) {
@@ -511,7 +524,7 @@ public final class NavigationService {
         }
         String message = "Unable to open " + label(target) + ": " + detail;
         SwingUtilities.invokeLater(() -> {
-            if (generation != this.runtimeGeneration.get() || CompanionApp.isSwitchingProjects()) return;
+            if (!isCurrent(context) || CompanionApp.isSwitching()) return;
             JOptionPane.showMessageDialog(
                 this.window,
                 message,

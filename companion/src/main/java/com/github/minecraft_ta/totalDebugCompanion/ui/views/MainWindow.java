@@ -366,6 +366,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void refreshProfile() {
+        this.navigationService.projectChanged(CompanionApp.currentScope());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
@@ -386,7 +387,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.evaluateExpressionWindow = null;
         this.searchEverywherePopup = null;
         this.snippetExecutions = null;
-        this.navigationService.projectChanged();
+        this.statusBar.setEditor(null);
         setEnabled(false);
         return true;
     }

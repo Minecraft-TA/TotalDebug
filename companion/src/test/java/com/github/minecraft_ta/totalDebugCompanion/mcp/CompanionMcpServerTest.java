@@ -3,6 +3,9 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.net.URI;
@@ -125,7 +128,7 @@ class CompanionMcpServerTest {
                             "\"code\":\"return 1;\",\"wait_ms\":0}}}"
             );
             assertEquals(200, unavailableExecution.statusCode());
-            assertTrue(unavailableExecution.body().contains("not available"));
+            assertTrue(unavailableExecution.body().contains("No Minecraft project"));
             assertTrue(unavailableExecution.body().contains("\"isError\":true"));
         }
         assertFalse(Files.exists(server.endpointDescriptor()));
@@ -146,7 +149,8 @@ class CompanionMcpServerTest {
         CompanionMcpServer server = new CompanionMcpServer(
                 this.temporaryDirectory.resolve("data"),
                 jobs,
-                0
+                0, new DebuggerMcpService(() -> null, name -> null),
+                () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory())
         );
         try (server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();
