@@ -75,6 +75,8 @@ public final class CompanionApplication implements AutoCloseable {
     private CompanionMcpServer mcpServer;
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
+    private ServiceStatus gameStatus;
+    private ServiceStatus mcpStatus;
     private volatile boolean closed;
     private ProjectRegistry projects;
     private volatile boolean switching;
@@ -495,6 +497,8 @@ public final class CompanionApplication implements AutoCloseable {
         try {
             server.start();
             mcpServer = server;
+            updateMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening",
+                    "MCP is listening at " + server.endpointUrl()));
             System.err.println("TotalDebug Companion MCP listening at " + server.endpointUrl());
             return server;
         } catch (Exception failure) { server.close(); throw failure; }
@@ -508,11 +512,7 @@ public final class CompanionApplication implements AutoCloseable {
         ));
         try {
             startMcpServer();
-            updateMcpStatus(new ServiceStatus(
-                    ServiceStatus.State.AVAILABLE,
-                    "Listening",
-                    "MCP is listening at " + mcpServer.endpointUrl()
-            ));
+
         } catch (Exception exception) {
             updateMcpStatus(new ServiceStatus(
                     ServiceStatus.State.FAILED,
@@ -565,6 +565,8 @@ public final class CompanionApplication implements AutoCloseable {
                 // These direct EDT updates and the replay snapshot precede publication.
                 window.refreshProfile();
                 window.setRuntimeIndexStatus(getRuntimeIndexStatus());
+                if (gameStatus != null) window.setGameStatus(gameStatus);
+                if (mcpStatus != null) window.setMcpStatus(mcpStatus);
                 ProjectScope scope = current;
                 queued = scope != null && scope.runtime() != null ? scope.drainNavigations() : List.of();
                 ui = window;
@@ -597,8 +599,18 @@ public final class CompanionApplication implements AutoCloseable {
             if (!closed && ui == view) action.accept(view);
         });
     }
-    private void updateGameStatus(ServiceStatus status) { onUi(view -> view.setGameStatus(status)); }
-    private void updateMcpStatus(ServiceStatus status) { onUi(view -> view.setMcpStatus(status)); }
+    private void updateGameStatus(ServiceStatus status) {
+        synchronized (lifecycleLock) {
+            gameStatus = status;
+            onUi(view -> view.setGameStatus(status));
+        }
+    }
+    private void updateMcpStatus(ServiceStatus status) {
+        synchronized (lifecycleLock) {
+            mcpStatus = status;
+            onUi(view -> view.setMcpStatus(status));
+        }
+    }
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) { onUi(view -> view.setRuntimeIndexStatus(status)); }
     public void focusWindow() { onUi(CompanionUi::focus); }
 

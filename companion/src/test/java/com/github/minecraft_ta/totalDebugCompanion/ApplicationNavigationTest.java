@@ -12,6 +12,14 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
+import java.net.Socket;
+import java.awt.Container;
+import java.awt.Component;
+import javax.swing.AbstractButton;
+import com.github.tth05.scnet.IConnectionListener;
+import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
+import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
@@ -63,6 +71,38 @@ class ApplicationNavigationTest {
             scope.cancelSwitch();
             SwingUtilities.invokeAndWait(() -> assertNotNull(app.createWindow()));
         }
+    }
+
+    @Test void lateWindowReplaysGameAndMcpStatuses() throws Exception {
+        var configuration = new CompanionLaunchConfiguration(directory);
+        try (var app = new CompanionApplication(configuration, "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(3, TimeUnit.SECONDS);
+            app.startMcpServer(ProjectSwitchJobs.create(), 0);
+            var connecting = new CompletableFuture<Void>();
+            app.session().server().addConnectionListener(new IConnectionListener() {
+                @Override public void onConnected() { connecting.complete(null); }
+                @Override public void onDisconnected() { }
+                @Override public void onConnectionError(Throwable failure) { connecting.completeExceptionally(failure); }
+            });
+            app.session().bindAndPublish(configuration);
+            int port = CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION).port();
+            try (var socket = new Socket("127.0.0.1", port)) {
+                connecting.get(3, TimeUnit.SECONDS);
+                SwingUtilities.invokeAndWait(() -> {
+                    var window = app.createWindow();
+                    assertTrue(hasButton(window, "MCP: Listening"));
+                    assertTrue(hasButton(window, "Game: Connecting"));
+                });
+            }
+        }
+    }
+
+    private static boolean hasButton(Container parent, String text) {
+        for (Component child : parent.getComponents()) {
+            if (child instanceof AbstractButton button && text.equals(button.getText())) return true;
+            if (child instanceof Container container && hasButton(container, text)) return true;
+        }
+        return false;
     }
 
     private static final class RecordingUi implements CompanionUi {
