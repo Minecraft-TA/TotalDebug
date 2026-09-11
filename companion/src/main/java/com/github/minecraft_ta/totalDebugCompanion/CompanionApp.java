@@ -372,6 +372,7 @@ public final class CompanionApp {
         if (requested.equals(currentProject())) { projects.select(requested); return; }
         // Prepare the actual replacement before disturbing the current project.
         ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
+        replacement.beginSwitch();
         ProjectScope old;
         synchronized (lifecycleLock) {
             old = current;
@@ -431,7 +432,10 @@ public final class CompanionApp {
                     if (old != null) old.cancelSwitch();
                     try {
                         if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
-                    } finally { switching = false; }
+                    } finally {
+                        if (installed) replacement.cancelSwitch();
+                        switching = false;
+                    }
                 }
                 if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
             }
