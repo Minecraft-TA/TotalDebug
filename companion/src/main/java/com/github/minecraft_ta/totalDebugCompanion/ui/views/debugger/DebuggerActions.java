@@ -64,8 +64,8 @@ public final class DebuggerActions implements AutoCloseable {
     }
 
     void applyStatus(DebuggerSessionController.Status status) {
+        Objects.requireNonNull(status, "status");
         UIUtils.onEdt(() -> {
-            Objects.requireNonNull(status, "status");
             if (this.closed) {
                 return;
             }

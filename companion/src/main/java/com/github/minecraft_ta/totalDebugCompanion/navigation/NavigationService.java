@@ -200,18 +200,18 @@ public final class NavigationService {
                         -1,
                         activation
                 );
-                case NavigationTarget.SymbolUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
+                case NavigationTarget.SymbolUsages usages -> dispatchNavigation(() -> openRuntimeEditor(requestedRuntime,
                         UsagesView.class,
                         view -> view.symbol().equals(usages.symbol()),
                         () -> new UsagesView(editors.get(), usages.symbol(), requestedRuntime)
                 ).thenAccept(UsagesView::restartSearch), activation);
-                case NavigationTarget.LiteralUsages usages -> onEdt(() -> openRuntimeEditor(requestedRuntime,
+                case NavigationTarget.LiteralUsages usages -> dispatchNavigation(() -> openRuntimeEditor(requestedRuntime,
                         LiteralUsagesView.class,
                         view -> view.literal().equals(usages.literal()),
                         () -> new LiteralUsagesView(editors.get(), usages.literal(), requestedRuntime)
                 ).thenAccept(LiteralUsagesView::restartSearch), activation);
                 case NavigationTarget.RuntimePackage runtimePackage -> revealPackage(runtimePackage);
-                case NavigationTarget.ModuleSearch search -> onEdt(() -> {
+                case NavigationTarget.ModuleSearch search -> dispatchNavigation(() -> {
                     this.window.openSearchEverywhere(search);
                     return CompletableFuture.completedFuture(null);
                 }, Activation.KEEP_CURRENT_WINDOW);
@@ -306,7 +306,7 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry, Context context) {
-        return onEdt(() -> {
+        return dispatchNavigation(() -> {
             if (!isCurrent(context)) return CompletableFuture.failedFuture(new CancellationException("Project changed"));
             IEditorPanel editor = this.tabs.getSelectedEditor();
             if (!isEditorDestination(entry.target())) {
@@ -406,7 +406,7 @@ public final class NavigationService {
         var service = installed.decompiler();
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
-            return onEdt(() -> {
+            return dispatchNavigation(() -> {
                 if (!isCurrent(context) || service != requireProject().requireRuntime().decompiler()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
@@ -434,14 +434,14 @@ public final class NavigationService {
         if (path.getParent().equals(scripts)
                 && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
             String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
-            return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
+            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,
                     view -> view.getTitle().equals(fileName),
                     () -> new ScriptView(editors.get(), scriptName)
             ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         if (fileName.endsWith(".java")) {
-            return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
+            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                     CodeView.class,
                     view -> view.getPath().equals(path),
                     () -> new CodeView(editors.get(), path, target.offset())
@@ -452,7 +452,7 @@ public final class NavigationService {
 
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation) {
         RuntimeBinding installed = source instanceof ArchiveEntrySource ? captureContext().runtime() : null;
-        return onEdt(() -> openRuntimeEditor(installed,
+        return dispatchNavigation(() -> openRuntimeEditor(installed,
                 ResourceView.class,
                 view -> view.source().identity().equals(source.identity()),
                 () -> new ResourceView(editors.get(), source, installed)
@@ -528,7 +528,7 @@ public final class NavigationService {
         );
     }
 
-    private CompletableFuture<Void> onEdt(
+    private CompletableFuture<Void> dispatchNavigation(
             Supplier<CompletableFuture<Void>> operation,
             Activation activation
     ) {
