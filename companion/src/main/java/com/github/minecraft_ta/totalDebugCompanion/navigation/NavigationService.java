@@ -430,10 +430,9 @@ public final class NavigationService {
             return CompletableFuture.failedFuture(new IllegalArgumentException("File does not exist: " + path));
         }
         String fileName = path.getFileName().toString();
-        Path scripts = project.paths().scripts().toAbsolutePath().normalize();
+        Path scripts = requireProject().paths().scripts().toAbsolutePath().normalize();
         if (path.getParent().equals(scripts)
-                && fileName.endsWith(ScriptView.FILE_EXTENSION)
-                && project != null) {
+                && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
             String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
             return onEdt(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,

@@ -7,18 +7,21 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 /** Authenticated execution and cancellation, shared by editors and MCP jobs. */
 public final class ScriptExecutionService {
     private final CompanionSession session;
+    private final BooleanSupplier connected;
     private final ScriptCompilationService compiler;
 
-    public ScriptExecutionService(CompanionSession session, ScriptCompilationService compiler) {
+    public ScriptExecutionService(CompanionSession session, ScriptCompilationService compiler, BooleanSupplier connected) {
+        this.connected = connected;
         this.session = session;
         this.compiler = compiler;
     }
 
-    public boolean isConnected() { return session.isConnected(); }
+    public boolean isConnected() { return connected.getAsBoolean(); }
 
     public boolean run(ProjectScope project, int id, String source, boolean serverSide,
                        ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {

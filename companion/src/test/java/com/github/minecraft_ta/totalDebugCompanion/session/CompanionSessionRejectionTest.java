@@ -163,7 +163,7 @@ class CompanionSessionRejectionTest {
         try (var session = new CompanionSession(token);
              var compiler = new ScriptCompilationService(message -> true, message -> true);
              Client client = configuredClient(null)) {
-            var scripts = new ScriptExecutionService(session, compiler);
+            var scripts = new ScriptExecutionService(session, compiler, session::isConnected);
             session.bindAndPublish(configuration);
             var response = connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION));
             assertFalse(scripts.run(scope, 1, "source", false, ScriptExecutionEnvironment.THREAD, failure -> {}));

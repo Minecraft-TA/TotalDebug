@@ -5,7 +5,6 @@ import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.*;
@@ -99,15 +98,7 @@ public class FileTreeView extends JScrollPane {
         if (item instanceof DecompiledSourcesTreeItem.SourceItem source) {
             navigator.accept(new NavigationTarget.RuntimeClass(source.binaryName()));
         } else if (item instanceof FileSystemFileItem fileItem) {
-            String lowerName = fileItem.getName().toLowerCase(Locale.ROOT);
-            boolean scriptFile = lowerName.endsWith(ScriptView.FILE_EXTENSION);
-            if (scriptFile
-                    && node.getParent().getUserObject().getName().equals("scripts")
-                    && project.get() != null) {
-                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-            } else {
-                navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
-            }
+            navigator.accept(new NavigationTarget.LocalFile(fileItem.getPath()));
         } else if (item instanceof ZipFileRootItem.Entry entry) {
             String entryPath = entry.getEntryPath();
             if (entryPath.toLowerCase(Locale.ROOT).endsWith(".class")) {

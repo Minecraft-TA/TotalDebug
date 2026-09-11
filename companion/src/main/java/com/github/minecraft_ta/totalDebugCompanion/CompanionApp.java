@@ -235,7 +235,7 @@ public final class CompanionApp {
                     handleDebugTarget(message);
                 }
             });
-            scriptExecutions = new ScriptExecutionService(session, scriptCompiler);
+            scriptExecutions = new ScriptExecutionService(session, scriptCompiler, CompanionApp::isConnected);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (java.util.concurrent.CompletionException failure) {
@@ -565,7 +565,7 @@ public final class CompanionApp {
 
     static void configureWithoutSession(CompanionProfile developmentProfile) {
         session = new CompanionSession("ui-development");
-        scriptExecutions = new ScriptExecutionService(session, scriptCompiler);
+        scriptExecutions = new ScriptExecutionService(session, scriptCompiler, CompanionApp::isConnected);
         runtimeIndexService = new RuntimeIndexService(lifecycleLock, CompanionApp::installRuntimeSnapshot);
         debuggerController = createDebuggerController();
         try {
