@@ -86,7 +86,7 @@ public final class CompanionSession implements AutoCloseable {
             throw new IOException("Companion transport did not bind to loopback: " + address);
         }
         this.projectSelections = new ProjectSelectionServer(this.authenticator,
-                this.projectSelectionHandler == null ? this.attachmentHandler : this.projectSelectionHandler);
+                this.projectSelectionHandler == null ? this.attachmentHandler : this.projectSelectionHandler, this::isConnected);
         new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid(), this.projectSelections.port())
                 .writeAtomically(configuration.descriptorFile());
     }

@@ -10,8 +10,11 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 
 class ProjectSwitchLifecycleTest {
     @TempDir Path directory;
@@ -136,9 +139,12 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() ->
                 com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE.getEditorTabs().openEditorTab(editor));
         set("uiStarted", true);
+        long generationBeforeVeto = CompanionApp.projectGeneration();
         assertThrows(java.util.concurrent.ExecutionException.class,
                 () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
         assertEquals(a, CompanionApp.currentProject());
+        assertEquals(generationBeforeVeto, CompanionApp.projectGeneration());
+        assertEquals("still A", CompanionApp.inProject(generationBeforeVeto, () -> "still A"));
         assertFalse(disposed.get());
         allowed.set(true);
         byte[] savedRegistry = Files.readAllBytes(paths.projects());
@@ -169,7 +175,46 @@ class ProjectSwitchLifecycleTest {
         assertEquals(a, ProjectRegistry.open(paths).selected());
         CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
         assertEquals(b, ProjectRegistry.open(paths).selected());
+        verifyNavigationReset(window);
         javax.swing.SwingUtilities.invokeAndWait(window::dispose);
+    }
+
+    private static void verifyNavigationReset(com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow window) throws Exception {
+        var pending = new java.util.concurrent.atomic.AtomicReference<CompletableFuture<Boolean>>();
+        var created = new CompletableFuture<NavigationService>();
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var tree = new com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView(ignored -> { }) {
+                @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
+                    var delayed = pending.getAndSet(null);
+                    return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
+                }
+            };
+            created.complete(new NavigationService(window,
+                    new com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs(), tree));
+        });
+        var navigation = created.join();
+        for (String directory : java.util.List.of("A/one", "A/two"))
+            navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
+        var delayedA = new CompletableFuture<Boolean>();
+        pending.set(delayedA);
+        var oldTraversal = navigation.goBack();
+        javax.swing.SwingUtilities.invokeAndWait(navigation::projectChanged);
+        assertFalse(oldTraversal.isDone(), "Old lookup is still awaiting a callback");
+        for (String directory : java.util.List.of("B/one", "B/two"))
+            navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
+        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
+        var delayedB = new CompletableFuture<Boolean>();
+        pending.set(delayedB);
+        var newTraversal = navigation.goBack();
+        javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        assertFalse(newTraversal.isDone());
+        delayedA.complete(true);
+        oldTraversal.get(3, TimeUnit.SECONDS);
+        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.goBack().isDone(),
+                "Completion from A must not admit another traversal while B is still navigating"));
+        delayedB.complete(true);
+        newTraversal.get(3, TimeUnit.SECONDS);
+        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));
     }
 
     private static Object get(String name) throws Exception {

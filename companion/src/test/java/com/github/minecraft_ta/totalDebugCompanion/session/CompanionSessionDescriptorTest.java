@@ -24,7 +24,7 @@ class CompanionSessionDescriptorTest {
 
         expected.writeAtomically(descriptorFile);
 
-        assertEquals(expected, CompanionSessionDescriptor.read(descriptorFile));
+        assertEquals(expected, CompanionSessionDescriptor.read(descriptorFile, 3));
         String contents = Files.readString(descriptorFile);
         assertEquals("protocol=3\nport=41731\npid=9912\nprojectPort=41732\n", contents.replace("\r\n", "\n"));
         assertFalse(contents.contains("token"));

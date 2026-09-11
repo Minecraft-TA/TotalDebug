@@ -15,7 +15,8 @@ final class ProjectSelectionServer implements AutoCloseable {
     private final ExecutorService worker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-project-request").unstarted(runnable));
 
-    ProjectSelectionServer(SessionAuthenticator authenticator, CompanionSession.AttachmentHandler select) throws IOException {
+    ProjectSelectionServer(SessionAuthenticator authenticator, CompanionSession.AttachmentHandler select,
+                           java.util.function.BooleanSupplier connected) throws IOException {
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 8);
         this.server.setExecutor(this.worker);
         this.server.createContext(ProjectSelectionRequest.PATH, exchange -> {
@@ -37,6 +38,7 @@ final class ProjectSelectionServer implements AutoCloseable {
                             detail = authentication.rejectionReason();
                         } else {
                             select.attach(hello);
+                            exchange.getResponseHeaders().set(ProjectSelectionRequest.CONNECTED_HEADER, Boolean.toString(connected.getAsBoolean()));
                             exchange.sendResponseHeaders(204, -1);
                             return;
                         }

@@ -109,6 +109,7 @@ public final class NavigationService {
 
     public void projectChanged() {
         this.runtimeGeneration.incrementAndGet();
+        this.traversingHistory.set(false);
         this.currentEntry = null;
         this.history.clear();
         refreshHistoryActions();
@@ -184,6 +185,7 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
+        long generation = this.runtimeGeneration.get();
         if (!this.traversingHistory.compareAndSet(false, true)) {
             return CompletableFuture.completedFuture(null);
         }
@@ -198,14 +200,17 @@ public final class NavigationService {
         }
 
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
+                (generation == this.runtimeGeneration.get() ? performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
+                        : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
                         .thenCompose(ignored -> restoreSelectedEntry(destination))
                         .thenRun(() -> {
+                            if (generation != this.runtimeGeneration.get()) return;
                             this.currentEntry = destination;
                             this.history.complete(direction, destination, origin);
                         })
         );
         navigation.whenComplete((ignored, failure) -> {
+            if (generation != this.runtimeGeneration.get()) return;
             if (failure != null && !(unwrap(failure) instanceof java.util.concurrent.CancellationException)) {
                 this.history.discard(direction, destination);
             }

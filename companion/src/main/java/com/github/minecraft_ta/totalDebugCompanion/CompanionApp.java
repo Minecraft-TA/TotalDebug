@@ -382,7 +382,6 @@ public final class CompanionApp {
         try (var checked = InstanceState.open(new InstancePaths(requested.dataDirectory()))) { }
         synchronized (CompanionApp.class) {
             switchingProjects = true;
-            projectGeneration++;
         }
         try {
             if (uiStarted) {
@@ -390,6 +389,7 @@ public final class CompanionApp {
                 SwingUtilities.invokeAndWait(() -> canSwitch[0] = MainWindow.INSTANCE.prepareProjectSwitch());
                 if (!canSwitch[0]) throw new IOException("Project switch cancelled because an editor could not be saved");
             }
+            synchronized (CompanionApp.class) { projectGeneration++; }
             if (mcpServer != null) mcpServer.prepareProjectSwitch();
             scriptCompiler.runtimeDisconnected();
             if (session != null) session.disconnect();

@@ -31,7 +31,7 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
         AtomicFiles.writeString(descriptorFile, contents);
     }
 
-    public static CompanionSessionDescriptor read(Path descriptorFile) throws IOException {
+    public static CompanionSessionDescriptor read(Path descriptorFile, int expectedProtocol) throws IOException {
         Map<String, String> values = new HashMap<>();
         for (String line : Files.readAllLines(descriptorFile, StandardCharsets.UTF_8)) {
             if (line.isBlank()) {
@@ -52,12 +52,22 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
                 throw new IOException("Duplicate companion session descriptor field: " + key);
             }
         }
+        int protocol;
+        try {
+            protocol = Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY));
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("Companion session descriptor contains an invalid protocol", exception);
+        }
+        if (protocol != expectedProtocol) {
+            throw new IOException("Close the running Companion before using protocol " + expectedProtocol
+                    + "; its descriptor uses protocol " + protocol);
+        }
         if (values.size() != 4) {
             throw new IOException("Companion session descriptor must contain protocol, port, pid and projectPort");
         }
         try {
             return new CompanionSessionDescriptor(
-                    Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)),
+                    protocol,
                     Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)),
                     Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY)),
                     Integer.parseInt(values.get("projectPort"))

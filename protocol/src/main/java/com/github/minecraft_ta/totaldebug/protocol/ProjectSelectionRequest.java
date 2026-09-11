@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 public final class ProjectSelectionRequest {
     public static final String PATH = "/select-project";
     public static final int MAX_BYTES = 32_768;
+    public static final String CONNECTED_HEADER = "X-Companion-Connected";
 
     private ProjectSelectionRequest() {}
 
@@ -36,7 +37,8 @@ public final class ProjectSelectionRequest {
         return hello;
     }
 
-    public static void send(int port, ClientHelloMessage hello) throws IOException {
+    /** Returns whether Companion still has an authenticated game connection after selection. */
+    public static boolean send(int port, ClientHelloMessage hello) throws IOException {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid project request port");
         var connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + PATH).toURL().openConnection(java.net.Proxy.NO_PROXY);
         connection.setConnectTimeout(5000);
@@ -58,6 +60,7 @@ public final class ProjectSelectionRequest {
                 }
                 throw new IOException(detail);
             }
+            return Boolean.parseBoolean(connection.getHeaderField(CONNECTED_HEADER));
         } finally { connection.disconnect(); }
     }
 }

@@ -33,10 +33,11 @@ class CompanionProjectAttachmentTest {
             });
             var config = new CompanionLaunchConfiguration(directory);
             session.bindAndPublish(config);
-            var descriptor = CompanionSessionDescriptor.read(config.descriptorFile());
+            var descriptor = CompanionSessionDescriptor.read(config.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION);
             try (var a = connect(descriptor.port())) {
                 assertTrue(handshake(a, "a"));
-                ProjectSelectionRequest.send(descriptor.projectPort(), hello("b"));
+                assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("a")));
+                assertFalse(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
                 assertEquals(-1, a.getInputStream().read());
                 assertEquals("b", selected.get());
                 try (var rejected = connect(descriptor.port())) {
@@ -46,7 +47,15 @@ class CompanionProjectAttachmentTest {
                 try (var b = connect(descriptor.port())) {
                     assertTrue(handshake(b, "b"));
                     assertTrue(session.isConnected());
-                    assertEquals(descriptor, CompanionSessionDescriptor.read(config.descriptorFile()));
+                    assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
+                    // Do not read B's EOF before selecting it again: its local ready state may still be stale.
+                    assertFalse(ProjectSelectionRequest.send(descriptor.projectPort(), hello("a")));
+                    assertFalse(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
+                    try (var reconnected = connect(descriptor.port())) {
+                        assertTrue(handshake(reconnected, "b"));
+                        assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
+                    }
+                    assertEquals(descriptor, CompanionSessionDescriptor.read(config.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION));
                 }
             }
         }

@@ -225,6 +225,21 @@ class CodeModeJobServiceTest {
     }
 
     @Test
+    void switchDisconnectsCompilingJobsBeforeSynchronousCancellationFailure() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            var submitted = service.submit("return 42;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            transport.onCancel = scriptId -> service.acceptResult(scriptId,
+                    new ExecutionResult(ExecutionStatus.COMPILATION_FAILED, ExecutionText.empty(), null,
+                            ExecutionText.complete("Compilation cancelled")));
+            service.prepareProjectSwitch();
+            assertEquals(List.of(submitted.scriptId()), transport.cancelledScriptIds);
+            assertEquals(CodeModeJobService.JobState.DISCONNECTED, service.get(submitted.jobId()).orElseThrow().state());
+        }
+    }
+
+    @Test
     void cancellationTransportFailureDoesNotLoseTheLiveJob() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
@@ -392,6 +407,7 @@ class CodeModeJobServiceTest {
         private final List<Execution> executions = new ArrayList<>();
         private final List<Integer> cancelledScriptIds = new ArrayList<>();
         private RuntimeException cancelFailure;
+        private java.util.function.IntConsumer onCancel = ignored -> { };
 
         @Override
         public void execute(
@@ -407,6 +423,7 @@ class CodeModeJobServiceTest {
         public void cancel(int scriptId) {
             if (this.cancelFailure != null) throw this.cancelFailure;
             this.cancelledScriptIds.add(scriptId);
+            this.onCancel.accept(scriptId);
         }
     }
 

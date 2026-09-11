@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ProjectSelectionServerTest {
     @Test void requiresAuthenticationAndAnExplicitNonBrowserRequest() throws Exception {
         var selected = new AtomicReference<String>("a");
-        try (var server = new ProjectSelectionServer(new SessionAuthenticator("secret"), hello -> selected.set(hello.profileId()));
+        try (var server = new ProjectSelectionServer(new SessionAuthenticator("secret"), hello -> selected.set(hello.profileId()), () -> false);
              var client = HttpClient.newHttpClient()) {
             assertThrows(IOException.class, () -> ProjectSelectionRequest.send(server.port(), hello("wrong", "b")));
             assertEquals("a", selected.get());
@@ -25,7 +25,7 @@ class ProjectSelectionServerTest {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(ProjectSelectionRequest.encode(hello("secret", "b")))).build();
             assertEquals(400, client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode());
             assertEquals("a", selected.get());
-            ProjectSelectionRequest.send(server.port(), hello("secret", "b"));
+            assertFalse(ProjectSelectionRequest.send(server.port(), hello("secret", "b")));
             assertEquals("b", selected.get());
         }
     }
@@ -33,7 +33,7 @@ class ProjectSelectionServerTest {
     @Test void propagatesSaveVetoWithoutChangingSelection() throws Exception {
         try (var server = new ProjectSelectionServer(new SessionAuthenticator("secret"), hello -> {
             throw new IOException("An editor could not be saved");
-        })) {
+        }, () -> false)) {
             var failure = assertThrows(IOException.class, () -> ProjectSelectionRequest.send(server.port(), hello("secret", "b")));
             assertTrue(failure.getMessage().contains("could not be saved"));
         }

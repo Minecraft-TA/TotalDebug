@@ -317,8 +317,12 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     public void prepareProjectSwitch() {
-        for (String jobId : List.copyOf(this.jobsByScriptId.values())) cancel(jobId);
+        var scriptIds = List.copyOf(this.jobsByScriptId.keySet());
         markRuntimeDisconnected();
+        for (int scriptId : scriptIds) {
+            try { this.transport.cancel(scriptId); }
+            catch (RuntimeException ignored) { /* Disconnected jobs already report that target code may still be running. */ }
+        }
     }
 
     private void markRuntimeDisconnected() {
@@ -575,7 +579,7 @@ public final class CodeModeJobService implements AutoCloseable {
                     null,
                     false,
                     null,
-                    "Minecraft disconnected before the job completed",
+                    "Minecraft disconnected before the job completed; target execution may still be running",
                     now
             );
             return true;
