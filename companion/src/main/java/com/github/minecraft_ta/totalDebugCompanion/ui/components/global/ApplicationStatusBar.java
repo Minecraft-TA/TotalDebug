@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import java.awt.CardLayout;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
@@ -37,7 +38,7 @@ public final class ApplicationStatusBar extends JPanel {
     private final JLabel editorStatusLabel = new JLabel();
     private final JLabel taskLabel = new JLabel();
     private final JButton taskState = new JButton();
-    private final JPanel taskCards = new JPanel(new java.awt.CardLayout());
+    private final JPanel taskCards = new JPanel(new CardLayout());
     private final ServiceStatusWidget gameStatus = new ServiceStatusWidget(
             "Game",
             new ServiceStatus(
@@ -190,7 +191,7 @@ public final class ApplicationStatusBar extends JPanel {
     public void setRuntimeStatus(RuntimeIndexService.Status status) {
         UIUtils.onEdt(() -> {
             this.runtimeStatus = status;
-            java.awt.CardLayout cards = (java.awt.CardLayout) this.taskCards.getLayout();
+            CardLayout cards = (CardLayout) this.taskCards.getLayout();
             if (status.active()) {
                 this.taskLabel.setText(status.detail());
                 this.taskLabel.setToolTipText(status.detail());
