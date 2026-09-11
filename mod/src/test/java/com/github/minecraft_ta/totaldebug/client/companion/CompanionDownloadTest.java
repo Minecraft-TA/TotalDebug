@@ -191,7 +191,8 @@ class CompanionDownloadTest {
                 client.transport = transport;
                 client.endpoint = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
                 CompanionAppInstaller installer = new CompanionAppInstaller(this.directory, "", release, client,
-                        new CompanionAppInstaller.DownloadLimits(Duration.ofMillis(300), Duration.ofMillis(300),
+                        new CompanionAppInstaller.DownloadLimits(
+                                sendHeaders ? Duration.ofSeconds(2) : Duration.ofMillis(300), Duration.ofMillis(300),
                                 Duration.ofSeconds(3), 4));
                 IOException failure = assertThrows(IOException.class, installer::resolveOrInstall);
                 if (sendHeaders) assertTrue(failure.getMessage().contains("made no progress"), failure.toString());
