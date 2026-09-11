@@ -41,6 +41,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.tth05.scnet.message.AbstractMessage;
 import org.eclipse.jdt.core.dom.ASTParser;
 import javax.swing.SwingUtilities;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
@@ -54,7 +55,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.LinkedHashMap;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
@@ -109,7 +109,7 @@ public final class CompanionApplication implements AutoCloseable {
                             "Waiting for Minecraft to finish the authenticated connection."
                     ));
                 }
-    
+
                 @Override
                 public void connected() {
                     updateGameStatus(new ServiceStatus(
@@ -118,7 +118,7 @@ public final class CompanionApplication implements AutoCloseable {
                             "Minecraft is connected and authenticated."
                     ));
                 }
-    
+
                 @Override
                 public void disconnected() {
                     scriptCompiler.runtimeDisconnected();
@@ -133,17 +133,17 @@ public final class CompanionApplication implements AutoCloseable {
                         current.runtimeDisconnected();
                     }
                 }
-    
+
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
                 }
-    
+
                 @Override
                 public void serverManifest(ServerManifestMessage message) {
                     scriptCompiler.acceptServerManifest(message);
                 }
-    
+
                 @Override
                 public void debugTarget(DebugTargetMessage message) {
                     handleDebugTarget(message);
@@ -186,7 +186,7 @@ public final class CompanionApplication implements AutoCloseable {
             CompanionUi view = ui;
             ui = null;
             if (view != null) {
-                try { onEdtAndWait(view::dispose); }
+                try { UIUtils.onEdtAndWait(view::dispose); }
                 catch (InvocationTargetException | InterruptedException failure) {
                     if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                     reportCleanupFailure("Close UI", failure);
@@ -317,7 +317,6 @@ public final class CompanionApplication implements AutoCloseable {
                 try { old.close(); }
                 catch (IOException | RuntimeException failure) { reportCleanupFailure("Close retired project", failure); }
             }
-            ASTCache.clear();
             synchronized (lifecycleLock) { current = replacement; }
             installed = true;
             runCleanup("Restore debugger preferences", () -> restoreProjectState(replacement));
@@ -587,7 +586,7 @@ public final class CompanionApplication implements AutoCloseable {
     private void refreshUiProfile() {
         CompanionUi view = ui;
         if (view == null) return;
-        try { onEdtAndWait(view::refreshProfile); }
+        try { UIUtils.onEdtAndWait(view::refreshProfile); }
         catch (InvocationTargetException failure) { throw new IllegalStateException("Unable to refresh the Companion UI", failure.getCause()); }
         catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new IllegalStateException("Interrupted refreshing the Companion UI", failure); }
     }
@@ -622,11 +621,6 @@ public final class CompanionApplication implements AutoCloseable {
             catch (IOException failure) { view.showError("Unable to save state", failure.getMessage()); return; }
         }
         exitRequested.countDown();
-    }
-
-    private static void onEdtAndWait(Runnable action) throws InvocationTargetException, InterruptedException {
-        if (SwingUtilities.isEventDispatchThread()) action.run();
-        else SwingUtilities.invokeAndWait(action);
     }
 
     public boolean isConnected() {

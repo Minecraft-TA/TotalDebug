@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsigh
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerBreakpointResolver;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.ExpressionScopeAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
@@ -172,6 +171,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 }
         );
         this.codeVisionController = new CodeVisionController(
+                context.astCache(),
                 this.identifier,
                 this.insightService,
                 this.codeVisionLayerUI,
@@ -245,7 +245,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.removeDebuggerPresentationListener = () -> {
             };
         } else {
-            this.removeInlineAstListener = ASTCache.addChangeListener(this.identifier, (unit, version) ->
+            this.removeInlineAstListener = context.astCache().addChangeListener(this.identifier, (unit, version) ->
                     SwingUtilities.invokeLater(this::updateInlineValueHints)
             );
             this.removeDebuggerPresentationListener = DebuggerEditorPresentation.addListener(snapshot ->
@@ -298,8 +298,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             return;
         }
         this.codeVisionLayerUI.setInlineValues(DebuggerInlineValueHints.create(
-                ASTCache.getFromCache(this.identifier),
-                ASTCache.getContents(this.identifier),
+                context.astCache().getFromCache(this.identifier),
+                context.astCache().getContents(this.identifier),
                 snapshot
         ), this.codeVisionLayer);
     }
@@ -511,8 +511,8 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private ExpressionCompletionSupport.CompletionProvider completionProviderAtLine(int displayedLine) {
-        String source = ASTCache.getContents(this.identifier);
-        var unit = ASTCache.getFromCache(this.identifier);
+        String source = context.astCache().getContents(this.identifier);
+        var unit = context.astCache().getFromCache(this.identifier);
         if (source == null || unit == null) {
             return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
         }
@@ -552,7 +552,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private Optional<DebugEngine.SourceBreakpoint> breakpointRequestAtLine(int displayedLine) {
-        var unit = ASTCache.getFromCache(this.identifier);
+        var unit = context.astCache().getFromCache(this.identifier);
         if (unit == null) {
             throw new IllegalStateException("Source analysis is still loading");
         }
@@ -659,7 +659,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void resolveSelectedSymbol(String action, java.util.function.Consumer<CodeSymbol> consumer) {
         try {
-            var resolution = JavaSymbolResolver.resolve(this.identifier, this.editorPane.getCaretPosition());
+            var resolution = JavaSymbolResolver.resolve(context.astCache(), this.identifier, this.editorPane.getCaretPosition());
             if (!resolution.isResolved()) {
                 this.bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
                 return;

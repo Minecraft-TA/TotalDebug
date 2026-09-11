@@ -37,13 +37,13 @@ public final class JavaSymbolResolver {
     private JavaSymbolResolver() {
     }
 
-    public static IJavaElement selectElement(String editorIdentifier, int offset) throws JavaModelException {
-        CompilationUnit unit = ASTCache.getFromCache(editorIdentifier);
+    public static IJavaElement selectElement(ASTCache cache, String editorIdentifier, int offset) throws JavaModelException {
+        CompilationUnit unit = cache.getFromCache(editorIdentifier);
         if (unit == null) {
             return null;
         }
 
-        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
         if (generatedOffset < 0) {
             return null;
         }
@@ -58,25 +58,25 @@ public final class JavaSymbolResolver {
         return elements[0];
     }
 
-    public static Resolution resolve(String editorIdentifier, int offset) throws JavaModelException {
-        CompilationUnit unit = ASTCache.getFromCache(editorIdentifier);
+    public static Resolution resolve(ASTCache cache, String editorIdentifier, int offset) throws JavaModelException {
+        CompilationUnit unit = cache.getFromCache(editorIdentifier);
         if (unit == null) {
             return Resolution.unavailable("Java model is still loading");
         }
-        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
         return generatedOffset < 0
                 ? Resolution.unavailable("The selected text is not part of the generated Java source")
                 : resolve(unit, generatedOffset);
     }
 
     /** Resolves the concrete class that owns a qualified package segment at an editor offset. */
-    public static String navigationOwnerClass(String editorIdentifier, int offset) {
-        CompilationUnit unit = ASTCache.getFromCache(editorIdentifier);
+    public static String navigationOwnerClass(ASTCache cache, String editorIdentifier, int offset) {
+        CompilationUnit unit = cache.getFromCache(editorIdentifier);
         if (unit == null) {
             return null;
         }
 
-        int generatedOffset = ASTCache.toGeneratedOffset(editorIdentifier, offset);
+        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
         if (generatedOffset < 0) {
             return null;
         }

@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.reference;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.IndexedReferenceSearch;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsagePage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.tth05.jindex.ClassIndex;
 
-import javax.swing.SwingUtilities;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -108,7 +108,7 @@ public final class ReferenceSearchService implements AutoCloseable {
             try {
                 ReferenceUsagePage result = searcher.search(this.query, this.limit);
                 if (!this.cancelled.get()) {
-                    dispatch(() -> {
+                    UIUtils.onEdt(() -> {
                         if (!this.cancelled.get()) {
                             this.listener.onCompleted(result);
                         }
@@ -116,7 +116,7 @@ public final class ReferenceSearchService implements AutoCloseable {
                 }
             } catch (RuntimeException failure) {
                 if (!this.cancelled.get() && !Thread.currentThread().isInterrupted()) {
-                    dispatch(() -> {
+                    UIUtils.onEdt(() -> {
                         if (!this.cancelled.get()) {
                             this.listener.onFailed(failure);
                         }
@@ -136,14 +136,6 @@ public final class ReferenceSearchService implements AutoCloseable {
         @Override
         public boolean isDone() {
             return this.done.get();
-        }
-    }
-
-    private static void dispatch(Runnable callback) {
-        if (SwingUtilities.isEventDispatchThread()) {
-            callback.run();
-        } else {
-            SwingUtilities.invokeLater(callback);
         }
     }
 

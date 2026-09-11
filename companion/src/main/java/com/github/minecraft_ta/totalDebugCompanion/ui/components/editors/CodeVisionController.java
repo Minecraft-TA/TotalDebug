@@ -28,7 +28,7 @@ final class CodeVisionController implements AutoCloseable {
     private boolean closed;
 
     CodeVisionController(
-            String editorIdentifier,
+            ASTCache cache, String editorIdentifier,
             CodeInsightService service,
             CodeVisionLayerUI layerUI,
             JLayer<JComponent> layer,
@@ -39,8 +39,8 @@ final class CodeVisionController implements AutoCloseable {
         this.layerUI = Objects.requireNonNull(layerUI, "layerUI");
         this.layer = Objects.requireNonNull(layer, "layer");
         this.gutterMarkers = Objects.requireNonNull(gutterMarkers, "gutterMarkers");
-        this.unsubscribeAst = ASTCache.addChangeListener(this.editorIdentifier, (unit, version) -> {
-            String source = ASTCache.getContents(this.editorIdentifier);
+        this.unsubscribeAst = cache.addChangeListener(this.editorIdentifier, (unit, version) -> {
+            String source = cache.getContents(this.editorIdentifier);
             if (source != null) {
                 analyze(SourceDeclarationAnalyzer.analyze(unit, source));
             }

@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExpressionScopeAnalyzerTest {
+    private static final ASTCache cache = new ASTCache();
     private static final String SOURCE = """
             class Sample {
                 int field;
@@ -154,9 +155,9 @@ class ExpressionScopeAnalyzerTest {
     void ignoresUnrelatedOpenTypesWithTheSameSimpleName() throws Exception {
         String key = "unrelated-external-completion-type";
         var parsed = new java.util.concurrent.CompletableFuture<Void>();
-        Runnable removeListener = ASTCache.addChangeListener(key, (unit, version) -> parsed.complete(null));
+        Runnable removeListener = cache.addChangeListener(key, (unit, version) -> parsed.complete(null));
         try {
-            ASTCache.update(key, "ExternalCompletionType", """
+            cache.update(key, "ExternalCompletionType", """
                     package unrelated;
                     class ExternalCompletionType {
                         int unrelatedField;
@@ -180,7 +181,7 @@ class ExpressionScopeAnalyzerTest {
             assertFalse(completions.contains("unrelatedField"), completions.toString());
         } finally {
             removeListener.run();
-            ASTCache.removeFromCache(key);
+            cache.removeFromCache(key);
         }
     }
 

@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 final class SemanticHighlightingPublicationTest {
+    private static final ASTCache cache = new ASTCache();
     private static final String SOURCE = """
             package example;
 
@@ -73,7 +74,7 @@ final class SemanticHighlightingPublicationTest {
                 return null;
             });
         } finally {
-            ASTCache.removeFromCache(key);
+            cache.removeFromCache(key);
         }
     }
 
@@ -100,7 +101,7 @@ final class SemanticHighlightingPublicationTest {
                 return null;
             });
         } finally {
-            ASTCache.removeFromCache(key);
+            cache.removeFromCache(key);
         }
     }
 
@@ -115,7 +116,7 @@ final class SemanticHighlightingPublicationTest {
         AtomicReference<CompilationUnit> oldUnit = new AtomicReference<>();
 
         // Register before the token maker to pause delivery of the first parsed AST.
-        ASTCache.addChangeListener(key, (unit, version) -> {
+        cache.addChangeListener(key, (unit, version) -> {
             if (holdFirstCallback.compareAndSet(true, false)) {
                 oldUnit.set(unit);
                 oldCallbackEntered.countDown();
@@ -125,7 +126,7 @@ final class SemanticHighlightingPublicationTest {
 
         try {
             RSyntaxTextArea area = onEdt(() -> editor(key, SOURCE));
-            ASTCache.addChangeListener(key, (unit, version) -> {
+            cache.addChangeListener(key, (unit, version) -> {
                 if (unit == oldUnit.get()) {
                     oldCallbackDelivered.countDown();
                 } else {
@@ -133,13 +134,13 @@ final class SemanticHighlightingPublicationTest {
                 }
             });
 
-            ASTCache.update(key, "Target", SOURCE);
+            cache.update(key, "Target", SOURCE);
             await(oldCallbackEntered, "The first AST callback did not reach its gate");
 
             String currentSource = "// newer source with different token positions\n" + SOURCE;
             onEdt(() -> {
                 area.setText(currentSource);
-                ASTCache.update(key, "Target", currentSource);
+                cache.update(key, "Target", currentSource);
                 return null;
             });
             await(newCallbackDelivered, "The newer AST was not delivered");
@@ -162,7 +163,7 @@ final class SemanticHighlightingPublicationTest {
                     await(oldCallbackDelivered, "The gated AST callback did not finish during cleanup");
                 }
             } finally {
-                ASTCache.removeFromCache(key);
+                cache.removeFromCache(key);
             }
         }
     }
@@ -172,7 +173,7 @@ final class SemanticHighlightingPublicationTest {
         CustomJavaTokenMaker tokenMaker = new CustomJavaTokenMaker();
         ((RSyntaxDocument) area.getDocument()).setSyntaxStyle(tokenMaker);
         area.setText(source);
-        tokenMaker.setASTKey(key, area);
+        tokenMaker.setASTKey(cache, key, area);
         return area;
     }
 
@@ -181,40 +182,40 @@ final class SemanticHighlightingPublicationTest {
         String key = newKey();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        ASTCache.addChangeListener(key, (unit, version) -> {
+        cache.addChangeListener(key, (unit, version) -> {
             entered.countDown();
             awaitCallbackRelease(release);
         });
-        var old = ASTCache.update(key, "Target", SOURCE);
+        var old = cache.update(key, "Target", SOURCE);
         try {
             await(entered, "Old parse did not enter its callback");
-            ASTCache.clear();
+            cache.clear();
             var received = new java.util.concurrent.CopyOnWriteArrayList<CompilationUnit>();
-            ASTCache.addChangeListener(key, (unit, version) -> received.add(unit));
+            cache.addChangeListener(key, (unit, version) -> received.add(unit));
             String next = "// next project\n" + SOURCE;
-            ASTCache.update(key, "Target", next).get(10, TimeUnit.SECONDS);
+            cache.update(key, "Target", next).get(10, TimeUnit.SECONDS);
             release.countDown();
             old.get(10, TimeUnit.SECONDS);
             assertEquals(1, received.size());
-            assertEquals(next, ASTCache.getContents(key));
-            assertEquals(ASTCache.getFromCache(key), received.getFirst());
+            assertEquals(next, cache.getContents(key));
+            assertEquals(cache.getFromCache(key), received.getFirst());
         } finally {
             release.countDown();
             old.get(10, TimeUnit.SECONDS);
-            ASTCache.removeFromCache(key);
+            cache.removeFromCache(key);
         }
     }
 
     private static void parseAndAwaitDelivery(String key, String source) throws InterruptedException {
-        CompilationUnit previous = ASTCache.getFromCache(key);
+        CompilationUnit previous = cache.getFromCache(key);
         CountDownLatch delivered = new CountDownLatch(1);
-        Runnable removeListener = ASTCache.addChangeListener(key, (unit, version) -> {
+        Runnable removeListener = cache.addChangeListener(key, (unit, version) -> {
             if (unit != previous) {
                 delivered.countDown();
             }
         });
         try {
-            ASTCache.update(key, "Target", source);
+            cache.update(key, "Target", source);
             await(delivered, "The Java AST was not delivered to the semantic token listener");
         } finally {
             removeListener.run();

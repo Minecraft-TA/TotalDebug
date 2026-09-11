@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 
@@ -34,7 +35,7 @@ public final class BreakpointsWindowPreview {
                 null
         )).join();
 
-        BreakpointsWindow window = new BreakpointsWindow(owner, controller, target -> {
+        BreakpointsWindow window = new BreakpointsWindow(new ASTCache(), owner, controller, target -> {
         });
         window.setBounds(owner.getX() + 50, owner.getY() + 20, 940, 680);
         window.showWindow();

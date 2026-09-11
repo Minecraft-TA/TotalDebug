@@ -139,7 +139,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setHeaderComponent(headerBar);
 
         this.editorPane.setParserDelay(400);
-        this.editorPane.addParser(new CustomJavaParser(scriptView.getPath().toString()));
+        this.editorPane.addParser(new CustomJavaParser(context.astCache(), scriptView.getPath().toString()));
         this.editorPane.setText(scriptView.getSourceText());
         this.editorPane.getActionMap().put(DefaultEditorKit.deletePrevCharAction, new CustomDeletePrevCharAction());
 

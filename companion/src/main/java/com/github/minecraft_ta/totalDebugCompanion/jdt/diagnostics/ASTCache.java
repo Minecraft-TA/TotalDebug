@@ -11,31 +11,31 @@ import java.util.function.BiConsumer;
 
 public class ASTCache {
 
-    private static final Map<String, Entry> CACHE = new HashMap<>();
-    private static final Map<String, CopyOnWriteArrayList<BiConsumer<CompilationUnit, Integer>>> LISTENERS =
+    private final Map<String, Entry> cache = new HashMap<>();
+    private final Map<String, CopyOnWriteArrayList<BiConsumer<CompilationUnit, Integer>>> listeners =
             new ConcurrentHashMap<>();
 
-    public static CompletableFuture<Void> update(String key, String className, String contents) {
+    public CompletableFuture<Void> update(String key, String className, String contents) {
         return update(key, className, contents, JavaEditorSource.identity(contents));
     }
 
-    public static CompletableFuture<Void> update(String key, String className, String editorContents, JavaEditorSource source) {
+    public CompletableFuture<Void> update(String key, String className, String editorContents, JavaEditorSource source) {
         Entry selected;
         int version;
-        synchronized (CACHE) {
-            selected = CACHE.computeIfAbsent(key, ignored -> new Entry());
+        synchronized (cache) {
+            selected = cache.computeIfAbsent(key, ignored -> new Entry());
             version = ++selected.version;
         }
 
         int finalVersion = version;
         return CompletableFuture.runAsync(() -> {
-            synchronized (CACHE) {
-                if (CACHE.get(key) != selected || selected.version != finalVersion) return;
+            synchronized (cache) {
+                if (cache.get(key) != selected || selected.version != finalVersion) return;
             }
             var ast = JavaAst.parse(className, source.text());
             List<BiConsumer<CompilationUnit, Integer>> listeners;
-            synchronized (CACHE) {
-                var entry = CACHE.get(key);
+            synchronized (cache) {
+                var entry = cache.get(key);
                 //There's already something newer available
                 if (entry != selected || entry.version != finalVersion)
                     return;
@@ -45,51 +45,51 @@ public class ASTCache {
                 entry.contents = editorContents;
                 entry.sourceMap = source.sourceMap();
                 entry.privilegedAccess = source.privilegedAccess();
-                listeners = List.copyOf(LISTENERS.getOrDefault(key, new CopyOnWriteArrayList<>()));
+                listeners = List.copyOf(this.listeners.getOrDefault(key, new CopyOnWriteArrayList<>()));
             }
             for (var listener : listeners) {
-                synchronized (CACHE) { if (CACHE.get(key) != selected) return; }
+                synchronized (cache) { if (cache.get(key) != selected) return; }
                 listener.accept(ast, finalVersion);
             }
         });
     }
 
-    public static Runnable addChangeListener(String key, BiConsumer<CompilationUnit, Integer> listener) {
+    public Runnable addChangeListener(String key, BiConsumer<CompilationUnit, Integer> listener) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(listener, "listener");
-        var listeners = LISTENERS.computeIfAbsent(key, ignored -> new CopyOnWriteArrayList<>());
+        var listeners = this.listeners.computeIfAbsent(key, ignored -> new CopyOnWriteArrayList<>());
         listeners.add(listener);
         Entry existing;
-        synchronized (CACHE) {
-            existing = CACHE.get(key);
+        synchronized (cache) {
+            existing = cache.get(key);
         }
         if (existing != null && existing.unit != null)
             listener.accept(existing.unit, existing.version);
         return () -> {
             listeners.remove(listener);
             if (listeners.isEmpty()) {
-                LISTENERS.remove(key, listeners);
+                this.listeners.remove(key, listeners);
             }
         };
     }
 
-    public static void removeFromCache(String key) {
-        synchronized (CACHE) {
-            CACHE.remove(key);
+    public void removeFromCache(String key) {
+        synchronized (cache) {
+            cache.remove(key);
         }
-        LISTENERS.remove(key);
+        this.listeners.remove(key);
     }
 
-    public static void clear() {
-        synchronized (CACHE) {
-            CACHE.clear();
-            LISTENERS.clear();
+    public void clear() {
+        synchronized (cache) {
+            cache.clear();
+            this.listeners.clear();
         }
     }
 
-    public static CompilationUnit getFromCache(String key) {
-        synchronized (CACHE) {
-            var entry = CACHE.get(key);
+    public CompilationUnit getFromCache(String key) {
+        synchronized (cache) {
+            var entry = cache.get(key);
             if (entry == null)
                 return null;
 
@@ -97,9 +97,9 @@ public class ASTCache {
         }
     }
 
-    public static Snapshot getSnapshot(String key) {
-        synchronized (CACHE) {
-            Entry entry = CACHE.get(key);
+    public Snapshot getSnapshot(String key) {
+        synchronized (cache) {
+            Entry entry = cache.get(key);
             return entry == null || entry.unit == null ? null : new Snapshot(entry.unit, entry.contents, entry.sourceMap);
         }
     }
@@ -107,30 +107,30 @@ public class ASTCache {
     public record Snapshot(CompilationUnit unit, String contents, JavaSourceMap sourceMap) {
     }
 
-    public static String getContents(String key) {
-        synchronized (CACHE) {
-            var entry = CACHE.get(key);
+    public String getContents(String key) {
+        synchronized (cache) {
+            var entry = cache.get(key);
             return entry == null ? null : entry.contents;
         }
     }
 
-    public static int toGeneratedOffset(String key, int editorOffset) {
-        synchronized (CACHE) {
-            Entry entry = CACHE.get(key);
+    public int toGeneratedOffset(String key, int editorOffset) {
+        synchronized (cache) {
+            Entry entry = cache.get(key);
             return entry == null ? editorOffset : entry.sourceMap.toGeneratedOffset(editorOffset);
         }
     }
 
-    public static int toEditorOffset(String key, int generatedOffset) {
-        synchronized (CACHE) {
-            Entry entry = CACHE.get(key);
+    public int toEditorOffset(String key, int generatedOffset) {
+        synchronized (cache) {
+            Entry entry = cache.get(key);
             return entry == null ? generatedOffset : entry.sourceMap.toEditorOffset(generatedOffset);
         }
     }
 
-    public static boolean allowsPrivilegedAccess(String key) {
-        synchronized (CACHE) {
-            Entry entry = CACHE.get(key);
+    public boolean allowsPrivilegedAccess(String key) {
+        synchronized (cache) {
+            Entry entry = cache.get(key);
             return entry != null && entry.privilegedAccess;
         }
     }

@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class JavaSymbolResolverTest {
+    private static final ASTCache cache = new ASTCache();
     private static final String SOURCE = """
             package example;
 
@@ -60,10 +61,10 @@ final class JavaSymbolResolverTest {
 
     @AfterAll
     static void closeClassIndex() {
-        ASTCache.removeFromCache("symbols");
-        ASTCache.removeFromCache("constructor");
-        ASTCache.removeFromCache("local");
-        ASTCache.removeFromCache("navigation");
+        cache.removeFromCache("symbols");
+        cache.removeFromCache("constructor");
+        cache.removeFromCache("local");
+        cache.removeFromCache("navigation");
         CompanionClassIndex.get().close();
         CompanionClassIndex.clear();
     }
@@ -72,9 +73,9 @@ final class JavaSymbolResolverTest {
     void resolvesExactJvmClassFieldAndMethodSymbols() throws Exception {
         String key = prepareAst("symbols");
 
-        var type = JavaSymbolResolver.resolve(key, SOURCE.indexOf("String field"));
-        var field = JavaSymbolResolver.resolve(key, SOURCE.indexOf("this.field") + "this.".length());
-        var method = JavaSymbolResolver.resolve(key, SOURCE.lastIndexOf("run("));
+        var type = JavaSymbolResolver.resolve(cache, key, SOURCE.indexOf("String field"));
+        var field = JavaSymbolResolver.resolve(cache, key, SOURCE.indexOf("this.field") + "this.".length());
+        var method = JavaSymbolResolver.resolve(cache, key, SOURCE.lastIndexOf("run("));
 
         assertEquals(new CodeSymbol.ClassSymbol("java.lang.String"), type.symbol());
         assertEquals(
@@ -96,7 +97,7 @@ final class JavaSymbolResolverTest {
         String key = prepareAst("constructor");
         int constructorUse = SOURCE.indexOf("new Target") + "new ".length();
 
-        var resolution = JavaSymbolResolver.resolve(key, constructorUse);
+        var resolution = JavaSymbolResolver.resolve(cache, key, constructorUse);
 
         assertEquals(
                 new CodeSymbol.MethodSymbol("example.Target", "<init>", "(Ljava/lang/String;)V"),
@@ -108,7 +109,7 @@ final class JavaSymbolResolverTest {
     void resolvesAnExternalIndexedMethodToItsRuntimeOwner() throws Exception {
         String key = prepareAst("external-method");
 
-        var method = JavaSymbolResolver.resolve(key, SOURCE.indexOf("isBlank"));
+        var method = JavaSymbolResolver.resolve(cache, key, SOURCE.indexOf("isBlank"));
 
         assertEquals(
                 new CodeSymbol.MethodSymbol("java.lang.String", "isBlank", "()Z"),
@@ -121,7 +122,7 @@ final class JavaSymbolResolverTest {
         String key = prepareAst("local");
         int localUse = SOURCE.indexOf("return local") + "return ".length();
 
-        var resolution = JavaSymbolResolver.resolve(key, localUse);
+        var resolution = JavaSymbolResolver.resolve(cache, key, localUse);
 
         assertFalse(resolution.isResolved());
         assertTrue(resolution.unavailableReason().contains("Local-variable"));
@@ -131,15 +132,15 @@ final class JavaSymbolResolverTest {
     void resolvesTheConcreteImportedTypeFromAPackageSegment() throws Exception {
         String key = prepareAst("navigation");
 
-        String owner = JavaSymbolResolver.navigationOwnerClass(key, SOURCE.indexOf("java.util"));
+        String owner = JavaSymbolResolver.navigationOwnerClass(cache, key, SOURCE.indexOf("java.util"));
 
         assertEquals("java.util.List", owner);
     }
 
     private static String prepareAst(String key) throws InterruptedException {
         CountDownLatch parsed = new CountDownLatch(1);
-        ASTCache.addChangeListener(key, (unit, version) -> parsed.countDown());
-        ASTCache.update(key, "Target", SOURCE);
+        cache.addChangeListener(key, (unit, version) -> parsed.countDown());
+        cache.update(key, "Target", SOURCE);
         assertTrue(parsed.await(5, TimeUnit.SECONDS), "Timed out waiting for the Java model");
         return key;
     }

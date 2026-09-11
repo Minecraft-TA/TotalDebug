@@ -1,12 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
-import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
 import java.util.Objects;
 
@@ -65,25 +65,24 @@ public final class DebuggerActions implements AutoCloseable {
 
     void applyStatus(DebuggerSessionController.Status status) {
         Objects.requireNonNull(status, "status");
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> applyStatus(status));
-            return;
-        }
-        if (this.closed) {
-            return;
-        }
+        UIUtils.onEdt(() -> {
+            if (this.closed) {
+                return;
+            }
 
-        boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED
-                && this.controller.evaluationStatus() == null;
-        this.attach.setEnabled(status.phase() == DebuggerSessionController.Phase.DETACHED
-                || status.phase() == DebuggerSessionController.Phase.FAILED);
-        this.resume.setEnabled(paused);
-        this.stepOver.setEnabled(paused);
-        this.stepInto.setEnabled(paused);
-        this.stepOut.setEnabled(paused);
-        this.detach.setEnabled(switch (status.phase()) {
-            case ATTACHING, RUNNING, PAUSED, DETACHING -> true;
-            default -> false;
+            boolean paused = status.phase() == DebuggerSessionController.Phase.PAUSED
+                    && this.controller.evaluationStatus() == null;
+            this.attach.setEnabled(status.phase() == DebuggerSessionController.Phase.DETACHED
+                    || status.phase() == DebuggerSessionController.Phase.FAILED);
+            this.resume.setEnabled(paused);
+            this.stepOver.setEnabled(paused);
+            this.stepInto.setEnabled(paused);
+            this.stepOut.setEnabled(paused);
+            this.detach.setEnabled(switch (status.phase()) {
+                case ATTACHING, RUNNING, PAUSED, DETACHING -> true;
+                default -> false;
+            });
+
         });
     }
 

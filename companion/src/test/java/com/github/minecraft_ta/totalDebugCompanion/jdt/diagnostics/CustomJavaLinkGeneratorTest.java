@@ -22,7 +22,7 @@ class CustomJavaLinkGeneratorTest {
         String source = "import java.util.List; final class Sample { List<?> values; }";
         IJavaElement packageFragment = packageFragment("java.util");
         AtomicReference<String> revealedPackage = new AtomicReference<>();
-        var generator = new CustomJavaLinkGenerator(
+        var generator = new CustomJavaLinkGenerator(new ASTCache(),
                 offset -> packageFragment,
                 offset -> "java.util.List",
                 (packageName, ownerClass) -> revealedPackage.set(packageName + " in " + ownerClass),
@@ -40,7 +40,7 @@ class CustomJavaLinkGeneratorTest {
     void unresolvedPackageOwnerIsPassedToTheDiagnosticRoute() {
         String source = "import missing.Type; class Sample {}";
         AtomicReference<String> diagnostic = new AtomicReference<>();
-        var generator = new CustomJavaLinkGenerator(offset -> packageFragment("missing"), offset -> null,
+        var generator = new CustomJavaLinkGenerator(new ASTCache(), offset -> packageFragment("missing"), offset -> null,
                 (name, owner) -> {
                     assertNull(owner);
                     diagnostic.set("Unresolved owner for " + name);
@@ -57,7 +57,7 @@ class CustomJavaLinkGeneratorTest {
         int hoverOffset = source.indexOf("List") + 2;
         RSyntaxTextArea textArea = new RSyntaxTextArea(source);
         textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
-        var generator = new CustomJavaLinkGenerator(
+        var generator = new CustomJavaLinkGenerator(new ASTCache(),
                 offset -> packageFragment("java.util"),
                 offset -> "java.util.List",
                 (packageName, ownerClass) -> {
@@ -81,7 +81,7 @@ class CustomJavaLinkGeneratorTest {
         String source = "final class Sample { Object value = target.call(); }";
         RSyntaxTextArea textArea = new RSyntaxTextArea(source);
         textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVA);
-        var generator = new CustomJavaLinkGenerator(
+        var generator = new CustomJavaLinkGenerator(new ASTCache(),
                 offset -> packageFragment("example"),
                 offset -> "example.Target",
                 (packageName, ownerClass) -> {

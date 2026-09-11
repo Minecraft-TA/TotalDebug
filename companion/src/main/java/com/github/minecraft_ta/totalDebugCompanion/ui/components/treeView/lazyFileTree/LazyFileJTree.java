@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
@@ -165,15 +166,12 @@ public class LazyFileJTree extends JTree {
     }
 
     public void loadItemsForTopLevelItem(TreeItem item) {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> loadItemsForTopLevelItem(item));
-            return;
-        }
-        var node = findTopLevelNodeForItem(item);
-        if (node == null)
-            return;
-        node.markChildrenStale();
-        loadItemsForNode(node);
+        UIUtils.onEdt(() -> {
+            var node = findTopLevelNodeForItem(item);
+            if (node == null) return;
+            node.markChildrenStale();
+            loadItemsForNode(node);
+        });
     }
 
     private CompletableFuture<Void> loadItemsForNode(LazyTreeNode node) {

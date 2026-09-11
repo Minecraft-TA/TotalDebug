@@ -6,10 +6,21 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import javax.swing.*;
 import javax.swing.text.*;
 import java.awt.*;
+import java.lang.reflect.InvocationTargetException;
 
 public class UIUtils {
     private static final System.Logger LOGGER = System.getLogger(UIUtils.class.getName());
     private static final double NAVIGATION_TARGET_VERTICAL_POSITION = 1.0 / 3.0;
+
+    public static void onEdt(Runnable action) {
+        if (SwingUtilities.isEventDispatchThread()) action.run();
+        else SwingUtilities.invokeLater(action);
+    }
+
+    public static void onEdtAndWait(Runnable action) throws InvocationTargetException, InterruptedException {
+        if (SwingUtilities.isEventDispatchThread()) action.run();
+        else SwingUtilities.invokeAndWait(action);
+    }
 
     public static int getFontWidth(JComponent component, String s) {
         return component.getFontMetrics(component.getFont()).stringWidth(s);
