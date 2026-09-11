@@ -314,8 +314,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
-        SwingUtilities.invokeLater(() ->
-                debuggerWindow(debugger).showVariable(frame, variable));
+        ProjectScope scope = project.get();
+        if (scope == null || !scope.isActive()) return;
+        SwingUtilities.invokeLater(() -> {
+            // A queued inline-value event may arrive after the project closed or changed.
+            if (disposed || project.get() != scope || !scope.isActive()) return;
+            debuggerWindow(debugger).showVariable(frame, variable);
+        });
     }
 
     @Override
