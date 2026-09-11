@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
@@ -53,6 +54,7 @@ public final class ImplementationChooserPopup extends BasePopup {
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
 
+    private final Consumer<NavigationTarget> navigator;
     private final CodeInsightService service;
     private final JLabel title = new JLabel(" ", SwingConstants.CENTER);
     private final JLabel message = new JLabel("Looking up the hierarchy...", SwingConstants.CENTER);
@@ -89,8 +91,9 @@ public final class ImplementationChooserPopup extends BasePopup {
         }
     };
 
-    public ImplementationChooserPopup(Window owner, CodeInsightService service) {
+    public ImplementationChooserPopup(Window owner, CodeInsightService service, Consumer<NavigationTarget> navigator) {
         super(owner);
+        this.navigator = navigator;
         this.service = Objects.requireNonNull(service, "service");
         configureUi();
     }
@@ -321,12 +324,12 @@ public final class ImplementationChooserPopup extends BasePopup {
         setVisible(false);
     }
 
-    private static void openResult(HierarchyResult result) {
+    private void openResult(HierarchyResult result) {
         switch (result.symbol()) {
-            case CodeSymbol.ClassSymbol type -> MainWindow.INSTANCE.navigation().navigate(
+            case CodeSymbol.ClassSymbol type -> navigator.accept(
                     new NavigationTarget.RuntimeClass(type.className())
             );
-            case CodeSymbol.MethodSymbol method -> MainWindow.INSTANCE.navigation().navigate(
+            case CodeSymbol.MethodSymbol method -> navigator.accept(
                     new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(method))
             );
             case CodeSymbol.FieldSymbol ignored -> throw new IllegalStateException(

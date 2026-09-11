@@ -1,10 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ResourceViewPanel;
@@ -20,15 +20,17 @@ public final class ResourceView implements IEditorPanel {
     @Override public RuntimeBinding runtimeBinding() { return runtimeBinding; }
 
 
+    private final EditorContext context;
     private final ContentSource source;
     private final ResourceFileType fileType;
     private final ResourceViewPanel panel;
 
-    public ResourceView(ContentSource source, RuntimeBinding runtimeBinding) {
+    public ResourceView(EditorContext context, ContentSource source, RuntimeBinding runtimeBinding) {
         this.runtimeBinding = runtimeBinding;
+        this.context = context;
         this.source = Objects.requireNonNull(source, "source");
         this.fileType = FileTypeResolver.resolve(source.displayName());
-        this.panel = new ResourceViewPanel(source, this.fileType);
+        this.panel = new ResourceViewPanel(source, this.fileType, context.navigation());
     }
 
     public ContentSource source() {
@@ -61,7 +63,7 @@ public final class ResourceView implements IEditorPanel {
             return EditorLocation.forArchiveEntry(archiveEntry.archivePath(), archiveEntry.entryName());
         }
         if (this.source instanceof LocalFileSource localFile) {
-            return EditorLocation.forFile(localFile.path(), CompanionApp.getWorkspaceDirectory());
+            return EditorLocation.forFile(localFile.path(), context.project().profile().workspaceDirectory());
         }
         return new EditorLocation(this.source.displayName(), java.util.List.of(), this.source.tooltip());
     }

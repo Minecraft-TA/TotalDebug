@@ -924,7 +924,7 @@ public final class UiDevHarness {
         SwingUtilities.invokeAndWait(() -> {
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new CodeView(MainWindow.INSTANCE.editorContext(), 
                     decompiledSample,
                     0,
                     EditorLocation.forRuntimeClass(
@@ -932,16 +932,16 @@ public final class UiDevHarness {
                             sampleClasses.toUri().toASCIIString()
                     ), CompanionApp.currentRuntime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
                     new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1), CompanionApp.currentRuntime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
                     new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1), CompanionApp.currentRuntime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
                     new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1), CompanionApp.currentRuntime()
             ));
-            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
+            MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(MainWindow.INSTANCE.editorContext(), 
                     new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), CompanionApp.currentRuntime()
             ));
             boolean interactionVerification = Arrays.asList(args).stream()
@@ -996,7 +996,7 @@ public final class UiDevHarness {
                 MainWindow.INSTANCE.setVisible(true);
             } else {
                 MainWindow.INSTANCE.setVisible(true);
-                UIUtils.centerJFrame(MainWindow.INSTANCE);
+                UIUtils.centerJFrame(MainWindow.INSTANCE, MainWindow.INSTANCE);
             }
             ToolTipManager.sharedInstance().setInitialDelay(200);
             MainWindow.INSTANCE.setRuntimeIndexStatus(new RuntimeIndexService.Status(

@@ -1,5 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -15,12 +24,12 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerAct
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerShortcuts;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.WorkspacePanel;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.*;
 import java.awt.*;
@@ -34,7 +43,7 @@ import java.awt.event.WindowEvent;
 
 public class MainWindow extends JFrame implements AWTEventListener {
 
-    public static final MainWindow INSTANCE = new MainWindow();
+    public static final MainWindow INSTANCE = CompanionApp.createMainWindow();
 
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
@@ -54,12 +63,28 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private long lastShiftReleasedTime = 0;
     private SearchEverywherePopup searchEverywherePopup;
-    private MainWindow() {
+    private boolean disposed;
+    private final Consumer<CompanionTheme> themeListener = this::updateWindowIcon;
+    private final Supplier<ProjectScope> project;
+    private final DebuggerSessionController debugger;
+    private final CodeInsightService insights;
+    private final ScriptExecutionService scripts;
+    private final CompanionSession session;
+    private final RuntimeIndexService indexLoader;
+
+    public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
+                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, Runnable exit) {
+        this.project = project;
+        this.debugger = debugger;
+        this.insights = insights;
+        this.scripts = scripts;
+        this.session = session;
+        this.indexLoader = indexLoader;
         setAutoRequestFocus(false);
 
-        this.fileTreeView = new FileTreeView(target -> navigation().navigate(target));
-        this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView);
-        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target));
+        this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
+        this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
+        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () -> session.send(new RetryRuntimeInventoryMessage()));
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -75,7 +100,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         fileMenu.add(new AbstractAction("Settings...", Icons.SETTINGS) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                new SettingsWindow(MainWindow.this).setVisible(true);
+                new SettingsWindow(MainWindow.this, project.get() == null ? InstanceState.inMemory() : project.get().state(), debugger).setVisible(true);
             }
         });
         menuBar.add(fileMenu);
@@ -94,7 +119,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs);
+                var window = new CreateScriptWindow(editorTabs, editorContext());
                 window.setVisible(true);
                 window.setLocationRelativeTo(MainWindow.this);
             }
@@ -102,7 +127,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.scriptMenu.add(this.newScriptAction);
         menuBar.add(this.scriptMenu);
         menuBar.add(Box.createHorizontalGlue());
-        DebuggerSessionController debugger = CompanionApp.getDebuggerController();
         this.debuggerActions = new DebuggerActions(debugger);
         this.debuggerShortcuts = new DebuggerShortcuts(this.debuggerActions);
         this.debuggerShortcuts.install(this);
@@ -110,6 +134,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
             @Override
             public void statusChanged(DebuggerSessionController.Status status) {
                 SwingUtilities.invokeLater(() -> {
+                    if (disposed) return;
                     setDebuggerState(status);
                     if (status.phase() == DebuggerSessionController.Phase.PAUSED) {
                         debuggerWindow(debugger);
@@ -126,18 +151,40 @@ public class MainWindow extends JFrame implements AWTEventListener {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent event) {
-                CompanionApp.exit();
+                exit.run();
             }
         });
         setTitle("TotalDebug Companion");
         updateWindowIcon(ThemeManager.current());
-        ThemeManager.addThemeChangeListener(this::updateWindowIcon);
+        ThemeManager.addThemeChangeListener(this.themeListener);
         refreshProfile();
 
         Toolkit.getDefaultToolkit().addAWTEventListener(
                 this,
                 AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK
         );
+    }
+
+    @Override public void dispose() {
+        if (!disposed) {
+            disposed = true;
+            debugger.removeListener(debuggerListener);
+            debuggerActions.close();
+            ThemeManager.removeThemeChangeListener(themeListener);
+            Toolkit.getDefaultToolkit().removeAWTEventListener(this);
+            if (debuggerWindow != null) debuggerWindow.dispose();
+            if (breakpointsWindow != null) breakpointsWindow.dispose();
+            if (evaluateExpressionWindow != null) evaluateExpressionWindow.dispose();
+            if (searchEverywherePopup != null) searchEverywherePopup.dispose();
+            if (snippetExecutions != null) snippetExecutions.close();
+            editorTabs.closeMatching(editor -> true);
+            statusBar.setEditor(null);
+        }
+        super.dispose();
+    }
+
+    public EditorContext editorContext() {
+        return new EditorContext(this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
     }
 
     private void updateWindowIcon(CompanionTheme theme) {
@@ -220,11 +267,16 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private DebuggerWindow debuggerWindow(DebuggerSessionController debugger) {
         if (this.debuggerWindow == null) {
             this.debuggerWindow = new DebuggerWindow(
+                    project.get().state(),
                     this,
                     debugger,
                     this.debuggerActions,
                     this.debuggerShortcuts,
-                    (frame, activateEditor) -> CompanionApp.openDebugFrame(frame, activateEditor),
+                    (frame, activateEditor) -> {
+                        if (!frame.binaryName().isBlank() && frame.line() > 0) navigation().navigate(
+                                new NavigationTarget.RuntimeLine(frame.binaryName(), frame.line()), activateEditor
+                                        ? NavigationService.Activation.ACTIVATE_WINDOW : NavigationService.Activation.KEEP_CURRENT_WINDOW);
+                    },
                     () -> breakpointsWindow(debugger).showWindow(),
                     target -> this.navigationService.navigate(target)
             );
@@ -245,17 +297,17 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     private EvaluateExpressionWindow evaluateExpressionWindow() {
         if (this.snippetExecutions == null) {
-            this.snippetExecutions = new SnippetExecutionService();
+            this.snippetExecutions = new SnippetExecutionService(session, scripts, project.get());
         }
         if (this.evaluateExpressionWindow == null) {
-            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions);
+            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this::refreshRuntimeSources);
         }
         return this.evaluateExpressionWindow;
     }
 
     public void showDebuggerValue(DebugEngine.StackFrame frame, DebugEngine.Variable variable) {
         SwingUtilities.invokeLater(() ->
-                debuggerWindow(CompanionApp.getDebuggerController()).showVariable(frame, variable));
+                debuggerWindow(debugger).showVariable(frame, variable));
     }
 
     @Override
@@ -282,7 +334,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         }
 
         this.lastShiftReleasedTime = 0;
-        if (!CompanionApp.hasProfile()) {
+        if (project.get() == null) {
             return;
         }
         openSearchEverywhere();
@@ -329,16 +381,21 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     public void openSearchEverywhere() {
         if (this.searchEverywherePopup == null) {
-            this.searchEverywherePopup = new SearchEverywherePopup();
+            this.searchEverywherePopup = new SearchEverywherePopup(this, indexLoader, this::searchRuntime, target -> navigation().navigate(target));
         }
         this.searchEverywherePopup.open();
     }
 
     public void openSearchEverywhere(NavigationTarget.ModuleSearch search) {
         if (this.searchEverywherePopup == null) {
-            this.searchEverywherePopup = new SearchEverywherePopup();
+            this.searchEverywherePopup = new SearchEverywherePopup(this, indexLoader, this::searchRuntime, target -> navigation().navigate(target));
         }
         this.searchEverywherePopup.open(search.moduleIds(), search.query());
+    }
+
+    private RuntimeBinding searchRuntime() {
+        ProjectScope scope = project.get();
+        return scope == null ? null : scope.runtime();
     }
 
     public EditorTabs getEditorTabs() {
@@ -366,7 +423,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void refreshProfile() {
-        this.navigationService.projectChanged(CompanionApp.currentScope());
+        this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
@@ -407,9 +464,9 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     private void refreshActions() {
-        boolean hasProfile = CompanionApp.hasProfile();
+        boolean hasProfile = project.get() != null;
         this.scriptMenu.setVisible(hasProfile);
-        this.evaluateExpressionAction.setEnabled(CompanionApp.isConnected());
+        this.evaluateExpressionAction.setEnabled(scripts.isConnected());
         this.newScriptAction.setEnabled(hasProfile);
         this.debuggerState.setVisible(hasProfile);
     }

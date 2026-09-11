@@ -21,9 +21,9 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService.CompilationResult;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
@@ -51,7 +51,6 @@ import com.github.minecraft_ta.totalDebugCompanion.syntax.TomlTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
-import com.github.tth05.scnet.Server;
 import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.tth05.jindex.ClassIndex;
 import org.eclipse.jdt.core.dom.ASTParser;
@@ -88,7 +87,7 @@ public final class CompanionApp {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
     private static final CountDownLatch EXIT = new CountDownLatch(1);
 
-    public static Server SERVER;
+    private static ScriptExecutionService scriptExecutions;
     private static CompanionSession session;
     private static CompanionLaunchConfiguration launchConfiguration;
     private static final Object lifecycleLock = new Object();
@@ -186,6 +185,10 @@ public final class CompanionApp {
             restoreProfile();
 
             session = new CompanionSession(token, CompanionApp::attachSelectedProfile, new CompanionSession.Listener() {
+                @Override public void openClass(OpenClassMessage message) {
+                    CompanionApp.openClass(message.binaryName(), message.targetType(), message.targetIdentifier());
+                }
+                @Override public void focusWindow() { CompanionApp.focusWindow(); }
                 @Override
                 public void connecting() {
                     updateGameStatus(new ServiceStatus(
@@ -234,7 +237,7 @@ public final class CompanionApp {
                     handleDebugTarget(message);
                 }
             });
-            SERVER = session.server();
+            scriptExecutions = new ScriptExecutionService(session, scriptCompiler);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (java.util.concurrent.CompletionException failure) {
@@ -563,6 +566,9 @@ public final class CompanionApp {
     }
 
     static void configureWithoutSession(CompanionProfile developmentProfile) {
+        session = new CompanionSession("ui-development");
+        scriptExecutions = new ScriptExecutionService(session, scriptCompiler);
+        runtimeIndexService = new RuntimeIndexService(lifecycleLock, CompanionApp::installRuntimeSnapshot);
         debuggerController = createDebuggerController();
         try {
             activateProfile(Objects.requireNonNull(developmentProfile, "developmentProfile"));
@@ -667,7 +673,7 @@ public final class CompanionApp {
 
     private static void startMcpServer() throws Exception {
         CodeModeJobService jobs = new CodeModeJobService(
-                SERVER,
+                session, scriptExecutions, CompanionApp::requireProject,
                 () -> isConnected(),
                 CompanionApp::runtimeContext
         );
@@ -735,13 +741,18 @@ public final class CompanionApp {
         return Map.copyOf(context);
     }
 
+    public static MainWindow createMainWindow() {
+        return new MainWindow(CompanionApp::currentScope, getDebuggerController(), codeInsightService,
+                scriptExecutions, session, runtimeIndexService, CompanionApp::exit);
+    }
+
     private static void startUi() throws InvocationTargetException, InterruptedException {
         SwingUtilities.invokeAndWait(() -> {
             uiStarted = true;
             MainWindow.INSTANCE.setSize(1280, 720);
             MainWindow.INSTANCE.setRuntimeIndexStatus(getRuntimeIndexStatus());
             MainWindow.INSTANCE.setVisible(true);
-            UIUtils.centerJFrame(MainWindow.INSTANCE);
+            UIUtils.centerJFrame(MainWindow.INSTANCE, MainWindow.INSTANCE);
             ToolTipManager.sharedInstance().setInitialDelay(200);
         });
     }
@@ -863,21 +874,8 @@ public final class CompanionApp {
         return isConnected() && scriptCompiler.isCurrentInventory(inventoryId);
     }
 
-    public static boolean runScript(int id, String source, boolean serverSide,
-                                    ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
-        synchronized (lifecycleLock) {
-            ProjectScope scope = current;
-            if (scope == null || !scope.isActive() || !isConnected()) return false;
-            return scope.admit(() -> {
-                scriptCompiler.submit(id, source, serverSide, environment, failureHandler);
-                return true;
-            });
-        }
-    }
-
-    public static boolean stopScript(int id) {
-        return scriptCompiler.cancel(id) || send(new StopScriptMessage(id));
-    }
+    public static ScriptExecutionService scriptExecutions() { return scriptExecutions; }
+    public static CompanionSession session() { return session; }
 
     public static void openClass(String binaryName, int targetType, String targetIdentifier) {
         openOrQueue(

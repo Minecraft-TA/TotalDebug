@@ -30,7 +30,7 @@ class ApplicationStatusBarTest {
     void usesAThinFixedWidthActivityIndicator() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
-            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {});
+            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {}, () -> {});
             bar.setRuntimeStatus(new RuntimeIndexService.Status(
                     RuntimeIndexService.Phase.BUILDING,
                     "Building class index",
@@ -52,7 +52,7 @@ class ApplicationStatusBarTest {
     @Test
     void serviceWidgetsRenderOnlyPublishedState() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
-        SwingUtilities.invokeAndWait(() -> result.set(new ApplicationStatusBar(target -> {})));
+        SwingUtilities.invokeAndWait(() -> result.set(new ApplicationStatusBar(target -> {}, () -> {})));
         ApplicationStatusBar bar = result.get();
 
         assertNotNull(findButton(bar, "Game: Offline"));
@@ -79,7 +79,7 @@ class ApplicationStatusBarTest {
     void centersContentWithinTheStatusBar() throws Exception {
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
-            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {});
+            ApplicationStatusBar bar = new ApplicationStatusBar(target -> {}, () -> {});
             bar.setRuntimeStatus(new RuntimeIndexService.Status(
                     RuntimeIndexService.Phase.READY,
                     "Runtime index ready",
@@ -113,7 +113,7 @@ class ApplicationStatusBarTest {
         List<NavigationTarget> navigated = new ArrayList<>();
         AtomicReference<ApplicationStatusBar> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
-            ApplicationStatusBar bar = new ApplicationStatusBar(navigated::add);
+            ApplicationStatusBar bar = new ApplicationStatusBar(navigated::add, () -> {});
             bar.setEditor(new IEditorPanel() {
                 @Override public String getTitle() { return "GrassBlock"; }
                 @Override public String getTooltip() { return "GrassBlock"; }

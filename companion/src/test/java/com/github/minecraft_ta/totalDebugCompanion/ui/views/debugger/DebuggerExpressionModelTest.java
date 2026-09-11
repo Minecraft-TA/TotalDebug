@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ class DebuggerExpressionModelTest {
 
     @Test
     void replacingAnExpressionReleasesItsValuesAcrossCachedFrames() {
-        var model = new DebuggerExpressionModel();
+        var model = new DebuggerExpressionModel(InstanceState.inMemory());
         var released = new AtomicInteger();
         model.nextFrame("pause", 1);
         var key = model.beginExplicit("value");
@@ -28,7 +29,7 @@ class DebuggerExpressionModelTest {
 
     @Test
     void lateCompletionsReleaseTheirOwnershipAfterRemovalAndPauseExpiry() {
-        var model = new DebuggerExpressionModel();
+        var model = new DebuggerExpressionModel(InstanceState.inMemory());
         var released = new AtomicInteger();
         model.nextFrame("pause", 1);
         var key = model.beginExplicit("value");
@@ -45,7 +46,7 @@ class DebuggerExpressionModelTest {
 
     @Test
     void anOlderCompletionCannotReplaceANewerRequestForTheSameExpression() {
-        var model = new DebuggerExpressionModel();
+        var model = new DebuggerExpressionModel(InstanceState.inMemory());
         var released = new AtomicInteger();
         model.nextFrame("pause", 1);
         var key = model.beginExplicit("value");

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaLinkGenerator;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
@@ -20,22 +21,25 @@ import java.util.function.Function;
 /** Java-specific parsing and navigation layered on top of the shared text editor. */
 public class AbstractCodeViewPanel extends AbstractTextViewPanel implements JavaEditorContext {
 
+    protected final EditorContext context;
     protected final String identifier;
     private boolean astDisposed;
 
-    public AbstractCodeViewPanel(String identifier, String className) {
-        this(identifier, className, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource::identity);
+    public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
+        this(context, identifier, className, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource::identity);
     }
 
     protected AbstractCodeViewPanel(
-            String identifier,
+            EditorContext context, String identifier,
             String className,
             Function<String, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource> sourceFactory
     ) {
         super();
+        this.context = context;
+        installNavigationHistoryMenu(context.navigation());
         this.identifier = identifier;
 
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, target -> context.navigation().navigate(target)));
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
             if (event.getType() == DocumentEvent.EventType.CHANGE) {
                 return;

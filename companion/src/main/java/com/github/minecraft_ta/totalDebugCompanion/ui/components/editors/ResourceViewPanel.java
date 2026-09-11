@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
@@ -21,6 +22,7 @@ public final class ResourceViewPanel extends JPanel {
         return thread;
     });
 
+    private final NavigationService navigation;
     private final ContentSource source;
     private final ResourceFileType fileType;
     private final BottomInformationBar informationBar = new BottomInformationBar();
@@ -29,8 +31,9 @@ public final class ResourceViewPanel extends JPanel {
     private Component activeView;
     private boolean disposed;
 
-    public ResourceViewPanel(ContentSource source, ResourceFileType fileType) {
+    public ResourceViewPanel(ContentSource source, ResourceFileType fileType, NavigationService navigation) {
         super(new BorderLayout());
+        this.navigation = navigation;
         this.source = source;
         this.fileType = fileType;
         reload();
@@ -75,6 +78,7 @@ public final class ResourceViewPanel extends JPanel {
             case LoadedResource.Text text -> new TextFileViewPanel(text, this.fileType, this.informationBar);
             case LoadedResource.Image image -> new ImageViewPanel(image, this.informationBar);
         };
+        if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
         replaceActiveView(view);
     }
 

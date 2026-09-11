@@ -1,7 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
@@ -35,8 +36,13 @@ import java.util.function.Consumer;
  */
 public class SettingsWindow extends JDialog {
 
-    public SettingsWindow(Window owner) {
+    private final InstanceState state;
+    private final DebuggerSessionController debugger;
+
+    public SettingsWindow(Window owner, InstanceState state, DebuggerSessionController debugger) {
         super(owner, "Settings", ModalityType.MODELESS);
+        this.state = state;
+        this.debugger = debugger;
 
         JPanel content = new JPanel(new BorderLayout(0, 12));
         content.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
@@ -59,13 +65,13 @@ public class SettingsWindow extends JDialog {
         addSection(form, row++, "Debugger");
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on caught exceptions",
-                CompanionApp.instanceState().breakOnCaughtExceptions(),
-                CompanionApp.instanceState()::setBreakOnCaughtExceptions
+                state.breakOnCaughtExceptions(),
+                state::setBreakOnCaughtExceptions
         ));
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on uncaught exceptions",
-                CompanionApp.instanceState().breakOnUncaughtExceptions(),
-                CompanionApp.instanceState()::setBreakOnUncaughtExceptions
+                state.breakOnUncaughtExceptions(),
+                state::setBreakOnUncaughtExceptions
         ));
         addWideRow(form, row++, createToggle(
                 "Show inline values while paused",
@@ -123,10 +129,10 @@ public class SettingsWindow extends JDialog {
         JCheckBox toggle = new JCheckBox(label, selected);
         toggle.addActionListener(event -> {
             setter.accept(toggle.isSelected());
-            CompanionApp.getDebuggerController()
+            debugger
                     .setExceptionBreakpoints(
-                            CompanionApp.instanceState().breakOnCaughtExceptions(),
-                            CompanionApp.instanceState().breakOnUncaughtExceptions()
+                            state.breakOnCaughtExceptions(),
+                            state.breakOnUncaughtExceptions()
                     );
         });
         return toggle;

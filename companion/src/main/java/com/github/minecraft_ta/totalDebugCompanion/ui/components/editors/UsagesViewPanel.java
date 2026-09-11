@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
@@ -11,7 +12,6 @@ import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSea
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
@@ -51,6 +51,7 @@ public final class UsagesViewPanel extends JPanel {
     private static final int INITIAL_RESULT_LIMIT = 200;
     private static final int MAX_RESULT_LIMIT = 5_000;
 
+    private final Consumer<NavigationTarget> navigator;
     private final ReferenceQuery query;
     private final String targetDisplayName;
     private final javax.swing.Icon targetIcon;
@@ -75,12 +76,12 @@ public final class UsagesViewPanel extends JPanel {
     private List<ReferenceUsage> currentUsages = List.of();
     private UsageTreeModel.Options groupingOptions = UsageTreeModel.Options.defaults();
 
-    public UsagesViewPanel(CodeSymbol symbol, ReferenceSearchService searchService) {
+    public UsagesViewPanel(CodeSymbol symbol, ReferenceSearchService searchService, Consumer<NavigationTarget> navigator) {
         this(
                 Objects.requireNonNull(symbol, "symbol").referenceQuery(),
                 symbol.displayName(),
                 symbolIcon(symbol),
-                searchService
+                searchService, navigator
         );
     }
 
@@ -88,9 +89,10 @@ public final class UsagesViewPanel extends JPanel {
             ReferenceQuery query,
             String targetDisplayName,
             javax.swing.Icon targetIcon,
-            ReferenceSearchService searchService
+            ReferenceSearchService searchService, Consumer<NavigationTarget> navigator
     ) {
         super(new BorderLayout());
+        this.navigator = navigator;
         this.query = Objects.requireNonNull(query, "query");
         this.targetDisplayName = Objects.requireNonNull(targetDisplayName, "targetDisplayName");
         this.targetIcon = Objects.requireNonNull(targetIcon, "targetIcon");
@@ -396,7 +398,7 @@ public final class UsagesViewPanel extends JPanel {
         if (!(nodeValue instanceof UsageNode usage)) {
             return;
         }
-        MainWindow.INSTANCE.navigation().navigate(new NavigationTarget.UsageSite(usage.usage(), this.query));
+        navigator.accept(new NavigationTarget.UsageSite(usage.usage(), this.query));
     }
 
     private void cancelActiveSearch() {

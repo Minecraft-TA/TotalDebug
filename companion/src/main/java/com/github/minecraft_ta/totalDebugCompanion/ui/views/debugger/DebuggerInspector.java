@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -107,7 +108,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private final JavaExpressionField expression = new JavaExpressionField();
     private final ExpressionCompletionSupport expressionCompletion = new ExpressionCompletionSupport(this.expression);
     private final JButton addWatch = createAddWatchButton();
-    private final DebuggerExpressionModel expressions = new DebuggerExpressionModel();
+    private final DebuggerExpressionModel expressions;
     private final Map<Key, DefaultMutableTreeNode> expressionNodes = new LinkedHashMap<>();
     private final PropertyChangeListener previewSettingsListener = event -> onEventThread(this::refreshPreviewMode);
 
@@ -123,10 +124,10 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private boolean watchSequenceStopped;
 
     DebuggerInspector(
-            DebuggerSessionController controller,
+            InstanceState state, DebuggerSessionController controller,
             Consumer<NavigationTarget> navigation
     ) {
-        this(controller, navigation, new RuntimeAccess() {
+        this(state, controller, navigation, new RuntimeAccess() {
             @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
                 return controller.retainValue(pauseId, reference);
             }
@@ -167,11 +168,12 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     }
 
     DebuggerInspector(
-            DebuggerSessionController controller,
+            InstanceState state, DebuggerSessionController controller,
             Consumer<NavigationTarget> navigation,
             RuntimeAccess runtime
     ) {
         super(new BorderLayout());
+        this.expressions = new DebuggerExpressionModel(state);
         this.controller = Objects.requireNonNull(controller, "controller");
         this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.runtime = Objects.requireNonNull(runtime, "runtime");

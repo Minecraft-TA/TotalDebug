@@ -1,8 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.formdev.flatlaf.util.StringUtils;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -31,27 +31,27 @@ public class CodeView implements IEditorPanel {
     private final CodeViewPanel codeViewPanel;
     private volatile CompletableFuture<Void> ready = CompletableFuture.completedFuture(null);
 
-    public CodeView(Path path, int offset) {
-        this(path, offset, EditorLocation.forFile(path, CompanionApp.getWorkspaceDirectory()));
+    public CodeView(EditorContext context, Path path, int offset) {
+        this(context, path, offset, EditorLocation.forFile(path, context.project().profile().workspaceDirectory()));
     }
 
-    public CodeView(Path path, int offset, EditorLocation location) {
+    public CodeView(EditorContext context, Path path, int offset, EditorLocation location) {
         this.runtimeBinding = null;
         this.path = path;
         this.location = location;
         this.debugSource = null;
         this.navigationTarget = new NavigationTarget.LocalFile(path);
-        this.codeViewPanel = new CodeViewPanel(this);
+        this.codeViewPanel = new CodeViewPanel(context, this);
         reload(offset);
     }
 
-    public CodeView(DecompiledSource source, int offset, EditorLocation location, RuntimeBinding runtimeBinding) {
+    public CodeView(EditorContext context, DecompiledSource source, int offset, EditorLocation location, RuntimeBinding runtimeBinding) {
         this.runtimeBinding = runtimeBinding;
         this.path = source.path();
         this.location = location;
         this.debugSource = source.debugSource();
         this.navigationTarget = new NavigationTarget.RuntimeClass(source.binaryName());
-        this.codeViewPanel = new CodeViewPanel(this);
+        this.codeViewPanel = new CodeViewPanel(context, this);
         setCode(source.contents(), offset);
     }
 

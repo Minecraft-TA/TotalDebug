@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerValueTree.DebugValue;
 
@@ -31,7 +31,12 @@ final class DebuggerExpressionModel {
         }
     }
 
-    private final Set<String> watches = new LinkedHashSet<>(CompanionApp.instanceState().debuggerWatches());
+    private final InstanceState state;
+    private final Set<String> watches;
+    DebuggerExpressionModel(InstanceState state) {
+        this.state = state;
+        this.watches = new LinkedHashSet<>(state.debuggerWatches());
+    }
     private Set<Key> submitted = new HashSet<>();
     private Map<Key, Outcome> outcomes = new HashMap<>();
     private final Map<Integer, FrameResults> frames = new HashMap<>();
@@ -162,6 +167,6 @@ final class DebuggerExpressionModel {
     }
 
     private void persistWatches() {
-        CompanionApp.instanceState().setDebuggerWatches(List.copyOf(this.watches));
+        state.setDebuggerWatches(List.copyOf(this.watches));
     }
 }

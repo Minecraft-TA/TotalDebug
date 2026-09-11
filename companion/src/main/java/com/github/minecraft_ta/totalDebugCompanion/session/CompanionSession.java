@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
@@ -38,6 +40,10 @@ public final class CompanionSession implements AutoCloseable {
     }
 
     public interface Listener {
+        default void openClass(OpenClassMessage message) { }
+
+        default void focusWindow() { }
+
         default void connecting() {
         }
 
@@ -89,6 +95,14 @@ public final class CompanionSession implements AutoCloseable {
                 this.projectSelectionHandler == null ? this.attachmentHandler : this.projectSelectionHandler, this::isConnected);
         new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid(), this.projectSelections.port())
                 .writeAtomically(configuration.descriptorFile());
+    }
+
+    public void addExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
+        this.server.getMessageBus().listenAlways(ExecutionResultMessage.class, listener, listener);
+    }
+
+    public void removeExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
+        this.server.getMessageBus().unregister(ExecutionResultMessage.class, listener);
     }
 
     public void setProjectSelectionHandler(AttachmentHandler handler) {
@@ -157,9 +171,9 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(RuntimeInventoryMessage.class, this.listener::runtimeInventory);
         this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
-        this.server.getMessageBus().listenAlways(OpenClassMessage.class, message -> com.github.minecraft_ta.totalDebugCompanion.CompanionApp.openClass(message.binaryName(), message.targetType(), message.targetIdentifier()));
+        this.server.getMessageBus().listenAlways(OpenClassMessage.class, this.listener::openClass);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
-                SwingUtilities.invokeLater(com.github.minecraft_ta.totalDebugCompanion.CompanionApp::focusWindow));
+                SwingUtilities.invokeLater(this.listener::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {
             @Override
             public void onConnected() {

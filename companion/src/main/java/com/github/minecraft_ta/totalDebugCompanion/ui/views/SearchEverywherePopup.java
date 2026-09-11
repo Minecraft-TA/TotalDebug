@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
+import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -110,7 +113,16 @@ public class SearchEverywherePopup extends JFrame {
     private Point dragWindowOrigin;
     private boolean manuallyPositioned;
 
-    SearchEverywherePopup() {
+    private final Window owner;
+    private final RuntimeIndexService indexLoader;
+    private final Supplier<RuntimeBinding> runtime;
+    private final Consumer<NavigationTarget> navigator;
+    SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
+                          Consumer<NavigationTarget> navigator) {
+        this.owner = owner;
+        this.indexLoader = indexLoader;
+        this.runtime = runtime;
+        this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
                 this.modules,
                 this.selectedModuleIds,
@@ -140,7 +152,7 @@ public class SearchEverywherePopup extends JFrame {
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
 
-        CompanionApp.addRuntimeIndexStatusListener(this.indexStatusListener);
+        indexLoader.addStatusListener(this.indexStatusListener);
 
         ((JPanel) getContentPane()).setBorder(PopupChrome.border());
         setUndecorated(true);
@@ -165,7 +177,7 @@ public class SearchEverywherePopup extends JFrame {
         }
         setVisible(true);
         if (!this.manuallyPositioned) {
-            UIUtils.centerJFrame(this);
+            UIUtils.centerJFrame(this, owner == null ? this : owner);
         }
         this.searchTextField.requestFocusInWindow();
         this.searchTextField.selectAll();
@@ -185,7 +197,7 @@ public class SearchEverywherePopup extends JFrame {
 
     @Override
     public void dispose() {
-        CompanionApp.removeRuntimeIndexStatusListener(this.indexStatusListener);
+        indexLoader.removeStatusListener(this.indexStatusListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
         if (this.pendingSearch != null) {
@@ -392,7 +404,7 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void syncRuntimeModules() {
-        RuntimeSourceCatalog currentCatalog = CompanionApp.getReferenceSearchService().sourceCatalog();
+        RuntimeSourceCatalog currentCatalog = runtime.get().sources();
         List<RuntimeInventory.RuntimeModule> currentModules = currentCatalog.modules();
         if (!currentModules.equals(this.modules)) {
             this.sourceCatalog = currentCatalog;
@@ -434,7 +446,7 @@ public class SearchEverywherePopup extends JFrame {
             this.pendingSearch = null;
         }
         if (!CompanionClassIndex.isOpen()) {
-            showIndexStatus(CompanionApp.getRuntimeIndexStatus());
+            showIndexStatus(indexLoader.status());
             return;
         }
 
@@ -543,10 +555,10 @@ public class SearchEverywherePopup extends JFrame {
         }
         setVisible(false);
         switch (selected) {
-            case ClassResult type -> MainWindow.INSTANCE.navigation().navigate(
+            case ClassResult type -> navigator.accept(
                     new NavigationTarget.RuntimeClass(type.binaryName())
             );
-            case SymbolResult symbol -> MainWindow.INSTANCE.navigation().navigate(
+            case SymbolResult symbol -> navigator.accept(
                     new NavigationTarget.RuntimeDeclaration(symbol.kind() == SymbolKind.FIELD
                             ? new RuntimeMember.Field(symbol.ownerBinaryName(), symbol.name())
                             : new RuntimeMember.Method(
@@ -555,7 +567,7 @@ public class SearchEverywherePopup extends JFrame {
                                     symbol.descriptor()
                             ))
             );
-            case TextResult text -> MainWindow.INSTANCE.navigation().navigate(
+            case TextResult text -> navigator.accept(
                     new NavigationTarget.LiteralUsages(text.value())
             );
         }

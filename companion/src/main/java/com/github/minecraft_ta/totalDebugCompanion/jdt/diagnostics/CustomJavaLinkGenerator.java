@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.JavaModelException;
@@ -35,13 +34,13 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     private final Consumer<NavigationTarget> navigator;
     private final Path sourcePath;
 
-    public CustomJavaLinkGenerator(String identifier) {
+    public CustomJavaLinkGenerator(String identifier, Consumer<NavigationTarget> navigator) {
         this(
                 offset -> JavaSymbolResolver.selectElement(identifier, offset),
                 offset -> JavaSymbolResolver.navigationOwnerClass(identifier, offset),
-                MainWindow.INSTANCE::revealPackage,
+                (name, owner) -> navigator.accept(new NavigationTarget.RuntimePackage(name, owner)),
                 Path.of(identifier),
-                target -> MainWindow.INSTANCE.navigation().navigate(target)
+                navigator
         );
     }
 

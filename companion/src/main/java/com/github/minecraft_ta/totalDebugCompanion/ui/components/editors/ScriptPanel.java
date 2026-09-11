@@ -1,8 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
@@ -17,7 +18,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -50,8 +50,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final int scriptId = SCRIPT_ID++;
     private final ScriptView scriptView;
 
-    private final CodeCompletionPopup codeCompletionPopup = new CodeCompletionPopup(MainWindow.INSTANCE);
-    private final SignatureHelpPopup signatureHelpPopup = new SignatureHelpPopup(MainWindow.INSTANCE);
+    private final CodeCompletionPopup codeCompletionPopup;
+    private final SignatureHelpPopup signatureHelpPopup;
 
     private final FlatIconButton runButton = new FlatIconButton(Icons.RUN, false);
     private final FlatIconButton runServerButton = new FlatIconButton(Icons.RUN_SERVER, false);
@@ -114,13 +114,15 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private int lastCaretPos;
     private JavaSnippetSource.GeneratedSource lastGeneratedSource;
 
-    public ScriptPanel(ScriptView scriptView) {
+    public ScriptPanel(EditorContext context, ScriptView scriptView) {
         super(
-                scriptView.getPath().toString(),
+                context, scriptView.getPath().toString(),
                 scriptView.getScriptName(),
                 text -> JavaSnippetSource.body(scriptView.getScriptName(), text).editorSource()
         );
         this.scriptView = scriptView;
+        this.codeCompletionPopup = new CodeCompletionPopup(context.owner());
+        this.signatureHelpPopup = new SignatureHelpPopup(context.owner());
 
         var headerBar = Box.createHorizontalBox();
         headerBar.setBackground(ThemeColors.headerBackground());
@@ -128,7 +130,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
         runButton.addActionListener(e -> runScript(false));
         runServerButton.addActionListener(e -> runScript(true));
-        stopButton.addActionListener(e -> CompanionApp.stopScript(this.scriptId));
+        stopButton.addActionListener(e -> context.scripts().stop(this.scriptId));
 
         headerBar.add(runButton);
         headerBar.add(runServerButton);
@@ -146,9 +148,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupAutocompletion();
         setupFormatting();
 
-        var messageBus = CompanionApp.SERVER.getMessageBus();
-        messageBus.listenAlways(ExecutionResultMessage.class, this, this::acceptResult);
-        this.unsubscribeResults = () -> messageBus.unregister(ExecutionResultMessage.class, this);
+        Consumer<ExecutionResultMessage> listener = this::acceptResult;
+        context.session().addExecutionResultListener(listener);
+        this.unsubscribeResults = () -> context.session().removeExecutionResultListener(listener);
     }
 
     private void acceptResult(ExecutionResultMessage m) {
@@ -178,7 +180,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void runScript(boolean server) {
-        if (!CompanionApp.SERVER.isClientConnected()) {
+        if (!context.scripts().isConnected()) {
             this.bottomInformationBar.setFailureInfoText("Not connected to game client!");
             return;
         }
@@ -199,7 +201,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         this.bottomInformationBar.setProcessInfoText("Compiling...");
         this.lastGeneratedSource = generated;
         clearRunOutput();
-        if (!CompanionApp.runScript(
+        if (!context.scripts().run(
+                context.project(),
                 this.scriptId,
                 this.lastGeneratedSource.source(),
                 server,
@@ -338,7 +341,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         this.saveTimer.setRepeats(false);
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
-                CompanionApp.stopScript(this.scriptId);
+                context.scripts().stop(this.scriptId);
                 this.saveTimer.stop();
             }
         });

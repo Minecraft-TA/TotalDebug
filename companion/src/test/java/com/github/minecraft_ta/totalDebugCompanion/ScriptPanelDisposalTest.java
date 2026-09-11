@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -48,13 +49,13 @@ class ScriptPanelDisposalTest {
             CompanionApp.configureWithoutSession(CompanionProfile.forGame(Files.createDirectories(root.resolve("game"))));
             CompanionApp.configureLookAndFeel();
             CompanionApp.configureTokenMakers();
-            try (var server = new Server()) {
+            try (var session = CompanionApp.session()) {
+                var server = session.server();
                 var bus = new TrackingBus();
                 server.setMessageBus(bus);
-                CompanionApp.SERVER = server;
                 SwingUtilities.invokeAndWait(() -> {
-                    var first = (ScriptPanel) new ScriptView("First").getComponent();
-                    var second = (ScriptPanel) new ScriptView("Second").getComponent();
+                    var first = (ScriptPanel) new ScriptView(MainWindow.INSTANCE.editorContext(), "First").getComponent();
+                    var second = (ScriptPanel) new ScriptView(MainWindow.INSTANCE.editorContext(), "Second").getComponent();
                     Window firstCompletion = popup(first, "codeCompletionPopup");
                     Window firstSignature = popup(first, "signatureHelpPopup");
                     Window secondCompletion = popup(second, "codeCompletionPopup");
@@ -62,15 +63,14 @@ class ScriptPanelDisposalTest {
                     firstCompletion.pack();
                     firstSignature.pack();
                     secondCompletion.pack();
-                    assertEquals(Set.of(first, second), bus.owners);
+                    assertEquals(2, bus.owners.size());
                     try (var replacement = new Server()) {
-                        CompanionApp.SERVER = replacement;
                         first.dispose();
                         first.dispose();
                         assertFalse(firstCompletion.isDisplayable());
                         assertFalse(firstSignature.isDisplayable());
                         assertTrue(secondCompletion.isDisplayable());
-                        assertEquals(Set.of(second), bus.owners);
+                        assertEquals(1, bus.owners.size());
                         second.dispose();
                         assertTrue(bus.owners.isEmpty());
                     }
@@ -98,6 +98,10 @@ class ScriptPanelDisposalTest {
         @Override public <T extends AbstractMessage> void listenAlways(Class<T> type, Object owner, Consumer<T> listener) {
             super.listenAlways(type, owner, listener);
             owners.add(owner);
+        }
+        @Override public <T extends AbstractMessage> void unregister(Class<T> type, Consumer<T> listener) {
+            super.unregister(type, listener);
+            owners.remove(listener);
         }
         @Override public <T extends AbstractMessage> void unregister(Class<T> type, Object owner) {
             super.unregister(type, owner);

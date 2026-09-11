@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -16,18 +16,20 @@ import java.nio.file.Path;
 public class ScriptView implements IEditorPanel {
     public static final String FILE_EXTENSION = ".tdscript";
 
+    private final EditorContext context;
     private final String text;
     private final Path path;
     protected ScriptPanel scriptPanel;
 
-    public ScriptView(String scriptName) {
+    public ScriptView(EditorContext context, String scriptName) {
+        this.context = context;
         if (!JavaSnippetSource.isValidClassName(scriptName)) {
             throw new IllegalArgumentException("Invalid script name: " + scriptName);
         }
-        if (!CompanionApp.hasProfile()) {
+        if (context.project() == null) {
             throw new IllegalStateException("Open a Minecraft profile before creating scripts");
         }
-        this.path = CompanionApp.instancePaths().scripts().resolve(scriptName + FILE_EXTENSION);
+        this.path = context.project().paths().scripts().resolve(scriptName + FILE_EXTENSION);
         try {
             Files.createDirectories(this.path.getParent());
             if (!Files.exists(this.path)) {
@@ -81,7 +83,7 @@ public class ScriptView implements IEditorPanel {
     @Override
     public Component getComponent() {
         if (this.scriptPanel == null)
-            this.scriptPanel = new ScriptPanel(this);
+            this.scriptPanel = new ScriptPanel(context, this);
         return this.scriptPanel;
     }
 

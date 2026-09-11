@@ -1,8 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -82,14 +83,19 @@ public final class EvaluateExpressionWindow extends JDialog {
     private boolean evaluationRunning;
     private boolean cancelPending;
 
-    public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions) {
+    private final EditorContext editorContext;
+    private final Runnable refreshSources;
+
+    public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, Runnable refreshSources) {
         super(owner, "Evaluate Expression", false);
+        this.editorContext = editorContext;
+        this.refreshSources = refreshSources;
         this.executions = executions;
-        this.history = CompanionApp.instanceState().expressionHistory();
+        this.history = editorContext.project().state().expressionHistory();
         configureInput();
         configureResults();
         configureWindow();
-        CompanionApp.getDebuggerController().addListener(this.debuggerListener);
+        editorContext.debugger().addListener(this.debuggerListener);
         refreshContexts();
     }
 
@@ -255,7 +261,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         StringBuilder source = new StringBuilder();
         this.expressionSupport.imports().forEach(imported -> source.append("import ").append(imported).append(";\n"));
         source.append(requested);
-        var controller = CompanionApp.getDebuggerController();
+        var controller = editorContext.debugger();
         String pauseId = selected.pauseId();
         setRunning(true);
         this.status.setText("Evaluating in " + frame.name());
@@ -409,7 +415,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                     "Invalid script name", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        Path path = CompanionApp.instancePaths().scripts().resolve(name + ScriptView.FILE_EXTENSION);
+        Path path = editorContext.project().paths().scripts().resolve(name + ScriptView.FILE_EXTENSION);
         if (Files.exists(path)) {
             JOptionPane.showMessageDialog(this, "A script with that name already exists.",
                     "Script exists", JOptionPane.ERROR_MESSAGE);
@@ -429,13 +435,8 @@ public final class EvaluateExpressionWindow extends JDialog {
                     "Unable to save script", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        String scriptName = name;
-        MainWindow.INSTANCE.getEditorTabs().focusOrCreateIfAbsent(
-                ScriptView.class,
-                view -> view.getTitle().equals(path.getFileName().toString()),
-                () -> new ScriptView(scriptName)
-        );
-        MainWindow.INSTANCE.refreshRuntimeSources();
+        refreshSources.run();
+        editorContext.navigation().navigate(new NavigationTarget.LocalFile(path));
     }
 
     private void applyTheme() {
@@ -454,7 +455,7 @@ public final class EvaluateExpressionWindow extends JDialog {
     private boolean contextAvailable(EvaluationContext context) {
         if (context == null) return false;
         if (context.frame() == null) return true;
-        var snapshot = CompanionApp.getDebuggerController().snapshot();
+        var snapshot = editorContext.debugger().snapshot();
         return java.util.Objects.equals(context.pauseId(), snapshot.pauseId()) && snapshot.pause() != null
                 && snapshot.pause().frames().stream().anyMatch(frame -> frame.id() == context.frame().id());
     }
@@ -465,7 +466,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         this.context.removeAllItems();
         this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.CLIENT, null, null, "Client"));
         this.context.addItem(new EvaluationContext(SnippetExecutionService.Side.SERVER, null, null, "Server"));
-        var snapshot = CompanionApp.getDebuggerController().snapshot();
+        var snapshot = editorContext.debugger().snapshot();
         if (snapshot.pause() != null) {
             for (var frame : snapshot.pause().frames()) {
                 this.context.addItem(new EvaluationContext(null, snapshot.pauseId(), frame,
@@ -492,7 +493,7 @@ public final class EvaluateExpressionWindow extends JDialog {
             this.status.setText("");
         }
         if (selected != null && selected.frame() != null && contextAvailable(selected)) {
-            var controller = CompanionApp.getDebuggerController();
+            var controller = editorContext.debugger();
             this.completion.setCompletionProvider((text, caret, explicit) -> controller.completions(text, caret, selected.frame()));
             this.expression.setSemanticTokenProvider(text -> controller.expressionTokens(text, selected.frame()));
         } else {
@@ -503,7 +504,7 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     @Override public void dispose() {
         clearDebuggerResults();
-        CompanionApp.getDebuggerController().removeListener(this.debuggerListener);
+        editorContext.debugger().removeListener(this.debuggerListener);
         super.dispose();
     }
 
