@@ -9,7 +9,8 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -42,9 +43,8 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-public class MainWindow extends JFrame implements AWTEventListener {
+public class MainWindow extends JFrame implements AWTEventListener, CompanionUi {
 
-    public static final MainWindow INSTANCE = CompanionApp.createMainWindow();
 
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
@@ -186,6 +186,13 @@ public class MainWindow extends JFrame implements AWTEventListener {
         }
         super.dispose();
     }
+
+    @Override public boolean canExit() { return editorTabs.canCloseAll(); }
+    @Override public void setSwitching(boolean switching) { setEnabled(!switching); }
+    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); }
+    @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
+    @Override public void focus() { UIUtils.focusWindow(this); }
+    @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
         return new EditorContext(this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);

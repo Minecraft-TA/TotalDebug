@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import javax.swing.SwingUtilities;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -12,14 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
-import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
-import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -27,46 +26,19 @@ import java.util.concurrent.CancellationException;
 import static org.junit.jupiter.api.Assertions.*;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 
 class ProjectSwitchLifecycleTest {
     @TempDir Path directory;
 
     @Test void switchesTheActualApplicationStateWithoutAWindowOrGame() throws Exception {
-        // Companion owns process-wide singletons. Exercise its real switch in a fresh JVM.
-        String classpath = System.getProperty("totaldebug.testClasspath", System.getProperty("java.class.path"));
-        Path log = directory.resolve("probe.log");
-        Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-Djava.awt.headless=false", "-cp", classpath,
-                getClass().getName(), directory.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
-        try {
-            assertTrue(process.waitFor(180, TimeUnit.SECONDS), () -> "Switch did not finish: " + read(log));
-            assertEquals(0, process.exitValue(), () -> read(log));
-        } finally { if (process.isAlive()) process.destroyForcibly(); }
-    }
-
-    public static void main(String[] args) {
-        try {
-            Path root = Path.of(args[0]);
-            AppPaths paths = new AppPaths(root.resolve("app"));
-            var registry = ProjectRegistry.open(paths);
-            set("launchConfiguration", new CompanionLaunchConfiguration(paths.home()));
-            set("projects", registry);
-            var createDebugger = CompanionApp.class.getDeclaredMethod("createDebuggerController");
-            createDebugger.setAccessible(true);
-            set("debuggerController", createDebugger.invoke(null));
-            var session = new com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession("test-token");
+        Path root = directory;
+        AppPaths paths = new AppPaths(root.resolve("app"));
+        GlobalConfig.getInstance().loadFrom(paths.home());
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(paths.home()), "test-token")) {
+            var session = app.session();
             session.bindAndPublish(new CompanionLaunchConfiguration(paths.home()));
-            set("session", session);
-            set("scriptExecutions", new ScriptExecutionService(session, (ScriptCompilationService) get("scriptCompiler"), CompanionApp::isConnected));
-
             var jobs = ProjectSwitchJobs.create();
-            var constructor = com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer.class.getDeclaredConstructor(
-                    Path.class, com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService.class, int.class);
-            constructor.setAccessible(true);
-            var mcp = (com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer) constructor.newInstance(paths.home(), jobs, 0);
-            mcp.start();
-            set("mcpServer", mcp);
+            var mcp = app.startMcpServer(jobs, 0);
             String endpoint = mcp.endpointUrl();
             var transport = io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
                     .builder(endpoint.substring(0, endpoint.length() - 4)).endpoint("/mcp").build();
@@ -76,80 +48,87 @@ class ProjectSwitchLifecycleTest {
             var b = profile(root, "B");
             Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "A");
             Files.writeString(b.dataDirectory().resolve("scripts/shared.tdscript"), "B");
-            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
-            CompanionApp.instanceState().setDebuggerWatches(List.of("watch A"));
-            var admitted = CompanionApp.requireProject().admit(() -> jobs.submit("return 42;", List.of(),
+            app.openProject(a).get(10, TimeUnit.SECONDS);
+            app.instanceState().setDebuggerWatches(List.of("watch A"));
+            var admitted = app.requireProject().admit(() -> jobs.submit("return 42;", List.of(),
                     CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
             assertEquals(CodeModeJobService.JobState.COMPILING, admitted.state());
-            CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
+            app.openProject(b).get(10, TimeUnit.SECONDS);
             assertEquals(CodeModeJobService.JobState.DISCONNECTED, jobs.get(admitted.jobId()).orElseThrow().state());
-            assertEquals(b, CompanionApp.currentProject());
-            assertTrue(CompanionApp.instanceState().debuggerWatches().isEmpty());
-            CompanionApp.instanceState().setDebuggerWatches(List.of("watch B"));
-            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
-            assertEquals(List.of("watch A"), CompanionApp.instanceState().debuggerWatches());
-            assertEquals("A", Files.readString(CompanionApp.instancePaths().scripts().resolve("shared.tdscript")));
+            assertEquals(b, app.currentProject());
+            assertTrue(app.instanceState().debuggerWatches().isEmpty());
+            app.instanceState().setDebuggerWatches(List.of("watch B"));
+            app.openProject(a).get(10, TimeUnit.SECONDS);
+            assertEquals(List.of("watch A"), app.instanceState().debuggerWatches());
+            assertEquals("A", Files.readString(app.instancePaths().scripts().resolve("shared.tdscript")));
             assertEquals("B", Files.readString(b.dataDirectory().resolve("scripts/shared.tdscript")));
             var missing = new CompanionProfile("missing", root.resolve("absent/total-debug"), root.resolve("absent"));
             assertThrows(ExecutionException.class,
-                    () -> CompanionApp.openProject(missing).get(10, TimeUnit.SECONDS));
-            assertEquals(a, CompanionApp.currentProject());
+                    () -> app.openProject(missing).get(10, TimeUnit.SECONDS));
+            assertEquals(a, app.currentProject());
             assertFalse(Files.exists(missing.dataDirectory()));
             Files.writeString(b.dataDirectory().resolve("state.json"), "invalid state");
             assertThrows(ExecutionException.class,
-                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
-            assertEquals(a, CompanionApp.currentProject());
+                    () -> app.openProject(b).get(10, TimeUnit.SECONDS));
+            assertEquals(a, app.currentProject());
             assertEquals(a, ProjectRegistry.open(paths).selected());
             Files.delete(b.dataDirectory().resolve("state.json"));
             Files.delete(b.dataDirectory().resolve("scripts/shared.tdscript"));
             Files.delete(b.dataDirectory().resolve("scripts"));
             Files.writeString(b.dataDirectory().resolve("scripts"), "not a directory");
             assertThrows(ExecutionException.class,
-                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
-            assertEquals(a, CompanionApp.currentProject());
+                    () -> app.openProject(b).get(10, TimeUnit.SECONDS));
+            assertEquals(a, app.currentProject());
             assertEquals(a, ProjectRegistry.open(paths).selected());
-            assertEquals(2, CompanionApp.projects().size());
-            assertFalse(CompanionApp.isSwitching());
+            assertEquals(2, app.projects().size());
+            assertFalse(app.isSwitching());
             assertEquals(endpoint, mcp.endpointUrl());
             var status = client.callTool(new io.modelcontextprotocol.spec.McpSchema.CallToolRequest("status", Map.of()));
             assertFalse(Boolean.TRUE.equals(status.isError()), "MCP must stay initialized through switches");
             // A failed state flush is reversible, just like the editor save veto.
             Files.delete(b.dataDirectory().resolve("scripts"));
             Files.createDirectory(b.dataDirectory().resolve("scripts"));
-            var scopeBeforeFlush = CompanionApp.requireProject();
-            CompanionApp.instanceState().saveNow();
+            var scopeBeforeFlush = app.requireProject();
+            app.instanceState().saveNow();
             Path stateFile = a.dataDirectory().resolve("state.json");
             byte[] savedState = Files.readAllBytes(stateFile);
             Files.delete(stateFile);
             Files.createDirectory(stateFile);
             Files.writeString(stateFile.resolve("occupied"), "x");
-            CompanionApp.instanceState().setDebuggerWatches(List.of("pending A"));
+            app.instanceState().setDebuggerWatches(List.of("pending A"));
             assertThrows(ExecutionException.class,
-                    () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
-            assertSame(scopeBeforeFlush, CompanionApp.requireProject());
+                    () -> app.openProject(b).get(10, TimeUnit.SECONDS));
+            assertSame(scopeBeforeFlush, app.requireProject());
             assertTrue(scopeBeforeFlush.admit(() -> true));
-            assertFalse(CompanionApp.isSwitching());
+            assertFalse(app.isSwitching());
             Files.delete(stateFile.resolve("occupied"));
             Files.delete(stateFile);
             Files.write(stateFile, savedState);
-            CompanionApp.instanceState().saveNow();
-            Files.delete(b.dataDirectory().resolve("scripts"));
-            Files.writeString(b.dataDirectory().resolve("scripts"), "restore fixture");
-            verifyEditorSwitch(a, b, paths);
-            set("uiStarted", false);
-            var retired = CompanionApp.requireProject();
-            CompanionApp.getDebuggerController().close();
-            CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
-            assertEquals(a, CompanionApp.currentProject(), "A broken debugger must not strand project selection");
+            app.instanceState().saveNow();
+
+            var retired = app.requireProject();
+            app.getDebuggerController().close();
+            app.openProject(b).get(10, TimeUnit.SECONDS);
+            assertEquals(b, app.currentProject(), "A broken debugger must not strand project selection");
             assertEquals(ProjectScope.Phase.RETIRED, retired.phase());
             assertThrows(IllegalStateException.class, () -> retired.state().setDebuggerWatches(List.of("closed")));
             client.close();
             mcp.close();
             session.close();
-            System.exit(0);
-        } catch (Throwable failure) {
-            failure.printStackTrace();
-            System.exit(1);
+        }
+    }
+
+    @Test void editorVetoAndStaleNavigationKeepTheRightProject() throws Exception {
+        AppPaths paths = new AppPaths(directory.resolve("app"));
+        GlobalConfig.getInstance().loadFrom(paths.home());
+        CompanionApp.configureLookAndFeel();
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(paths.home()), "test-token")) {
+            var a = profile(directory, "A");
+            var b = profile(directory, "B");
+            app.openProject(a).get(10, TimeUnit.SECONDS);
+            Files.delete(b.dataDirectory().resolve("scripts"));
+            Files.writeString(b.dataDirectory().resolve("scripts"), "restore fixture");
+            verifyEditorSwitch(app, a, b, paths);
         }
     }
 
@@ -160,7 +139,7 @@ class ProjectSwitchLifecycleTest {
         return new CompanionProfile(id, data, game);
     }
 
-    private static void verifyEditorSwitch(CompanionProfile a, CompanionProfile b, AppPaths paths) throws Exception {
+    private static void verifyEditorSwitch(CompanionApplication app, CompanionProfile a, CompanionProfile b, AppPaths paths) throws Exception {
         Files.delete(b.dataDirectory().resolve("scripts"));
         Files.createDirectory(b.dataDirectory().resolve("scripts"));
         var allowed = new java.util.concurrent.atomic.AtomicBoolean();
@@ -173,40 +152,42 @@ class ProjectSwitchLifecycleTest {
             public java.awt.Component getComponent() { return panel; }
             public boolean canClose() {
                 if (!allowed.get()) return false;
-                assertEquals(a, CompanionApp.currentProject(), "Save must run before selecting B");
+                assertEquals(a, app.currentProject(), "Save must run before selecting B");
                 try { Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "saved A"); }
                 catch (java.io.IOException failure) { return false; }
                 return true;
             }
             public void dispose() { disposed.set(true); }
         };
-        GlobalConfig.getInstance().loadFrom(((CompanionLaunchConfiguration) get("launchConfiguration")).appHome());
-        CompanionApp.configureLookAndFeel();
-        javax.swing.SwingUtilities.invokeAndWait(() ->
-                com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE.getEditorTabs().openEditorTab(editor));
-        set("uiStarted", true);
-        var scopeBeforeVeto = CompanionApp.requireProject();
+        var createdWindow = new CompletableFuture<MainWindow>();
+        SwingUtilities.invokeAndWait(() -> {
+            MainWindow window = app.createWindow();
+            window.getEditorTabs().openEditorTab(editor);
+            createdWindow.complete(window);
+        });
+        var window = createdWindow.join();
+        var scopeBeforeVeto = app.requireProject();
         assertThrows(ExecutionException.class,
-                () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
-        assertEquals(a, CompanionApp.currentProject());
-        assertSame(scopeBeforeVeto, CompanionApp.requireProject());
+                () -> app.openProject(b).get(10, TimeUnit.SECONDS));
+        assertEquals(a, app.currentProject());
+        assertSame(scopeBeforeVeto, app.requireProject());
         assertEquals("still A", scopeBeforeVeto.admit(() -> "still A"));
         assertFalse(disposed.get());
         allowed.set(true);
-        CompanionApp.instanceState().saveNow();
+        app.instanceState().saveNow();
         Path stateFile = a.dataDirectory().resolve("state.json");
         byte[] savedState = Files.readAllBytes(stateFile);
         Files.delete(stateFile);
         Files.createDirectory(stateFile);
         Files.writeString(stateFile.resolve("occupied"), "x");
-        CompanionApp.instanceState().setDebuggerWatches(List.of("pending view state"));
+        app.instanceState().setDebuggerWatches(List.of("pending view state"));
         try {
-            assertThrows(ExecutionException.class, () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
-            assertSame(scopeBeforeVeto, CompanionApp.requireProject());
+            assertThrows(ExecutionException.class, () -> app.openProject(b).get(10, TimeUnit.SECONDS));
+            assertSame(scopeBeforeVeto, app.requireProject());
             assertFalse(disposed.get(), "A failed state flush must preserve open views");
             SwingUtilities.invokeAndWait(() -> {
-                assertSame(editor, MainWindow.INSTANCE.getEditorTabs().getSelectedEditor());
-                assertTrue(MainWindow.INSTANCE.isEnabled());
+                assertSame(editor, window.getEditorTabs().getSelectedEditor());
+                assertTrue(window.isEnabled());
             });
         } finally {
             Files.delete(stateFile.resolve("occupied"));
@@ -218,13 +199,12 @@ class ProjectSwitchLifecycleTest {
         Files.createDirectory(paths.projects());
         Files.writeString(paths.projects().resolve("occupied"), "x");
         var failure = assertThrows(ExecutionException.class,
-                () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
+                () -> app.openProject(b).get(10, TimeUnit.SECONDS));
         assertTrue(failure.getCause().getMessage().contains("Project opened, but its selection could not be saved"));
-        assertEquals(b, CompanionApp.currentProject());
-        assertTrue(CompanionApp.instanceState().debuggerWatches().isEmpty());
+        assertEquals(b, app.currentProject());
+        assertTrue(app.instanceState().debuggerWatches().isEmpty());
         assertTrue(disposed.get());
         assertEquals("saved A", Files.readString(a.dataDirectory().resolve("scripts/shared.tdscript")));
-        var window = com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE;
         var treeField = window.getClass().getDeclaredField("fileTreeView");
         treeField.setAccessible(true);
         var treeView = (javax.swing.JScrollPane) treeField.get(window);
@@ -239,28 +219,28 @@ class ProjectSwitchLifecycleTest {
         Files.delete(paths.projects());
         Files.write(paths.projects(), savedRegistry);
         assertEquals(a, ProjectRegistry.open(paths).selected());
-        CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
+        app.openProject(b).get(10, TimeUnit.SECONDS);
         assertEquals(b, ProjectRegistry.open(paths).selected());
-        verifyNavigationReset(window);
+        verifyNavigationReset(app, window);
         javax.swing.SwingUtilities.invokeAndWait(window::dispose);
     }
 
-    private static void verifyNavigationReset(com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow window) throws Exception {
+    private static void verifyNavigationReset(CompanionApplication app, MainWindow window) throws Exception {
         var pending = new java.util.concurrent.atomic.AtomicReference<CompletableFuture<Boolean>>();
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var tree = new FileTreeView(CompanionApp::currentScope, ignored -> { }) {
+            var tree = new FileTreeView(app::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
                     var delayed = pending.getAndSet(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
                 }
             };
             created.complete(new NavigationService(window,
-                    new EditorTabs(), tree, CompanionApp.currentScope(), window::editorContext));
+                    new EditorTabs(), tree, app.currentScope(), window::editorContext));
         });
         var navigation = created.join();
-        var scopeA = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
-        var scopeB = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
+        var scopeA = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory());
+        var scopeB = new ProjectScope(new Object(), app.currentProject(), InstanceState.inMemory());
         navigation.projectChanged(scopeA);
         for (String directory : List.of("A/one", "A/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
@@ -302,19 +282,4 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
     }
 
-    private static Object get(String name) throws Exception {
-        var field = CompanionApp.class.getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(null);
-    }
-
-    private static void set(String name, Object value) throws Exception {
-        var field = CompanionApp.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(null, value);
-    }
-
-    private static String read(Path file) {
-        try { return Files.readString(file); } catch (Exception failure) { return failure.toString(); }
-    }
 }

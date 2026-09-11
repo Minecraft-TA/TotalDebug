@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.BundleContextImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.ContentTypeManagerImpl;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.DummyJarPackageFragmentRoot;
@@ -11,7 +10,7 @@ import org.eclipse.core.internal.runtime.InternalPlatform;
 import org.eclipse.core.internal.runtime.MetaDataKeeper;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IPath;
-import org.eclipse.core.runtime.Path;
+import java.nio.file.Path;
 import org.eclipse.core.runtime.content.IContentTypeManager;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IType;
@@ -26,8 +25,8 @@ import sun.misc.Unsafe;
 
 public class JDTHacks {
 
-    public static final JavaProject DUMMY_JAVA_PROJECT;
-    private static final PackageFragmentRoot PACKAGE_FRAGMENT_ROOT;
+    public static JavaProject DUMMY_JAVA_PROJECT;
+    private static PackageFragmentRoot PACKAGE_FRAGMENT_ROOT;
     private static final Unsafe UNSAFE;
     static {
         try {
@@ -35,13 +34,19 @@ public class JDTHacks {
             theUnsafe.setAccessible(true);
             UNSAFE = (Unsafe) theUnsafe.get(null);
 
-            init();
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
 
-        DUMMY_JAVA_PROJECT = new JavaProjectImpl();
-        PACKAGE_FRAGMENT_ROOT = new DummyJarPackageFragmentRoot();
+    }
+
+    public static synchronized void init(Path metadataPath) {
+        if (DUMMY_JAVA_PROJECT != null) return;
+        try {
+            initializeWorkspace(metadataPath);
+            DUMMY_JAVA_PROJECT = new JavaProjectImpl();
+            PACKAGE_FRAGMENT_ROOT = new DummyJarPackageFragmentRoot();
+        } catch (Throwable failure) { throw new IllegalStateException("Unable to initialize JDT", failure); }
     }
 
     public static PackageFragment createPackageFragment(String name) {
@@ -99,7 +104,7 @@ public class JDTHacks {
         }
     }
 
-    private static void init() throws Throwable {
+    private static void initializeWorkspace(Path metadataPath) throws Throwable {
         //Set global instance
         new JavaCore();
 
@@ -130,7 +135,7 @@ public class JDTHacks {
         value.open(true);
         field.set(InternalPlatform.getDefault(), value);
 
-        IPath metadataLocation = Path.fromOSString(CompanionApp.appPaths().jdtCache().toString());
+        IPath metadataLocation = org.eclipse.core.runtime.Path.fromOSString(metadataPath.toString());
 
         //cachedInstanceLocation
         field = InternalPlatform.class.getDeclaredField("cachedInstanceLocation");

@@ -39,7 +39,8 @@ class CompanionMcpServerTest {
         CompanionMcpServer server = new CompanionMcpServer(
                 dataDirectory,
                 jobs,
-                0
+                0, new DebuggerMcpService(() -> null, name -> null),
+                () -> { throw new IllegalStateException("No Minecraft project is loaded"); }
         );
         try (server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();
