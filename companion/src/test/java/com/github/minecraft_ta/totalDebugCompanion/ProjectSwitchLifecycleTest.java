@@ -14,6 +14,11 @@ import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
+import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
+import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CancellationException;
 import static org.junit.jupiter.api.Assertions.*;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -48,8 +53,7 @@ class ProjectSwitchLifecycleTest {
             session.bindAndPublish(new CompanionLaunchConfiguration(paths.home()));
             set("session", session);
             CompanionApp.SERVER = session.server();
-            var jobs = new com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService(
-                    session.server(), CompanionApp::isConnected, Map::of);
+            var jobs = ProjectSwitchJobs.create();
             var constructor = com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer.class.getDeclaredConstructor(
                     Path.class, com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService.class, int.class);
             constructor.setAccessible(true);
@@ -66,22 +70,26 @@ class ProjectSwitchLifecycleTest {
             Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "A");
             Files.writeString(b.dataDirectory().resolve("scripts/shared.tdscript"), "B");
             CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
-            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("watch A"));
+            CompanionApp.instanceState().setDebuggerWatches(List.of("watch A"));
+            var admitted = CompanionApp.requireProject().admit(() -> jobs.submit("return 42;", List.of(),
+                    CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
+            assertEquals(CodeModeJobService.JobState.COMPILING, admitted.state());
             CompanionApp.openProject(b).get(10, TimeUnit.SECONDS);
+            assertEquals(CodeModeJobService.JobState.DISCONNECTED, jobs.get(admitted.jobId()).orElseThrow().state());
             assertEquals(b, CompanionApp.currentProject());
             assertTrue(CompanionApp.instanceState().debuggerWatches().isEmpty());
-            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("watch B"));
+            CompanionApp.instanceState().setDebuggerWatches(List.of("watch B"));
             CompanionApp.openProject(a).get(10, TimeUnit.SECONDS);
-            assertEquals(java.util.List.of("watch A"), CompanionApp.instanceState().debuggerWatches());
+            assertEquals(List.of("watch A"), CompanionApp.instanceState().debuggerWatches());
             assertEquals("A", Files.readString(CompanionApp.instancePaths().scripts().resolve("shared.tdscript")));
             assertEquals("B", Files.readString(b.dataDirectory().resolve("scripts/shared.tdscript")));
             var missing = new CompanionProfile("missing", root.resolve("absent/total-debug"), root.resolve("absent"));
-            assertThrows(java.util.concurrent.ExecutionException.class,
+            assertThrows(ExecutionException.class,
                     () -> CompanionApp.openProject(missing).get(10, TimeUnit.SECONDS));
             assertEquals(a, CompanionApp.currentProject());
             assertFalse(Files.exists(missing.dataDirectory()));
             Files.writeString(b.dataDirectory().resolve("state.json"), "invalid state");
-            assertThrows(java.util.concurrent.ExecutionException.class,
+            assertThrows(ExecutionException.class,
                     () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
             assertEquals(a, CompanionApp.currentProject());
             assertEquals(a, ProjectRegistry.open(paths).selected());
@@ -89,7 +97,7 @@ class ProjectSwitchLifecycleTest {
             Files.delete(b.dataDirectory().resolve("scripts/shared.tdscript"));
             Files.delete(b.dataDirectory().resolve("scripts"));
             Files.writeString(b.dataDirectory().resolve("scripts"), "not a directory");
-            assertThrows(java.util.concurrent.ExecutionException.class,
+            assertThrows(ExecutionException.class,
                     () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
             assertEquals(a, CompanionApp.currentProject());
             assertEquals(a, ProjectRegistry.open(paths).selected());
@@ -108,8 +116,8 @@ class ProjectSwitchLifecycleTest {
             Files.delete(stateFile);
             Files.createDirectory(stateFile);
             Files.writeString(stateFile.resolve("occupied"), "x");
-            CompanionApp.instanceState().setDebuggerWatches(java.util.List.of("pending A"));
-            assertThrows(java.util.concurrent.ExecutionException.class,
+            CompanionApp.instanceState().setDebuggerWatches(List.of("pending A"));
+            assertThrows(ExecutionException.class,
                     () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
             assertSame(scopeBeforeFlush, CompanionApp.requireProject());
             assertTrue(scopeBeforeFlush.admit(() -> true));
@@ -164,7 +172,7 @@ class ProjectSwitchLifecycleTest {
                 com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow.INSTANCE.getEditorTabs().openEditorTab(editor));
         set("uiStarted", true);
         var scopeBeforeVeto = CompanionApp.requireProject();
-        assertThrows(java.util.concurrent.ExecutionException.class,
+        assertThrows(ExecutionException.class,
                 () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
         assertEquals(a, CompanionApp.currentProject());
         assertSame(scopeBeforeVeto, CompanionApp.requireProject());
@@ -175,7 +183,7 @@ class ProjectSwitchLifecycleTest {
         Files.delete(paths.projects());
         Files.createDirectory(paths.projects());
         Files.writeString(paths.projects().resolve("occupied"), "x");
-        var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+        var failure = assertThrows(ExecutionException.class,
                 () -> CompanionApp.openProject(b).get(10, TimeUnit.SECONDS));
         assertTrue(failure.getCause().getMessage().contains("Project opened, but its selection could not be saved"));
         assertEquals(b, CompanionApp.currentProject());
@@ -220,7 +228,7 @@ class ProjectSwitchLifecycleTest {
         var scopeA = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
         var scopeB = new ProjectScope(new Object(), CompanionApp.currentProject(), InstanceState.inMemory());
         navigation.projectChanged(scopeA);
-        for (String directory : java.util.List.of("A/one", "A/two"))
+        for (String directory : List.of("A/one", "A/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
         var delayedA = new CompletableFuture<Boolean>();
         pending.set(delayedA);
@@ -228,7 +236,7 @@ class ProjectSwitchLifecycleTest {
         scopeA.retire();
         javax.swing.SwingUtilities.invokeAndWait(() -> navigation.projectChanged(scopeB));
         assertFalse(oldTraversal.isDone(), "Old lookup is still awaiting a callback");
-        for (String directory : java.util.List.of("B/one", "B/two"))
+        for (String directory : List.of("B/one", "B/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
         var delayedB = new CompletableFuture<Boolean>();
@@ -237,12 +245,23 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() -> { });
         assertFalse(newTraversal.isDone());
         delayedA.complete(true);
-        oldTraversal.get(3, TimeUnit.SECONDS);
+        assertInstanceOf(CancellationException.class, assertThrows(ExecutionException.class,
+                () -> oldTraversal.get(3, TimeUnit.SECONDS)).getCause());
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.goBack().isDone(),
                 "Completion from A must not admit another traversal while B is still navigating"));
         delayedB.complete(true);
         newTraversal.get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));
+        var duringVeto = new CompletableFuture<Boolean>();
+        pending.set(duringVeto);
+        var vetoTraversal = navigation.goForward();
+        javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        scopeB.beginSwitch();
+        duringVeto.complete(true);
+        assertThrows(ExecutionException.class, () -> vetoTraversal.get(3, TimeUnit.SECONDS));
+        scopeB.cancelSwitch();
+        navigation.goForward().get(3, TimeUnit.SECONDS);
+        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
     }
 
     private static Object get(String name) throws Exception {

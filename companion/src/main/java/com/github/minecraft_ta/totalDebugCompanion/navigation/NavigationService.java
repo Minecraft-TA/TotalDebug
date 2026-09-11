@@ -31,7 +31,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CancellationException;
 import java.util.function.Supplier;
 
 /** Resolves semantic destinations into the current Companion UI. */
@@ -86,7 +86,7 @@ public final class NavigationService {
         Context context = captureContext();
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
                 (isCurrent(context) ? performNavigation(target, activation)
-                        : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
+                        : CompletableFuture.<Void>failedFuture(new CancellationException("Project changed")))
                         .thenCompose(ignored -> captureDestination(target))
                         .thenAccept(destination -> {
                             if (!isCurrent(context)) return;
@@ -108,7 +108,7 @@ public final class NavigationService {
     }
 
     public void runtimeChanged() {
-        state().traversingHistory.set(false);
+        state().traversal.set(null);
         Context context = captureContext();
         SwingUtilities.invokeLater(() -> {
             if (!isCurrent(context)) return;
@@ -196,7 +196,9 @@ public final class NavigationService {
 
     private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
         Context context = captureContext();
-        if (!state().traversingHistory.compareAndSet(false, true)) {
+        NavigationState navigationState = state();
+        Object traversal = new Object();
+        if (!navigationState.traversal.compareAndSet(null, traversal)) {
             return CompletableFuture.completedFuture(null);
         }
         NavigationEntry destination = state().history.destination(
@@ -204,14 +206,14 @@ public final class NavigationService {
                 CompanionApp.getActiveRuntimeSignature()
         );
         if (destination == null) {
-            state().traversingHistory.set(false);
+            state().traversal.set(null);
             refreshHistoryActions();
             return CompletableFuture.completedFuture(null);
         }
 
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
                 (isCurrent(context) ? performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
-                        : CompletableFuture.<Void>failedFuture(new java.util.concurrent.CancellationException("Project changed")))
+                        : CompletableFuture.<Void>failedFuture(new CancellationException("Project changed")))
                         .thenCompose(ignored -> restoreSelectedEntry(destination, context))
                         .thenRun(() -> {
                             if (!isCurrent(context)) return;
@@ -220,11 +222,11 @@ public final class NavigationService {
                         })
         );
         navigation.whenComplete((ignored, failure) -> {
-            if (!isCurrent(context)) return;
-            if (failure != null && !(unwrap(failure) instanceof java.util.concurrent.CancellationException)) {
-                state().history.discard(direction, destination);
+            if (isCurrent(context) && failure != null && !(unwrap(failure) instanceof CancellationException)) {
+                navigationState.history.discard(direction, destination);
             }
-            state().traversingHistory.set(false);
+            // A reversible switch must not strand the old traversal; a new one has a different token.
+            navigationState.traversal.compareAndSet(traversal, null);
             refreshHistoryActions();
         });
         reportFailure(navigation, destination.target());
@@ -277,7 +279,7 @@ public final class NavigationService {
 
     private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry, Context context) {
         return onEdt(() -> {
-            if (!isCurrent(context)) return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Project changed"));
+            if (!isCurrent(context)) return CompletableFuture.failedFuture(new CancellationException("Project changed"));
             IEditorPanel editor = this.tabs.getSelectedEditor();
             if (!isEditorDestination(entry.target())) {
                 return CompletableFuture.completedFuture(null);
@@ -352,7 +354,7 @@ public final class NavigationService {
     private void refreshHistoryActions() {
         SwingUtilities.invokeLater(() -> {
             String runtimeSignature = CompanionApp.getActiveRuntimeSignature();
-            boolean available = !state().traversingHistory.get();
+            boolean available = state().traversal.get() == null;
             this.backAction.setEnabled(available && state().history.canNavigate(
                     NavigationHistory.Direction.BACK,
                     runtimeSignature
@@ -376,7 +378,7 @@ public final class NavigationService {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
                 if (!isCurrent(context) || service != CompanionApp.getDecompilationService()) {
-                    return CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Runtime changed during source navigation"));
+                    return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
                 return this.tabs.focusOrCreateIfAbsent(
                         CodeView.class,
@@ -494,10 +496,11 @@ public final class NavigationService {
         SwingUtilities.invokeLater(() -> {
             try {
                 if (!isCurrent(context) || CompanionApp.isSwitching()) {
-                    result.completeExceptionally(new java.util.concurrent.CancellationException("Project changed"));
+                    result.completeExceptionally(new CancellationException("Project changed"));
                     return;
                 }
                 operation.get().whenComplete((ignored, failure) -> {
+                    if (!isCurrent(context)) { result.cancel(false); return; }
                     if (failure != null) {
                         result.completeExceptionally(failure);
                         return;
@@ -515,7 +518,7 @@ public final class NavigationService {
     }
 
     private void showFailure(NavigationTarget target, Throwable failure) {
-        if (failure instanceof java.util.concurrent.CancellationException) return;
+        if (failure instanceof CancellationException) return;
         Context context = captureContext();
         failure.printStackTrace(System.err);
         String detail = failure.getMessage();

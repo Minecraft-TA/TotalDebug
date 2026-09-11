@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -103,7 +104,7 @@ public final class ProjectScope implements AutoCloseable {
         if (relative.isAbsolute() || !file.startsWith(root) || file.equals(root)) {
             throw new IllegalArgumentException("Breakpoint script must be relative to the scripts directory");
         }
-        try { return java.nio.file.Files.readString(file); }
+        try { return Files.readString(file); }
         catch (IOException failure) { throw new IllegalStateException("Unable to read breakpoint script " + name, failure); }
     }
 
