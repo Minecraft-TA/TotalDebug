@@ -18,7 +18,7 @@ The active endpoint is written to `<companion-app-home>/run/companion/mcp-endpoi
 
 Companion removes the descriptor when it closes. A Minecraft disconnect does not stop MCP.
 
-Project switching also preserves this endpoint and initialized MCP clients. Outstanding code jobs keep their original context and are marked disconnected after cancellation is requested. Project-bound requests reject stale results, and code/debugger mutations are admitted against the project generation in which the request started. Project list/open tools are not yet exposed through MCP.
+Project switching also preserves this endpoint and initialized MCP clients. Outstanding code jobs keep their original context and are marked disconnected after cancellation is requested. Project-bound requests reject stale results, and code/debugger mutations are admitted through the active project scope in which the request started. Project list/open tools are not yet exposed through MCP.
 
 ## Response policy
 
@@ -134,3 +134,5 @@ The preferred design is a persistent profiling service inside TotalDebug's Minec
 JFR is the right first backend for broad CPU hotspot sampling and sampled allocation estimates. Exact invocation counts or timings for named methods are a separate feature and may justify targeted instrumentation later. A Java agent is not needed for the initial sampler. Spark or async-profiler ingestion can remain optional if native stack profiling or flame graphs become necessary.
 
 Before implementation, settle the result shape, whether blocked-thread events belong in the first version, and whether one active profile is sufficient. No profiling MCP tools are shipped yet.
+
+Project-bound requests capture the opened project scope. During a project switch, new mutations are rejected, including while an editor save dialog is open. Retry after the switch or save veto completes; results from a retired project are rejected.

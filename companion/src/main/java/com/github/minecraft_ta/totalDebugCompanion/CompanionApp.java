@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.PendingNavigation;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
@@ -89,25 +91,20 @@ public final class CompanionApp {
     public static Server SERVER;
     private static CompanionSession session;
     private static CompanionLaunchConfiguration launchConfiguration;
-    private static volatile CompanionProfile profile;
-    private static volatile InstanceState instanceState = InstanceState.inMemory();
-    private static volatile RuntimeBinding runtime;
+    private static final Object lifecycleLock = new Object();
+    private static volatile ProjectScope current;
+    private static final InstanceState emptyState = InstanceState.inMemory();
     private static final CodeInsightService codeInsightService = new CodeInsightService(
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private static RuntimeIndexService runtimeIndexService;
     private static final ScriptCompilationService scriptCompiler = new ScriptCompilationService(CompanionApp::send, CompanionApp::send);
-    private static final List<PendingNavigation> pendingNavigations = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
     private static volatile DebuggerSessionController debuggerController;
     private static volatile boolean uiStarted;
     private static ProjectRegistry projects;
-    private static volatile boolean switchingProjects;
-    private static volatile long projectGeneration;
+    private static volatile boolean switching;
     private static final java.util.concurrent.ExecutorService projectWorker = java.util.concurrent.Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
-
-    private record PendingNavigation(NavigationTarget target, NavigationService.Activation activation) {
-    }
 
     private CompanionApp() {
     }
@@ -179,7 +176,7 @@ public final class CompanionApp {
 
             GlobalConfig.getInstance().loadFrom(launchConfiguration.appHome());
             configureLookAndFeel();
-            runtimeIndexService = new RuntimeIndexService(CompanionApp.class, CompanionApp::installRuntimeSnapshot);
+            runtimeIndexService = new RuntimeIndexService(lifecycleLock, CompanionApp::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(CompanionApp::updateRuntimeIndexUi);
             debuggerController = createDebuggerController();
             debuggerController.setExceptionBreakpoints(
@@ -282,7 +279,7 @@ public final class CompanionApp {
                 RuntimePhase.run("close.ui", CompanionApp::stopUiAfterFailure);
                 try (var state = RuntimePhase.start("close.state")) {
                     GlobalConfig.getInstance().saveNow();
-                    instanceState.close();
+                    instanceState().close();
                 } catch (IOException exception) {
                     exception.printStackTrace(System.err);
                 }
@@ -307,22 +304,24 @@ public final class CompanionApp {
         }
     }
 
-    private static synchronized void attachSelectedProfile(
+    private static void attachSelectedProfile(
             com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage hello
     ) throws IOException {
-        CompanionProfile requested;
-        try {
-            requested = CompanionProfile.fromHello(hello);
-        } catch (IllegalArgumentException exception) {
-            throw new IOException("Invalid Minecraft profile", exception);
-        }
-        if (switchingProjects || !requested.equals(profile)) {
-            throw new IOException("Select this project explicitly before connecting");
+        synchronized (lifecycleLock) {
+            CompanionProfile requested;
+            try {
+                requested = CompanionProfile.fromHello(hello);
+            } catch (IllegalArgumentException exception) {
+                throw new IOException("Invalid Minecraft profile", exception);
+            }
+            if (switching || !requested.equals(currentProject())) {
+                throw new IOException("Select this project explicitly before connecting");
+            }
         }
     }
 
     private static void handleDebugTarget(DebugTargetMessage message) {
-        if (switchingProjects) return;
+        if (switching) return;
         if (message.targetKind() != DebugTargetMessage.LOCAL_JVM) {
             throw new IllegalArgumentException("Unknown debug target kind: " + message.targetKind());
         }
@@ -346,16 +345,17 @@ public final class CompanionApp {
         return projects == null ? List.of() : projects.projects();
     }
 
-    public static CompanionProfile currentProject() { return profile; }
+    public static CompanionProfile currentProject() { var scope = current; return scope == null ? null : scope.profile(); }
 
-    public static boolean isSwitchingProjects() { return switchingProjects; }
+    public static boolean isSwitching() { return switching; }
 
-    public static long projectGeneration() { return projectGeneration; }
+    public static ProjectScope currentScope() { return current; }
 
-    /** Admit mutations/queue submissions atomically with starting a switch; never wait here. */
-    public static synchronized <T> T inProject(long generation, java.util.function.Supplier<T> action) {
-        if (switchingProjects || generation != projectGeneration) throw new IllegalStateException("Project changed during the request");
-        return action.get();
+    public static ProjectScope requireProject() {
+        ProjectScope scope = current;
+        if (scope == null) throw new IllegalStateException("No Minecraft project is loaded");
+        scope.requireActive();
+        return scope;
     }
 
     /** Application API; selection controls and MCP project tools are added separately. */
@@ -369,37 +369,54 @@ public final class CompanionApp {
 
     private static void switchProject(CompanionProfile requested) throws IOException {
         validateProfile(requested);
-        if (requested.equals(profile)) {
-            projects.select(requested);
-            return;
+        if (requested.equals(currentProject())) { projects.select(requested); return; }
+        // Prepare the actual replacement before disturbing the current project.
+        ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
+        replacement.beginSwitch();
+        ProjectScope old;
+        synchronized (lifecycleLock) {
+            old = current;
+            switching = true;
+            if (old != null) old.beginSwitch();
         }
-        // Validate state before closing the current project; malformed destination state must not displace it.
-        try (var checked = InstanceState.open(new InstancePaths(requested.dataDirectory()))) { }
-        synchronized (CompanionApp.class) {
-            switchingProjects = true;
-        }
+        boolean installed = false;
         try {
             if (uiStarted) {
                 boolean[] canSwitch = {false};
                 SwingUtilities.invokeAndWait(() -> canSwitch[0] = MainWindow.INSTANCE.prepareProjectSwitch());
                 if (!canSwitch[0]) throw new IOException("Project switch cancelled because an editor could not be saved");
             }
-            synchronized (CompanionApp.class) { projectGeneration++; }
-            if (mcpServer != null) mcpServer.prepareProjectSwitch();
-            scriptCompiler.runtimeDisconnected();
-            if (session != null) session.disconnect();
-            getDebuggerController().clearTarget().join();
-            getDebuggerController().replaceBreakpointDefinitions(List.of()).join();
-            com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache.clear();
-            synchronized (CompanionApp.class) {
-                pendingNavigations.clear();
-                if (runtimeIndexService != null) runtimeIndexService.clear();
-                activateProfile(requested);
+            if (old != null) old.state().saveNow();
+            if (uiStarted) {
+                boolean[] closed = {false};
+                SwingUtilities.invokeAndWait(() -> closed[0] = MainWindow.INSTANCE.closeProjectViews());
+                if (!closed[0]) throw new IOException("Project switch cancelled because an editor could not be closed");
             }
+            synchronized (lifecycleLock) {
+                if (old != null) old.retire();
+                current = null;
+                if (runtimeIndexService != null) runtimeIndexService.clear();
+            }
+            // Retirement is terminal. Attempt every detach and install the prepared replacement even if
+            // a broken debugger/connection cannot detach cleanly.
+            if (mcpServer != null) finishTransitionStep("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            finishTransitionStep("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
+            if (session != null) finishTransitionStep("Disconnect Minecraft", session::disconnect);
+            finishTransitionStep("Clear debugger target", () -> getDebuggerController().clearTarget().join());
+            finishTransitionStep("Clear debugger breakpoints", () -> getDebuggerController().replaceBreakpointDefinitions(List.of()).join());
+            CompanionClassIndex.clear();
+            if (old != null) {
+                try { old.close(); }
+                catch (IOException | RuntimeException failure) { reportTransitionFailure("Close retired project", failure); }
+            }
+            com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache.clear();
+            synchronized (lifecycleLock) { current = replacement; }
+            installed = true;
+            finishTransitionStep("Restore debugger preferences", () -> restoreProjectState(replacement));
+            if (uiStarted) refreshUiProfile();
             updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Selected project is not connected to Minecraft."));
-            try {
-                projects.select(requested);
-            } catch (IOException failure) {
+            try { projects.select(requested); }
+            catch (IOException failure) {
                 throw new IOException("Project opened, but its selection could not be saved: " + failure.getMessage(), failure);
             }
         } catch (InterruptedException failure) {
@@ -408,37 +425,45 @@ public final class CompanionApp {
         } catch (InvocationTargetException failure) {
             throw new IOException("Unable to close project editors", failure.getCause());
         } finally {
-            switchingProjects = false;
-            if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
+            try {
+                if (!installed) { replacement.retire(); replacement.close(); }
+            } finally {
+                synchronized (lifecycleLock) {
+                    if (old != null) old.cancelSwitch();
+                    try {
+                        if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
+                    } finally {
+                        if (installed) replacement.cancelSwitch();
+                        switching = false;
+                    }
+                }
+                if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
+            }
         }
+    }
+
+    private static void finishTransitionStep(String description, Runnable action) {
+        try { action.run(); }
+        catch (RuntimeException failure) { reportTransitionFailure(description, failure); }
+    }
+
+    private static void reportTransitionFailure(String description, Exception failure) {
+        System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
+                description + " failed while switching projects", failure);
     }
 
     private static void activateProfile(CompanionProfile requested) throws IOException {
         validateProfile(requested);
-        CompanionProfile current = profile;
-        boolean profileChanged = !requested.equals(current);
-        if (profileChanged) {
-            InstanceState replacementState = InstanceState.open(new InstancePaths(requested.dataDirectory()));
-            try {
-                instanceState.close();
-            } catch (IOException exception) {
-                replacementState.close();
-                throw exception;
-            }
-            instanceState = replacementState;
-            getDebuggerController().setBreakpointsMuted(instanceState.debuggerBreakpointsMuted()).join();
-            getDebuggerController().setExceptionBreakpoints(instanceState.breakOnCaughtExceptions(),
-                    instanceState.breakOnUncaughtExceptions()).join();
-            closeRuntime();
-        }
-        profile = requested;
-        setupDataDirectories();
-        if (uiStarted && profileChanged) {
-            refreshUiProfile();
-        }
-        if (profileChanged && runtimeIndexService != null) {
-            runtimeIndexService.restore(requested.dataDirectory());
-        }
+        ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
+        synchronized (lifecycleLock) { current = replacement; }
+        restoreProjectState(replacement);
+        if (runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
+    }
+
+    private static void restoreProjectState(ProjectScope scope) {
+        getDebuggerController().setBreakpointsMuted(scope.state().debuggerBreakpointsMuted()).join();
+        getDebuggerController().setExceptionBreakpoints(scope.state().breakOnCaughtExceptions(),
+                scope.state().breakOnUncaughtExceptions()).join();
     }
 
     private static void validateProfile(CompanionProfile requested) throws IOException {
@@ -449,24 +474,26 @@ public final class CompanionApp {
         setupDataDirectories(requested.dataDirectory(), true);
     }
 
-    private static synchronized void handleRuntimeInventory(RuntimeInventoryMessage message) {
-        if (switchingProjects) return;
-        CompanionProfile current = profile;
-        if (current == null || runtimeIndexService == null) {
-            return;
-        }
-        switch (message.state()) {
-            case RuntimeInventoryMessage.PREPARING -> {
-                runtimeIndexService.waiting(
-                        message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
+    private static void handleRuntimeInventory(RuntimeInventoryMessage message) {
+        synchronized (lifecycleLock) {
+            if (switching) return;
+            CompanionProfile current = currentProject();
+            if (current == null || runtimeIndexService == null) {
+                return;
             }
-            case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
-                    current.dataDirectory(),
-                    message.inventoryId(),
-                    Path.of(message.inventoryFile())
-            );
-            case RuntimeInventoryMessage.FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
-            default -> runtimeIndexService.failedBeforeBuild("Minecraft sent an unknown runtime inventory state");
+            switch (message.state()) {
+                case RuntimeInventoryMessage.PREPARING -> {
+                    runtimeIndexService.waiting(
+                            message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
+                }
+                case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
+                        current.dataDirectory(),
+                        message.inventoryId(),
+                        Path.of(message.inventoryFile())
+                );
+                case RuntimeInventoryMessage.FAILED -> runtimeIndexService.failedBeforeBuild(message.detail());
+                default -> runtimeIndexService.failedBeforeBuild("Minecraft sent an unknown runtime inventory state");
+            }
         }
     }
 
@@ -475,54 +502,59 @@ public final class CompanionApp {
                 snapshot.indexFile().getParent().resolve("inventory.json"), snapshot.inventoryId()));
     }
 
-    private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot,
+    private static void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot,
                                                              RuntimeSnapshotBytecodeSource bytecodeSource) {
-        if (switchingProjects) throw new IllegalStateException("Project is switching");
-        CompanionProfile current = requireProfile();
-        RuntimeBinding replacement;
-        try {
-            replacement = new RuntimeBinding(snapshot, current.dataDirectory(), bytecodeSource, scriptCompiler, codeInsightService);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to prepare the runtime class index", exception);
-        }
-        try {
-            closeRuntime();
-            replacement.attach();
-            // Queue before publication: rejected scheduling still leaves ownership with the loader.
-            // The follow-up acquires this lock after the loader finishes its installation callback.
-            projectWorker.execute(() -> finishRuntimeInstallation(replacement, current));
-            CompanionClassIndex.set(snapshot.index());
-            runtime = replacement;
-            replacement.acceptOwnership();
-        } catch (RuntimeException failure) {
-            replacement.close();
-            throw failure;
+        synchronized (lifecycleLock) {
+            if (switching) throw new IllegalStateException("Project is switching");
+            ProjectScope scope = requireProject();
+            CompanionProfile current = scope.profile();
+            RuntimeBinding replacement;
+            try {
+                replacement = new RuntimeBinding(snapshot, current.dataDirectory(), bytecodeSource, scriptCompiler, codeInsightService);
+            } catch (IOException exception) {
+                throw new IllegalStateException("Unable to prepare the runtime class index", exception);
+            }
+            try {
+                closeRuntime();
+                replacement.attach();
+                // Queue before publication: rejected scheduling still leaves ownership with the loader.
+                // The follow-up acquires this lock after the loader finishes its installation callback.
+                projectWorker.execute(() -> finishRuntimeInstallation(replacement, scope));
+                CompanionClassIndex.set(snapshot.index());
+                scope.bindRuntime(replacement);
+                replacement.acceptOwnership();
+            } catch (RuntimeException failure) {
+                replacement.close();
+                throw failure;
+            }
         }
     }
 
-    private static void finishRuntimeInstallation(RuntimeBinding installed, CompanionProfile selected) {
+    private static void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
+        SwingUtilities.invokeLater(() -> {
+            if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+            if (uiStarted) {
+                MainWindow.INSTANCE.navigation().runtimeChanged();
+                MainWindow.INSTANCE.refreshRuntimeSources();
+            }
+            List<PendingNavigation> queued;
+            synchronized (lifecycleLock) {
+                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+                queued = selected.drainNavigations();
+            }
+            for (PendingNavigation pending : queued) {
+                MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
+            }
+        });
         try {
             CompletableFuture<?> breakpoints;
-            synchronized (CompanionApp.class) {
-                if (switchingProjects || runtime != installed || profile != selected) return;
+            synchronized (lifecycleLock) {
+                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
                 breakpoints = getDebuggerController().replaceBreakpointDefinitions(
-                        restoreBreakpoints(installed.snapshot().signature()));
+                        selected.restoreBreakpoints(installed.snapshot().signature()));
             }
             // A failed debugger/UI refresh must never return ownership of an installed index to its loader.
             breakpoints.join();
-            SwingUtilities.invokeLater(() -> {
-                if (switchingProjects || runtime != installed || profile != selected) return;
-                if (uiStarted) MainWindow.INSTANCE.refreshRuntimeSources();
-                List<PendingNavigation> queued;
-                synchronized (CompanionApp.class) {
-                    if (switchingProjects || runtime != installed || profile != selected) return;
-                    queued = List.copyOf(pendingNavigations);
-                    pendingNavigations.clear();
-                }
-                for (PendingNavigation pending : queued) {
-                    MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
-                }
-            });
             prewarmJavaParser();
         } catch (RuntimeException failure) {
             System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
@@ -688,14 +720,14 @@ public final class CompanionApp {
     }
 
     private static Map<String, Object> runtimeContext() {
-        CompanionProfile current = profile;
+        CompanionProfile current = currentProject();
         if (current == null) {
             return Map.of();
         }
         Map<String, Object> context = new java.util.LinkedHashMap<>();
         context.put("profile_id", current.id());
         context.put("workspace_directory", current.workspaceDirectory().toString());
-        RuntimeBinding installed = runtime;
+        RuntimeBinding installed = currentRuntime();
         if (installed != null) {
             context.put("runtime_signature", installed.snapshot().signature());
             context.put("index_file", installed.snapshot().indexFile().toString());
@@ -792,7 +824,7 @@ public final class CompanionApp {
             }
             try (var state = RuntimePhase.start("close.request-save")) {
                 GlobalConfig.getInstance().saveNow();
-                instanceState.saveNow();
+                instanceState().saveNow();
             } catch (IOException exception) {
                 JOptionPane.showMessageDialog(MainWindow.INSTANCE, exception.getMessage(),
                         "Unable to save state", JOptionPane.ERROR_MESSAGE);
@@ -803,27 +835,27 @@ public final class CompanionApp {
     }
 
     public static boolean isConnected() {
-        return !switchingProjects && session != null && session.isConnected();
+        return !switching && session != null && session.isConnected();
     }
 
     public static boolean hasProfile() {
-        return profile != null;
+        return current != null;
     }
 
     public static String getActiveRuntimeSignature() {
-        RuntimeBinding current = runtime;
+        RuntimeBinding current = currentRuntime();
         return current == null ? null : current.snapshot().signature();
     }
 
     public static boolean send(AbstractMessage message) {
-        if (switchingProjects && !(message instanceof StopScriptMessage)) return false;
+        if (switching && !(message instanceof StopScriptMessage)) return false;
         CompanionSession current = session;
         return current != null && current.send(message);
     }
 
     public static CompletableFuture<CompilationResult> compileJava(String source, String entryClass) {
-        if (switchingProjects) return CompletableFuture.failedFuture(new IllegalStateException("Project is switching"));
-        return scriptCompiler.compile(source, entryClass);
+        try { return requireProject().admit(() -> scriptCompiler.compile(source, entryClass)); }
+        catch (IllegalStateException failure) { return CompletableFuture.failedFuture(failure); }
     }
 
     /** A pre-send check; the receiving runtime must still validate the result's inventory identity. */
@@ -833,10 +865,14 @@ public final class CompanionApp {
 
     public static boolean runScript(int id, String source, boolean serverSide,
                                     ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
-        CompanionSession current = session;
-        if (switchingProjects || current == null || !current.isConnected()) return false;
-        scriptCompiler.submit(id, source, serverSide, environment, failureHandler);
-        return true;
+        synchronized (lifecycleLock) {
+            ProjectScope scope = current;
+            if (scope == null || !scope.isActive() || !isConnected()) return false;
+            return scope.admit(() -> {
+                scriptCompiler.submit(id, source, serverSide, environment, failureHandler);
+                return true;
+            });
+        }
     }
 
     public static boolean stopScript(int id) {
@@ -851,12 +887,13 @@ public final class CompanionApp {
     }
 
     private static void openOrQueue(NavigationTarget target, NavigationService.Activation activation) {
-        if (switchingProjects) return;
-        if (runtime == null) {
-            synchronized (CompanionApp.class) {
-                if (switchingProjects) return;
-                if (runtime == null) {
-                    pendingNavigations.add(new PendingNavigation(target, activation));
+        if (switching) return;
+        if (currentRuntime() == null) {
+            synchronized (lifecycleLock) {
+                if (switching) return;
+                if (currentRuntime() == null) {
+                    ProjectScope scope = current;
+                    if (scope != null && scope.isActive()) scope.queueNavigation(target, activation);
                     return;
                 }
             }
@@ -880,7 +917,7 @@ public final class CompanionApp {
     }
 
     private static DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
-        RuntimeBinding current = runtime;
+        RuntimeBinding current = currentRuntime();
         CompanionDecompilationService service = current == null ? null : current.decompiler();
         return service == null ? null : service.loadDebugSource(binaryName);
     }
@@ -894,7 +931,8 @@ public final class CompanionApp {
     }
 
     public static InstanceState instanceState() {
-        return instanceState;
+        ProjectScope scope = current;
+        return scope == null ? emptyState : scope.state();
     }
 
     public static Path getRootPath() {
@@ -906,7 +944,7 @@ public final class CompanionApp {
     }
 
     public static ReferenceSearchService getReferenceSearchService() {
-        RuntimeBinding current = runtime;
+        RuntimeBinding current = currentRuntime();
         ReferenceSearchService service = current == null ? null : current.references();
         if (service == null) {
             throw new IllegalStateException("Reference search is unavailable");
@@ -916,19 +954,19 @@ public final class CompanionApp {
 
     public static CodeInsightService getCodeInsightService() {
         CodeInsightService service = codeInsightService;
-        if (runtime == null) {
+        if (currentRuntime() == null) {
             throw new IllegalStateException("Code insight is unavailable");
         }
         return service;
     }
 
     public static RuntimeSourceCatalog getRuntimeSourceCatalog() {
-        RuntimeBinding current = runtime;
+        RuntimeBinding current = currentRuntime();
         return current == null ? RuntimeSourceCatalog.empty() : current.sources();
     }
 
     public static CompanionDecompilationService getDecompilationService() {
-        RuntimeBinding current = runtime;
+        RuntimeBinding current = currentRuntime();
         CompanionDecompilationService service = current == null ? null : current.decompiler();
         if (service == null) {
             throw new IllegalStateException("Decompilation is unavailable");
@@ -955,7 +993,7 @@ public final class CompanionApp {
     }
 
     private static DebuggerSessionController createDebuggerController() {
-        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource, () -> { RuntimeBinding current = runtime; return current == null ? null : current.classpath(); }, CompanionApp::loadBreakpointScript);
+        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource, () -> { RuntimeBinding current = currentRuntime(); return current == null ? null : current.classpath(); }, name -> requireProject().loadBreakpointScript(name));
         controller.setBreakpointsMuted(instanceState().debuggerBreakpointsMuted()).join();
         controller.addListener(new DebuggerSessionController.Listener() {
             @Override
@@ -963,80 +1001,17 @@ public final class CompanionApp {
                     URI sourceUri,
                     List<DebuggerSessionController.Breakpoint> breakpoints
             ) {
-                persistBreakpoints(controller);
+                ProjectScope scope = current;
+                if (scope != null) scope.persistBreakpoints(controller);
             }
 
             @Override
             public void breakpointsMutedChanged(boolean muted) {
-                instanceState().setDebuggerBreakpointsMuted(muted);
+                ProjectScope scope = current;
+                if (scope != null && scope.isActive()) scope.state().setDebuggerBreakpointsMuted(muted);
             }
         });
         return controller;
-    }
-
-    private static String loadBreakpointScript(String name) {
-        Path relative = Path.of(name);
-        Path root = instancePaths().scripts().toAbsolutePath().normalize();
-        Path file = root.resolve(relative).normalize();
-        if (relative.isAbsolute() || !file.startsWith(root) || file.equals(root)) {
-            throw new IllegalArgumentException("Breakpoint script must be relative to the scripts directory");
-        }
-        try { return java.nio.file.Files.readString(file); }
-        catch (IOException failure) { throw new IllegalStateException("Unable to read breakpoint script " + name, failure); }
-    }
-
-    private static List<DebuggerSessionController.BreakpointDefinition> restoreBreakpoints(String runtimeSignature) {
-        return instanceState().debuggerBreakpoints(runtimeSignature).stream()
-                .map(persisted -> {
-                    DebugEngine.MethodTarget method = persisted.methodOwner() == null
-                            ? null
-                            : new DebugEngine.MethodTarget(
-                                    persisted.methodOwner(),
-                                    persisted.methodName(),
-                                    persisted.methodDescriptor()
-                            );
-                    DebugEngine.SourceBreakpoint request = new DebugEngine.SourceBreakpoint(
-                            persisted.line(),
-                            persisted.debuggerLine(),
-                            method,
-                            persisted.condition(),
-                            persisted.hitCondition(), persisted.action()
-                    );
-                    return new DebuggerSessionController.BreakpointDefinition(
-                            URI.create(persisted.sourceUri()),
-                            persisted.binaryName(),
-                            request,
-                            persisted.enabled()
-                    );
-                })
-                .toList();
-    }
-
-    private static void persistBreakpoints(DebuggerSessionController controller) {
-        if (switchingProjects) return;
-        String runtimeSignature = getActiveRuntimeSignature();
-        if (runtimeSignature == null || runtimeSignature.isBlank()) {
-            return;
-        }
-        List<InstanceState.PersistedBreakpoint> persisted = controller.breakpointDefinitions().stream()
-                .map(definition -> {
-                    DebugEngine.SourceBreakpoint request = definition.request();
-                    DebugEngine.MethodTarget method = request.method();
-                    return new InstanceState.PersistedBreakpoint(
-                            definition.sourceUri().toString(),
-                            definition.binaryName(),
-                            request.line(),
-                            request.debuggerLine(),
-                            method == null ? null : method.ownerClassName(),
-                            method == null ? null : method.name(),
-                            method == null ? null : method.descriptor(),
-                            request.condition(),
-                            request.hitCondition(),
-                            definition.enabled(), request.action()
-                    );
-                })
-                .toList();
-        instanceState().setDebuggerBreakpoints(runtimeSignature, persisted);
     }
 
     public static RuntimeIndexService.Status getRuntimeIndexStatus() {
@@ -1069,23 +1044,22 @@ public final class CompanionApp {
     }
 
     private static CompanionProfile requireProfile() {
-        CompanionProfile current = profile;
+        CompanionProfile current = currentProject();
         if (current == null) {
             throw new IllegalStateException("No Minecraft profile is loaded");
         }
         return current;
     }
 
+    public static RuntimeBinding currentRuntime() {
+        ProjectScope scope = current;
+        return scope == null ? null : scope.runtime();
+    }
+
     private static void closeRuntime() {
-        RuntimeBinding previous = runtime;
-        runtime = null;
+        ProjectScope scope = current;
         CompanionClassIndex.clear();
-        if (previous != null) {
-            try { previous.close(); }
-            finally {
-                if (uiStarted) MainWindow.INSTANCE.navigation().runtimeChanged();
-            }
-        }
+        if (scope != null) scope.closeRuntime();
     }
 
     private static String newInstanceToken() {

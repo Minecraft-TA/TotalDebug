@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** Loopback MCP host for Companion code mode. */
 public final class CompanionMcpServer implements AutoCloseable {
@@ -36,6 +38,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private final CompanionMcpSearchService search;
     private final DebuggerMcpService debugger;
     private final int port;
+    private final Supplier<ProjectScope> project;
     private HttpServletStreamableServerTransportProvider transportProvider;
     private McpSyncServer mcpServer;
     private Tomcat tomcat;
@@ -48,10 +51,11 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port) {
         this(dataDirectory, jobs, port, new DebuggerMcpService(CompanionApp::getDebuggerController,
-                name -> CompanionApp.getDecompilationService().loadDebugSource(name)));
+                name -> CompanionApp.getDecompilationService().loadDebugSource(name)), CompanionApp::requireProject);
     }
 
-    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger) {
+    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger, Supplier<ProjectScope> project) {
+        this.project = Objects.requireNonNull(project);
         this.dataDirectory = normalize(dataDirectory);
         this.endpointDescriptor = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpEndpoint();
         this.jobs = Objects.requireNonNull(jobs, "jobs");
@@ -152,9 +156,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private McpSchema.CallToolResult callTool(McpSchema.CallToolRequest request) {
         try {
             CompanionMcpToolCatalog.validateRequest(request);
-            long project = CompanionApp.projectGeneration();
-            boolean projectBound = !List.of("status", "job_wait", "job_cancel", "job_source").contains(request.name());
-            if (projectBound && CompanionApp.isSwitchingProjects()) throw new IllegalStateException("Project is switching");
+            ProjectScope project = CompanionMcpToolCatalog.projectBound(request.name()) ? this.project.get() : null;
             Map<String, Object> result = switch (request.name()) {
                 case "status" -> status();
                 case "client_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.CLIENT, project);
@@ -189,8 +191,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                         this.debugger.call(request.name(), request.arguments(), project);
                 default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
             };
-            if (projectBound && (project != CompanionApp.projectGeneration() || CompanionApp.isSwitchingProjects()))
-                throw new IllegalStateException("Project changed during the request");
+            if (project != null) project.requireActive();
             return CompanionMcpToolCatalog.result(result, false);
         } catch (RuntimeException | IOException exception) {
             return CompanionMcpToolCatalog.result(
@@ -210,7 +211,7 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     private Map<String, Object> execute(
             Map<String, Object> arguments,
-            CodeModeJobService.ExecutionSide side, long project
+            CodeModeJobService.ExecutionSide side, ProjectScope project
     ) {
         String code = requiredString(arguments, "code");
         List<String> imports = optionalStringList(arguments, "imports");
@@ -218,7 +219,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 CodeModeJobService.ExecutionEnvironment.class,
                 Objects.requireNonNullElse(optionalString(arguments, "environment"), "thread")
         );
-        CodeModeJobService.JobSnapshot submitted = CompanionApp.inProject(project, () -> this.jobs.submit(code, imports, side, environment));
+        CodeModeJobService.JobSnapshot submitted = project.admit(() -> this.jobs.submit(code, imports, side, environment));
         return this.jobs.waitFor(
                 submitted.jobId(),
                 optionalInteger(arguments, "wait_ms", 10_000)

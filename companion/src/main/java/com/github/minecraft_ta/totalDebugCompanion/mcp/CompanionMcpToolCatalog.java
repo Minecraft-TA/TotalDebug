@@ -40,27 +40,32 @@ final class CompanionMcpToolCatalog {
             ),
             List.of("code")
     );
-    private static final List<McpSchema.Tool> TOOLS = List.of(
-            tool(
+    private record ToolSpec(McpSchema.Tool tool, boolean projectBound) { }
+    private static final List<ToolSpec> TOOLS = List.of(
+            spec(
                     "status",
+                    false,
                     "Report Companion, Minecraft, and debugger connectivity.",
                     emptySchema(),
                     statusOutputSchema()
             ),
-            tool(
+            spec(
                     "client_code_execute",
+                    true,
                     "Execute a value-returning Java body in the connected Minecraft client JVM.",
                     EXECUTE_INPUT_SCHEMA,
                     jobOutputSchema()
             ),
-            tool(
+            spec(
                     "server_code_execute",
+                    true,
                     "Execute a value-returning Java body with server authority.",
                     EXECUTE_INPUT_SCHEMA,
                     jobOutputSchema()
             ),
-            tool(
+            spec(
                     "job_wait",
+                    false,
                     "Wait for one code job to finish or return its current state at the timeout.",
                     objectSchema(
                             Map.of(
@@ -75,20 +80,23 @@ final class CompanionMcpToolCatalog {
                     ),
                     jobOutputSchema()
             ),
-            tool(
+            spec(
                     "job_cancel",
+                    false,
                     "Request cancellation of one code job.",
                     jobIdSchema(),
                     jobCancellationOutputSchema()
             ),
-            tool(
+            spec(
                     "job_source",
+                    false,
                     "Return the exact generated Java source for one code job.",
                     jobIdSchema(),
                     sourceOutputSchema()
             ),
-            tool(
+            spec(
                     "search_classes",
+                    true,
                     "Resolve an exact binary name first, otherwise search full binary names by literal text.",
                     objectSchema(
                             Map.of("query", stringSchema("Exact binary name or case-insensitive name fragment.")),
@@ -96,8 +104,9 @@ final class CompanionMcpToolCatalog {
                     ),
                     boundedListOutputSchema("classes", classOutputSchema())
             ),
-            tool(
+            spec(
                     "runtime_source",
+                    true,
                     "Return one exact class or member source scope from a runtime class.",
                     objectSchema(
                             Map.of("target", runtimeSourceTargetSchema()),
@@ -105,14 +114,16 @@ final class CompanionMcpToolCatalog {
                     ),
                     runtimeSourceOutputSchema()
             ),
-            tool(
+            spec(
                     "search_symbols",
+                    true,
                     "Search field and method declarations, or list declarations owned by one class.",
                     searchSymbolsSchema(),
                     boundedListOutputSchema("symbols", symbolOutputSchema())
             ),
-            tool(
+            spec(
                     "find_usages",
+                    true,
                     "Find declaration sites that reference one exact class, field, or method.",
                     objectSchema(
                             Map.of("target", usageTargetSchema()),
@@ -120,8 +131,9 @@ final class CompanionMcpToolCatalog {
                     ),
                     boundedListOutputSchema("usages", usageOutputSchema())
             ),
-            tool(
+            spec(
                     "search_literals",
+                    true,
                     "Search indexed Java string literal values by case-sensitive text.",
                     objectSchema(Map.of("query", stringSchema("Literal text fragment.")), List.of("query")),
                     boundedListOutputSchema("literals", literalOutputSchema())
@@ -169,6 +181,16 @@ final class CompanionMcpToolCatalog {
             ), false);
         }
         return result(Map.of("error", failure.asMap()), true);
+    }
+
+    private static ToolSpec spec(String name, boolean projectBound, String description,
+                                 Map<String, Object> inputSchema, Map<String, Object> outputSchema) {
+        return new ToolSpec(tool(name, description, inputSchema, outputSchema), projectBound);
+    }
+
+    static boolean projectBound(String name) {
+        return TOOLS.stream().filter(spec -> spec.tool().name().equals(name))
+                .findFirst().map(ToolSpec::projectBound).orElse(true);
     }
 
     static McpSchema.Tool tool(
@@ -480,7 +502,7 @@ final class CompanionMcpToolCatalog {
     }
 
     private static List<McpSchema.Tool> allTools() {
-        return java.util.stream.Stream.concat(TOOLS.stream(), DebuggerMcpToolCatalog.tools().stream()).toList();
+        return java.util.stream.Stream.concat(TOOLS.stream().map(ToolSpec::tool), DebuggerMcpToolCatalog.tools().stream()).toList();
     }
 
     private static Map<String, McpSchema.Tool> indexTools() {

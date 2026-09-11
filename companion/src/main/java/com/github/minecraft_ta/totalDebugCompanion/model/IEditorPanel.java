@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
@@ -29,6 +30,9 @@ public interface IEditorPanel {
     default BottomInformationBar getInformationBar() {
         return null;
     }
+
+    /** The runtime that supplied this view; local editors have no runtime owner. */
+    default RuntimeBinding runtimeBinding() { return null; }
 
     default NavigationTarget getNavigationTarget() {
         return null;

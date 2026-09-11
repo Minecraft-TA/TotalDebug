@@ -366,6 +366,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void refreshProfile() {
+        this.navigationService.projectChanged(CompanionApp.currentScope());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
@@ -373,6 +374,12 @@ public class MainWindow extends JFrame implements AWTEventListener {
     public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         if (!this.editorTabs.canCloseAll()) return false;
+        setEnabled(false);
+        return true;
+    }
+
+    public boolean closeProjectViews() {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         this.editorTabs.closeMatching(editor -> true);
         if (this.editorTabs.getTabCount() != 0) return false;
         for (Window window : getOwnedWindows()) window.dispose();
@@ -386,7 +393,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.evaluateExpressionWindow = null;
         this.searchEverywherePopup = null;
         this.snippetExecutions = null;
-        this.navigationService.projectChanged();
+        this.statusBar.setEditor(null);
         setEnabled(false);
         return true;
     }

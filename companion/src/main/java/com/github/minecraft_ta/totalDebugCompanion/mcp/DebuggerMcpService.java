@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerBreakpointResolver;
@@ -27,7 +28,7 @@ final class DebuggerMcpService {
         this.sources = Objects.requireNonNull(sources, "sources");
     }
 
-    Map<String, Object> call(String tool, Map<String, Object> args, long project) throws IOException {
+    Map<String, Object> call(String tool, Map<String, Object> args, ProjectScope project) throws IOException {
         DebuggerSessionController session = this.controller.get();
         try {
             return switch (tool) {
@@ -47,12 +48,12 @@ final class DebuggerMcpService {
                 case "debugger_frames" -> Map.of("frames", await(session.frames(text(args, "pause_id")))
                         .stream().map(DebuggerMcpService::frame).toList());
                 case "debugger_variables" -> variables(session, args);
-                case "debugger_evaluate" -> operation(session, await(CompanionApp.inProject(project, () -> session.startEvaluation(text(args, "pause_id"),
+                case "debugger_evaluate" -> operation(session, await(project.admit(() -> session.startEvaluation(text(args, "pause_id"),
                         integer(args, "frame_id", 0), text(args, "source")))), integer(args, "wait_ms", 1000));
                 case "debugger_evaluation_wait" -> operation(session,
                         await(session.evaluationOperation(text(args, "operation_id"))), integer(args, "wait_ms", 1000));
                 case "debugger_evaluation_cancel" -> {
-                    var requested = await(CompanionApp.inProject(project, () -> session.cancelEvaluation(text(args, "operation_id"))));
+                    var requested = await(project.admit(() -> session.cancelEvaluation(text(args, "operation_id"))));
                     yield operation(session, requested, 0);
                 }
                 default -> throw new IllegalArgumentException("Unknown debugger tool: " + tool);
@@ -116,10 +117,10 @@ final class DebuggerMcpService {
         return result;
     }
 
-    private Map<String, Object> control(DebuggerSessionController session, Map<String, Object> args, long project)
+    private Map<String, Object> control(DebuggerSessionController session, Map<String, Object> args, ProjectScope project)
             throws InterruptedException {
         String action = text(args, "action");
-        CompletableFuture<Void> operation = CompanionApp.inProject(project, () -> switch (action) {
+        CompletableFuture<Void> operation = project.admit(() -> switch (action) {
             case "attach" -> session.attach();
             case "detach" -> session.detach();
             case "pause" -> session.pause(((Number) args.get("thread_id")).longValue());
@@ -132,7 +133,7 @@ final class DebuggerMcpService {
         return snapshot(session.waitUntilStopped(integer(args, "wait_ms", defaultWait)));
     }
 
-    private Map<String, Object> setBreakpoint(DebuggerSessionController session, Map<String, Object> args, long project)
+    private Map<String, Object> setBreakpoint(DebuggerSessionController session, Map<String, Object> args, ProjectScope project)
             throws IOException {
         String binaryName = text(args, "binary_name");
         DebugEngine.Source source;
@@ -144,7 +145,7 @@ final class DebuggerMcpService {
             throw new IOException("Unable to load debugger source for " + binaryName, exception);
         }
         if (source == null) throw new IllegalArgumentException("Class not found: " + binaryName);
-        CompanionApp.inProject(project, () -> null);
+        project.requireActive();
         int line = integer(args, "line", 0);
         DebugEngine.SourceBreakpoint request = DebuggerBreakpointResolver.resolve(source, line,
                 (String) args.get("condition"), (String) args.get("hit_condition"))
@@ -154,19 +155,19 @@ final class DebuggerMcpService {
                     (String) action.get("script"), "continue_on_success".equals(action.get("completion"))));
         }
         DebugEngine.SourceBreakpoint resolvedRequest = request;
-        await(CompanionApp.inProject(project, () -> session.putBreakpoint(source, resolvedRequest, (Boolean) args.getOrDefault("enabled", true))));
+        await(project.admit(() -> session.putBreakpoint(source, resolvedRequest, (Boolean) args.getOrDefault("enabled", true))));
         DebuggerSessionController.Breakpoint resolved = session.breakpoint(source.uri(), line);
         if (resolved == null) throw new IllegalStateException("Breakpoint was removed concurrently");
         return Map.of("breakpoint", breakpoint(new DebuggerSessionController.BreakpointEntry(
                 source.uri(), source.binaryName(), resolved)));
     }
 
-    private Map<String, Object> removeBreakpoint(DebuggerSessionController session, Map<String, Object> args, long project) {
+    private Map<String, Object> removeBreakpoint(DebuggerSessionController session, Map<String, Object> args, ProjectScope project) {
         String binaryName = text(args, "binary_name");
         int line = integer(args, "line", 0);
         List<DebuggerSessionController.BreakpointEntry> matches = session.breakpointEntries().stream()
                 .filter(entry -> entry.binaryName().equals(binaryName) && entry.breakpoint().line() == line).toList();
-        for (var entry : matches) await(CompanionApp.inProject(project, () -> session.removeBreakpoint(entry.sourceUri(), line)));
+        for (var entry : matches) await(project.admit(() -> session.removeBreakpoint(entry.sourceUri(), line)));
         return Map.of("removed", !matches.isEmpty());
     }
 

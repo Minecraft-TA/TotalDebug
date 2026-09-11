@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.formdev.flatlaf.util.StringUtils;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -19,6 +20,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
 
 public class CodeView implements IEditorPanel {
+    private final RuntimeBinding runtimeBinding;
+    @Override public RuntimeBinding runtimeBinding() { return runtimeBinding; }
+
 
     private final Path path;
     private final EditorLocation location;
@@ -32,6 +36,7 @@ public class CodeView implements IEditorPanel {
     }
 
     public CodeView(Path path, int offset, EditorLocation location) {
+        this.runtimeBinding = null;
         this.path = path;
         this.location = location;
         this.debugSource = null;
@@ -40,7 +45,8 @@ public class CodeView implements IEditorPanel {
         reload(offset);
     }
 
-    public CodeView(DecompiledSource source, int offset, EditorLocation location) {
+    public CodeView(DecompiledSource source, int offset, EditorLocation location, RuntimeBinding runtimeBinding) {
+        this.runtimeBinding = runtimeBinding;
         this.path = source.path();
         this.location = location;
         this.debugSource = source.debugSource();

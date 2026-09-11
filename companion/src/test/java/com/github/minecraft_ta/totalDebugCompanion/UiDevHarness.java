@@ -930,19 +930,19 @@ public final class UiDevHarness {
                     EditorLocation.forRuntimeClass(
                             "com.github.minecraft_ta.totaldebug.ThemeSample",
                             sampleClasses.toUri().toASCIIString()
-                    )
+                    ), CompanionApp.currentRuntime()
             ));
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
-                    new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1)
+                    new ArchiveEntrySource(sampleArchive, "META-INF/MANIFEST.MF", -1), CompanionApp.currentRuntime()
             ));
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
-                    new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1)
+                    new ArchiveEntrySource(sampleArchive, "docs/NOTICE.custom", -1), CompanionApp.currentRuntime()
             ));
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
-                    new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1)
+                    new ArchiveEntrySource(sampleArchive, "config/defaults.toml", -1), CompanionApp.currentRuntime()
             ));
             MainWindow.INSTANCE.getEditorTabs().openEditorTab(new ResourceView(
-                    new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1)
+                    new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), CompanionApp.currentRuntime()
             ));
             boolean interactionVerification = Arrays.asList(args).stream()
                     .anyMatch(argument -> argument.startsWith("--verify-"));

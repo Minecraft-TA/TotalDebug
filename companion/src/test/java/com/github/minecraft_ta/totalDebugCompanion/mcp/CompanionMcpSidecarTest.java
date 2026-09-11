@@ -5,6 +5,9 @@ import java.util.function.Consumer;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.BufferedReader;
@@ -170,10 +173,11 @@ class CompanionMcpSidecarTest {
                 transport,
                 Clock.systemUTC()
         );
+        var scope = new ProjectScope(new Object(), new CompanionProfile(instance, temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
         return new CompanionMcpServer(
                 this.temporaryDirectory.resolve(instance).resolve("data"),
                 jobs,
-                port
+                port, new DebuggerMcpService(() -> null, name -> null), () -> scope
         );
     }
 
