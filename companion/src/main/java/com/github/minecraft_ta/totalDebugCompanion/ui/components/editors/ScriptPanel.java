@@ -50,8 +50,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final int scriptId = SCRIPT_ID++;
     private final ScriptView scriptView;
 
-    private static final CodeCompletionPopup codeCompletionPopup = new CodeCompletionPopup(MainWindow.INSTANCE);
-    private static final SignatureHelpPopup signatureHelpPopup = new SignatureHelpPopup(MainWindow.INSTANCE);
+    private final CodeCompletionPopup codeCompletionPopup = new CodeCompletionPopup(MainWindow.INSTANCE);
+    private final SignatureHelpPopup signatureHelpPopup = new SignatureHelpPopup(MainWindow.INSTANCE);
 
     private final FlatIconButton runButton = new FlatIconButton(Icons.RUN, false);
     private final FlatIconButton runServerButton = new FlatIconButton(Icons.RUN_SERVER, false);
@@ -108,6 +108,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     private final SnippetCompletionAdapter snippetCompletionAdapter = new SnippetCompletionAdapter(this.editorPane);
     private CustomCompletionRequestor completionRequestor;
+    private boolean disposed;
+    private final Runnable unsubscribeResults;
     private boolean didTypeBeforeCaretMove;
     private int lastCaretPos;
     private JavaSnippetSource.GeneratedSource lastGeneratedSource;
@@ -144,12 +146,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupAutocompletion();
         setupFormatting();
 
-        CompanionApp.SERVER.getMessageBus().listenAlways(ExecutionResultMessage.class, this, this::acceptResult);
+        var messageBus = CompanionApp.SERVER.getMessageBus();
+        messageBus.listenAlways(ExecutionResultMessage.class, this, this::acceptResult);
+        this.unsubscribeResults = () -> messageBus.unregister(ExecutionResultMessage.class, this);
     }
 
     private void acceptResult(ExecutionResultMessage m) {
         SwingUtilities.invokeLater(() -> {
-            if (m.scriptId() != this.scriptId)
+            if (this.disposed || m.scriptId() != this.scriptId)
                 return;
 
             ExecutionStatus status = m.result().status();
@@ -578,10 +582,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     @Override
     public void dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.unsubscribeResults.run();
         this.saveTimer.stop();
         if (this.completionRequestor != null)
             this.completionRequestor.setCanceled(true);
-        hideCompletionPopup();
+        this.codeCompletionPopup.dispose();
+        this.signatureHelpPopup.dispose();
         super.dispose();
     }
 

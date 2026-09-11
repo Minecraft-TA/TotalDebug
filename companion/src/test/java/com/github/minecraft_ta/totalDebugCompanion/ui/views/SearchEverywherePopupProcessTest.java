@@ -1,6 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.UiDevHarness;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import javax.swing.JLabel;
+import java.util.Collection;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.AbstractButton;
@@ -61,6 +66,14 @@ class SearchEverywherePopupProcessTest {
         assertTrue(result.output().contains("Search category cycling verification passed"), result.output());
     }
 
+    @Test
+    void disposedPopupUnsubscribesAndIgnoresQueuedRuntimeStatus() throws Exception {
+        assumeFalse(GraphicsEnvironment.isHeadless());
+        ProcessResult result = runProcess(Duration.ofSeconds(10), Probe.class.getName(), "verify-disposal");
+        assertTrue(result.finished(), result.output());
+        assertEquals(0, result.exitCode(), result.output());
+    }
+
     private static ProcessResult runProcess(Duration timeout, String mainClass, String... arguments) throws Exception {
 
         String javaExecutable = Path.of(
@@ -92,6 +105,10 @@ class SearchEverywherePopupProcessTest {
         }
 
         public static void main(String[] arguments) throws Exception {
+            if (java.util.Arrays.asList(arguments).contains("verify-disposal")) {
+                verifyDisposal();
+                System.exit(0);
+            }
             SwingUtilities.invokeAndWait(() -> {
                 SearchEverywherePopup popup = new SearchEverywherePopup();
                 try {
@@ -104,6 +121,35 @@ class SearchEverywherePopupProcessTest {
                 }
             });
             System.exit(0);
+        }
+
+        private static void verifyDisposal() throws Exception {
+            var serviceField = CompanionApp.class.getDeclaredField("runtimeIndexService");
+            serviceField.setAccessible(true);
+            var listenersField = RuntimeIndexService.class.getDeclaredField("listeners");
+            listenersField.setAccessible(true);
+            var messageField = SearchEverywherePopup.class.getDeclaredField("messageLabel");
+            messageField.setAccessible(true);
+            try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
+                serviceField.set(null, service);
+                for (int cycle = 0; cycle < 3; cycle++) {
+                    var label = new AtomicReference<JLabel>();
+                    SwingUtilities.invokeAndWait(() -> {
+                        var popup = new SearchEverywherePopup();
+                        try {
+                            assertEquals(1, ((Collection<?>) listenersField.get(service)).size());
+                            label.set((JLabel) messageField.get(popup));
+                            label.get().setText("unchanged after disposal");
+                            service.waiting("queued before disposal");
+                        } catch (IllegalAccessException failure) { throw new AssertionError(failure); }
+                        finally { popup.dispose(); }
+                    });
+                    SwingUtilities.invokeAndWait(() -> assertEquals("unchanged after disposal", label.get().getText()));
+                    assertTrue(((Collection<?>) listenersField.get(service)).isEmpty());
+                    service.waiting("sent after disposal");
+                    SwingUtilities.invokeAndWait(() -> assertEquals("unchanged after disposal", label.get().getText()));
+                }
+            } finally { serviceField.set(null, null); }
         }
 
         private static void verifyCategoryCycling(SearchEverywherePopup popup) {

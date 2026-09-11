@@ -69,6 +69,7 @@ public final class UsagesViewPanel extends JPanel {
     private ReferenceSearchService.SearchHandle activeSearch;
     private long searchGeneration;
     private boolean detached;
+    private boolean disposed;
     private int resultLimit = INITIAL_RESULT_LIMIT;
     private boolean resultTruncated;
     private List<ReferenceUsage> currentUsages = List.of();
@@ -110,8 +111,16 @@ public final class UsagesViewPanel extends JPanel {
         });
     }
 
+    public void dispose() {
+        requireEdt();
+        this.disposed = true;
+        this.detached = true;
+        cancelActiveSearch();
+    }
+
     public void restartSearch() {
         requireEdt();
+        if (this.disposed) return;
         this.detached = false;
         this.resultLimit = INITIAL_RESULT_LIMIT;
         this.resultTruncated = false;

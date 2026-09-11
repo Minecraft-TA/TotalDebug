@@ -22,6 +22,7 @@ final class CodeVisionController implements AutoCloseable {
     private final JLayer<JComponent> layer;
     private final HierarchyGutterMarkers gutterMarkers;
 
+    private final Runnable unsubscribeAst;
     private CodeInsightService.SearchHandle activeAnalysis;
     private long generation;
     private boolean closed;
@@ -38,7 +39,7 @@ final class CodeVisionController implements AutoCloseable {
         this.layerUI = Objects.requireNonNull(layerUI, "layerUI");
         this.layer = Objects.requireNonNull(layer, "layer");
         this.gutterMarkers = Objects.requireNonNull(gutterMarkers, "gutterMarkers");
-        ASTCache.addChangeListener(this.editorIdentifier, (unit, version) -> {
+        this.unsubscribeAst = ASTCache.addChangeListener(this.editorIdentifier, (unit, version) -> {
             String source = ASTCache.getContents(this.editorIdentifier);
             if (source != null) {
                 analyze(SourceDeclarationAnalyzer.analyze(unit, source));
@@ -106,6 +107,7 @@ final class CodeVisionController implements AutoCloseable {
             return;
         }
         this.closed = true;
+        this.unsubscribeAst.run();
         if (this.activeAnalysis != null) {
             this.activeAnalysis.cancel();
             this.activeAnalysis = null;

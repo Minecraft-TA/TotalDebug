@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
@@ -121,9 +120,6 @@ public class ScriptView implements IEditorPanel {
     @Override
     public void dispose() {
         if (this.scriptPanel != null) {
-            if (CompanionApp.SERVER != null) {
-                CompanionApp.SERVER.getMessageBus().unregister(ExecutionResultMessage.class, this.scriptPanel);
-            }
             this.scriptPanel.dispose();
         }
     }
