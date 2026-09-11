@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import javax.swing.JLabel;
+import javax.swing.JPopupMenu;
+import javax.swing.Timer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
@@ -59,7 +62,7 @@ final class UiScenarioDriver {
         ScenarioContext context = new ScenarioContext(source);
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
         int[] stableReadyPolls = {0};
-        javax.swing.Timer timer = new javax.swing.Timer(50, event -> {
+        Timer timer = new Timer(50, event -> {
             try {
                 advance(scenario, context);
                 if (context.workspaceReady() && ready(scenario, context)) {
@@ -67,7 +70,7 @@ final class UiScenarioDriver {
                     if (stableReadyPolls[0] < READY_POLLS) {
                         return;
                     }
-                    ((javax.swing.Timer) event.getSource()).stop();
+                    ((Timer) event.getSource()).stop();
                     if (screenshot != null) {
                         capture(screenshot);
                         mainWindow.dispose();
@@ -478,11 +481,11 @@ final class UiScenarioDriver {
         }
     }
 
-    private javax.swing.JPopupMenu visibleMenuPopup() {
+    private JPopupMenu visibleMenuPopup() {
         return Arrays.stream(javax.swing.MenuSelectionManager.defaultManager().getSelectedPath())
-                .filter(javax.swing.JPopupMenu.class::isInstance)
-                .map(javax.swing.JPopupMenu.class::cast)
-                .filter(javax.swing.JPopupMenu::isShowing)
+                .filter(JPopupMenu.class::isInstance)
+                .map(JPopupMenu.class::cast)
+                .filter(JPopupMenu::isShowing)
                 .findFirst()
                 .orElse(null);
     }
@@ -511,15 +514,15 @@ final class UiScenarioDriver {
         return null;
     }
 
-    private javax.swing.JLabel findLabelContaining(Container root, String expectedText) {
+    private JLabel findLabelContaining(Container root, String expectedText) {
         for (Component component : root.getComponents()) {
-            if (component instanceof javax.swing.JLabel label
+            if (component instanceof JLabel label
                     && label.getText() != null
                     && label.getText().contains(expectedText)) {
                 return label;
             }
             if (component instanceof Container child) {
-                javax.swing.JLabel match = findLabelContaining(child, expectedText);
+                JLabel match = findLabelContaining(child, expectedText);
                 if (match != null) {
                     return match;
                 }

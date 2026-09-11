@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import javax.swing.JLabel;
+import javax.swing.Timer;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
@@ -285,7 +287,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleSearchEverywhereInteractionVerification() {
-        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
+        Timer openTimer = new Timer(500, event -> {
             mainWindow.openSearchEverywhere();
             SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
                     .filter(SearchEverywherePopup.class::isInstance)
@@ -296,7 +298,7 @@ public final class UiDevHarness {
             // This fixture sends synthetic events; native focus belongs to the user's other windows.
             var focusListeners = popup.getWindowFocusListeners();
             for (var listener : focusListeners) popup.removeWindowFocusListener(listener);
-            javax.swing.Timer firstQuery = new javax.swing.Timer(250, queryEvent -> {
+            Timer firstQuery = new Timer(250, queryEvent -> {
                 popup.setLocation(mainWindow.getX() + 220, mainWindow.getY() + 70);
                 FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
                 if (search == null) {
@@ -305,7 +307,7 @@ public final class UiDevHarness {
                 search.setText("Theme");
 
                 long resultsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                javax.swing.Timer verifyResults = new javax.swing.Timer(50, verifyEvent -> {
+                Timer verifyResults = new Timer(50, verifyEvent -> {
                     @SuppressWarnings("rawtypes")
                     JList results = findComponent(popup, JList.class);
                     if (results == null || results.getModel().getSize() == 0 || !results.isShowing()) {
@@ -313,7 +315,7 @@ public final class UiDevHarness {
                         throw new IllegalStateException("Initial Search Everywhere results did not become visible");
                     }
 
-                    ((javax.swing.Timer) verifyEvent.getSource()).stop();
+                    ((Timer) verifyEvent.getSource()).stop();
                     int previousResultCount = results.getModel().getSize();
                     search.setText("ThemeSampleImpl");
                     if (!results.isShowing() || results.getModel().getSize() != previousResultCount) {
@@ -334,12 +336,12 @@ public final class UiDevHarness {
                     }
 
                     long updatedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                    javax.swing.Timer verifyUpdated = new javax.swing.Timer(50, updatedEvent -> {
+                    Timer verifyUpdated = new Timer(50, updatedEvent -> {
                         if (results.getModel().getSize() != 1 || !results.isShowing()) {
                             if (System.nanoTime() < updatedDeadline) return;
                             throw new IllegalStateException("Updated Search Everywhere results did not remain visible");
                         }
-                        ((javax.swing.Timer) updatedEvent.getSource()).stop();
+                        ((Timer) updatedEvent.getSource()).stop();
                         for (var listener : focusListeners) popup.addWindowFocusListener(listener);
                         var lostFocus = new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS);
                         for (var listener : focusListeners) listener.windowLostFocus(lostFocus);
@@ -361,7 +363,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleMethodNavigationVerification() {
-        javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> application.openClass(
+        Timer openTimer = new Timer(500, event -> application.openClass(
                 "sample.ThemeSampleImpl",
                 org.eclipse.jdt.core.IJavaElement.METHOD,
                 "Lsample/ThemeSampleImpl;.apply(Lsample/ThemeSample;)V"
@@ -370,7 +372,7 @@ public final class UiDevHarness {
         openTimer.start();
 
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
-        javax.swing.Timer verifyTimer = new javax.swing.Timer(100, event -> {
+        Timer verifyTimer = new Timer(100, event -> {
             try {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 if (selected instanceof CodeView codeView
@@ -384,7 +386,7 @@ public final class UiDevHarness {
                     int lineStart = editor.getLineStartOffset(line);
                     String lineText = editor.getText(lineStart, editor.getLineEndOffset(line) - lineStart);
                     if (lineText.contains(" apply(")) {
-                        ((javax.swing.Timer) event.getSource()).stop();
+                        ((Timer) event.getSource()).stop();
                         System.out.println("METHOD_NAVIGATION_OK line=" + (line + 1) + " caret=" + caret);
                         mainWindow.dispose();
                         finishHarness(0);
@@ -497,7 +499,7 @@ public final class UiDevHarness {
      * actually refreshes.
      */
     private static void startThemeCycling() {
-        javax.swing.Timer timer = new javax.swing.Timer(8000, null);
+        Timer timer = new Timer(8000, null);
         timer.addActionListener(event -> {
             var themes = com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme.available();
             var current = com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current();
@@ -509,7 +511,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleCodeVisionClickVerification(String source) {
-        javax.swing.Timer clickTimer = new javax.swing.Timer(1400, event -> {
+        Timer clickTimer = new Timer(1400, event -> {
             try {
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 if (editor == null) {
@@ -524,16 +526,16 @@ public final class UiDevHarness {
                 );
 
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                Timer resultTimer = new Timer(250, resultEvent -> {
                     var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof UsagesView) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("CODE_VISION_CLICK_OK");
                         mainWindow.dispose();
                         finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("CODE_VISION_CLICK_MISSED selected="
                                 + (selected == null ? "null" : selected.getClass().getName()));
                         mainWindow.dispose();
@@ -555,7 +557,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleGutterClickVerification(String source) {
-        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+        Timer setupTimer = new Timer(1400, event -> {
             try {
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
@@ -571,15 +573,15 @@ public final class UiDevHarness {
                 );
                 target.x = iconRow.getWidth() / 2;
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                Timer resultTimer = new Timer(250, resultEvent -> {
                     if (isShowing(ImplementationChooserPopup.class)) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("GUTTER_CLICK_OK");
                         mainWindow.dispose();
                         finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("GUTTER_CLICK_MISSED");
                         mainWindow.dispose();
                         finishHarness(2);
@@ -600,7 +602,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleSingleGutterNavigationVerification(String source) {
-        javax.swing.Timer setupTimer = new javax.swing.Timer(1400, event -> {
+        Timer setupTimer = new Timer(1400, event -> {
             try {
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
@@ -616,16 +618,16 @@ public final class UiDevHarness {
                 );
                 target.x = iconRow.getWidth() / 2;
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
-                javax.swing.Timer resultTimer = new javax.swing.Timer(250, resultEvent -> {
+                Timer resultTimer = new Timer(250, resultEvent -> {
                     var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof CodeView codeView && "SingleActionImpl".equals(codeView.getTitle())) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.out.println("GUTTER_DIRECT_NAVIGATION_OK");
                         mainWindow.dispose();
                         finishHarness(0);
                     }
                     if (System.nanoTime() >= deadline) {
-                        ((javax.swing.Timer) resultEvent.getSource()).stop();
+                        ((Timer) resultEvent.getSource()).stop();
                         System.err.println("GUTTER_DIRECT_NAVIGATION_MISSED selected="
                                 + (selected == null ? "null" : selected.getTitle()));
                         mainWindow.dispose();
@@ -648,7 +650,7 @@ public final class UiDevHarness {
 
     private static void scheduleGutterHover(String source, int declarationOffset, boolean verify) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer hoverTimer = new javax.swing.Timer(150, event -> {
+        Timer hoverTimer = new Timer(150, event -> {
             try {
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 IconRowHeader iconRow = findComponent(mainWindow, IconRowHeader.class);
@@ -664,7 +666,7 @@ public final class UiDevHarness {
                 }
 
                 if (verify) {
-                    ((javax.swing.Timer) event.getSource()).stop();
+                    ((Timer) event.getSource()).stop();
                 }
                 Rectangle2D declaration = editor.modelToView2D(declarationOffset);
                 var viewport = (javax.swing.JViewport) SwingUtilities.getAncestorOfClass(
@@ -704,15 +706,15 @@ public final class UiDevHarness {
 
     private static <T extends java.awt.Window> void scheduleWindowVerification(Class<T> type, String successMessage) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+        Timer timer = new Timer(100, event -> {
             if (isShowing(type)) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.out.println(successMessage);
                 mainWindow.dispose();
                 finishHarness(0);
             }
             if (System.nanoTime() >= deadline) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.err.println(successMessage.replace("_OK", "_MISSED"));
                 mainWindow.dispose();
                 finishHarness(2);
@@ -723,18 +725,18 @@ public final class UiDevHarness {
 
     private static void scheduleHierarchyRowLayoutVerification() {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-        javax.swing.Timer timer = new javax.swing.Timer(100, event -> {
+        Timer timer = new Timer(100, event -> {
             HierarchyPreviewPopup popup = Arrays.stream(java.awt.Window.getWindows())
                     .filter(HierarchyPreviewPopup.class::isInstance)
                     .map(HierarchyPreviewPopup.class::cast)
                     .filter(java.awt.Window::isShowing)
                     .findFirst()
                     .orElse(null);
-            javax.swing.JLabel declaration = popup == null
+            JLabel declaration = popup == null
                     ? null
                     : findLabelContaining(popup, "OverrideChild.overrideMe");
             if (declaration != null) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 PrimarySecondaryLabel declarationPresentation = (PrimarySecondaryLabel) declaration.getParent();
                 Container row = declarationPresentation.getParent();
                 PrimarySecondaryLabel modulePresentation = Arrays.stream(row.getComponents())
@@ -743,7 +745,7 @@ public final class UiDevHarness {
                         .filter(presentation -> presentation != declarationPresentation)
                         .findFirst()
                         .orElseThrow();
-                javax.swing.JLabel module = firstLabel(modulePresentation);
+                JLabel module = firstLabel(modulePresentation);
                 Point declarationOrigin = SwingUtilities.convertPoint(declaration, 0, 0, row);
                 Point moduleOrigin = SwingUtilities.convertPoint(module, 0, 0, row);
                 int declarationBaseline = declarationOrigin.y
@@ -773,7 +775,7 @@ public final class UiDevHarness {
                 finishHarness(0);
             }
             if (System.nanoTime() >= deadline) {
-                ((javax.swing.Timer) event.getSource()).stop();
+                ((Timer) event.getSource()).stop();
                 System.err.println("HIERARCHY_ROW_LAYOUT_MISSED");
                 mainWindow.dispose();
                 finishHarness(2);
@@ -782,15 +784,15 @@ public final class UiDevHarness {
         timer.start();
     }
 
-    private static javax.swing.JLabel findLabelContaining(Container root, String expectedText) {
+    private static JLabel findLabelContaining(Container root, String expectedText) {
         for (Component component : root.getComponents()) {
-            if (component instanceof javax.swing.JLabel label
+            if (component instanceof JLabel label
                     && label.getText() != null
                     && label.getText().contains(expectedText)) {
                 return label;
             }
             if (component instanceof Container child) {
-                javax.swing.JLabel match = findLabelContaining(child, expectedText);
+                JLabel match = findLabelContaining(child, expectedText);
                 if (match != null) {
                     return match;
                 }
@@ -799,10 +801,10 @@ public final class UiDevHarness {
         return null;
     }
 
-    private static javax.swing.JLabel firstLabel(Container root) {
+    private static JLabel firstLabel(Container root) {
         return Arrays.stream(root.getComponents())
-                .filter(javax.swing.JLabel.class::isInstance)
-                .map(javax.swing.JLabel.class::cast)
+                .filter(JLabel.class::isInstance)
+                .map(JLabel.class::cast)
                 .findFirst()
                 .orElseThrow();
     }
@@ -1049,6 +1051,8 @@ public final class UiDevHarness {
                 new UiScenarioDriver(mainWindow, UiDevHarness::finishHarness).schedule(scenario, CodeView.readCode(sample), screenshot);
             }
         });
+        application.awaitExit();
+        finishHarness(0);
     }
 
     private static java.util.Optional<String> argument(String[] args, String prefix) {

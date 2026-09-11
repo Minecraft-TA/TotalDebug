@@ -20,11 +20,9 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
-import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService.CompilationResult;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -35,7 +33,6 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
-import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
@@ -44,7 +41,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.scnet.message.AbstractMessage;
 import org.eclipse.jdt.core.dom.ASTParser;
-import org.eclipse.jdt.core.dom.CompilationUnit;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.io.IOException;
@@ -272,6 +268,7 @@ public final class CompanionApplication implements AutoCloseable {
     /** Application API; selection controls and MCP project tools are added separately. */
     public CompletableFuture<Void> openProject(CompanionProfile requested) {
         Objects.requireNonNull(requested);
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
         return CompletableFuture.runAsync(() -> {
             try { switchProject(requested); }
             catch (IOException failure) { throw new CompletionException(failure); }
@@ -348,7 +345,7 @@ public final class CompanionApplication implements AutoCloseable {
                         switching = false;
                     }
                 }
-                if (ui != null) SwingUtilities.invokeLater(() -> ui.setSwitching(false));
+                onUi(view -> view.setSwitching(isSwitching()));
             }
         }
     }
@@ -484,15 +481,12 @@ public final class CompanionApplication implements AutoCloseable {
         if (!CompanionClassIndex.isOpen()) {
             return;
         }
-        Thread thread = new Thread(() -> {
-            ASTParser parser = JdtConfiguration.createParser();
-            parser.setSource(new CompilationUnitImpl("Test", "class Test{}"));
-            parser.setResolveBindings(true);
-            parser.setKind(ASTParser.K_COMPILATION_UNIT);
-            CompilationUnit ignored = (CompilationUnit) parser.createAST(null);
-        }, "Companion JDT prewarm");
-        thread.setDaemon(true);
-        thread.start();
+        // This follow-up already runs on the project worker, which shutdown drains before closing the index.
+        ASTParser parser = JdtConfiguration.createParser();
+        parser.setSource(new CompilationUnitImpl("Test", "class Test{}"));
+        parser.setResolveBindings(true);
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.createAST(null);
     }
 
     private void startMcpServer() throws Exception {
@@ -565,11 +559,14 @@ public final class CompanionApplication implements AutoCloseable {
     }
 
     public MainWindow createWindow() {
+        if (closed) throw new IllegalStateException("Application is closed");
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         if (ui != null) throw new IllegalStateException("Application already has a UI");
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
                 scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit);
         ui = window;
+        // A restore may have finished while the constructor still had no published UI.
+        window.refreshProfile();
         window.setRuntimeIndexStatus(getRuntimeIndexStatus());
         ProjectScope scope = current;
         if (scope != null && scope.isActive() && scope.runtime() != null) {
@@ -627,32 +624,12 @@ public final class CompanionApplication implements AutoCloseable {
         return !closed && !switching && session != null && session.isConnected();
     }
 
-    public boolean hasProfile() {
-        return current != null;
-    }
-
-    public String getActiveRuntimeSignature() {
-        RuntimeBinding current = currentRuntime();
-        return current == null ? null : current.snapshot().signature();
-    }
-
-    public boolean send(AbstractMessage message) {
+    private boolean send(AbstractMessage message) {
         if (switching && !(message instanceof StopScriptMessage)) return false;
         CompanionSession current = session;
         return current != null && current.send(message);
     }
 
-    public CompletableFuture<CompilationResult> compileJava(String source, String entryClass) {
-        try { return requireProject().admit(() -> scriptCompiler.compile(source, entryClass)); }
-        catch (IllegalStateException failure) { return CompletableFuture.failedFuture(failure); }
-    }
-
-    /** A pre-send check; the receiving runtime must still validate the result's inventory identity. */
-    public boolean isCurrentRuntimeInventory(String inventoryId) {
-        return isConnected() && scriptCompiler.isCurrentInventory(inventoryId);
-    }
-
-    public ScriptExecutionService scriptExecutions() { return scriptExecutions; }
     public CompanionSession session() { return session; }
 
     public void openClass(String binaryName, int targetType, String targetIdentifier) {
@@ -712,36 +689,6 @@ public final class CompanionApplication implements AutoCloseable {
         return scope == null ? emptyState : scope.state();
     }
 
-    public Path getRootPath() {
-        return requireProfile().dataDirectory();
-    }
-
-    public Path getWorkspaceDirectory() {
-        return requireProfile().workspaceDirectory();
-    }
-
-    public ReferenceSearchService getReferenceSearchService() {
-        RuntimeBinding current = currentRuntime();
-        ReferenceSearchService service = current == null ? null : current.references();
-        if (service == null) {
-            throw new IllegalStateException("Reference search is unavailable");
-        }
-        return service;
-    }
-
-    public CodeInsightService getCodeInsightService() {
-        CodeInsightService service = codeInsightService;
-        if (currentRuntime() == null) {
-            throw new IllegalStateException("Code insight is unavailable");
-        }
-        return service;
-    }
-
-    public RuntimeSourceCatalog getRuntimeSourceCatalog() {
-        RuntimeBinding current = currentRuntime();
-        return current == null ? RuntimeSourceCatalog.empty() : current.sources();
-    }
-
     public CompanionDecompilationService getDecompilationService() {
         RuntimeBinding current = currentRuntime();
         CompanionDecompilationService service = current == null ? null : current.decompiler();
@@ -757,16 +704,6 @@ public final class CompanionApplication implements AutoCloseable {
             throw new IllegalStateException("Debugger controller is not initialized");
         }
         return controller;
-    }
-
-    public boolean isDebuggerConnected() {
-        DebuggerSessionController controller = debuggerController;
-        if (controller == null) {
-            return false;
-        }
-        DebuggerSessionController.Phase phase = controller.status().phase();
-        return phase == DebuggerSessionController.Phase.RUNNING
-                || phase == DebuggerSessionController.Phase.PAUSED;
     }
 
     private DebuggerSessionController createDebuggerController() {
@@ -796,28 +733,6 @@ public final class CompanionApplication implements AutoCloseable {
         return service == null
                 ? new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "Waiting for runtime inventory", null)
                 : service.status();
-    }
-
-    public void addRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) {
-            service.addStatusListener(listener);
-        } else {
-            listener.accept(getRuntimeIndexStatus());
-        }
-    }
-
-    public void removeRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) service.removeStatusListener(listener);
-    }
-
-    public void retryRuntimeIndex() {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) {
-            service.waiting("Requesting runtime inventory again");
-        }
-        send(new RetryRuntimeInventoryMessage());
     }
 
     private CompanionProfile requireProfile() {

@@ -62,7 +62,7 @@ class RuntimeInstallationTest {
         }
     }
 
-    private static ReadySnapshot snapshot(Path root, String signature) throws Exception {
+    static ReadySnapshot snapshot(Path root, String signature) throws Exception {
         Path classes = Files.createDirectories(root.resolve("classes"));
         var module = new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.LIBRARY);
         var source = new RuntimeSnapshotBytecodeSource.Source(0, classes, classes.toUri().toString(), module);
