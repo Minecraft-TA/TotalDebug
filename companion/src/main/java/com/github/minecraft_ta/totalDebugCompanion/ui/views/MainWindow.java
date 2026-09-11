@@ -23,6 +23,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.Breakpoints
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerActions;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerShortcuts;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerPanel.FrameNavigation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.WorkspacePanel;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
@@ -71,20 +72,25 @@ public class MainWindow extends JFrame implements AWTEventListener {
     private final ScriptExecutionService scripts;
     private final CompanionSession session;
     private final RuntimeIndexService indexLoader;
+    private final FrameNavigation frameNavigation;
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
-                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, Runnable exit) {
+                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit) {
         this.project = project;
         this.debugger = debugger;
         this.insights = insights;
         this.scripts = scripts;
         this.session = session;
         this.indexLoader = indexLoader;
+        this.frameNavigation = frameNavigation;
         setAutoRequestFocus(false);
 
         this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
-        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () -> session.send(new RetryRuntimeInventoryMessage()));
+        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () -> {
+            indexLoader.waiting("Requesting runtime inventory again");
+            session.send(new RetryRuntimeInventoryMessage());
+        });
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -269,11 +275,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
                     debugger,
                     this.debuggerActions,
                     this.debuggerShortcuts,
-                    (frame, activateEditor) -> {
-                        if (!frame.binaryName().isBlank() && frame.line() > 0) navigation().navigate(
-                                new NavigationTarget.RuntimeLine(frame.binaryName(), frame.line()), activateEditor
-                                        ? NavigationService.Activation.ACTIVATE_WINDOW : NavigationService.Activation.KEEP_CURRENT_WINDOW);
-                    },
+                    this.frameNavigation,
                     () -> breakpointsWindow(debugger).showWindow(),
                     target -> this.navigationService.navigate(target)
             );
@@ -401,22 +403,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
 
     public NavigationService navigation() {
         return this.navigationService;
-    }
-
-    public void revealPackage(String packageName, String ownerClassName) {
-        if (ownerClassName == null || ownerClassName.isBlank()) {
-            reportNavigationFailure("JDT could not resolve the class owning package " + packageName);
-            return;
-        }
-        this.navigationService.navigate(new NavigationTarget.RuntimePackage(packageName, ownerClassName));
-    }
-
-    private void reportNavigationFailure(String message) {
-        var editor = this.editorTabs.getSelectedEditor();
-        var informationBar = editor == null ? null : editor.getInformationBar();
-        if (informationBar != null) {
-            informationBar.setDefaultInfoText(message);
-        }
     }
 
     public void refreshProfile() {

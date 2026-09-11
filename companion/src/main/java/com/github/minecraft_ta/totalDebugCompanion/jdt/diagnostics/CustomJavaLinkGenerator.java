@@ -34,11 +34,11 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     private final Consumer<NavigationTarget> navigator;
     private final Path sourcePath;
 
-    public CustomJavaLinkGenerator(String identifier, Consumer<NavigationTarget> navigator) {
+    public CustomJavaLinkGenerator(String identifier, BiConsumer<String, String> packageNavigator, Consumer<NavigationTarget> navigator) {
         this(
                 offset -> JavaSymbolResolver.selectElement(identifier, offset),
                 offset -> JavaSymbolResolver.navigationOwnerClass(identifier, offset),
-                (name, owner) -> navigator.accept(new NavigationTarget.RuntimePackage(name, owner)),
+                packageNavigator,
                 Path.of(identifier),
                 navigator
         );

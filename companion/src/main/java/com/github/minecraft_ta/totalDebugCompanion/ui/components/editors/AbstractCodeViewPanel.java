@@ -40,7 +40,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         installNavigationHistoryMenu(context.navigation());
         this.identifier = identifier;
 
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, target -> context.navigation().navigate(target)));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
             if (event.getType() == DocumentEvent.EventType.CHANGE) {
                 return;

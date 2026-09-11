@@ -107,6 +107,22 @@ public final class NavigationService {
         return navigation;
     }
 
+    public void revealPackage(String packageName, String ownerClassName) {
+        if (ownerClassName == null || ownerClassName.isBlank()) {
+            reportNavigationFailure("JDT could not resolve the class owning package " + packageName);
+            return;
+        }
+        navigate(new NavigationTarget.RuntimePackage(packageName, ownerClassName));
+    }
+
+    private void reportNavigationFailure(String message) {
+        var editor = this.tabs.getSelectedEditor();
+        var informationBar = editor == null ? null : editor.getInformationBar();
+        if (informationBar != null) {
+            informationBar.setDefaultInfoText(message);
+        }
+    }
+
     public Action backAction() {
         return this.backAction;
     }

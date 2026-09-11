@@ -27,7 +27,6 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationServi
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -81,7 +80,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.function.Consumer;
 
 public final class CompanionApp {
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
@@ -743,7 +741,7 @@ public final class CompanionApp {
 
     public static MainWindow createMainWindow() {
         return new MainWindow(CompanionApp::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, runtimeIndexService, CompanionApp::exit);
+                scriptExecutions, session, runtimeIndexService, CompanionApp::openDebugFrame, CompanionApp::exit);
     }
 
     private static void startUi() throws InvocationTargetException, InterruptedException {
@@ -1017,28 +1015,6 @@ public final class CompanionApp {
         return service == null
                 ? new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "Waiting for runtime inventory", null)
                 : service.status();
-    }
-
-    public static void addRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) {
-            service.addStatusListener(listener);
-        } else {
-            listener.accept(getRuntimeIndexStatus());
-        }
-    }
-
-    public static void removeRuntimeIndexStatusListener(Consumer<RuntimeIndexService.Status> listener) {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) service.removeStatusListener(listener);
-    }
-
-    public static void retryRuntimeIndex() {
-        RuntimeIndexService service = runtimeIndexService;
-        if (service != null) {
-            service.waiting("Requesting runtime inventory again");
-        }
-        send(new RetryRuntimeInventoryMessage());
     }
 
     private static CompanionProfile requireProfile() {

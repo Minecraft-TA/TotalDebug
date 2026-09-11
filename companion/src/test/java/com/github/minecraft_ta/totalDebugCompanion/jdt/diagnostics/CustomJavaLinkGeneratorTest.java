@@ -37,6 +37,21 @@ class CustomJavaLinkGeneratorTest {
     }
 
     @Test
+    void unresolvedPackageOwnerIsPassedToTheDiagnosticRoute() {
+        String source = "import missing.Type; class Sample {}";
+        AtomicReference<String> diagnostic = new AtomicReference<>();
+        var generator = new CustomJavaLinkGenerator(offset -> packageFragment("missing"), offset -> null,
+                (name, owner) -> {
+                    assertNull(owner);
+                    diagnostic.set("Unresolved owner for " + name);
+                }, Path.of("Sample.java"));
+        var link = generator.isLinkAtOffset(new RSyntaxTextArea(source), source.indexOf("missing"));
+        assertNotNull(link);
+        link.execute();
+        assertEquals("Unresolved owner for missing", diagnostic.get());
+    }
+
+    @Test
     void linkResultStartsAtTheTokenSoRSyntaxTextAreaCanUnderlineIt() {
         String source = "final class Sample { java.util.List<?> values; }";
         int hoverOffset = source.indexOf("List") + 2;
