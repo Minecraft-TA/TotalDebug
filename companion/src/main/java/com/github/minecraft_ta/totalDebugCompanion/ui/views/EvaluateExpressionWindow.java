@@ -47,9 +47,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 
 /** Global, history-backed Java expression evaluator for a running Minecraft session. */
 public final class EvaluateExpressionWindow extends JDialog {
+    private final Consumer<CompanionTheme> themeListener = theme -> {
+        setIconImages(Icons.createWindowIconImages(theme));
+        applyTheme();
+    };
     private static final String CLASS_NAME = "CompanionExpression";
 
     private final JavaExpressionField expression = new JavaExpressionField(54);
@@ -203,10 +209,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         setMinimumSize(new Dimension(720, 360));
         setSize(860, 500);
         setIconImages(Icons.createWindowIconImages(ThemeManager.current()));
-        ThemeManager.addThemeChangeListener(theme -> {
-            setIconImages(Icons.createWindowIconImages(theme));
-            applyTheme();
-        });
+        ThemeManager.addThemeChangeListener(this.themeListener);
     }
 
     private void evaluate() {
@@ -503,6 +506,7 @@ public final class EvaluateExpressionWindow extends JDialog {
     }
 
     @Override public void dispose() {
+        ThemeManager.removeThemeChangeListener(this.themeListener);
         clearDebuggerResults();
         editorContext.debugger().removeListener(this.debuggerListener);
         super.dispose();

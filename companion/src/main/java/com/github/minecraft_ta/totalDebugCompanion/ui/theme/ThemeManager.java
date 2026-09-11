@@ -47,6 +47,8 @@ public final class ThemeManager {
         LISTENERS.add(listener);
     }
 
+    static int listenerCount() { return LISTENERS.size(); }
+
     public static void removeThemeChangeListener(Consumer<CompanionTheme> listener) {
         LISTENERS.remove(listener);
     }

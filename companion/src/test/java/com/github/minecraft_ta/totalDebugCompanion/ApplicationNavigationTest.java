@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
+import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -35,13 +36,43 @@ class ApplicationNavigationTest {
         }
     }
 
+    @Test void replacementRejectsRequestsUntilUiRestorationFinishes() throws Exception {
+        var ui = new RecordingUi();
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token", ui)) {
+            var restored = new CompletableFuture<Void>();
+            ui.onRefresh = () -> {
+                assertTrue(app.isSwitching());
+                assertFalse(app.currentScope().isActive());
+                assertThrows(IllegalStateException.class, app::requireProject);
+                assertThrows(IllegalStateException.class, () -> app.currentScope().admit(() -> true));
+                restored.complete(null);
+            };
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(3, TimeUnit.SECONDS);
+            assertTrue(restored.isDone());
+            assertTrue(app.requireProject().admit(() -> true));
+            assertFalse(app.isSwitching());
+        }
+    }
+
+    @Test void rejectedWindowCreationDoesNotPublishAWindow() throws Exception {
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(3, TimeUnit.SECONDS);
+            var scope = app.requireProject();
+            scope.beginSwitch();
+            SwingUtilities.invokeAndWait(() -> assertThrows(IllegalStateException.class, app::createWindow));
+            scope.cancelSwitch();
+            SwingUtilities.invokeAndWait(() -> assertNotNull(app.createWindow()));
+        }
+    }
+
     private static final class RecordingUi implements CompanionUi {
+        Runnable onRefresh = () -> { };
         final CompletableFuture<NavigationTarget> navigation = new CompletableFuture<>();
         public boolean prepareProjectSwitch() { return true; }
         public boolean closeProjectViews() { return true; }
         public boolean canExit() { return true; }
         public void setSwitching(boolean switching) { }
-        public void refreshProfile() { }
+        public void refreshProfile() { onRefresh.run(); }
         public void runtimeChanged() { }
         public void setGameStatus(ServiceStatus status) { }
         public void setMcpStatus(ServiceStatus status) { }

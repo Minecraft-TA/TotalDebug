@@ -14,6 +14,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -32,6 +33,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class ApplicationStatusBar extends JPanel {
+    private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
     private final BreadcrumbBar breadcrumbs;
     private final JLabel editorStatusLabel = new JLabel();
     private final JLabel taskLabel = new JLabel();
@@ -118,8 +120,13 @@ public final class ApplicationStatusBar extends JPanel {
         add(this.mcpStatus);
         add(this.taskCards);
         applyTheme();
-        ThemeManager.addThemeChangeListener(theme -> applyTheme());
+        ThemeManager.addThemeChangeListener(this.themeListener);
         setRuntimeStatus(this.runtimeStatus);
+    }
+
+    public void dispose() {
+        ThemeManager.removeThemeChangeListener(this.themeListener);
+        setEditor(null);
     }
 
     public void setEditor(IEditorPanel editor) {

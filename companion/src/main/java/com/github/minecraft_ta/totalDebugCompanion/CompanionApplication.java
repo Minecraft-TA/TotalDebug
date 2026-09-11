@@ -38,11 +38,9 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.scnet.message.AbstractMessage;
 import org.eclipse.jdt.core.dom.ASTParser;
 import javax.swing.SwingUtilities;
-import javax.swing.ToolTipManager;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
@@ -379,7 +377,7 @@ public final class CompanionApplication implements AutoCloseable {
             throw new IOException("Minecraft workspace not found");
         }
         Files.createDirectories(requested.dataDirectory());
-        setupDataDirectories(requested.dataDirectory(), true);
+        setupDataDirectories(requested.dataDirectory());
     }
 
     private void handleRuntimeInventory(RuntimeInventoryMessage message) {
@@ -469,11 +467,8 @@ public final class CompanionApplication implements AutoCloseable {
         }
     }
 
-    static void setupDataDirectories(Path rootPath, boolean scriptExecutionEnabled) throws IOException {
+    static void setupDataDirectories(Path rootPath) throws IOException {
 
-        if (!scriptExecutionEnabled) {
-            return;
-        }
         Files.createDirectories(new InstancePaths(rootPath).scripts());
     }
 
@@ -559,30 +554,33 @@ public final class CompanionApplication implements AutoCloseable {
     }
 
     public MainWindow createWindow() {
-        if (closed) throw new IllegalStateException("Application is closed");
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
-        if (ui != null) throw new IllegalStateException("Application already has a UI");
+        synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
                 scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit);
-        ui = window;
-        // A restore may have finished while the constructor still had no published UI.
-        window.refreshProfile();
-        window.setRuntimeIndexStatus(getRuntimeIndexStatus());
-        ProjectScope scope = current;
-        if (scope != null && scope.isActive() && scope.runtime() != null) {
-            for (PendingNavigation pending : scope.drainNavigations()) window.navigate(pending.target(), pending.activation());
+        List<PendingNavigation> queued;
+        try {
+            synchronized (lifecycleLock) {
+                checkWindowCreation();
+                // These direct EDT updates and the replay snapshot precede publication.
+                window.refreshProfile();
+                window.setRuntimeIndexStatus(getRuntimeIndexStatus());
+                ProjectScope scope = current;
+                queued = scope != null && scope.runtime() != null ? scope.drainNavigations() : List.of();
+                ui = window;
+            }
+        } catch (RuntimeException | Error failure) {
+            window.dispose();
+            throw failure;
         }
+        for (PendingNavigation pending : queued) window.navigate(pending.target(), pending.activation());
         return window;
     }
 
-    void startUi() throws InvocationTargetException, InterruptedException {
-        SwingUtilities.invokeAndWait(() -> {
-            MainWindow window = createWindow();
-            window.setSize(1280, 720);
-            window.setVisible(true);
-            UIUtils.centerJFrame(window, window);
-            ToolTipManager.sharedInstance().setInitialDelay(200);
-        });
+    private void checkWindowCreation() {
+        if (closed) throw new IllegalStateException("Application is closed");
+        if (ui != null) throw new IllegalStateException("Application already has a UI");
+        if (switching || current != null && !current.isActive()) throw new IllegalStateException("Project is switching");
     }
 
     private void refreshUiProfile() {
@@ -630,7 +628,7 @@ public final class CompanionApplication implements AutoCloseable {
         return current != null && current.send(message);
     }
 
-    public CompanionSession session() { return session; }
+    CompanionSession session() { return session; }
 
     public void openClass(String binaryName, int targetType, String targetIdentifier) {
         openOrQueue(
@@ -680,7 +678,7 @@ public final class CompanionApplication implements AutoCloseable {
         return launchConfiguration.paths();
     }
 
-    public InstancePaths instancePaths() {
+    InstancePaths instancePaths() {
         return new InstancePaths(requireProfile().dataDirectory());
     }
 
@@ -689,7 +687,7 @@ public final class CompanionApplication implements AutoCloseable {
         return scope == null ? emptyState : scope.state();
     }
 
-    public CompanionDecompilationService getDecompilationService() {
+    CompanionDecompilationService getDecompilationService() {
         RuntimeBinding current = currentRuntime();
         CompanionDecompilationService service = current == null ? null : current.decompiler();
         if (service == null) {

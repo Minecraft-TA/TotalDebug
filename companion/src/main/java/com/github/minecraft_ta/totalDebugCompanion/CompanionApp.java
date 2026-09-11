@@ -17,6 +17,9 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
+import javax.swing.ToolTipManager;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -91,7 +94,13 @@ public final class CompanionApp {
             GlobalConfig.getInstance().loadFrom(configuration.appHome());
             configureLookAndFeel();
             try (var application = new CompanionApplication(configuration, token)) {
-                application.startUi();
+                SwingUtilities.invokeAndWait(() -> {
+                    var window = application.createWindow();
+                    window.setSize(1280, 720);
+                    window.setVisible(true);
+                    UIUtils.centerJFrame(window, window);
+                    ToolTipManager.sharedInstance().setInitialDelay(200);
+                });
                 application.start();
                 startup.close();
                 application.awaitExit();

@@ -182,7 +182,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             Toolkit.getDefaultToolkit().removeAWTEventListener(this);
             closeProjectWindows();
             editorTabs.closeMatching(editor -> true);
-            statusBar.setEditor(null);
+            statusBar.dispose();
         }
         super.dispose();
     }
@@ -413,21 +413,21 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         return this.navigationService;
     }
 
-    public void refreshProfile() {
+    @Override public void refreshProfile() {
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
 
-    public boolean prepareProjectSwitch() {
+    @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         if (!this.editorTabs.canCloseAll()) return false;
         setEnabled(false);
         return true;
     }
 
-    public boolean closeProjectViews() {
+    @Override public boolean closeProjectViews() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         this.editorTabs.closeMatching(editor -> true);
         if (this.editorTabs.getTabCount() != 0) return false;
@@ -467,7 +467,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.debuggerState.setVisible(hasProfile);
     }
 
-    public void setGameStatus(ServiceStatus status) {
+    @Override public void setGameStatus(ServiceStatus status) {
         this.statusBar.setGameStatus(status);
         if (status.state() != ServiceStatus.State.AVAILABLE && this.snippetExecutions != null) {
             this.snippetExecutions.runtimeDisconnected();
@@ -475,11 +475,11 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
     }
 
-    public void setMcpStatus(ServiceStatus status) {
+    @Override public void setMcpStatus(ServiceStatus status) {
         this.statusBar.setMcpStatus(status);
     }
 
-    public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
+    @Override public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
         this.statusBar.setRuntimeStatus(status);
     }
 }
