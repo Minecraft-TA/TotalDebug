@@ -25,12 +25,13 @@ class CompletionPresentationTest {
                 classes.add(stream.readAllBytes());
             }
         }
-        CompanionClassIndex.replace(ClassIndex.fromBytes(classes));
+        CompanionClassIndex.set(ClassIndex.fromBytes(classes));
     }
 
     @AfterAll
     static void closeIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

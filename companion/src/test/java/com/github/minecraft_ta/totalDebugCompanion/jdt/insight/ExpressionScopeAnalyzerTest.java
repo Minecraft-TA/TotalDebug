@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionPr
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -40,7 +41,7 @@ class ExpressionScopeAnalyzerTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(ExternalCompletionType.class),
@@ -51,12 +52,13 @@ class ExpressionScopeAnalyzerTest {
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test
     void keepsOnlyNamesVisibleInTheSelectedLexicalScope() {
-        var unit = ASTCache.rawParse("Sample", SOURCE);
+        var unit = JavaAst.parse("Sample", SOURCE);
         int innerUse = SOURCE.indexOf("field++");
         int outerUse = SOURCE.indexOf("field++", innerUse + 1);
 
@@ -70,7 +72,7 @@ class ExpressionScopeAnalyzerTest {
 
     @Test
     void excludesInstanceNamesFromAStaticMethod() {
-        var unit = ASTCache.rawParse("Sample", SOURCE);
+        var unit = JavaAst.parse("Sample", SOURCE);
 
         List<String> names = names(ExpressionScopeAnalyzer.analyze(unit, SOURCE.lastIndexOf("staticField++")));
 
@@ -93,7 +95,7 @@ class ExpressionScopeAnalyzerTest {
                     }
                 }
                 """;
-        var unit = ASTCache.rawParse("Sample", source);
+        var unit = JavaAst.parse("Sample", source);
         int context = source.indexOf("target.");
         List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
                 unit, context, "target.", "target.".length()
@@ -114,7 +116,7 @@ class ExpressionScopeAnalyzerTest {
                     }
                 }
                 """;
-        var unit = ASTCache.rawParse("Sample", source);
+        var unit = JavaAst.parse("Sample", source);
         int context = source.indexOf("target =");
         String expression = "target.own + target.";
 
@@ -138,7 +140,7 @@ class ExpressionScopeAnalyzerTest {
                     }
                 }
                 """;
-        var unit = ASTCache.rawParse("Sample", source);
+        var unit = JavaAst.parse("Sample", source);
         int context = source.indexOf("parameter.");
         List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(
                 unit, context, "parameter.", "parameter.".length()
@@ -169,7 +171,7 @@ class ExpressionScopeAnalyzerTest {
                         }
                     }
                     """;
-            var unit = ASTCache.rawParse("Sample", source);
+            var unit = JavaAst.parse("Sample", source);
             List<String> completions = names(ExpressionScopeAnalyzer.complete(
                     unit, source.indexOf("parameter."), "parameter.", "parameter.".length()
             ));
@@ -193,7 +195,7 @@ class ExpressionScopeAnalyzerTest {
                     }
                 }
                 """;
-        var unit = ASTCache.rawParse("Sample", source);
+        var unit = JavaAst.parse("Sample", source);
         int context = source.indexOf("void run");
 
         List<DebuggerCompletionProposal> completions = ExpressionScopeAnalyzer.complete(

@@ -45,12 +45,13 @@ class DebuggerMcpIntegrationTest {
                 bytes.add(stream.readAllBytes());
             }
         }
-        CompanionClassIndex.replace(ClassIndex.fromBytes(bytes));
+        CompanionClassIndex.set(ClassIndex.fromBytes(bytes));
     }
 
     @AfterAll
     static void closeIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

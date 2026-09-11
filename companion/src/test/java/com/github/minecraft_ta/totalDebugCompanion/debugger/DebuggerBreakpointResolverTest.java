@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,13 +16,14 @@ class DebuggerBreakpointResolverTest {
     @BeforeAll
     static void initializeIndex() throws Exception {
         try (var stream = Object.class.getResourceAsStream("/java/lang/Object.class")) {
-            CompanionClassIndex.replace(ClassIndex.fromBytes(java.util.List.of(stream.readAllBytes())));
+            CompanionClassIndex.set(ClassIndex.fromBytes(java.util.List.of(stream.readAllBytes())));
         }
     }
 
     @AfterAll
     static void closeIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     private static final String SOURCE = """
@@ -37,7 +38,7 @@ class DebuggerBreakpointResolverTest {
     @Test
     void editorAndRemoteCallsResolveTheSameMethodEntryAndExecutableLine() {
         DebugEngine.Source source = source(SourceLineMap.fromOriginalToDisplayed(new int[]{40, 4}));
-        var unit = ASTCache.rawParse("Test", SOURCE);
+        var unit = JavaAst.parse("Test", SOURCE);
         var remote = DebuggerBreakpointResolver.resolve(source, 3, "true", "5").orElseThrow();
         assertEquals(remote, DebuggerBreakpointResolver.resolve(source, unit, 3, "true", "5").orElseThrow());
         assertTrue(remote.isMethodEntry());

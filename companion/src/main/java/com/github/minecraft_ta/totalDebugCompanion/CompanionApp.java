@@ -33,6 +33,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTargets;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
@@ -89,16 +90,12 @@ public final class CompanionApp {
     private static CompanionSession session;
     private static CompanionLaunchConfiguration launchConfiguration;
     private static volatile CompanionProfile profile;
-    private static volatile CompanionDecompilationService decompilationService;
     private static volatile InstanceState instanceState = InstanceState.inMemory();
-    private static volatile ReferenceSearchService referenceSearchService;
-    private static volatile CodeInsightService codeInsightService;
-    private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
+    private static volatile RuntimeBinding runtime;
+    private static final CodeInsightService codeInsightService = new CodeInsightService(
+            () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private static RuntimeIndexService runtimeIndexService;
     private static final ScriptCompilationService scriptCompiler = new ScriptCompilationService(CompanionApp::send, CompanionApp::send);
-    private static volatile String evaluationClasspath;
-    private static volatile Path activeIndexFile;
-    private static volatile String activeRuntimeSignature;
     private static final List<PendingNavigation> pendingNavigations = new ArrayList<>();
     private static CompanionMcpServer mcpServer;
     private static volatile DebuggerSessionController debuggerController;
@@ -279,11 +276,9 @@ public final class CompanionApp {
                 if (debuggerController != null) {
                     RuntimePhase.run("close.debugger", debuggerController::close);
                 }
-                RuntimePhase.run("close.decompilation", CompanionApp::closeDecompilationService);
-                RuntimePhase.run("close.references", CompanionApp::closeReferenceSearchService);
-                RuntimePhase.run("close.code-insight", CompanionApp::closeCodeInsightService);
+                RuntimePhase.run("close.runtime", CompanionApp::closeRuntime);
+                RuntimePhase.run("close.code-insight", codeInsightService::close);
                 RuntimePhase.run("close.script-compiler", scriptCompiler::close);
-                RuntimePhase.run("close.index", CompanionClassIndex::close);
                 RuntimePhase.run("close.ui", CompanionApp::stopUiAfterFailure);
                 try (var state = RuntimePhase.start("close.state")) {
                     GlobalConfig.getInstance().saveNow();
@@ -434,14 +429,7 @@ public final class CompanionApp {
             getDebuggerController().setBreakpointsMuted(instanceState.debuggerBreakpointsMuted()).join();
             getDebuggerController().setExceptionBreakpoints(instanceState.breakOnCaughtExceptions(),
                     instanceState.breakOnUncaughtExceptions()).join();
-            closeDecompilationService();
-            closeReferenceSearchService();
-            invalidateCodeInsightService();
-            scriptCompiler.bind(null);
-            CompanionClassIndex.close();
-            activeIndexFile = null;
-            activeRuntimeSignature = null;
-            runtimeSourceCatalog = RuntimeSourceCatalog.empty();
+            closeRuntime();
         }
         profile = requested;
         setupDataDirectories();
@@ -489,52 +477,56 @@ public final class CompanionApp {
 
     private static synchronized void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot,
                                                              RuntimeSnapshotBytecodeSource bytecodeSource) {
+        if (switchingProjects) throw new IllegalStateException("Project is switching");
         CompanionProfile current = requireProfile();
-        closeDecompilationService();
-        CompanionDecompilationService replacement;
+        RuntimeBinding replacement;
         try {
-            replacement = new CompanionDecompilationService(
-                    snapshot.signature(),
-                    current.dataDirectory(),
-                    bytecodeSource
-            );
-        } catch (IOException | RuntimeException exception) {
-            throw new IllegalStateException("Unable to activate the runtime class index", exception);
+            replacement = new RuntimeBinding(snapshot, current.dataDirectory(), bytecodeSource, scriptCompiler, codeInsightService);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to prepare the runtime class index", exception);
         }
+        try {
+            closeRuntime();
+            replacement.attach();
+            // Queue before publication: rejected scheduling still leaves ownership with the loader.
+            // The follow-up acquires this lock after the loader finishes its installation callback.
+            projectWorker.execute(() -> finishRuntimeInstallation(replacement, current));
+            CompanionClassIndex.set(snapshot.index());
+            runtime = replacement;
+            replacement.acceptOwnership();
+        } catch (RuntimeException failure) {
+            replacement.close();
+            throw failure;
+        }
+    }
 
-        closeReferenceSearchService();
-        RuntimeSourceCatalog sourceCatalog = new RuntimeSourceCatalog(snapshot.sources());
-        runtimeSourceCatalog = sourceCatalog;
-        evaluationClasspath = snapshot.sources().stream().map(source -> source.path().toString())
-                .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
-        CodeInsightService currentInsightService = codeInsightService;
-        if (currentInsightService != null) {
-            currentInsightService.rebind(snapshot::index, sourceCatalog);
-        }
-        scriptCompiler.bind(snapshot);
-        CompanionClassIndex.replace(snapshot.index());
-        decompilationService = replacement;
-        referenceSearchService = new ReferenceSearchService(
-                CompanionClassIndex::get,
-                sourceCatalog
-        );
-        if (currentInsightService == null) {
-            codeInsightService = new CodeInsightService(snapshot::index, sourceCatalog);
-        }
-        activeIndexFile = snapshot.indexFile();
-        activeRuntimeSignature = snapshot.signature();
-        getDebuggerController().replaceBreakpointDefinitions(
-                restoreBreakpoints(snapshot.signature())
-        ).join();
-        if (uiStarted) {
-            MainWindow.INSTANCE.refreshRuntimeSources();
-        }
-        prewarmJavaParser();
-
-        List<PendingNavigation> queued = List.copyOf(pendingNavigations);
-        pendingNavigations.clear();
-        for (PendingNavigation pending : queued) {
-            MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
+    private static void finishRuntimeInstallation(RuntimeBinding installed, CompanionProfile selected) {
+        try {
+            CompletableFuture<?> breakpoints;
+            synchronized (CompanionApp.class) {
+                if (switchingProjects || runtime != installed || profile != selected) return;
+                breakpoints = getDebuggerController().replaceBreakpointDefinitions(
+                        restoreBreakpoints(installed.snapshot().signature()));
+            }
+            // A failed debugger/UI refresh must never return ownership of an installed index to its loader.
+            breakpoints.join();
+            SwingUtilities.invokeLater(() -> {
+                if (switchingProjects || runtime != installed || profile != selected) return;
+                if (uiStarted) MainWindow.INSTANCE.refreshRuntimeSources();
+                List<PendingNavigation> queued;
+                synchronized (CompanionApp.class) {
+                    if (switchingProjects || runtime != installed || profile != selected) return;
+                    queued = List.copyOf(pendingNavigations);
+                    pendingNavigations.clear();
+                }
+                for (PendingNavigation pending : queued) {
+                    MainWindow.INSTANCE.navigation().navigate(pending.target(), pending.activation());
+                }
+            });
+            prewarmJavaParser();
+        } catch (RuntimeException failure) {
+            System.getLogger(CompanionApp.class.getName()).log(System.Logger.Level.WARNING,
+                    "Runtime installed, but debugger refresh failed", failure);
         }
     }
 
@@ -703,11 +695,10 @@ public final class CompanionApp {
         Map<String, Object> context = new java.util.LinkedHashMap<>();
         context.put("profile_id", current.id());
         context.put("workspace_directory", current.workspaceDirectory().toString());
-        if (activeRuntimeSignature != null) {
-            context.put("runtime_signature", activeRuntimeSignature);
-        }
-        if (activeIndexFile != null) {
-            context.put("index_file", activeIndexFile.toString());
+        RuntimeBinding installed = runtime;
+        if (installed != null) {
+            context.put("runtime_signature", installed.snapshot().signature());
+            context.put("index_file", installed.snapshot().indexFile().toString());
         }
         return Map.copyOf(context);
     }
@@ -820,7 +811,8 @@ public final class CompanionApp {
     }
 
     public static String getActiveRuntimeSignature() {
-        return activeRuntimeSignature;
+        RuntimeBinding current = runtime;
+        return current == null ? null : current.snapshot().signature();
     }
 
     public static boolean send(AbstractMessage message) {
@@ -860,10 +852,10 @@ public final class CompanionApp {
 
     private static void openOrQueue(NavigationTarget target, NavigationService.Activation activation) {
         if (switchingProjects) return;
-        if (decompilationService == null) {
+        if (runtime == null) {
             synchronized (CompanionApp.class) {
                 if (switchingProjects) return;
-                if (decompilationService == null) {
+                if (runtime == null) {
                     pendingNavigations.add(new PendingNavigation(target, activation));
                     return;
                 }
@@ -888,7 +880,8 @@ public final class CompanionApp {
     }
 
     private static DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
-        CompanionDecompilationService service = decompilationService;
+        RuntimeBinding current = runtime;
+        CompanionDecompilationService service = current == null ? null : current.decompiler();
         return service == null ? null : service.loadDebugSource(binaryName);
     }
 
@@ -913,7 +906,8 @@ public final class CompanionApp {
     }
 
     public static ReferenceSearchService getReferenceSearchService() {
-        ReferenceSearchService service = referenceSearchService;
+        RuntimeBinding current = runtime;
+        ReferenceSearchService service = current == null ? null : current.references();
         if (service == null) {
             throw new IllegalStateException("Reference search is unavailable");
         }
@@ -922,18 +916,20 @@ public final class CompanionApp {
 
     public static CodeInsightService getCodeInsightService() {
         CodeInsightService service = codeInsightService;
-        if (service == null) {
+        if (runtime == null) {
             throw new IllegalStateException("Code insight is unavailable");
         }
         return service;
     }
 
     public static RuntimeSourceCatalog getRuntimeSourceCatalog() {
-        return runtimeSourceCatalog;
+        RuntimeBinding current = runtime;
+        return current == null ? RuntimeSourceCatalog.empty() : current.sources();
     }
 
     public static CompanionDecompilationService getDecompilationService() {
-        CompanionDecompilationService service = decompilationService;
+        RuntimeBinding current = runtime;
+        CompanionDecompilationService service = current == null ? null : current.decompiler();
         if (service == null) {
             throw new IllegalStateException("Decompilation is unavailable");
         }
@@ -959,7 +955,7 @@ public final class CompanionApp {
     }
 
     private static DebuggerSessionController createDebuggerController() {
-        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource, () -> evaluationClasspath, CompanionApp::loadBreakpointScript);
+        DebuggerSessionController controller = new DebuggerSessionController(CompanionApp::loadDebugSource, () -> { RuntimeBinding current = runtime; return current == null ? null : current.classpath(); }, CompanionApp::loadBreakpointScript);
         controller.setBreakpointsMuted(instanceState().debuggerBreakpointsMuted()).join();
         controller.addListener(new DebuggerSessionController.Listener() {
             @Override
@@ -1018,7 +1014,7 @@ public final class CompanionApp {
 
     private static void persistBreakpoints(DebuggerSessionController controller) {
         if (switchingProjects) return;
-        String runtimeSignature = activeRuntimeSignature;
+        String runtimeSignature = getActiveRuntimeSignature();
         if (runtimeSignature == null || runtimeSignature.isBlank()) {
             return;
         }
@@ -1080,42 +1076,14 @@ public final class CompanionApp {
         return current;
     }
 
-    private static void closeReferenceSearchService() {
-        ReferenceSearchService service = referenceSearchService;
-        referenceSearchService = null;
-        if (service != null) {
-            service.close();
-        }
-    }
-
-    private static void closeCodeInsightService() {
-        CodeInsightService service = codeInsightService;
-        codeInsightService = null;
-        if (service != null) {
-            service.close();
-        }
-    }
-
-    private static void invalidateCodeInsightService() {
-        CodeInsightService service = codeInsightService;
-        if (service != null) {
-            service.rebind(
-                    () -> {
-                        throw new IllegalStateException("Runtime class index is not ready");
-                    },
-                    RuntimeSourceCatalog.empty()
-            );
-        }
-    }
-
-    private static void closeDecompilationService() {
-        evaluationClasspath = null;
-        CompanionDecompilationService service = decompilationService;
-        decompilationService = null;
-        if (service != null) {
-            service.close();
-            if (uiStarted) {
-                MainWindow.INSTANCE.navigation().runtimeChanged();
+    private static void closeRuntime() {
+        RuntimeBinding previous = runtime;
+        runtime = null;
+        CompanionClassIndex.clear();
+        if (previous != null) {
+            try { previous.close(); }
+            finally {
+                if (uiStarted) MainWindow.INSTANCE.navigation().runtimeChanged();
             }
         }
     }

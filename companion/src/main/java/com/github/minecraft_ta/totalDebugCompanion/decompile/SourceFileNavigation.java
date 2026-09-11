@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
@@ -53,7 +53,7 @@ public final class SourceFileNavigation {
 
     public static int topLevelTypeOffset(String source) {
         Objects.requireNonNull(source, "source");
-        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
+        var ast = JavaAst.parse(COMPILATION_UNIT_NAME, source);
         if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
             throw new IllegalStateException("Decompiled source has no top-level type");
         }
@@ -85,7 +85,7 @@ public final class SourceFileNavigation {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(query, "query");
 
-        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
+        var ast = JavaAst.parse(COMPILATION_UNIT_NAME, source);
         if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
             throw new IllegalStateException("Decompiled source has no top-level type");
         }
@@ -187,7 +187,7 @@ public final class SourceFileNavigation {
     public static int memberOffset(String source, RuntimeMember member) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(member, "member");
-        var ast = ASTCache.rawParse(COMPILATION_UNIT_NAME, source);
+        var ast = JavaAst.parse(COMPILATION_UNIT_NAME, source);
         if (ast.types().isEmpty() || !(ast.types().getFirst() instanceof AbstractTypeDeclaration type)) {
             throw new IllegalStateException("Decompiled source has no top-level type");
         }

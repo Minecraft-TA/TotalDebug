@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
@@ -53,18 +53,19 @@ final class SourceDeclarationAnalyzerTest {
     static void initializeClassIndex() throws Exception {
         String resource = "/java/lang/Object.class";
         try (var stream = Objects.requireNonNull(Object.class.getResourceAsStream(resource), resource)) {
-            CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(stream.readAllBytes())));
+            CompanionClassIndex.set(ClassIndex.fromBytes(List.of(stream.readAllBytes())));
         }
     }
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test
     void extractsTypesMethodsAndFieldsWithHeaderAnchors() {
-        var unit = ASTCache.rawParse("Implementation", SOURCE);
+        var unit = JavaAst.parse("Implementation", SOURCE);
         List<SourceDeclaration> declarations = SourceDeclarationAnalyzer.analyze(unit, SOURCE);
 
         assertTrue(declarations.stream().anyMatch(declaration ->
@@ -93,7 +94,7 @@ final class SourceDeclarationAnalyzerTest {
 
     @Test
     void includesCompilerParametersInNestedConstructorDescriptors() {
-        var unit = ASTCache.rawParse("Outer", CONSTRUCTOR_SOURCE);
+        var unit = JavaAst.parse("Outer", CONSTRUCTOR_SOURCE);
         List<CodeSymbol> symbols = SourceDeclarationAnalyzer.analyze(unit, CONSTRUCTOR_SOURCE).stream()
                 .map(SourceDeclaration::symbol)
                 .toList();

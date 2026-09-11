@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SnippetExpressionSupportTest {
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(com.github.minecraft_ta.totaldebug.TotalDebug.class),
                 classBytes(ExternalCompletionType.class),
@@ -36,7 +36,8 @@ class SnippetExpressionSupportTest {
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

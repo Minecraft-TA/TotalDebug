@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,12 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DebuggerInlineValueHintsTest {
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(classBytes(Object.class), classBytes(String.class))));
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(classBytes(Object.class), classBytes(String.class))));
     }
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test
@@ -62,7 +63,7 @@ class DebuggerInlineValueHintsTest {
         ));
 
         Map<Integer, DebuggerInlineValueHints.LineHint> hints = DebuggerInlineValueHints.create(
-                ASTCache.rawParse("Sample", source), source, snapshot
+                JavaAst.parse("Sample", source), source, snapshot
         );
 
         assertTrue(text(hints.get(2)).contains("query: \"stone\""), hints.toString());
@@ -102,7 +103,7 @@ class DebuggerInlineValueHintsTest {
         );
 
         Map<Integer, DebuggerInlineValueHints.LineHint> hints = DebuggerInlineValueHints.create(
-                ASTCache.rawParse("Sample", source), source, snapshot
+                JavaAst.parse("Sample", source), source, snapshot
         );
 
         assertTrue(hints.isEmpty(), hints.toString());
@@ -116,7 +117,7 @@ class DebuggerInlineValueHintsTest {
                 ))
         );
         Map<Integer, DebuggerInlineValueHints.LineHint> resolvedHints = DebuggerInlineValueHints.create(
-                ASTCache.rawParse("Sample", source), source, resolved
+                JavaAst.parse("Sample", source), source, resolved
         );
         assertEquals("pos: x=1, y=64, z=2", text(resolvedHints.get(2)));
         assertEquals("pos: x=1, y=64, z=2", text(resolvedHints.get(3)));

@@ -51,7 +51,7 @@ final class JavaSymbolResolverTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(List.class)
@@ -64,7 +64,8 @@ final class JavaSymbolResolverTest {
         ASTCache.removeFromCache("constructor");
         ASTCache.removeFromCache("local");
         ASTCache.removeFromCache("navigation");
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test

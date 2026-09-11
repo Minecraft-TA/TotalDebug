@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.AfterAll;
@@ -36,17 +36,18 @@ class JavaBreadcrumbResolverTest {
 
     @BeforeAll
     static void initializeClassIndex() throws IOException {
-        CompanionClassIndex.replace(ClassIndex.fromBytes(List.of(classBytes(Object.class))));
+        CompanionClassIndex.set(ClassIndex.fromBytes(List.of(classBytes(Object.class))));
     }
 
     @AfterAll
     static void closeClassIndex() {
-        CompanionClassIndex.close();
+        CompanionClassIndex.get().close();
+        CompanionClassIndex.clear();
     }
 
     @Test
     void resolvesTheEnclosingLocalMethodAtItsDeclaration() {
-        var unit = ASTCache.rawParse("Sample", SOURCE);
+        var unit = JavaAst.parse("Sample", SOURCE);
         Path file = this.temporaryDirectory.resolve("Sample.java");
 
         JavaBreadcrumbResolver.Member member = JavaBreadcrumbResolver.resolve(
@@ -64,7 +65,7 @@ class JavaBreadcrumbResolverTest {
 
     @Test
     void resolvesAnExactRuntimeMemberTarget() {
-        var unit = ASTCache.rawParse("Sample", SOURCE);
+        var unit = JavaAst.parse("Sample", SOURCE);
 
         JavaBreadcrumbResolver.Member member = JavaBreadcrumbResolver.resolve(
                 unit,
@@ -85,7 +86,7 @@ class JavaBreadcrumbResolverTest {
 
     @Test
     void resolvesAFieldButNotClassLevelWhitespace() {
-        var unit = ASTCache.rawParse("Sample", SOURCE);
+        var unit = JavaAst.parse("Sample", SOURCE);
         NavigationTarget.LocalFile target = new NavigationTarget.LocalFile(
                 this.temporaryDirectory.resolve("Sample.java")
         );

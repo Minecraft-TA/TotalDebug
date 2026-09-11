@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.ExpressionScopeAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSemantics;
@@ -419,7 +420,7 @@ public final class BreakpointsWindow extends JDialog {
                     : entry.sourceUri().toString();
             var unit = ASTCache.getFromCache(key);
             if (unit == null) {
-                unit = ASTCache.rawParse(entry.binaryName(), source.contents());
+                unit = JavaAst.parse(entry.binaryName(), source.contents());
             }
             int contextOffset = sourceOffset(source.contents(), entry.breakpoint().line());
             return ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret);
