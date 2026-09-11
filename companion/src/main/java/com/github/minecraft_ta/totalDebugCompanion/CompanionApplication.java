@@ -54,7 +54,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.LinkedHashMap;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
@@ -109,7 +108,7 @@ public final class CompanionApplication implements AutoCloseable {
                             "Waiting for Minecraft to finish the authenticated connection."
                     ));
                 }
-    
+
                 @Override
                 public void connected() {
                     updateGameStatus(new ServiceStatus(
@@ -118,7 +117,7 @@ public final class CompanionApplication implements AutoCloseable {
                             "Minecraft is connected and authenticated."
                     ));
                 }
-    
+
                 @Override
                 public void disconnected() {
                     scriptCompiler.runtimeDisconnected();
@@ -133,17 +132,17 @@ public final class CompanionApplication implements AutoCloseable {
                         current.runtimeDisconnected();
                     }
                 }
-    
+
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
                 }
-    
+
                 @Override
                 public void serverManifest(ServerManifestMessage message) {
                     scriptCompiler.acceptServerManifest(message);
                 }
-    
+
                 @Override
                 public void debugTarget(DebugTargetMessage message) {
                     handleDebugTarget(message);
@@ -317,7 +316,6 @@ public final class CompanionApplication implements AutoCloseable {
                 try { old.close(); }
                 catch (IOException | RuntimeException failure) { reportCleanupFailure("Close retired project", failure); }
             }
-            ASTCache.clear();
             synchronized (lifecycleLock) { current = replacement; }
             installed = true;
             runCleanup("Restore debugger preferences", () -> restoreProjectState(replacement));

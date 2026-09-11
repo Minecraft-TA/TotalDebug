@@ -5,7 +5,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.Timer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
@@ -338,7 +337,7 @@ final class UiScenarioDriver {
         selectCodeEditor(context);
         var selected = mainWindow.getEditorTabs().getSelectedEditor();
         if (!(selected instanceof CodeView codeView)
-                || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
+                || mainWindow.getEditorTabs().astCache().getFromCache(codeView.getPath().toString()) == null) {
             return;
         }
         RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
@@ -394,7 +393,7 @@ final class UiScenarioDriver {
             return;
         }
         if (!(mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)
-                || ASTCache.getFromCache(codeView.getPath().toString()) == null) {
+                || mainWindow.getEditorTabs().astCache().getFromCache(codeView.getPath().toString()) == null) {
             return;
         }
         context.once("open-chooser", () -> {

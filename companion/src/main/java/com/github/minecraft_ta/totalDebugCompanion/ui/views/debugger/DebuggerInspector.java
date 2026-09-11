@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -110,7 +111,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private final JButton addWatch = createAddWatchButton();
     private final DebuggerExpressionModel expressions;
     private final Map<Key, DefaultMutableTreeNode> expressionNodes = new LinkedHashMap<>();
-    private final PropertyChangeListener previewSettingsListener = event -> onEventThread(this::refreshPreviewMode);
+    private final PropertyChangeListener previewSettingsListener = event -> UIUtils.onEdt(this::refreshPreviewMode);
 
     private long revision;
     private long previewRevision;
@@ -471,7 +472,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         this.pendingExpression = request;
         String pauseId = this.controller.snapshot().pauseId();
         future.thenCompose(result -> this.runtime.retainValue(pauseId, result.variablesReference())
-                .thenApply(lease -> new RetainedResult(result, lease))).whenComplete((retained, failure) -> onEventThread(() -> {
+                .thenApply(lease -> new RetainedResult(result, lease))).whenComplete((retained, failure) -> UIUtils.onEdt(() -> {
             if (this.pendingExpression == request) this.expressionPending = false;
             Outcome outcome = failure == null
                     ? Outcome.success(DebugValue.from(key.expression(), retained.result()))
@@ -545,7 +546,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugValue value = Objects.requireNonNull(debugValue(node.getUserObject()));
         long started = System.nanoTime();
         this.runtime.preview(requestFrame, value.variablesReference()).whenComplete((preview, failure) ->
-                onEventThread(() -> {
+                UIUtils.onEdt(() -> {
                     if (isStale(requestFrame, requestRevision) || requestPreviewRevision != this.previewRevision) return;
                     if (failure == null && preview != null) {
                         applyPreview(node, value, preview);
@@ -567,7 +568,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             return;
         }
         this.runtime.preview(requestFrame, value.variablesReference()).whenComplete((preview, failure) ->
-                onEventThread(() -> {
+                UIUtils.onEdt(() -> {
                     if (isStale(requestFrame, requestRevision) || node.getParent() == null
                             || failure != null && isCancellation(failure)) {
                         return;
@@ -672,7 +673,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         }
         int count = owner.indexedVariables() > 0 ? CHILD_PAGE_SIZE : 0;
         this.runtime.variables(requestFrame, owner.variablesReference(), start, count)
-                .whenComplete((children, failure) -> onEventThread(() -> {
+                .whenComplete((children, failure) -> UIUtils.onEdt(() -> {
                     if (isStale(requestFrame, requestRevision)) {
                         return;
                     }
@@ -773,7 +774,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugEngine.Source source = frame.sourceUri() == null ? null : this.controller.source(frame.sourceUri());
         CompletableFuture.supplyAsync(() ->
                 DebuggerVariableNavigation.declarationTarget(source, frame, variable, parent)
-        ).whenComplete((target, failure) -> onEventThread(() -> {
+        ).whenComplete((target, failure) -> UIUtils.onEdt(() -> {
             if (failure != null) {
                 showOperationFailure("Unable to Jump to Source", failure);
             } else if (target.isEmpty()) {
@@ -807,7 +808,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             return;
         }
         this.controller.setVariable(variable, replacement.toString(), currentFrame)
-                .whenComplete((variables, failure) -> onEventThread(() -> {
+                .whenComplete((variables, failure) -> UIUtils.onEdt(() -> {
                     if (failure != null) {
                         showOperationFailure("Unable to Set Value", failure);
                     } else {
@@ -907,14 +908,6 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
 
     private static void copy(String text) {
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-    }
-
-    private static void onEventThread(Runnable action) {
-        if (SwingUtilities.isEventDispatchThread()) {
-            action.run();
-        } else {
-            SwingUtilities.invokeLater(action);
-        }
     }
 
     private static DebugEngine.Variable parentVariable(DefaultMutableTreeNode node) {

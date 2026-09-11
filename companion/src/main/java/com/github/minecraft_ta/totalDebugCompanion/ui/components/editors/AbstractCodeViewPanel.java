@@ -25,6 +25,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     protected final EditorContext context;
     protected final String identifier;
     private boolean astDisposed;
+    private final Runnable unsubscribeSemantic;
 
     public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
         this(context, identifier, className, JavaEditorSource::identity);
@@ -40,13 +41,13 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         installNavigationHistoryMenu(context.navigation());
         this.identifier = identifier;
 
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
-            if (event.getType() == DocumentEvent.EventType.CHANGE) {
+            if (astDisposed || event.getType() == DocumentEvent.EventType.CHANGE) {
                 return;
             }
             String editorText = UIUtils.getText(this.editorPane);
-            ASTCache.update(identifier, className, editorText, sourceFactory.apply(editorText));
+            context.astCache().update(identifier, className, editorText, sourceFactory.apply(editorText));
         });
 
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
@@ -54,7 +55,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
             var document = this.editorPane.getDocument();
             var field = document.getClass().getDeclaredField("tokenMaker");
             field.setAccessible(true);
-            ((CustomJavaTokenMaker) field.get(document)).setASTKey(identifier, this.editorPane);
+            this.unsubscribeSemantic = ((CustomJavaTokenMaker) field.get(document)).setASTKey(context.astCache(), identifier, this.editorPane);
         } catch (Throwable throwable) {
             throw new RuntimeException(throwable);
         }
@@ -64,6 +65,8 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     protected void applyAdditionalSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
         CodeUtils.initJavaSemanticColors(scheme, palette);
     }
+
+    @Override public ASTCache astCache() { return context.astCache(); }
 
     @Override
     public String astKey() {
@@ -87,7 +90,8 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     public void dispose() {
         if (!this.astDisposed) {
             this.astDisposed = true;
-            ASTCache.removeFromCache(this.identifier);
+            this.unsubscribeSemantic.run();
+            context.astCache().removeFromCache(this.identifier);
         }
         super.dispose();
     }

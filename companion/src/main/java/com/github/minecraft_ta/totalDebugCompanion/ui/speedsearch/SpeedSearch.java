@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
-import javax.swing.SwingUtilities;
 import javax.swing.tree.TreePath;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -302,11 +302,7 @@ public final class SpeedSearch implements AutoCloseable {
         if (!this.active) {
             return;
         }
-        if (SwingUtilities.isEventDispatchThread()) {
-            updateSelection();
-        } else {
-            SwingUtilities.invokeLater(this::updateSelection);
-        }
+        UIUtils.onEdt(this::updateSelection);
     }
 
     private static boolean isFindShortcut(KeyEvent event) {

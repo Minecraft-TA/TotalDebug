@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
@@ -25,7 +25,6 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
-import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -147,7 +146,7 @@ public final class ApplicationStatusBar extends JPanel {
         if (this.selectedJavaContext != null && this.selectedTarget != null) {
             JavaEditorContext context = this.selectedJavaContext;
             this.removeCaretListener = context.addCaretOffsetListener(ignored -> requestMemberRefresh());
-            this.removeAstListener = ASTCache.addChangeListener(
+            this.removeAstListener = context.astCache().addChangeListener(
                     context.astKey(),
                     (unit, version) -> requestMemberRefresh()
             );
@@ -161,11 +160,7 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     private void requestMemberRefresh() {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(this::requestMemberRefresh);
-            return;
-        }
-        this.memberDebounce.restart();
+        UIUtils.onEdt(this.memberDebounce::restart);
     }
 
     private void refreshMember() {
@@ -173,7 +168,7 @@ public final class ApplicationStatusBar extends JPanel {
         NavigationTarget target = this.selectedTarget;
         JavaBreadcrumbResolver.Member member = null;
         if (context != null && target != null) {
-            var unit = ASTCache.getFromCache(context.astKey());
+            var unit = context.astCache().getFromCache(context.astKey());
             if (unit != null) {
                 member = JavaBreadcrumbResolver.resolve(unit, context.caretOffset(), target);
             }
@@ -193,26 +188,25 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     public void setRuntimeStatus(RuntimeIndexService.Status status) {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> setRuntimeStatus(status));
-            return;
-        }
-        this.runtimeStatus = status;
-        java.awt.CardLayout cards = (java.awt.CardLayout) this.taskCards.getLayout();
-        if (status.active()) {
-            this.taskLabel.setText(status.detail());
-            this.taskLabel.setToolTipText(status.detail());
-            cards.show(this.taskCards, "progress");
-            return;
-        }
-        this.taskState.setIcon(switch (status.phase()) {
-            case READY -> Icons.SUCCESS;
-            case FAILED -> Icons.ERROR;
-            default -> Icons.INFORMATION;
+        UIUtils.onEdt(() -> {
+            this.runtimeStatus = status;
+            java.awt.CardLayout cards = (java.awt.CardLayout) this.taskCards.getLayout();
+            if (status.active()) {
+                this.taskLabel.setText(status.detail());
+                this.taskLabel.setToolTipText(status.detail());
+                cards.show(this.taskCards, "progress");
+                return;
+            }
+            this.taskState.setIcon(switch (status.phase()) {
+                case READY -> Icons.SUCCESS;
+                case FAILED -> Icons.ERROR;
+                default -> Icons.INFORMATION;
+            });
+            this.taskState.setText(status.detail());
+            this.taskState.setToolTipText("Show background activity");
+            cards.show(this.taskCards, "state");
+
         });
-        this.taskState.setText(status.detail());
-        this.taskState.setToolTipText("Show background activity");
-        cards.show(this.taskCards, "state");
     }
 
     public void setGameStatus(ServiceStatus status) {
@@ -224,23 +218,22 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     private void setEditorStatus(BottomInformationBar.State state) {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> setEditorStatus(state));
-            return;
-        }
-        this.editorStatusLabel.setText(state.text());
-        this.editorStatusLabel.setForeground(
-                state.style() == BottomInformationBar.Style.PLAIN ? ThemeColors.mutedText() : getForeground()
-        );
-        if (state.style() != BottomInformationBar.Style.PROCESS) {
-            this.processIcon.stop();
-        }
-        this.editorStatusLabel.setIcon(switch (state.style()) {
-            case INFORMATION -> Icons.INFORMATION;
-            case PROCESS -> this.processIcon;
-            case SUCCESS -> Icons.SUCCESS;
-            case FAILURE -> Icons.ERROR;
-            case PLAIN -> null;
+        UIUtils.onEdt(() -> {
+            this.editorStatusLabel.setText(state.text());
+            this.editorStatusLabel.setForeground(
+                    state.style() == BottomInformationBar.Style.PLAIN ? ThemeColors.mutedText() : getForeground()
+            );
+            if (state.style() != BottomInformationBar.Style.PROCESS) {
+                this.processIcon.stop();
+            }
+            this.editorStatusLabel.setIcon(switch (state.style()) {
+                case INFORMATION -> Icons.INFORMATION;
+                case PROCESS -> this.processIcon;
+                case SUCCESS -> Icons.SUCCESS;
+                case FAILURE -> Icons.ERROR;
+                case PLAIN -> null;
+            });
+
         });
     }
 

@@ -7,9 +7,11 @@ import org.fife.ui.rsyntaxtextarea.parser.*;
 
 public class CustomJavaParser extends AbstractParser {
 
+    private final ASTCache cache;
     private final String astKey;
 
-    public CustomJavaParser(String astKey) {
+    public CustomJavaParser(ASTCache cache, String astKey) {
+        this.cache = cache;
         this.astKey = astKey;
     }
 
@@ -21,16 +23,16 @@ public class CustomJavaParser extends AbstractParser {
         if (!SyntaxConstants.SYNTAX_STYLE_JAVA.equals(style))
             return result;
 
-        var ast = ASTCache.getFromCache(this.astKey);
+        var ast = cache.getFromCache(this.astKey);
         if (ast == null)
             return result;
 
         for (IProblem problem : ast.getProblems()) {
-            if (ASTCache.allowsPrivilegedAccess(this.astKey) && isAccessProblem(problem.getID())) {
+            if (cache.allowsPrivilegedAccess(this.astKey) && isAccessProblem(problem.getID())) {
                 continue;
             }
-            int start = ASTCache.toEditorOffset(this.astKey, problem.getSourceStart());
-            int end = ASTCache.toEditorOffset(this.astKey, problem.getSourceEnd());
+            int start = cache.toEditorOffset(this.astKey, problem.getSourceStart());
+            int end = cache.toEditorOffset(this.astKey, problem.getSourceEnd());
             if (start < 0 || end < start) {
                 continue;
             }

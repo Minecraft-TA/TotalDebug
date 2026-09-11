@@ -26,10 +26,10 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
     private RSyntaxDocument document;
     private Map<Integer, SemanticToken> overwrittenTokenTypes;
 
-    public void setASTKey(String identifier, RSyntaxTextArea textArea) {
+    public Runnable setASTKey(ASTCache cache, String identifier, RSyntaxTextArea textArea) {
         trackDocument(textArea);
-        ASTCache.addChangeListener(identifier, (ast, version) -> {
-            var snapshot = ASTCache.getSnapshot(identifier);
+        return cache.addChangeListener(identifier, (ast, version) -> {
+            var snapshot = cache.getSnapshot(identifier);
             if (snapshot == null || snapshot.unit() != ast) {
                 return;
             }
@@ -45,7 +45,7 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
                 }
             });
             SwingUtilities.invokeLater(() -> {
-                if (ASTCache.getFromCache(identifier) == ast && snapshot.contents().equals(textArea.getText())) {
+                if (cache.getFromCache(identifier) == ast && snapshot.contents().equals(textArea.getText())) {
                     setSemanticTokenTypes(editorTokenTypes, textArea);
                 }
             });

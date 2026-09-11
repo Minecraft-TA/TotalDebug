@@ -55,6 +55,7 @@ import java.util.function.Consumer;
 public final class BreakpointsWindow extends JDialog {
     private static final Dimension DEFAULT_SIZE = new Dimension(940, 680);
 
+    private final ASTCache cache;
     private final DebuggerSessionController controller;
     private final Consumer<NavigationTarget> navigation;
     private final DefaultListModel<DebuggerSessionController.BreakpointEntry> model = new DefaultListModel<>();
@@ -89,11 +90,12 @@ public final class BreakpointsWindow extends JDialog {
     private BreakpointKey editingBreakpoint;
 
     public BreakpointsWindow(
-            Window owner,
+            ASTCache cache, Window owner,
             DebuggerSessionController controller,
             Consumer<NavigationTarget> navigation
     ) {
         super(owner, "Breakpoints", ModalityType.MODELESS);
+        this.cache = cache;
         this.controller = Objects.requireNonNull(controller, "controller");
         this.navigation = Objects.requireNonNull(navigation, "navigation");
 
@@ -418,7 +420,7 @@ public final class BreakpointsWindow extends JDialog {
             String key = entry.sourceUri().getScheme().equalsIgnoreCase("file")
                     ? Path.of(entry.sourceUri()).toString()
                     : entry.sourceUri().toString();
-            var unit = ASTCache.getFromCache(key);
+            var unit = cache.getFromCache(key);
             if (unit == null) {
                 unit = JavaAst.parse(entry.binaryName(), source.contents());
             }

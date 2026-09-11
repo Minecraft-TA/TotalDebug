@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -18,7 +19,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
-import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -59,17 +59,17 @@ public final class DebuggerPanel extends JPanel {
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void statusChanged(DebuggerSessionController.Status status) {
-            onEventThread(() -> applyStatus(status));
+            UIUtils.onEdt(() -> applyStatus(status));
         }
 
         @Override
         public void paused(DebuggerSessionController.PausedState state) {
-            onEventThread(() -> showPausedState(state));
+            UIUtils.onEdt(() -> showPausedState(state));
         }
 
         @Override
         public void breakpointsMutedChanged(boolean muted) {
-            onEventThread(() -> DebuggerPanel.this.muteBreakpoints.setSelected(muted));
+            UIUtils.onEdt(() -> DebuggerPanel.this.muteBreakpoints.setSelected(muted));
         }
     };
 
@@ -249,7 +249,7 @@ public final class DebuggerPanel extends JPanel {
             return;
         }
 
-        this.controller.variablesForFrame(frame).whenComplete((loaded, failure) -> onEventThread(() -> {
+        this.controller.variablesForFrame(frame).whenComplete((loaded, failure) -> UIUtils.onEdt(() -> {
             if (!isCurrent(frame, revision)) {
                 return;
             }
@@ -349,14 +349,6 @@ public final class DebuggerPanel extends JPanel {
         button.setFocusable(false);
         button.setMargin(new Insets(4, 6, 4, 6));
         return button;
-    }
-
-    private static void onEventThread(Runnable action) {
-        if (SwingUtilities.isEventDispatchThread()) {
-            action.run();
-        } else {
-            SwingUtilities.invokeLater(action);
-        }
     }
 
     private static final class MutedLabel extends JLabel {

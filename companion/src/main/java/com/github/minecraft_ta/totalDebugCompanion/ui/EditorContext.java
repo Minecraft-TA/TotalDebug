@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -11,7 +12,7 @@ import java.awt.Window;
 import java.util.function.BiConsumer;
 
 /** The collaborators shared by Java editors in one project. */
-public record EditorContext(Window owner, ProjectScope project, CodeInsightService insights,
+public record EditorContext(ASTCache astCache, Window owner, ProjectScope project, CodeInsightService insights,
                             DebuggerSessionController debugger, NavigationService navigation,
                             ScriptExecutionService scripts, CompanionSession session,
                             BiConsumer<DebugEngine.StackFrame, DebugEngine.Variable> inspectVariable) { }

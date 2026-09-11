@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
@@ -15,6 +17,10 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 
 public class EditorTabs extends JTabbedPane {
+
+    private final ASTCache astCache = new ASTCache();
+
+    public ASTCache astCache() { return astCache; }
 
     private final List<IEditorPanel> editors = new ArrayList<>();
     private final List<Consumer<IEditorPanel>> selectedEditorListeners = new ArrayList<>();
@@ -108,11 +114,7 @@ public class EditorTabs extends JTabbedPane {
 
             future.complete(null);
         };
-        if (SwingUtilities.isEventDispatchThread()) {
-            open.run();
-        } else {
-            SwingUtilities.invokeLater(open);
-        }
+        UIUtils.onEdt(open);
 
         return future;
     }

@@ -28,16 +28,17 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
         IJavaElement resolve(int offset) throws JavaModelException;
     }
 
+    private final ASTCache cache;
     private final ElementResolver elementResolver;
     private final IntFunction<String> ownerClassResolver;
     private final BiConsumer<String, String> packageNavigator;
     private final Consumer<NavigationTarget> navigator;
     private final Path sourcePath;
 
-    public CustomJavaLinkGenerator(String identifier, BiConsumer<String, String> packageNavigator, Consumer<NavigationTarget> navigator) {
+    public CustomJavaLinkGenerator(ASTCache cache, String identifier, BiConsumer<String, String> packageNavigator, Consumer<NavigationTarget> navigator) {
         this(
-                offset -> JavaSymbolResolver.selectElement(identifier, offset),
-                offset -> JavaSymbolResolver.navigationOwnerClass(identifier, offset),
+                cache, offset -> JavaSymbolResolver.selectElement(cache, identifier, offset),
+                offset -> JavaSymbolResolver.navigationOwnerClass(cache, identifier, offset),
                 packageNavigator,
                 Path.of(identifier),
                 navigator
@@ -45,22 +46,23 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     }
 
     CustomJavaLinkGenerator(
-            ElementResolver elementResolver,
+            ASTCache cache, ElementResolver elementResolver,
             IntFunction<String> ownerClassResolver,
             BiConsumer<String, String> packageNavigator,
             Path sourcePath
     ) {
-        this(elementResolver, ownerClassResolver, packageNavigator, sourcePath, ignored -> {
+        this(cache, elementResolver, ownerClassResolver, packageNavigator, sourcePath, ignored -> {
         });
     }
 
     CustomJavaLinkGenerator(
-            ElementResolver elementResolver,
+            ASTCache cache, ElementResolver elementResolver,
             IntFunction<String> ownerClassResolver,
             BiConsumer<String, String> packageNavigator,
             Path sourcePath,
             Consumer<NavigationTarget> navigator
     ) {
+        this.cache = cache;
         this.elementResolver = Objects.requireNonNull(elementResolver, "elementResolver");
         this.ownerClassResolver = Objects.requireNonNull(ownerClassResolver, "ownerClassResolver");
         this.packageNavigator = Objects.requireNonNull(packageNavigator, "packageNavigator");
@@ -120,7 +122,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                     }
 
-                    int editorOffset = ASTCache.toEditorOffset(sourcePath.toString(), sourceRange.getOffset());
+                    int editorOffset = cache.toEditorOffset(sourcePath.toString(), sourceRange.getOffset());
                     if (editorOffset < 0) {
                         return null;
                     }
@@ -163,6 +165,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
         private void navigateResolvedSymbol() throws JavaModelException {
             JavaSymbolResolver.Resolution resolution = JavaSymbolResolver.resolve(
+                    cache,
                     sourcePath.toString(),
                     this.navigationOffset
             );

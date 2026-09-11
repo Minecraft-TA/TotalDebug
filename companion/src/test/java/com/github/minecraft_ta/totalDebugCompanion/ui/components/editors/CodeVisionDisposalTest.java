@@ -19,13 +19,14 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CodeVisionDisposalTest {
+    private static final ASTCache cache = new ASTCache();
     @Test
     void closingControllerUnsubscribesWithoutRemovingOtherEditorListeners() throws Exception {
-        var field = ASTCache.class.getDeclaredField("LISTENERS");
+        var field = ASTCache.class.getDeclaredField("listeners");
         field.setAccessible(true);
-        var listeners = (Map<?, ?>) field.get(null);
+        var listeners = (Map<?, ?>) field.get(cache);
         String key = "code-vision-disposal-test";
-        Runnable unsubscribeOther = ASTCache.addChangeListener(key, (unit, version) -> {});
+        Runnable unsubscribeOther = cache.addChangeListener(key, (unit, version) -> {});
         try (var service = new CodeInsightService(() -> { throw new AssertionError("No analysis expected"); }, RuntimeSourceCatalog.empty())) {
             SwingUtilities.invokeAndWait(() -> {
                 var editor = new RSyntaxTextArea();
@@ -41,12 +42,12 @@ class CodeVisionDisposalTest {
                     public void preview(SourceDeclaration declaration, HierarchyRelation relation, int count, boolean mixed) {}
                     public void hidePreview() {}
                 });
-                var controller = new CodeVisionController(key, service, layerUI, layer, gutter);
+                var controller = new CodeVisionController(cache, key, service, layerUI, layer, gutter);
                 assertEquals(2, ((Collection<?>) listeners.get(key)).size());
                 controller.close();
                 controller.close();
                 assertEquals(1, ((Collection<?>) listeners.get(key)).size());
             });
-        } finally { unsubscribeOther.run(); ASTCache.removeFromCache(key); }
+        } finally { unsubscribeOther.run(); cache.removeFromCache(key); }
     }
 }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
@@ -8,7 +9,6 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
-import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
@@ -38,11 +38,7 @@ final class ServiceStatusWidget extends JButton {
     }
 
     void setStatus(ServiceStatus status) {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> setStatus(status));
-            return;
-        }
-        applyStatus(status);
+        UIUtils.onEdt(() -> applyStatus(status));
     }
 
     private void applyStatus(ServiceStatus status) {

@@ -183,6 +183,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             closeProjectWindows();
             editorTabs.closeMatching(editor -> true);
             statusBar.dispose();
+            editorTabs.astCache().clear();
         }
         super.dispose();
     }
@@ -195,7 +196,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
-        return new EditorContext(this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
+        return new EditorContext(editorTabs.astCache(), this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
     }
 
     private void updateWindowIcon(CompanionTheme theme) {
@@ -294,7 +295,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private BreakpointsWindow breakpointsWindow(DebuggerSessionController debugger) {
         if (this.breakpointsWindow == null) {
             this.breakpointsWindow = new BreakpointsWindow(
-                    this,
+                    editorTabs.astCache(), this,
                     debugger,
                     target -> this.navigationService.navigate(target)
             );
@@ -433,6 +434,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         if (this.editorTabs.getTabCount() != 0) return false;
         closeProjectWindows();
         this.statusBar.setEditor(null);
+        editorTabs.astCache().clear();
         setEnabled(false);
         return true;
     }
@@ -452,11 +454,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     public void refreshRuntimeSources() {
-        if (SwingUtilities.isEventDispatchThread()) {
-            this.fileTreeView.reloadProfile();
-        } else {
-            SwingUtilities.invokeLater(this.fileTreeView::reloadProfile);
-        }
+        UIUtils.onEdt(this.fileTreeView::reloadProfile);
     }
 
     private void refreshActions() {
