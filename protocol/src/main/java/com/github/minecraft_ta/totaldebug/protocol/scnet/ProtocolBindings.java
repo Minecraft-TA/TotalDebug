@@ -21,6 +21,7 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class, RetryRuntimeInventoryMessage::new);
         processor.registerOutgoing(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class);
         processor.registerOutgoing(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class);
+        processor.registerIncoming(CompanionProtocol.SERVER_SOURCE_REQUEST, ServerSourceRequestMessage.class, ServerSourceRequestMessage::new);
     }
 
     public static void registerCompanion(IMessageProcessor processor) {
@@ -36,5 +37,6 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.RETRY_RUNTIME_INVENTORY, RetryRuntimeInventoryMessage.class);
         processor.registerIncoming(CompanionProtocol.DEBUG_TARGET, DebugTargetMessage.class, DebugTargetMessage::new);
         processor.registerIncoming(CompanionProtocol.SERVER_MANIFEST, ServerManifestMessage.class, ServerManifestMessage::new);
+        processor.registerOutgoing(CompanionProtocol.SERVER_SOURCE_REQUEST, ServerSourceRequestMessage.class);
     }
 }

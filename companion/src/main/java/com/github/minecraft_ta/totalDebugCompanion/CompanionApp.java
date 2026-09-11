@@ -94,7 +94,7 @@ public final class CompanionApp {
     private static volatile CodeInsightService codeInsightService;
     private static volatile RuntimeSourceCatalog runtimeSourceCatalog = RuntimeSourceCatalog.empty();
     private static RuntimeIndexService runtimeIndexService;
-    private static final ScriptCompilationService scriptCompiler = new ScriptCompilationService(CompanionApp::send);
+    private static final ScriptCompilationService scriptCompiler = new ScriptCompilationService(CompanionApp::send, CompanionApp::send);
     private static volatile String evaluationClasspath;
     private static volatile Path activeIndexFile;
     private static volatile String activeRuntimeSignature;

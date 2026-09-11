@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
+import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
@@ -35,6 +36,12 @@ public final class TotalDebugClient {
         );
         this.companionApp = companionApp;
         TotalDebug.get().network().setManifestReceiver(payload -> companionApp.acceptServerManifest(payload.message()));
+        companionApp.setServerSourceRequestHandler(request -> Minecraft.getInstance().execute(() -> {
+            var connection = Minecraft.getInstance().getConnection();
+            if (connection != null && connection.hasChannel(ServerSourceRequestPayload.TYPE)) {
+                connection.send(new ServerSourceRequestPayload(request));
+            }
+        }));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.codeOpen = new ClientCodeOpenService(companionApp);
         this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {

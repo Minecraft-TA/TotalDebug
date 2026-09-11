@@ -13,7 +13,7 @@ public record ServerManifestPayload(ServerManifestMessage message) implements Cu
     public static final StreamCodec<FriendlyByteBuf, ServerManifestPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override
         public ServerManifestPayload decode(FriendlyByteBuf buffer) {
-            return new ServerManifestPayload(new ServerManifestMessage(buffer.readUtf(64), buffer.readUtf(2048),
+            return new ServerManifestPayload(new ServerManifestMessage(buffer.readUtf(64), buffer.readUtf(64), buffer.readInt(), buffer.readUtf(2048),
                     buffer.readInt(), buffer.readInt(), buffer.readByteArray(ServerManifestMessage.CHUNK_BYTES)));
         }
 
@@ -21,6 +21,8 @@ public record ServerManifestPayload(ServerManifestMessage message) implements Cu
         public void encode(FriendlyByteBuf buffer, ServerManifestPayload payload) {
             var message = payload.message();
             buffer.writeUtf(message.sessionId(), 64);
+            buffer.writeUtf(message.requestId(), 64);
+            buffer.writeInt(message.source());
             buffer.writeUtf(message.detail(), 2048);
             buffer.writeInt(message.offset());
             buffer.writeInt(message.total());

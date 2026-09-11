@@ -50,6 +50,28 @@ class ProtocolBindingsTest {
     }
 
     @Test
+    void sourceRequestTravelsFromCompanionToTheMod() throws Exception {
+        try (Server server = endpoint(ProtocolBindings::registerCompanion); Client client = new Client()) {
+            ProtocolBindings.registerMod(client.getMessageProcessor());
+            var connected = new CompletableFuture<Void>();
+            server.addConnectionListener(new IConnectionListener() {
+                @Override public void onConnected() { connected.complete(null); }
+                @Override public void onDisconnected() { }
+                @Override public void onConnectionError(Throwable cause) { connected.completeExceptionally(cause); }
+            });
+            var received = new CompletableFuture<ServerSourceRequestMessage>();
+            client.getMessageBus().listenAlways(ServerSourceRequestMessage.class, received::complete);
+            assertTrue(client.connect(server.getLocalAddress()));
+            connected.get(5, TimeUnit.SECONDS);
+            server.getMessageProcessor().enqueueMessage(new ServerSourceRequestMessage("session", "request", 7));
+            var request = received.get(5, TimeUnit.SECONDS);
+            assertEquals("session", request.sessionId());
+            assertEquals("request", request.requestId());
+            assertEquals(7, request.source());
+        }
+    }
+
+    @Test
     void modIgnoresOutgoingOnlyIdsWithoutDecodingTheirPayload() throws Exception {
         try (Server server = endpoint(ProtocolBindings::registerMod)) {
             var received = new CompletableFuture<Integer>();

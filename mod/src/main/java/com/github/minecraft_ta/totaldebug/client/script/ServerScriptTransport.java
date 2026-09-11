@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedCompanionPayload;
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
+import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -32,7 +33,8 @@ interface ServerScriptTransport {
             if (connection == null) {
                 return Availability.unsupported("Join a world to run server-side scripts");
             }
-            if (!connection.hasChannel(ServerManifestPayload.TYPE)
+            if (!connection.hasChannel(ServerSourceRequestPayload.TYPE)
+                    || !connection.hasChannel(ServerManifestPayload.TYPE)
                     || !connection.hasChannel(RunServerScriptPayload.TYPE)
                     || !connection.hasChannel(StopServerScriptPayload.TYPE)
                     || !connection.hasChannel(ForwardedCompanionPayload.TYPE)) {

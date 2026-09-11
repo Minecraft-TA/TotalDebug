@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.message.RunScriptPayload;
 import com.github.tth05.scnet.message.AbstractMessage;
@@ -11,14 +10,6 @@ public final class RunScriptMessage extends AbstractMessage {
     private RunScriptPayload payload;
 
     public RunScriptMessage() {
-    }
-
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, ScriptExecutionEnvironment executionEnvironment) {
-        this(scriptId, bytecode, inventoryId, serverSide, executionEnvironment.name());
-    }
-
-    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment) {
-        this(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, "");
     }
 
     public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId) {

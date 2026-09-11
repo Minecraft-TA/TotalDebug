@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.network;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import java.util.Map;
 import java.util.Random;
 import java.io.ByteArrayOutputStream;
@@ -100,11 +101,13 @@ class ServerScriptPayloadTest {
         new Random(9).nextBytes(bytes);
         var assembler = new ServerManifestMessage.Assembler();
         byte[] result = null;
-        for (var message : ServerManifestMessage.split("session", bytes)) {
+        for (var message : ServerManifestMessage.split("session", "request", 12, bytes)) {
             FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
             try {
                 ServerManifestPayload.STREAM_CODEC.encode(buffer, new ServerManifestPayload(message));
                 var read = ServerManifestPayload.STREAM_CODEC.decode(buffer);
+                assertEquals("request", read.message().requestId());
+                assertEquals(12, read.message().source());
                 result = assembler.accept(read.message());
                 assertEquals(0, buffer.readableBytes());
             } finally {
@@ -112,6 +115,20 @@ class ServerScriptPayloadTest {
             }
         }
         assertArrayEquals(bytes, result);
+    }
+
+    @Test
+    void sourceRequestRoundTripsThroughGameTransport() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ServerSourceRequestPayload.STREAM_CODEC.encode(buffer,
+                    new ServerSourceRequestPayload(new ServerSourceRequestMessage("session", "request", 17)));
+            var read = ServerSourceRequestPayload.STREAM_CODEC.decode(buffer).message();
+            assertEquals("session", read.sessionId());
+            assertEquals("request", read.requestId());
+            assertEquals(17, read.source());
+            assertEquals(0, buffer.readableBytes());
+        } finally { buffer.release(); }
     }
 
     @Test

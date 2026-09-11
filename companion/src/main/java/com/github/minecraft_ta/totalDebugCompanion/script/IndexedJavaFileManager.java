@@ -2,10 +2,6 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source;
 import com.github.tth05.jindex.ClassIndex;
-import com.github.minecraft_ta.totaldebug.evaluation.ClassDeclarations;
-import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
-import java.io.ByteArrayInputStream;
-import java.util.function.Supplier;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.IndexedPackage;
 
@@ -15,6 +11,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -25,21 +22,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.jar.JarFile;
 import java.util.zip.ZipFile;
 
 /** Borrows Companion's index and opens only the archives javac actually reads. */
 final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
     private final ClassIndex index;
-    private final Supplier<ServerManifest> serverManifest;
-    private final Map<Integer, String> archiveHashes = new HashMap<>();
+    private final Supplier<Set<String>> unsupportedClasses;
     private final Map<Integer, Path> sources = new HashMap<>();
     private final Map<Integer, JarFile> archives = new HashMap<>();
 
-    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources, Supplier<ServerManifest> serverManifest) {
+    IndexedJavaFileManager(StandardJavaFileManager standard, ClassIndex index, List<Source> sources, Supplier<Set<String>> unsupportedClasses) {
         super(standard);
         this.index = index;
-        this.serverManifest = serverManifest;
+        this.unsupportedClasses = unsupportedClasses;
         for (Source source : sources) {
             // --release supplies the platform classes from javac's own standard manager.
             if (!"jrt:/".equals(source.logicalUri())) this.sources.put(source.sourceId(), source.path());
@@ -122,8 +119,13 @@ final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJav
 
         @Override
         public InputStream openInputStream() throws IOException {
+            Set<String> unsupported = unsupportedClasses.get();
+            if (unsupported != null && unsupported.contains(this.name)) {
+                throw new IOException("Server compilation unsupported: class " + this.name
+                        + " is absent or its declarations differ on the server. Use matching client/server classes.");
+            }
             String resource = this.name.replace('.', '/') + ".class";
-            if (Files.isDirectory(this.path)) return checked(Files.newInputStream(this.path.resolve(resource)));
+            if (Files.isDirectory(this.path)) return Files.newInputStream(this.path.resolve(resource));
             JarFile archive = archives.get(this.sourceId);
             if (archive == null) {
                 archive = new JarFile(this.path.toFile(), false, ZipFile.OPEN_READ, Runtime.Version.parse("21"));
@@ -131,22 +133,8 @@ final class IndexedJavaFileManager extends ForwardingJavaFileManager<StandardJav
             }
             var entry = archive.getJarEntry(resource);
             if (entry == null) throw new IOException("Runtime index points to a missing class: " + this.path + " / " + resource);
-            return checked(archive.getInputStream(entry));
+            return archive.getInputStream(entry);
         }
 
-        private InputStream checked(InputStream input) throws IOException {
-            ServerManifest manifest = serverManifest.get();
-            if (manifest == null) return input;
-            try (input) {
-                byte[] bytes = input.readAllBytes();
-                String hash = archiveHashes.get(this.sourceId);
-                if (hash == null) {
-                    hash = Files.isDirectory(this.path) ? "" : ClassDeclarations.archiveFingerprint(this.path);
-                    archiveHashes.put(this.sourceId, hash);
-                }
-                manifest.requireCompatible(this.name, hash, bytes);
-                return new ByteArrayInputStream(bytes);
-            }
-        }
     }
 }

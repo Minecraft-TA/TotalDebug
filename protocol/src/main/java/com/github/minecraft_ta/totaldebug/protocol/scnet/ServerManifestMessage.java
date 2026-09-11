@@ -14,6 +14,8 @@ public final class ServerManifestMessage extends AbstractMessage {
     public static final int CHUNK_BYTES = 512 * 1024;
     public static final int MAX_BYTES = 32 * 1024 * 1024;
     private String sessionId;
+    private String requestId;
+    private int source;
     private String detail;
     private int offset;
     private int total;
@@ -22,12 +24,19 @@ public final class ServerManifestMessage extends AbstractMessage {
     public ServerManifestMessage() {}
 
     public ServerManifestMessage(String sessionId, String detail, int offset, int total, byte[] bytes) {
-        if (sessionId.length() > 64 || detail.length() > 2048 || total < 0 || total > MAX_BYTES
+        this(sessionId, "", -1, detail, offset, total, bytes);
+    }
+
+    public ServerManifestMessage(String sessionId, String requestId, int source, String detail, int offset, int total, byte[] bytes) {
+        if (source < -1 || source >= 4096 || requestId.length() > 64 || (source >= 0 && requestId.isBlank())
+                || (source == -1 && !requestId.isEmpty()) || sessionId.length() > 64 || detail.length() > 2048 || total < 0 || total > MAX_BYTES
                 || offset < 0 || offset > total || bytes.length > CHUNK_BYTES
                 || (long) offset + bytes.length > total || (total > 0 && (sessionId.isBlank() || bytes.length == 0))) {
             throw new IllegalArgumentException("Invalid server manifest chunk");
         }
         this.sessionId = sessionId;
+        this.requestId = requestId;
+        this.source = source;
         this.detail = detail;
         this.offset = offset;
         this.total = total;
@@ -39,10 +48,14 @@ public final class ServerManifestMessage extends AbstractMessage {
     }
 
     public static List<ServerManifestMessage> split(String sessionId, byte[] bytes) {
+        return split(sessionId, "", -1, bytes);
+    }
+
+    public static List<ServerManifestMessage> split(String sessionId, String requestId, int source, byte[] bytes) {
         if (bytes.length == 0 || bytes.length > MAX_BYTES) throw new IllegalArgumentException("Invalid manifest size");
         var messages = new ArrayList<ServerManifestMessage>();
         for (int offset = 0; offset < bytes.length; offset += CHUNK_BYTES) {
-            messages.add(new ServerManifestMessage(sessionId, "", offset, bytes.length,
+            messages.add(new ServerManifestMessage(sessionId, requestId, source, "", offset, bytes.length,
                     Arrays.copyOfRange(bytes, offset, Math.min(bytes.length, offset + CHUNK_BYTES))));
         }
         return List.copyOf(messages);
@@ -51,13 +64,17 @@ public final class ServerManifestMessage extends AbstractMessage {
     @Override
     public void read(ByteBufferInputStream input) {
         String session = input.readString();
+        String request = input.readString();
+        int source = input.readInt();
         String detail = input.readString();
         int offset = input.readInt();
         int total = input.readInt();
         int length = input.readInt();
         if (length < 0 || length > CHUNK_BYTES) throw new IllegalArgumentException("Invalid manifest chunk size");
-        var checked = new ServerManifestMessage(session, detail, offset, total, input.readByteArray(length));
+        var checked = new ServerManifestMessage(session, request, source, detail, offset, total, input.readByteArray(length));
         this.sessionId = checked.sessionId;
+        this.requestId = checked.requestId;
+        this.source = checked.source;
         this.detail = checked.detail;
         this.offset = checked.offset;
         this.total = checked.total;
@@ -67,6 +84,8 @@ public final class ServerManifestMessage extends AbstractMessage {
     @Override
     public void write(ByteBufferOutputStream output) {
         output.writeString(sessionId);
+        output.writeString(requestId);
+        output.writeInt(source);
         output.writeString(detail);
         output.writeInt(offset);
         output.writeInt(total);
@@ -75,6 +94,9 @@ public final class ServerManifestMessage extends AbstractMessage {
     }
 
     public String sessionId() { return sessionId; }
+    public String requestId() { return requestId; }
+    public int source() { return source; }
+    public boolean baseline() { return source == -1; }
     public String detail() { return detail; }
     public int offset() { return offset; }
     public int total() { return total; }
@@ -82,6 +104,8 @@ public final class ServerManifestMessage extends AbstractMessage {
 
     public static final class Assembler {
         private String session = "";
+        private String request = "";
+        private int source = -1;
         private int total;
         private ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
@@ -90,9 +114,11 @@ public final class ServerManifestMessage extends AbstractMessage {
             if (message.offset == 0) {
                 clear();
                 this.session = message.sessionId;
+                this.request = message.requestId;
+                this.source = message.source;
                 this.total = message.total;
             }
-            if (!this.session.equals(message.sessionId) || this.total != message.total || buffer.size() != message.offset) {
+            if (!this.session.equals(message.sessionId) || !this.request.equals(message.requestId) || this.source != message.source || this.total != message.total || buffer.size() != message.offset) {
                 clear();
                 throw new IllegalArgumentException("Out-of-order server manifest transfer");
             }
@@ -105,6 +131,8 @@ public final class ServerManifestMessage extends AbstractMessage {
 
         public void clear() {
             session = "";
+            request = "";
+            source = -1;
             total = 0;
             buffer = new ByteArrayOutputStream();
         }
