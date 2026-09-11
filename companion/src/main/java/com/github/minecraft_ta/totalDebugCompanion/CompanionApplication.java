@@ -439,6 +439,19 @@ public final class CompanionApplication implements AutoCloseable {
     }
 
     private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
+        CompanionUi view = ui;
+        if (view != null) SwingUtilities.invokeLater(() -> {
+            if (ui != view || !selected.isActive() || selected.runtime() != installed || current != selected) return;
+            view.runtimeChanged();
+            List<PendingNavigation> queued;
+            synchronized (lifecycleLock) {
+                if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+                queued = selected.drainNavigations();
+            }
+            for (PendingNavigation pending : queued) {
+                view.navigate(pending.target(), pending.activation());
+            }
+        });
         try {
             CompletableFuture<?> breakpoints;
             synchronized (lifecycleLock) {
@@ -452,20 +465,6 @@ public final class CompanionApplication implements AutoCloseable {
         } catch (RuntimeException failure) {
             System.getLogger(CompanionApplication.class.getName()).log(System.Logger.Level.WARNING,
                     "Runtime installed, but debugger refresh failed", failure);
-        } finally {
-            CompanionUi view = ui;
-            if (view != null) SwingUtilities.invokeLater(() -> {
-                if (ui != view || !selected.isActive() || selected.runtime() != installed || current != selected) return;
-                view.runtimeChanged();
-                List<PendingNavigation> queued;
-                synchronized (lifecycleLock) {
-                    if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
-                    queued = selected.drainNavigations();
-                }
-                for (PendingNavigation pending : queued) {
-                    view.navigate(pending.target(), pending.activation());
-                }
-            });
         }
     }
 
