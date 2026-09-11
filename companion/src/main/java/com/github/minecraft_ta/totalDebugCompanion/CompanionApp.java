@@ -39,6 +39,7 @@ import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightSer
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
@@ -102,6 +103,11 @@ public final class CompanionApp {
     private static CompanionMcpServer mcpServer;
     private static volatile DebuggerSessionController debuggerController;
     private static volatile boolean uiStarted;
+    private static ProjectRegistry projects;
+    private static volatile boolean switchingProjects;
+    private static volatile long projectGeneration;
+    private static final java.util.concurrent.ExecutorService projectWorker = java.util.concurrent.Executors.newSingleThreadExecutor(
+            runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
 
     private record PendingNavigation(NavigationTarget target, NavigationService.Activation activation) {
     }
@@ -185,7 +191,7 @@ public final class CompanionApp {
             );
             restoreProfile();
 
-            session = new CompanionSession(token, CompanionApp::activateSessionProfile, new CompanionSession.Listener() {
+            session = new CompanionSession(token, CompanionApp::attachSelectedProfile, new CompanionSession.Listener() {
                 @Override
                 public void connecting() {
                     updateGameStatus(new ServiceStatus(
@@ -235,6 +241,12 @@ public final class CompanionApp {
                 }
             });
             SERVER = session.server();
+            session.setProjectSelectionHandler(hello -> {
+                try { openProject(CompanionProfile.fromHello(hello)).join(); }
+                catch (java.util.concurrent.CompletionException failure) {
+                    throw new IOException(failure.getCause().getMessage(), failure.getCause());
+                }
+            });
             startUi();
             updateGameStatus(new ServiceStatus(
                     ServiceStatus.State.INACTIVE,
@@ -256,6 +268,7 @@ public final class CompanionApp {
         } finally {
             startup.close();
             try (var shutdown = RuntimePhase.start("companion.shutdown")) {
+                projectWorker.close();
                 if (runtimeIndexService != null) {
                     runtimeIndexService.close();
                 }
@@ -299,7 +312,7 @@ public final class CompanionApp {
         }
     }
 
-    private static synchronized void activateSessionProfile(
+    private static synchronized void attachSelectedProfile(
             com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage hello
     ) throws IOException {
         CompanionProfile requested;
@@ -308,10 +321,13 @@ public final class CompanionApp {
         } catch (IllegalArgumentException exception) {
             throw new IOException("Invalid Minecraft profile", exception);
         }
-        activateProfile(requested, true);
+        if (switchingProjects || !requested.equals(profile)) {
+            throw new IOException("Select this project explicitly before connecting");
+        }
     }
 
     private static void handleDebugTarget(DebugTargetMessage message) {
+        if (switchingProjects) return;
         if (message.targetKind() != DebugTargetMessage.LOCAL_JVM) {
             throw new IllegalArgumentException("Unknown debug target kind: " + message.targetKind());
         }
@@ -323,14 +339,86 @@ public final class CompanionApp {
     }
 
     private static void restoreProfile() throws IOException {
-        Path profileFile = launchConfiguration.profileFile();
-        if (!Files.isRegularFile(profileFile)) {
-            return;
+        projects = ProjectRegistry.open(launchConfiguration.paths());
+        CompanionProfile selected = projects.selected();
+        if (selected != null) {
+            try { activateProfile(selected); }
+            catch (IOException failure) { System.err.println("Unable to reopen selected project: " + failure.getMessage()); }
         }
-        activateProfile(CompanionProfile.read(profileFile), false);
     }
 
-    private static void activateProfile(CompanionProfile requested, boolean persist) throws IOException {
+    public static List<ProjectRegistry.Project> projects() {
+        return projects == null ? List.of() : projects.projects();
+    }
+
+    public static CompanionProfile currentProject() { return profile; }
+
+    public static boolean isSwitchingProjects() { return switchingProjects; }
+
+    public static long projectGeneration() { return projectGeneration; }
+
+    /** Admit mutations/queue submissions atomically with starting a switch; never wait here. */
+    public static synchronized <T> T inProject(long generation, java.util.function.Supplier<T> action) {
+        if (switchingProjects || generation != projectGeneration) throw new IllegalStateException("Project changed during the request");
+        return action.get();
+    }
+
+    /** Application API; selection controls and MCP project tools are added separately. */
+    public static CompletableFuture<Void> openProject(CompanionProfile requested) {
+        Objects.requireNonNull(requested);
+        return CompletableFuture.runAsync(() -> {
+            try { switchProject(requested); }
+            catch (IOException failure) { throw new java.util.concurrent.CompletionException(failure); }
+        }, projectWorker);
+    }
+
+    private static void switchProject(CompanionProfile requested) throws IOException {
+        validateProfile(requested);
+        if (requested.equals(profile)) {
+            projects.select(requested);
+            return;
+        }
+        // Validate state before closing the current project; malformed destination state must not displace it.
+        try (var checked = InstanceState.open(new InstancePaths(requested.dataDirectory()))) { }
+        synchronized (CompanionApp.class) {
+            switchingProjects = true;
+        }
+        try {
+            if (uiStarted) {
+                boolean[] canSwitch = {false};
+                SwingUtilities.invokeAndWait(() -> canSwitch[0] = MainWindow.INSTANCE.prepareProjectSwitch());
+                if (!canSwitch[0]) throw new IOException("Project switch cancelled because an editor could not be saved");
+            }
+            synchronized (CompanionApp.class) { projectGeneration++; }
+            if (mcpServer != null) mcpServer.prepareProjectSwitch();
+            scriptCompiler.runtimeDisconnected();
+            if (session != null) session.disconnect();
+            getDebuggerController().clearTarget().join();
+            getDebuggerController().replaceBreakpointDefinitions(List.of()).join();
+            com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache.clear();
+            synchronized (CompanionApp.class) {
+                pendingNavigations.clear();
+                if (runtimeIndexService != null) runtimeIndexService.clear();
+                activateProfile(requested);
+            }
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Selected project is not connected to Minecraft."));
+            try {
+                projects.select(requested);
+            } catch (IOException failure) {
+                throw new IOException("Project opened, but its selection could not be saved: " + failure.getMessage(), failure);
+            }
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Project switch interrupted", failure);
+        } catch (InvocationTargetException failure) {
+            throw new IOException("Unable to close project editors", failure.getCause());
+        } finally {
+            switchingProjects = false;
+            if (uiStarted) SwingUtilities.invokeLater(() -> MainWindow.INSTANCE.setEnabled(true));
+        }
+    }
+
+    private static void activateProfile(CompanionProfile requested) throws IOException {
         validateProfile(requested);
         CompanionProfile current = profile;
         boolean profileChanged = !requested.equals(current);
@@ -357,9 +445,6 @@ public final class CompanionApp {
         }
         profile = requested;
         setupDataDirectories();
-        if (persist) {
-            requested.writeAtomically(launchConfiguration.profileFile());
-        }
         if (uiStarted && profileChanged) {
             refreshUiProfile();
         }
@@ -369,13 +454,15 @@ public final class CompanionApp {
     }
 
     private static void validateProfile(CompanionProfile requested) throws IOException {
-        Files.createDirectories(requested.dataDirectory());
         if (!Files.isDirectory(requested.workspaceDirectory())) {
             throw new IOException("Minecraft workspace not found");
         }
+        Files.createDirectories(requested.dataDirectory());
+        setupDataDirectories(requested.dataDirectory(), true);
     }
 
     private static synchronized void handleRuntimeInventory(RuntimeInventoryMessage message) {
+        if (switchingProjects) return;
         CompanionProfile current = profile;
         if (current == null || runtimeIndexService == null) {
             return;
@@ -454,7 +541,7 @@ public final class CompanionApp {
     static void configureWithoutSession(CompanionProfile developmentProfile) {
         debuggerController = createDebuggerController();
         try {
-            activateProfile(Objects.requireNonNull(developmentProfile, "developmentProfile"), false);
+            activateProfile(Objects.requireNonNull(developmentProfile, "developmentProfile"));
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to configure the UI profile", exception);
         }
@@ -725,7 +812,7 @@ public final class CompanionApp {
     }
 
     public static boolean isConnected() {
-        return session != null && session.isConnected();
+        return !switchingProjects && session != null && session.isConnected();
     }
 
     public static boolean hasProfile() {
@@ -737,11 +824,13 @@ public final class CompanionApp {
     }
 
     public static boolean send(AbstractMessage message) {
+        if (switchingProjects && !(message instanceof StopScriptMessage)) return false;
         CompanionSession current = session;
         return current != null && current.send(message);
     }
 
     public static CompletableFuture<CompilationResult> compileJava(String source, String entryClass) {
+        if (switchingProjects) return CompletableFuture.failedFuture(new IllegalStateException("Project is switching"));
         return scriptCompiler.compile(source, entryClass);
     }
 
@@ -753,7 +842,7 @@ public final class CompanionApp {
     public static boolean runScript(int id, String source, boolean serverSide,
                                     ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
         CompanionSession current = session;
-        if (current == null || !current.isConnected()) return false;
+        if (switchingProjects || current == null || !current.isConnected()) return false;
         scriptCompiler.submit(id, source, serverSide, environment, failureHandler);
         return true;
     }
@@ -770,8 +859,10 @@ public final class CompanionApp {
     }
 
     private static void openOrQueue(NavigationTarget target, NavigationService.Activation activation) {
+        if (switchingProjects) return;
         if (decompilationService == null) {
             synchronized (CompanionApp.class) {
+                if (switchingProjects) return;
                 if (decompilationService == null) {
                     pendingNavigations.add(new PendingNavigation(target, activation));
                     return;
@@ -926,6 +1017,7 @@ public final class CompanionApp {
     }
 
     private static void persistBreakpoints(DebuggerSessionController controller) {
+        if (switchingProjects) return;
         String runtimeSignature = activeRuntimeSignature;
         if (runtimeSignature == null || runtimeSignature.isBlank()) {
             return;

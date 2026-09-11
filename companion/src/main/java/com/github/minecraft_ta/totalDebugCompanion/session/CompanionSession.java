@@ -61,6 +61,8 @@ public final class CompanionSession implements AutoCloseable {
     private final AttachmentHandler attachmentHandler;
     private final Listener listener;
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
+    private ProjectSelectionServer projectSelections;
+    private AttachmentHandler projectSelectionHandler;
 
     public CompanionSession(String expectedToken) {
         this(expectedToken, hello -> { }, new Listener() { });
@@ -83,8 +85,28 @@ public final class CompanionSession implements AutoCloseable {
             close();
             throw new IOException("Companion transport did not bind to loopback: " + address);
         }
-        new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid())
+        this.projectSelections = new ProjectSelectionServer(this.authenticator,
+                this.projectSelectionHandler == null ? this.attachmentHandler : this.projectSelectionHandler, this::isConnected);
+        new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid(), this.projectSelections.port())
                 .writeAtomically(configuration.descriptorFile());
+    }
+
+    public void setProjectSelectionHandler(AttachmentHandler handler) {
+        if (this.projectSelections != null) throw new IllegalStateException("Session is already published");
+        this.projectSelectionHandler = Objects.requireNonNull(handler);
+    }
+
+    public void disconnect() {
+        if (!this.server.isClientConnected()) return;
+        try {
+            this.server.closeClientAfterPendingWrites().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException failure) {
+            this.server.closeClient();
+        } catch (InterruptedException failure) {
+            this.server.closeClient();
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while disconnecting the previous game", failure);
+        }
     }
 
     static InetSocketAddress sessionAddress(int port) {
@@ -203,6 +225,7 @@ public final class CompanionSession implements AutoCloseable {
     public void close() {
         State previous = this.state.getAndSet(State.CLOSED);
         this.server.close();
+        if (this.projectSelections != null) this.projectSelections.close();
         if (previous == State.AUTHENTICATED) {
             this.listener.disconnected();
         }

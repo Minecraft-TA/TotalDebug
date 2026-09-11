@@ -147,13 +147,18 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.jobs.runtimeDisconnected();
     }
 
+    public void prepareProjectSwitch() { this.jobs.prepareProjectSwitch(); }
+
     private McpSchema.CallToolResult callTool(McpSchema.CallToolRequest request) {
         try {
             CompanionMcpToolCatalog.validateRequest(request);
+            long project = CompanionApp.projectGeneration();
+            boolean projectBound = !List.of("status", "job_wait", "job_cancel", "job_source").contains(request.name());
+            if (projectBound && CompanionApp.isSwitchingProjects()) throw new IllegalStateException("Project is switching");
             Map<String, Object> result = switch (request.name()) {
                 case "status" -> status();
-                case "client_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.CLIENT);
-                case "server_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.SERVER);
+                case "client_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.CLIENT, project);
+                case "server_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.SERVER, project);
                 case "job_wait" -> this.jobs.waitFor(
                         requiredString(request.arguments(), "job_id"),
                         optionalInteger(request.arguments(), "wait_ms", 30_000)
@@ -181,9 +186,11 @@ public final class CompanionMcpServer implements AutoCloseable {
                 case "debugger_status", "debugger_wait", "debugger_control", "debugger_threads",
                      "debugger_breakpoints", "debugger_breakpoint_set", "debugger_breakpoint_remove",
                      "debugger_frames", "debugger_variables", "debugger_evaluate", "debugger_evaluation_wait", "debugger_evaluation_cancel" ->
-                        this.debugger.call(request.name(), request.arguments());
+                        this.debugger.call(request.name(), request.arguments(), project);
                 default -> throw new IllegalArgumentException("Unknown MCP tool: " + request.name());
             };
+            if (projectBound && (project != CompanionApp.projectGeneration() || CompanionApp.isSwitchingProjects()))
+                throw new IllegalStateException("Project changed during the request");
             return CompanionMcpToolCatalog.result(result, false);
         } catch (RuntimeException | IOException exception) {
             return CompanionMcpToolCatalog.result(
@@ -203,7 +210,7 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     private Map<String, Object> execute(
             Map<String, Object> arguments,
-            CodeModeJobService.ExecutionSide side
+            CodeModeJobService.ExecutionSide side, long project
     ) {
         String code = requiredString(arguments, "code");
         List<String> imports = optionalStringList(arguments, "imports");
@@ -211,7 +218,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 CodeModeJobService.ExecutionEnvironment.class,
                 Objects.requireNonNullElse(optionalString(arguments, "environment"), "thread")
         );
-        CodeModeJobService.JobSnapshot submitted = this.jobs.submit(code, imports, side, environment);
+        CodeModeJobService.JobSnapshot submitted = CompanionApp.inProject(project, () -> this.jobs.submit(code, imports, side, environment));
         return this.jobs.waitFor(
                 submitted.jobId(),
                 optionalInteger(arguments, "wait_ms", 10_000)

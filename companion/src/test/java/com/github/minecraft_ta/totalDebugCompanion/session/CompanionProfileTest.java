@@ -12,7 +12,7 @@ class CompanionProfileTest {
     Path temporaryDirectory;
 
     @Test
-    void persistsTheOfflineProfileSnapshot() throws Exception {
+    void readsThePreviouslyRememberedProfile() throws Exception {
         CompanionProfile profile = new CompanionProfile(
                 "atm10",
                 this.temporaryDirectory.resolve("data"),
@@ -20,7 +20,7 @@ class CompanionProfileTest {
         );
         Path profileFile = this.temporaryDirectory.resolve("profile.properties");
 
-        profile.writeAtomically(profileFile);
+        com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(profileFile, profile.toJson());
 
         assertEquals(profile, CompanionProfile.read(profileFile));
     }

@@ -51,7 +51,7 @@ Default Windows home: `%LOCALAPPDATA%/TotalDebugCompanion`. Override it with `--
 ```text
 TotalDebugCompanion/
   settings.json
-  profile.json
+  projects.json
   run/
     companion/
       instance.lock
@@ -76,7 +76,8 @@ TotalDebugCompanion/
 ```
 
 - `settings.json` contains appearance, fonts, debugger window geometry and presentation preferences. It contains no watches, breakpoints or expression history.
-- `profile.json` remembers the current instance home and actual game directory. Companion reopens this profile on standalone startup.
+- `projects.json` remembers known projects by instance identity, display name, TotalDebug data directory and game directory, plus the selected project. Companion restores its cached data on standalone startup. The previously remembered `profile.json` is imported once and removed after the registry is saved; instance files stay in place.
+- Instance identity is derived from the normalized game-directory path. Moving a directory requires reopening that location and may require rebuilding its cache; this registry does not relocate installations.
 - The `run/companion` files coordinate the existing single Companion process. Credentials are published with user-only POSIX permissions or Windows ACLs. Lock ownership, not the existence of a lock file, determines liveness.
 - Immutable launch copies retain the three most recently used builds, plus any older build still pinned by a launching or running process. Publishers and pruning share a cache lock; the launcher pins the JAR through process exit, and Companion also pins its running copy. Authored scripts and installed executables are outside this cleanup scope.
 - The JDT directory holds embedded Eclipse plugin metadata. The dummy bundle is part of the JDT adapter, not a Minecraft plugin.

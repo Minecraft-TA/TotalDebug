@@ -17,26 +17,29 @@ public class ASTCache {
     private static final Map<String, CopyOnWriteArrayList<BiConsumer<CompilationUnit, Integer>>> LISTENERS =
             new ConcurrentHashMap<>();
 
-    public static void update(String key, String className, String contents) {
-        update(key, className, contents, JavaEditorSource.identity(contents));
+    public static CompletableFuture<Void> update(String key, String className, String contents) {
+        return update(key, className, contents, JavaEditorSource.identity(contents));
     }
 
-    public static void update(String key, String className, String editorContents, JavaEditorSource source) {
-        int version = 0;
+    public static CompletableFuture<Void> update(String key, String className, String editorContents, JavaEditorSource source) {
+        Entry selected;
+        int version;
         synchronized (CACHE) {
-            var existing = CACHE.get(key);
-            if (existing != null)
-                version = ++existing.version;
+            selected = CACHE.computeIfAbsent(key, ignored -> new Entry());
+            version = ++selected.version;
         }
 
         int finalVersion = version;
-        CompletableFuture.runAsync(() -> {
-            var ast = rawParse(className, source.text());
-
+        return CompletableFuture.runAsync(() -> {
             synchronized (CACHE) {
-                var entry = CACHE.computeIfAbsent(key, (k) -> new Entry());
+                if (CACHE.get(key) != selected || selected.version != finalVersion) return;
+            }
+            var ast = rawParse(className, source.text());
+            List<BiConsumer<CompilationUnit, Integer>> listeners;
+            synchronized (CACHE) {
+                var entry = CACHE.get(key);
                 //There's already something newer available
-                if (entry.version > finalVersion)
+                if (entry != selected || entry.version != finalVersion)
                     return;
 
                 entry.version = finalVersion;
@@ -44,8 +47,12 @@ public class ASTCache {
                 entry.contents = editorContents;
                 entry.sourceMap = source.sourceMap();
                 entry.privilegedAccess = source.privilegedAccess();
+                listeners = List.copyOf(LISTENERS.getOrDefault(key, new CopyOnWriteArrayList<>()));
             }
-            notifyListeners(key, ast, finalVersion);
+            for (var listener : listeners) {
+                synchronized (CACHE) { if (CACHE.get(key) != selected) return; }
+                listener.accept(ast, finalVersion);
+            }
         });
     }
 
@@ -67,7 +74,7 @@ public class ASTCache {
         synchronized (CACHE) {
             existing = CACHE.get(key);
         }
-        if (existing != null)
+        if (existing != null && existing.unit != null)
             listener.accept(existing.unit, existing.version);
         return () -> {
             listeners.remove(listener);
@@ -84,6 +91,13 @@ public class ASTCache {
         LISTENERS.remove(key);
     }
 
+    public static void clear() {
+        synchronized (CACHE) {
+            CACHE.clear();
+            LISTENERS.clear();
+        }
+    }
+
     public static CompilationUnit getFromCache(String key) {
         synchronized (CACHE) {
             var entry = CACHE.get(key);
@@ -97,7 +111,7 @@ public class ASTCache {
     public static Snapshot getSnapshot(String key) {
         synchronized (CACHE) {
             Entry entry = CACHE.get(key);
-            return entry == null ? null : new Snapshot(entry.unit, entry.contents, entry.sourceMap);
+            return entry == null || entry.unit == null ? null : new Snapshot(entry.unit, entry.contents, entry.sourceMap);
         }
     }
 
@@ -129,16 +143,6 @@ public class ASTCache {
         synchronized (CACHE) {
             Entry entry = CACHE.get(key);
             return entry != null && entry.privilegedAccess;
-        }
-    }
-
-    private static void notifyListeners(String key, CompilationUnit ast, int version) {
-        var listeners = LISTENERS.get(key);
-        if (listeners == null) {
-            return;
-        }
-        for (var listener : listeners) {
-            listener.accept(ast, version);
         }
     }
 

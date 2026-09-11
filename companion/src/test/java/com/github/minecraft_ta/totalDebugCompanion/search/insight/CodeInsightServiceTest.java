@@ -15,8 +15,41 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodeInsightServiceTest {
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void dropsCompletedQueriesStillQueuedOnTheEdtAfterRebindOrClose(boolean close) throws Exception {
+        var enteredEdt = new java.util.concurrent.CountDownLatch(1);
+        var releaseEdt = new java.util.concurrent.CountDownLatch(1);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, classBytes(String.class))));
+             CodeInsightService service = new CodeInsightService(() -> index, RuntimeSourceCatalog.empty())) {
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                enteredEdt.countDown();
+                try { releaseEdt.await(5, TimeUnit.SECONDS); }
+                catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
+            });
+            try {
+                assertTrue(enteredEdt.await(3, TimeUnit.SECONDS));
+                var result = new CompletableFuture<RuntimeSnapshotBytecodeSource.Source>();
+                service.locateClass("java.lang.String", listener(result));
+                var executorField = CodeInsightService.class.getDeclaredField("executor");
+                executorField.setAccessible(true);
+                var executor = (java.util.concurrent.ThreadPoolExecutor) executorField.get(service);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                while (executor.getCompletedTaskCount() == 0 && System.nanoTime() < deadline) Thread.sleep(1);
+                assertEquals(1, executor.getCompletedTaskCount(), "Query must finish before changing the binding");
+                if (close) service.close();
+                else service.rebind(() -> index, RuntimeSourceCatalog.empty());
+                releaseEdt.countDown();
+                javax.swing.SwingUtilities.invokeAndWait(() -> { });
+                assertFalse(result.isDone(), "An old query must not reach its listener after rebinding or closing");
+            } finally { releaseEdt.countDown(); }
+        }
+    }
 
     @Test
     void locatesTheSingleSourceOwningAQualifiedClass() throws Exception {

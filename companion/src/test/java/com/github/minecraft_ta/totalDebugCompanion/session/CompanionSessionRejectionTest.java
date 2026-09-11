@@ -40,7 +40,7 @@ class CompanionSessionRejectionTest {
             client.getMessageProcessor().registerMessage(CompanionProtocol.EXECUTION_RESULT, TestExecutionResult.class);
             session.bindAndPublish(configuration);
             CompletableFuture<TestServerHello> rejection = connect(client,
-                    CompanionSessionDescriptor.read(configuration.descriptorFile()));
+                    CompanionSessionDescriptor.read(configuration.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION));
 
             client.getMessageProcessor().enqueueMessage(new TestExecutionResult());
 
@@ -71,7 +71,7 @@ class CompanionSessionRejectionTest {
              Client client = configuredClient(token)) {
             try {
                 session.bindAndPublish(configuration);
-                connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile()));
+                connect(client, CompanionSessionDescriptor.read(configuration.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION));
                 assertTrue(authenticated.await(2, TimeUnit.SECONDS));
                 session.server().getMessageProcessor().beginOutboundDrain();
                 assertFalse(session.send(new com.github.tth05.scnet.message.impl.EmptyMessage()));
@@ -90,7 +90,7 @@ class CompanionSessionRejectionTest {
              Client rejectedClient = configuredClient("wrong-token-value-1234567890abcdef");
              Client acceptedClient = configuredClient(token)) {
             session.bindAndPublish(configuration);
-            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile());
+            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION);
 
             TestServerHello rejected = connect(rejectedClient, descriptor).get(2, TimeUnit.SECONDS);
             assertFalse(rejected.accepted);
@@ -119,7 +119,7 @@ class CompanionSessionRejectionTest {
              Client first = configuredClient(token);
              Client second = configuredClient(token)) {
             session.bindAndPublish(configuration);
-            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile());
+            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION);
 
             assertTrue(connect(first, descriptor).get(2, TimeUnit.SECONDS).accepted);
             first.close();
@@ -139,7 +139,7 @@ class CompanionSessionRejectionTest {
         try (CompanionSession session = new CompanionSession(token);
              Client client = configuredClient(token)) {
             session.bindAndPublish(configuration);
-            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile());
+            CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION);
             CompletableFuture<TestReady> ready = new CompletableFuture<>();
             client.getMessageBus().listenAlways(TestReady.class, ready::complete);
 

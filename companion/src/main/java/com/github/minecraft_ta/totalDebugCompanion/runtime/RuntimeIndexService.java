@@ -156,6 +156,14 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
+    public void clear() {
+        synchronized (this.lifecycleLock) {
+            this.pending = null;
+            this.activeInventoryId = null;
+            this.activeDataDirectory = null;
+        }
+    }
+
     public void accept(Path dataDirectory, String expectedInventoryId, Path inventoryFile) {
         synchronized (this.lifecycleLock) {
             ensureOpen();

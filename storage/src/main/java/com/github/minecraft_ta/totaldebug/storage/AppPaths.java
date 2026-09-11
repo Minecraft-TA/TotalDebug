@@ -30,6 +30,7 @@ public record AppPaths(Path home) {
 
     public Path settings() { return home.resolve("settings.json"); }
     public Path profile() { return home.resolve(CompanionLaunchContract.PROFILE_FILE_NAME); }
+    public Path projects() { return home.resolve("projects.json"); }
     public Path run() { return home.resolve("run").resolve("companion"); }
     public Path instanceLock() { return run().resolve(CompanionLaunchContract.INSTANCE_LOCK_FILE_NAME); }
     public Path instanceDescriptor() { return run().resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME); }

@@ -9,7 +9,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-public record CompanionSessionDescriptor(int protocolVersion, int port, long processId) {
+public record CompanionSessionDescriptor(int protocolVersion, int port, long processId, int projectPort) {
     public CompanionSessionDescriptor {
         if (protocolVersion < 1) {
             throw new IllegalArgumentException("protocolVersion must be positive");
@@ -20,16 +20,18 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
         if (processId < 1) {
             throw new IllegalArgumentException("processId must be positive");
         }
+        if (projectPort < 1 || projectPort > 65_535) throw new IllegalArgumentException("Invalid project port");
     }
 
     public void writeAtomically(Path descriptorFile) throws IOException {
         String contents = CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY + "=" + this.protocolVersion + "\n"
                 + CompanionLaunchContract.DESCRIPTOR_PORT_KEY + "=" + this.port + "\n"
-                + CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY + "=" + this.processId + "\n";
+                + CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY + "=" + this.processId + "\n"
+                + "projectPort=" + this.projectPort + "\n";
         AtomicFiles.writeString(descriptorFile, contents);
     }
 
-    public static CompanionSessionDescriptor read(Path descriptorFile) throws IOException {
+    public static CompanionSessionDescriptor read(Path descriptorFile, int expectedProtocol) throws IOException {
         Map<String, String> values = new HashMap<>();
         for (String line : Files.readAllLines(descriptorFile, StandardCharsets.UTF_8)) {
             if (line.isBlank()) {
@@ -43,21 +45,32 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
             String value = line.substring(separator + 1);
             if (!key.equals(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)
                     && !key.equals(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)
-                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY)) {
+                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY) && !key.equals("projectPort")) {
                 throw new IOException("Unknown companion session descriptor field: " + key);
             }
             if (values.putIfAbsent(key, value) != null) {
                 throw new IOException("Duplicate companion session descriptor field: " + key);
             }
         }
-        if (values.size() != 3) {
-            throw new IOException("Companion session descriptor must contain protocol, port, and pid");
+        int protocol;
+        try {
+            protocol = Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY));
+        } catch (IllegalArgumentException exception) {
+            throw new IOException("Companion session descriptor contains an invalid protocol", exception);
+        }
+        if (protocol != expectedProtocol) {
+            throw new IOException("Close the running Companion before using protocol " + expectedProtocol
+                    + "; its descriptor uses protocol " + protocol);
+        }
+        if (values.size() != 4) {
+            throw new IOException("Companion session descriptor must contain protocol, port, pid and projectPort");
         }
         try {
             return new CompanionSessionDescriptor(
-                    Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)),
+                    protocol,
                     Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)),
-                    Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY))
+                    Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY)),
+                    Integer.parseInt(values.get("projectPort"))
             );
         } catch (IllegalArgumentException exception) {
             throw new IOException("Companion session descriptor contains an invalid value", exception);

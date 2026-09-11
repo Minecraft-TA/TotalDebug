@@ -27,6 +27,7 @@ class CompanionJavaRuntimeTest {
             "java.xml",
             "jdk.attach",
             "jdk.compiler",
+            "jdk.httpserver",
             "jdk.jdi",
             "jdk.unsupported",
             "jdk.zipfs"

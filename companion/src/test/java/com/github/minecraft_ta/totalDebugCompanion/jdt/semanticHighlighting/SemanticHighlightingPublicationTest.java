@@ -175,6 +175,35 @@ final class SemanticHighlightingPublicationTest {
         return area;
     }
 
+    @Test
+    void clearingAProjectPreventsOldCallbacksFromReachingAReusedKey() throws Exception {
+        String key = newKey();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ASTCache.addChangeListener(key, (unit, version) -> {
+            entered.countDown();
+            awaitCallbackRelease(release);
+        });
+        var old = ASTCache.update(key, "Target", SOURCE);
+        try {
+            await(entered, "Old parse did not enter its callback");
+            ASTCache.clear();
+            var received = new java.util.concurrent.CopyOnWriteArrayList<CompilationUnit>();
+            ASTCache.addChangeListener(key, (unit, version) -> received.add(unit));
+            String next = "// next project\n" + SOURCE;
+            ASTCache.update(key, "Target", next).get(10, TimeUnit.SECONDS);
+            release.countDown();
+            old.get(10, TimeUnit.SECONDS);
+            assertEquals(1, received.size());
+            assertEquals(next, ASTCache.getContents(key));
+            assertEquals(ASTCache.getFromCache(key), received.getFirst());
+        } finally {
+            release.countDown();
+            old.get(10, TimeUnit.SECONDS);
+            ASTCache.removeFromCache(key);
+        }
+    }
+
     private static void parseAndAwaitDelivery(String key, String source) throws InterruptedException {
         CompilationUnit previous = ASTCache.getFromCache(key);
         CountDownLatch delivered = new CountDownLatch(1);

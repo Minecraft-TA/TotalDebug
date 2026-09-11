@@ -370,6 +370,27 @@ public class MainWindow extends JFrame implements AWTEventListener {
         refreshActions();
     }
 
+    public boolean prepareProjectSwitch() {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
+        if (!this.editorTabs.canCloseAll()) return false;
+        this.editorTabs.closeMatching(editor -> true);
+        if (this.editorTabs.getTabCount() != 0) return false;
+        for (Window window : getOwnedWindows()) window.dispose();
+        if (this.debuggerWindow != null) this.debuggerWindow.dispose();
+        if (this.breakpointsWindow != null) this.breakpointsWindow.dispose();
+        if (this.evaluateExpressionWindow != null) this.evaluateExpressionWindow.dispose();
+        if (this.searchEverywherePopup != null) this.searchEverywherePopup.dispose();
+        if (this.snippetExecutions != null) this.snippetExecutions.close();
+        this.debuggerWindow = null;
+        this.breakpointsWindow = null;
+        this.evaluateExpressionWindow = null;
+        this.searchEverywherePopup = null;
+        this.snippetExecutions = null;
+        this.navigationService.projectChanged();
+        setEnabled(false);
+        return true;
+    }
+
     public void refreshRuntimeSources() {
         if (SwingUtilities.isEventDispatchThread()) {
             this.fileTreeView.reloadProfile();

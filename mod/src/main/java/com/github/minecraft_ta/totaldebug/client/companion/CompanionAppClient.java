@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -36,11 +38,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -149,7 +148,7 @@ public final class CompanionAppClient implements AutoCloseable {
         this.appHome = appPaths.home();
         this.instanceDescriptorFile = appPaths.instanceDescriptor();
         this.instanceKeyFile = appPaths.instanceKey();
-        this.profileId = profileId(this.workspaceDirectory);
+        this.profileId = InstancePaths.profileId(this.workspaceDirectory);
         this.installer = new CompanionAppInstaller(this.appDirectory, developmentJar);
         this.runtimeInventoryPublisher = new RuntimeInventoryPublisher(this.dataDirectory);
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
@@ -411,14 +410,19 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void ensureConnectedAndReady() throws IOException {
         try {
+            CompanionSessionDescriptor descriptor = discoverOrStartCompanion();
+            String token = readInstanceKey();
+            boolean connectionRetained = com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest.send(descriptor.projectPort(),
+                    new ClientHelloMessage(CompanionProtocol.VERSION, token, this.profileId,
+                            this.dataDirectory.toString(), this.workspaceDirectory.toString()));
             CompletableFuture<Void> readiness = this.ready;
-            if (this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
+            if (connectionRetained && descriptor.equals(this.activeDescriptor)
+                    && this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
                 return;
             }
             resetConnection();
-            CompanionSessionDescriptor descriptor = discoverOrStartCompanion();
             this.activeDescriptor = descriptor;
-            this.sessionToken = readInstanceKey();
+            this.sessionToken = token;
             InetSocketAddress address = sessionAddress(descriptor.port());
             reportProgress(CompanionStartupProgress.connecting());
             if (!this.client.connect(address)) {
@@ -538,21 +542,15 @@ public final class CompanionAppClient implements AutoCloseable {
         if (!Files.isRegularFile(this.instanceDescriptorFile)) {
             return null;
         }
-        CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(this.instanceDescriptorFile);
-        boolean processAlive = ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false);
-        if (!processAlive || !isInstanceLockHeld()) {
-            TotalDebug.LOGGER.info(
-                    "Discarding stale TotalDebugCompanion descriptor for process {}",
-                    descriptor.processId()
-            );
+        if (!isInstanceLockHeld()) {
+            TotalDebug.LOGGER.info("Discarding stale TotalDebugCompanion descriptor without an instance lock");
             Files.deleteIfExists(this.instanceDescriptorFile);
             Files.deleteIfExists(this.instanceKeyFile);
             return null;
         }
-        if (descriptor.protocolVersion() != CompanionProtocol.VERSION) {
-            throw new IOException(
-                    "Close the running Companion before using protocol " + CompanionProtocol.VERSION
-            );
+        CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(this.instanceDescriptorFile, CompanionProtocol.VERSION);
+        if (!ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
+            throw new IOException("Companion descriptor names a stopped process while its instance lock is held");
         }
         if (!Files.isRegularFile(this.instanceKeyFile)) {
             throw new IOException("Companion instance key is missing");
@@ -611,13 +609,7 @@ public final class CompanionAppClient implements AutoCloseable {
         long timeoutNanos = this.timeouts.processStart().toNanos();
         while (System.nanoTime() - startedAt < timeoutNanos) {
             if (Files.isRegularFile(descriptorFile)) {
-                CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile);
-                if (descriptor.protocolVersion() != CompanionProtocol.VERSION) {
-                    throw new IOException(
-                            "Companion descriptor protocol mismatch: expected " + CompanionProtocol.VERSION
-                                    + ", got " + descriptor.protocolVersion()
-                    );
-                }
+                CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile, CompanionProtocol.VERSION);
                 if (!ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
                     throw new IOException("Companion descriptor names a stopped process");
                 }
@@ -690,16 +682,4 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    private static String profileId(Path workspaceDirectory) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String identity = workspaceDirectory.toAbsolutePath().normalize().toString();
-            if (System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
-                identity = identity.toLowerCase(java.util.Locale.ROOT);
-            }
-            return HexFormat.of().formatHex(digest.digest(identity.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
-    }
 }

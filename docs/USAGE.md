@@ -12,6 +12,18 @@ Companion stays open when Minecraft exits and reconnects when a matching TotalDe
 
 The index describes selected runtime archives and prepared class files. It does not reconstruct every transformation inside the running JVM. Decompiled source can differ from original source, and generated local names do not replace missing debugger metadata.
 
+## Projects
+
+Companion remembers one project per Minecraft instance and keeps one selected at a time. Scripts, watches, history and caches remain in that instance's existing `total-debug` directory. Standalone startup reopens the selected project, including cached source access while Minecraft is offline.
+
+F6 or an explicit source-open request from another game selects its project before connecting. An ordinary handshake cannot replace the selected project. Selection uses an authenticated loopback request separate from the occupied game socket; it does not depend on the optional MCP host. Companion protocol 15 requires a matching mod/Companion pair.
+
+Switching saves and closes project editors; a failed save prevents the switch. It detaches the debugger, requests cancellation of owned execution jobs, clears project views and pending results, and restores the selected instance's state. Minecraft processes remain running, and the existing MCP endpoint stays available. Disconnection does not prove arbitrary target code has stopped.
+
+If remembering the selection fails, the new project remains open and Companion reports the save error. Selecting it again retries persistence; until then, restarting reopens the last successfully remembered project.
+
+The application API supports listing known projects and opening a `CompanionProfile`, including one created with `CompanionProfile.forGame(path)`. Project-selector UI, project MCP tools, launcher controls and restoring open tabs are subsequent work.
+
 ## Scripts and evaluation
 
 Saved scripts contain imports and Java statements. Use `return` to produce a structured value, and `log` or `logln` for output. Companion compiles scripts using its existing runtime index and sends the generated classes to Minecraft for execution. Wait for the current runtime index to become ready before running a script.

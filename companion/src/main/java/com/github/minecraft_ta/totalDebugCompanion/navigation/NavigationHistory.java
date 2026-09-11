@@ -29,6 +29,11 @@ final class NavigationHistory {
         this.forward.clear();
     }
 
+    synchronized void clear() {
+        this.back.clear();
+        this.forward.clear();
+    }
+
     synchronized NavigationEntry destination(Direction direction, String runtimeSignature) {
         Deque<NavigationEntry> source = source(direction);
         while (!source.isEmpty() && !source.peekFirst().isValidForRuntime(runtimeSignature)) {
