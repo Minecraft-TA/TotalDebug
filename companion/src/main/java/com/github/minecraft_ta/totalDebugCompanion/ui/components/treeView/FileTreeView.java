@@ -130,29 +130,26 @@ public class FileTreeView extends JScrollPane {
 
     private RuntimeSourceCatalog sourceCatalog() {
         var scope = project.get();
-        return scope == null || scope.runtime() == null ? RuntimeSourceCatalog.empty() : scope.runtime().sources();
+        var runtime = scope == null ? null : scope.runtime();
+        return runtime == null ? RuntimeSourceCatalog.empty() : runtime.sources();
     }
 
     public void reloadProfile() {
-        if (project.get() == null) {
+        var scope = project.get();
+        if (scope == null) {
             this.tree.setRootNodes();
             return;
         }
-
+        var binding = scope.runtime();
+        RuntimeSourceCatalog catalog = binding == null ? RuntimeSourceCatalog.empty() : binding.sources();
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
-        if (project.get() != null) {
-            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(
-                    project.get().paths().scripts(),
-                    true
-            );
-            scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
-            rootItems.add(scripts);
-        }
-        if (!sourceCatalog().modules().isEmpty()) {
-            rootItems.add(new DecompiledSourcesTreeItem(this.tree, project.get().runtime().decompiler()));
+        var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts(), true);
+        scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
+        rootItems.add(scripts);
+        if (!catalog.modules().isEmpty()) {
+            rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
         }
 
-        RuntimeSourceCatalog catalog = sourceCatalog();
         if (!catalog.modules().isEmpty()) {
             var runtime = new DirectoryTreeItem("runtime") {
                 {

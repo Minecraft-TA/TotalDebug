@@ -177,6 +177,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
             disposed = true;
             debugger.removeListener(debuggerListener);
             debuggerActions.close();
+            debuggerShortcuts.close();
             ThemeManager.removeThemeChangeListener(themeListener);
             Toolkit.getDefaultToolkit().removeAWTEventListener(this);
             closeProjectWindows();
