@@ -29,7 +29,7 @@ public final class DebuggerWindow extends JFrame {
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void paused(DebuggerSessionController.PausedState state) {
-            javax.swing.SwingUtilities.invokeLater(() -> showWindow());
+            javax.swing.SwingUtilities.invokeLater(() -> { if (!disposed) showWindow(); });
         }
     };
     private boolean disposed;

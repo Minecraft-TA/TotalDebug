@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaLinkGenerator;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
@@ -26,13 +27,13 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     private boolean astDisposed;
 
     public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
-        this(context, identifier, className, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource::identity);
+        this(context, identifier, className, JavaEditorSource::identity);
     }
 
     protected AbstractCodeViewPanel(
             EditorContext context, String identifier,
             String className,
-            Function<String, com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource> sourceFactory
+            Function<String, JavaEditorSource> sourceFactory
     ) {
         super();
         this.context = context;

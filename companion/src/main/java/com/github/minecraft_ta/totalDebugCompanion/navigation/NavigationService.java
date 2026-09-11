@@ -50,11 +50,16 @@ public final class NavigationService {
     private final NavigationState emptyNavigation = new NavigationState();
     private NavigationState state() { var scope = project; return scope == null ? emptyNavigation : scope.navigation(); }
     private record Context(ProjectScope project, RuntimeBinding runtime) { }
+    private ProjectScope requireProject() {
+        var scope = project;
+        if (scope == null) throw new IllegalStateException("No Minecraft project is loaded");
+        return scope;
+    }
     private Context captureContext() { var scope = project; return new Context(scope, scope == null ? null : scope.runtime()); }
     private boolean isCurrent(Context captured) {
-        return captured.project() == project && (project == null
-                ? true
-                : project.isActive() && project.runtime() == captured.runtime());
+        ProjectScope selected = project;
+        return captured.project() == selected && (selected == null
+                || selected.isActive() && selected.runtime() == captured.runtime());
     }
     private final Action backAction = new AbstractAction("Back") {
         @Override
@@ -386,7 +391,7 @@ public final class NavigationService {
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
             return onEdt(() -> {
-                if (!isCurrent(context) || service != editors.get().project().runtime().decompiler()) {
+                if (!isCurrent(context) || service != requireProject().requireRuntime().decompiler()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
                 return openRuntimeEditor(installed,

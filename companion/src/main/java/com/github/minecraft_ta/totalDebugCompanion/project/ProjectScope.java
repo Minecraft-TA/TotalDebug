@@ -21,6 +21,9 @@ import java.util.function.Supplier;
 /** Resources and request admission for one opened project. */
 public final class ProjectScope implements AutoCloseable {
     public enum Phase { ACTIVE, SWITCHING, RETIRED }
+    public static final class InactiveProjectException extends IllegalStateException {
+        private InactiveProjectException() { super("Project changed during the request"); }
+    }
     public record PendingNavigation(NavigationTarget target, NavigationService.Activation activation) { }
 
     private final NavigationState navigation = new NavigationState();
@@ -50,7 +53,7 @@ public final class ProjectScope implements AutoCloseable {
     public Phase phase() { return phase; }
     public boolean isActive() { return phase == Phase.ACTIVE; }
     public void requireActive() {
-        if (!isActive()) throw new IllegalStateException("Project changed during the request");
+        if (!isActive()) throw new InactiveProjectException();
     }
 
     /** Check and submit under the shared lifecycle lock; actions must never wait. */
@@ -67,6 +70,11 @@ public final class ProjectScope implements AutoCloseable {
     }
     public void retire() { synchronized (lock) { phase = Phase.RETIRED; } }
     public RuntimeBinding runtime() { return runtime; }
+    public RuntimeBinding requireRuntime() {
+        RuntimeBinding installed = runtime;
+        if (installed == null) throw new IllegalStateException("Runtime class index is not ready");
+        return installed;
+    }
     public String runtimeSignature() { var value = runtime; return value == null ? null : value.snapshot().signature(); }
 
     /** Called by the loader under the shared lifecycle lock, before its ownership handoff. */

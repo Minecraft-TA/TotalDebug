@@ -38,16 +38,16 @@ class DebuggerInspectorTest {
     @Test
     void evaluatesAutomaticExpressionsOncePerFrameRevision() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
+        InstanceState state = InstanceState.inMemory();
         boolean previousPreviews = config.automaticDebuggerPreviews();
         AtomicInteger inspections = new AtomicInteger();
         AtomicInteger explicitEvaluations = new AtomicInteger();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of("counter()"));
+            state.setDebuggerWatches(List.of("counter()"));
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(),
+                DebuggerInspector inspector = new DebuggerInspector(state,
                         controller,
                         target -> {
                         },
@@ -75,7 +75,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -86,11 +85,9 @@ class DebuggerInspectorTest {
     void publishesOneEditorSnapshotAfterAllRootPreviewsResolve() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger publications = new AtomicInteger();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(true);
             DebuggerEditorPresentation.clear();
             Runnable removeListener = DebuggerEditorPresentation.addListener(snapshot -> publications.incrementAndGet());
@@ -113,7 +110,6 @@ class DebuggerInspectorTest {
             });
             removeListener.run();
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -124,11 +120,9 @@ class DebuggerInspectorTest {
     void retainsExpressionPreviewAcrossUnrelatedTreeRebuilds() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger previewRequests = new AtomicInteger();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -193,7 +187,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -204,11 +197,9 @@ class DebuggerInspectorTest {
     void loadsLargeChildrenInExplicitBoundedPages() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         List<Integer> starts = new ArrayList<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -279,7 +270,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -290,11 +280,9 @@ class DebuggerInspectorTest {
     void loadsNamedObjectFieldsOnceWithoutPagingArguments() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         List<List<Integer>> requests = new ArrayList<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
@@ -354,7 +342,6 @@ class DebuggerInspectorTest {
                 inspector.close();
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();
@@ -424,13 +411,11 @@ class DebuggerInspectorTest {
     void replacingAndClosingAnInspectorReleasesValuesIncludingLateResults() throws Exception {
         GlobalConfig config = GlobalConfig.getInstance();
         boolean previousPreviews = config.automaticDebuggerPreviews();
-        List<String> previousWatches = com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().debuggerWatches();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         AtomicInteger owners = new AtomicInteger();
         AtomicInteger retains = new AtomicInteger();
         CompletableFuture<DebuggerValueLease> late = new CompletableFuture<>();
         try {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(List.of());
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 var runtime = runtime(new AtomicInteger(), new AtomicInteger(), List.of(), 77, reference -> {
@@ -463,7 +448,6 @@ class DebuggerInspectorTest {
                 }
             });
         } finally {
-            com.github.minecraft_ta.totalDebugCompanion.CompanionApp.instanceState().setDebuggerWatches(previousWatches);
             config.setAutomaticDebuggerPreviews(previousPreviews);
             controller.close();
             DebuggerEditorPresentation.clear();

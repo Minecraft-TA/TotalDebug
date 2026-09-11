@@ -133,10 +133,11 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.debuggerListener = new DebuggerSessionController.Listener() {
             @Override
             public void statusChanged(DebuggerSessionController.Status status) {
+                ProjectScope selected = project.get();
                 SwingUtilities.invokeLater(() -> {
-                    if (disposed) return;
+                    if (disposed || selected != project.get() || !status.equals(debugger.status())) return;
                     setDebuggerState(status);
-                    if (status.phase() == DebuggerSessionController.Phase.PAUSED) {
+                    if (selected != null && selected.isActive() && status.phase() == DebuggerSessionController.Phase.PAUSED) {
                         debuggerWindow(debugger);
                     }
                 });
@@ -172,11 +173,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
             debuggerActions.close();
             ThemeManager.removeThemeChangeListener(themeListener);
             Toolkit.getDefaultToolkit().removeAWTEventListener(this);
-            if (debuggerWindow != null) debuggerWindow.dispose();
-            if (breakpointsWindow != null) breakpointsWindow.dispose();
-            if (evaluateExpressionWindow != null) evaluateExpressionWindow.dispose();
-            if (searchEverywherePopup != null) searchEverywherePopup.dispose();
-            if (snippetExecutions != null) snippetExecutions.close();
+            closeProjectWindows();
             editorTabs.closeMatching(editor -> true);
             statusBar.setEditor(null);
         }
@@ -423,6 +420,7 @@ public class MainWindow extends JFrame implements AWTEventListener {
     }
 
     public void refreshProfile() {
+        setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
         refreshActions();
@@ -439,6 +437,13 @@ public class MainWindow extends JFrame implements AWTEventListener {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
         this.editorTabs.closeMatching(editor -> true);
         if (this.editorTabs.getTabCount() != 0) return false;
+        closeProjectWindows();
+        this.statusBar.setEditor(null);
+        setEnabled(false);
+        return true;
+    }
+
+    private void closeProjectWindows() {
         for (Window window : getOwnedWindows()) window.dispose();
         if (this.debuggerWindow != null) this.debuggerWindow.dispose();
         if (this.breakpointsWindow != null) this.breakpointsWindow.dispose();
@@ -450,9 +455,6 @@ public class MainWindow extends JFrame implements AWTEventListener {
         this.evaluateExpressionWindow = null;
         this.searchEverywherePopup = null;
         this.snippetExecutions = null;
-        this.statusBar.setEditor(null);
-        setEnabled(false);
-        return true;
     }
 
     public void refreshRuntimeSources() {

@@ -50,7 +50,7 @@ class RuntimeInstallationTest {
             GlobalConfig.getInstance().loadFrom(root.resolve("app"));
             CompanionApp.configureLookAndFeel();
             SwingUtilities.invokeAndWait(() -> MainWindow.INSTANCE.getEditorTabs().openEditorTab(
-                    new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), null)));
+                    new ResourceView(MainWindow.INSTANCE.editorContext(), new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), null)));
             var uiStarted = CompanionApp.class.getDeclaredField("uiStarted");
             uiStarted.setAccessible(true);
             uiStarted.set(null, true);
@@ -77,7 +77,7 @@ class RuntimeInstallationTest {
                 try {
                     install.invoke(null, accepted, bytes);
                     SwingUtilities.invokeAndWait(() -> {
-                        var view = new ResourceView(new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), CompanionApp.currentRuntime());
+                        var view = new ResourceView(MainWindow.INSTANCE.editorContext(), new ArchiveEntrySource(root.resolve("old.jar"), "old.txt", -1), CompanionApp.currentRuntime());
                         newView.set(view);
                         MainWindow.INSTANCE.getEditorTabs().openEditorTab(view);
                     });

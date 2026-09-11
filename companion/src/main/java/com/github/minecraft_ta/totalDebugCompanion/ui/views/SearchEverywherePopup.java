@@ -5,7 +5,6 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
@@ -93,15 +92,16 @@ public class SearchEverywherePopup extends JFrame {
     private final ModuleFilterPopup moduleFilterPopup;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
 
-    private final Consumer<RuntimeIndexService.Status> indexStatusListener = status -> SwingUtilities.invokeLater(() -> {
-        if (!isDisplayable()) return;
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-            refreshResults();
-        } else {
-            showIndexStatus(status);
-        }
-    });
+    private final Consumer<RuntimeIndexService.Status> indexStatusListener = this::indexStatusChanged;
+
+    private void indexStatusChanged(RuntimeIndexService.Status status) {
+        SwingUtilities.invokeLater(() -> {
+            if (!isDisplayable()) return;
+            RuntimeBinding installed = runtime.get();
+            if (installed != null) { syncRuntimeModules(installed); refreshResults(); }
+            else showIndexStatus(status);
+        });
+    }
 
     private RuntimeSourceCatalog sourceCatalog = RuntimeSourceCatalog.empty();
     private List<RuntimeInventory.RuntimeModule> modules = List.of();
@@ -172,9 +172,8 @@ public class SearchEverywherePopup extends JFrame {
             toFront();
             return;
         }
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-        }
+        RuntimeBinding installed = runtime.get();
+        if (installed != null) syncRuntimeModules(installed);
         setVisible(true);
         if (!this.manuallyPositioned) {
             UIUtils.centerJFrame(this, owner == null ? this : owner);
@@ -187,9 +186,8 @@ public class SearchEverywherePopup extends JFrame {
     void open(Set<String> moduleIds, String query) {
         Objects.requireNonNull(moduleIds, "moduleIds");
         Objects.requireNonNull(query, "query");
-        if (CompanionClassIndex.isOpen()) {
-            syncRuntimeModules();
-        }
+        RuntimeBinding installed = runtime.get();
+        if (installed != null) syncRuntimeModules(installed);
         setSelectedModules(moduleIds);
         this.searchTextField.setText(query);
         open();
@@ -333,7 +331,9 @@ public class SearchEverywherePopup extends JFrame {
         this.moduleFilterButton.setIconTextGap(6);
         this.moduleFilterButton.setToolTipText("Filter search results by module");
         this.moduleFilterButton.addActionListener(event -> {
-            syncRuntimeModules();
+            RuntimeBinding installed = runtime.get();
+            if (installed == null) return;
+            syncRuntimeModules(installed);
             this.moduleFilterPopup.updateModules(this.modules, this.selectedModuleIds);
             this.moduleFilterPopup.show(
                     this.moduleFilterButton,
@@ -403,8 +403,8 @@ public class SearchEverywherePopup extends JFrame {
         refreshResults();
     }
 
-    private void syncRuntimeModules() {
-        RuntimeSourceCatalog currentCatalog = runtime.get().sources();
+    private void syncRuntimeModules(RuntimeBinding installed) {
+        RuntimeSourceCatalog currentCatalog = installed.sources();
         List<RuntimeInventory.RuntimeModule> currentModules = currentCatalog.modules();
         if (!currentModules.equals(this.modules)) {
             this.sourceCatalog = currentCatalog;
@@ -445,7 +445,8 @@ public class SearchEverywherePopup extends JFrame {
             this.pendingSearch.cancel(false);
             this.pendingSearch = null;
         }
-        if (!CompanionClassIndex.isOpen()) {
+        RuntimeBinding installed = runtime.get();
+        if (installed == null) {
             showIndexStatus(indexLoader.status());
             return;
         }
@@ -468,6 +469,7 @@ public class SearchEverywherePopup extends JFrame {
             return;
         }
 
+        if (sourceCatalog != installed.sources()) syncRuntimeModules(installed);
         Category requestedCategory = this.category;
         int[] sourceIds = this.selectedModuleIds.size() == this.modules.size()
                 ? null
@@ -476,16 +478,17 @@ public class SearchEverywherePopup extends JFrame {
         this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
             try {
+                if (runtime.get() != installed) return;
                 List<Result> results = this.search.search(
-                        CompanionClassIndex.get(),
+                        installed.snapshot().index(),
                         query,
                         requestedCategory,
                         RESULT_LIMIT,
                         sourceIds
                 );
-                SwingUtilities.invokeLater(() -> applyResults(generation, results));
+                SwingUtilities.invokeLater(() -> { if (runtime.get() == installed) applyResults(generation, results); });
             } catch (RuntimeException failure) {
-                SwingUtilities.invokeLater(() -> showSearchFailure(generation, failure));
+                SwingUtilities.invokeLater(() -> { if (runtime.get() == installed) showSearchFailure(generation, failure); });
             }
         }, 70, TimeUnit.MILLISECONDS);
     }

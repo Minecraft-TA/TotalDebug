@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.InactiveProjectException;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -22,11 +23,15 @@ public final class ScriptExecutionService {
     public boolean run(ProjectScope project, int id, String source, boolean serverSide,
                        ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
         if (project == null || !project.isActive() || !isConnected()) return false;
-        return project.admit(() -> {
-            if (!isConnected()) return false;
-            compiler.submit(id, source, serverSide, environment, failureHandler);
-            return true;
-        });
+        try {
+            return project.admit(() -> {
+                if (!isConnected()) return false;
+                compiler.submit(id, source, serverSide, environment, failureHandler);
+                return true;
+            });
+        } catch (InactiveProjectException ignored) {
+            return false;
+        }
     }
 
     public boolean stop(int id) { return compiler.cancel(id) || session.send(new StopScriptMessage(id)); }
