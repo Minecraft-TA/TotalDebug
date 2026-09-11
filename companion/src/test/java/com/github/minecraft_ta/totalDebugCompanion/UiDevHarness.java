@@ -76,7 +76,6 @@ public final class UiDevHarness {
                 package sample;
 
                 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
                 /** Javadoc comment: doc colour. */
                 @FunctionalInterface
@@ -263,12 +262,12 @@ import java.util.concurrent.TimeUnit;
     private static void scheduleSearchEverywhereInteractionVerification() {
         javax.swing.Timer openTimer = new javax.swing.Timer(500, event -> {
             MainWindow.INSTANCE.openSearchEverywhere();
-                SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
-                        .filter(SearchEverywherePopup.class::isInstance)
-                        .map(SearchEverywherePopup.class::cast)
-                        .filter(java.awt.Window::isShowing)
-                        .findFirst()
-                        .orElseThrow();
+            SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
+                    .filter(SearchEverywherePopup.class::isInstance)
+                    .map(SearchEverywherePopup.class::cast)
+                    .filter(java.awt.Window::isShowing)
+                    .findFirst()
+                    .orElseThrow();
             // This fixture sends synthetic events; native focus belongs to the user's other windows.
             var focusListeners = popup.getWindowFocusListeners();
             for (var listener : focusListeners) popup.removeWindowFocusListener(listener);
