@@ -15,6 +15,8 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CompanionProjectAttachmentTest {
@@ -22,9 +24,12 @@ class CompanionProjectAttachmentTest {
 
     @Test void explicitSwitchReplacesAnAttachedGameButAnOrdinaryHandshakeCannot() throws Exception {
         var selected = new AtomicReference<>("a");
+        var disconnected = new LinkedBlockingQueue<Boolean>();
         try (var session = new CompanionSession("secret", hello -> {
             if (!hello.profileId().equals(selected.get())) throw new IOException("Select the project first");
-        }, new CompanionSession.Listener() {})) {
+        }, new CompanionSession.Listener() {
+            @Override public void disconnected() { disconnected.add(true); }
+        })) {
             session.setProjectSelectionHandler(hello -> {
                 if (!hello.profileId().equals(selected.get())) {
                     session.disconnect();
@@ -39,10 +44,12 @@ class CompanionProjectAttachmentTest {
                 assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("a")));
                 assertFalse(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
                 assertEquals(-1, a.getInputStream().read());
+                assertNotNull(disconnected.poll(5, TimeUnit.SECONDS), "A teardown must finish before reconnecting");
                 assertEquals("b", selected.get());
                 try (var rejected = connect(descriptor.port())) {
                     assertFalse(handshake(rejected, "a"));
                     assertEquals(-1, rejected.getInputStream().read());
+                    assertNotNull(disconnected.poll(5, TimeUnit.SECONDS), "Rejected connection teardown must finish");
                 }
                 try (var b = connect(descriptor.port())) {
                     assertTrue(handshake(b, "b"));

@@ -38,6 +38,7 @@ class ApplicationNavigationTest {
     private static final class RecordingUi implements CompanionUi {
         final CompletableFuture<NavigationTarget> navigation = new CompletableFuture<>();
         public boolean prepareProjectSwitch() { return true; }
+        public boolean closeProjectViews() { return true; }
         public boolean canExit() { return true; }
         public void setSwitching(boolean switching) { }
         public void refreshProfile() { }

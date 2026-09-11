@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -62,6 +63,38 @@ class RuntimeInstallationTest {
         }
     }
 
+    @Test void lateRuntimeRefreshKeepsViewsOpenedAgainstTheInstalledBinding() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("app"));
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(new CompanionProfile("test", Files.createDirectories(directory.resolve("data")),
+                    Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            try (var accepted = snapshot(directory, "accepted")) {
+                app.installRuntimeSnapshot(accepted,
+                        RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index()));
+                app.openProject(app.currentProject()).get(10, TimeUnit.SECONDS);
+                var createdWindow = new AtomicReference<MainWindow>();
+                var currentView = new AtomicReference<ResourceView>();
+                SwingUtilities.invokeAndWait(() -> {
+                    MainWindow window = app.createWindow();
+                    var source = new ArchiveEntrySource(directory.resolve("same.jar"), "same.txt", -1);
+                    var stale = new ResourceView(window.editorContext(), source, null);
+                    var current = new ResourceView(window.editorContext(), source, app.requireProject().runtime());
+                    window.getEditorTabs().openEditorTab(stale);
+                    window.getEditorTabs().openEditorTab(current);
+                    createdWindow.set(window);
+                    currentView.set(current);
+                    window.navigation().runtimeChanged();
+                });
+                SwingUtilities.invokeAndWait(() -> {
+                    assertEquals(1, createdWindow.get().getEditorTabs().getTabCount());
+                    assertSame(currentView.get(), createdWindow.get().getEditorTabs().getSelectedEditor(),
+                            "A late refresh must preserve a tab opened against the installed runtime");
+                });
+                app.close();
+            }
+        }
+    }
+
     static ReadySnapshot snapshot(Path root, String signature) throws Exception {
         Path classes = Files.createDirectories(root.resolve("classes"));
         var module = new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.LIBRARY);
@@ -72,8 +105,4 @@ class RuntimeInstallationTest {
         }
     }
 
-    private static String read(Path path) {
-        try { return Files.readString(path); }
-        catch (Exception failure) { return failure.toString(); }
-    }
 }

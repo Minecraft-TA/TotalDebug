@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
@@ -174,6 +175,7 @@ class ProjectSwitchLifecycleTest {
         assertEquals("still A", scopeBeforeVeto.admit(() -> "still A"));
         assertFalse(disposed.get());
         allowed.set(true);
+        app.instanceState().setDebuggerWatches(List.of("saved view state"));
         app.instanceState().saveNow();
         Path stateFile = a.dataDirectory().resolve("state.json");
         byte[] savedState = Files.readAllBytes(stateFile);
@@ -226,12 +228,14 @@ class ProjectSwitchLifecycleTest {
     }
 
     private static void verifyNavigationReset(CompanionApplication app, MainWindow window) throws Exception {
-        var pending = new java.util.concurrent.atomic.AtomicReference<CompletableFuture<Boolean>>();
+        var pending = new AtomicReference<CompletableFuture<Boolean>>();
+        var lookupStarted = new AtomicReference<CompletableFuture<Void>>();
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
             var tree = new FileTreeView(app::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
                     var delayed = pending.getAndSet(null);
+                    if (delayed != null) lookupStarted.get().complete(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
                 }
             };
@@ -246,7 +250,9 @@ class ProjectSwitchLifecycleTest {
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
         var delayedA = new CompletableFuture<Boolean>();
         pending.set(delayedA);
+        lookupStarted.set(new CompletableFuture<>());
         var oldTraversal = navigation.goBack();
+        lookupStarted.get().get(3, TimeUnit.SECONDS);
         scopeA.retire();
         javax.swing.SwingUtilities.invokeAndWait(() -> navigation.projectChanged(scopeB));
         assertFalse(oldTraversal.isDone(), "Old lookup is still awaiting a callback");
@@ -255,7 +261,9 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
         var delayedB = new CompletableFuture<Boolean>();
         pending.set(delayedB);
+        lookupStarted.set(new CompletableFuture<>());
         var newTraversal = navigation.goBack();
+        lookupStarted.get().get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> { });
         assertFalse(newTraversal.isDone());
         javax.swing.SwingUtilities.invokeAndWait(() -> {
@@ -272,7 +280,9 @@ class ProjectSwitchLifecycleTest {
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));
         var duringVeto = new CompletableFuture<Boolean>();
         pending.set(duringVeto);
+        lookupStarted.set(new CompletableFuture<>());
         var vetoTraversal = navigation.goForward();
+        lookupStarted.get().get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> { });
         scopeB.beginSwitch();
         duringVeto.complete(true);
