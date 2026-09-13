@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -17,7 +20,7 @@ class ProjectRegistryTest {
         CompanionProfile b = profile("b");
         Path aScript = Files.writeString(a.dataDirectory().resolve("script.txt"), "A");
         Path bScript = Files.writeString(b.dataDirectory().resolve("script.txt"), "B");
-        com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(paths.profile(), a.toJson());
+        JsonFiles.write(paths.profile(), a.toJson());
         var registry = ProjectRegistry.open(paths);
         assertEquals(a, registry.selected());
         assertFalse(Files.exists(paths.profile()));
@@ -46,5 +49,34 @@ class ProjectRegistryTest {
     private CompanionProfile profile(String name) throws Exception {
         Path game = Files.createDirectories(directory.resolve(name).resolve("minecraft"));
         return new CompanionProfile(name, Files.createDirectories(game.resolve("total-debug")), game);
+    }
+
+    @Test void namesAreAutomaticUnlessExplicitlyOverridden() throws Exception {
+        AppPaths paths = new AppPaths(directory.resolve("app"));
+        var a = profile("ATM10");
+        var b = profile("Development");
+        var registry = ProjectRegistry.open(paths);
+        registry.select(a);
+        assertEquals("ATM10", registry.projects().getFirst().name());
+        assertFalse(Files.readString(paths.projects()).contains("nameOverride"));
+        registry.rename(a.id(), "My pack");
+        assertEquals("My pack", ProjectRegistry.open(paths).projects().getFirst().name());
+        registry.rename(a.id(), null);
+        assertEquals("ATM10", registry.projects().getFirst().name());
+        registry.select(b);
+        registry.forget(a.id());
+        assertEquals(1, ProjectRegistry.open(paths).projects().size());
+        assertTrue(Files.isDirectory(a.dataDirectory()));
+        assertThrows(IllegalArgumentException.class, () -> registry.forget(b.id()));
+    }
+
+    @Test void projectListDoesNotWaitForThePersistenceMonitor() throws Exception {
+        var registry = ProjectRegistry.open(new AppPaths(directory.resolve("app")));
+        registry.select(profile("ATM10"));
+        synchronized (registry) {
+            var read = CompletableFuture.supplyAsync(registry::projects);
+            assertEquals("ATM10", read.get(1, TimeUnit.SECONDS).getFirst().name());
+        }
+        assertThrows(UnsupportedOperationException.class, () -> registry.projects().clear());
     }
 }

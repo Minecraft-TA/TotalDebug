@@ -40,6 +40,8 @@ class CompanionMcpToolCatalogTest {
                 "descriptor", "()V"
         );
         Map<String, Map<String, Object>> samples = Map.ofEntries(
+                Map.entry("project_list", Map.of("projects", List.of(), "prism_instances", List.of())),
+                Map.entry("project_open", Map.of("companion_available", true, "minecraft_connected", false, "debugger_connected", false)),
                 Map.entry("status", Map.of(
                         "companion_available", true,
                         "minecraft_connected", true,

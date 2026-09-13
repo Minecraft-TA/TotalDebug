@@ -18,13 +18,13 @@ The active endpoint is written to `<companion-app-home>/run/companion/mcp-endpoi
 
 Companion removes the descriptor when it closes. A Minecraft disconnect does not stop MCP.
 
-Project switching also preserves this endpoint and initialized MCP clients. Outstanding code jobs keep their original context and are marked disconnected after cancellation is requested. Project-bound requests reject stale results, and code/debugger mutations are admitted through the active project scope in which the request started. Project list/open tools are not yet exposed through MCP.
+Project switching preserves this endpoint and initialized MCP clients. Outstanding code jobs keep their original context. Project-bound requests reject stale results, and code/debugger mutations use the captured project scope's admission gate. Project list/open tools are application-level operations and work without a connected game or an already selected project.
 
 ## Response policy
 
-Each tool returns only the values needed to use that tool. Runtime paths, hashes, profile metadata, timestamps, and artifact locations do not appear in normal status or job responses.
+Each tool returns the values needed to use it. Project tools and status include project identity, name and directories so callers can choose and verify their target. Internal runtime hashes and artifact locations do not appear in normal status or job responses.
 
-- `status` returns `companion_available`, `minecraft_connected`, and `debugger_connected`.
+- `status` returns connectivity, `project_switching`, source readiness, and `selected_project` when a project is open.
 - Job responses return `job_id`, `state`, and any available `logs`, `result`, or `error`.
 - A sidecar connection failure returns one `error` object with `code`, `stage`, `endpoint_health`, and `retryable`.
 
@@ -32,7 +32,11 @@ Every tool advertises an `outputSchema` covering its exact success result and th
 
 ## Tools
 
-- `status` reports Companion, Minecraft, and debugger connectivity.
+- `status` reports Companion, Minecraft, and debugger connectivity, selected project identity/name/directories, switching state and source index state/detail.
+- `project_list(include_prism=false)` lists remembered projects and optionally local instances in the default Prism directory. Discovery does not modify them.
+- `project_open(project_id | directory, name?)` opens exactly one remembered ID or game/Prism instance directory. The optional name overrides the automatic folder name. It returns the status shape before indexing finishes. It saves/closes editors, but does not launch Minecraft or ask another running game to attach.
+- New directory selections require `mods/` or existing `total-debug/` data. Unsupported folders are rejected without creating files. Code browsing still requires a saved runtime inventory; local mod indexing is planned separately.
+- Both execution tools accept `expected_project_id` to reject execution against an unintended project. This check runs inside the captured scope's admission gate.
 - `client_code_execute` runs a value-returning Java body in the Minecraft client JVM.
 - `server_code_execute` runs the same contract with server authority.
 - `job_wait` waits for one asynchronous code job.

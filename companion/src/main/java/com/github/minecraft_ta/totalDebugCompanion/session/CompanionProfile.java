@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -26,8 +27,7 @@ public record CompanionProfile(
     }
 
     public static CompanionProfile forGame(Path directory) {
-        return new CompanionProfile(com.github.minecraft_ta.totaldebug.storage.InstancePaths.profileId(directory),
-                com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(directory).home(), directory);
+        return new CompanionProfile(InstancePaths.profileId(directory), InstancePaths.forGame(directory).home(), directory);
     }
 
     JsonObject toJson() {

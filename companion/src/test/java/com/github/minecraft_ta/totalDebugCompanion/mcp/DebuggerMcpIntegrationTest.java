@@ -91,7 +91,7 @@ class DebuggerMcpIntegrationTest {
                     Clock.systemUTC());
             DebuggerMcpService debugger = new DebuggerMcpService(() -> controller, name -> source);
             var scope = new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
-            try (CompanionMcpServer server = new CompanionMcpServer(temporaryDirectory.resolve("data"), jobs, 0, debugger, () -> scope)) {
+            try (CompanionMcpServer server = new CompanionMcpServer(temporaryDirectory.resolve("data"), jobs, 0, debugger, () -> scope, new TestProjectControls())) {
                 server.start();
                 String base = server.endpointUrl().substring(0, server.endpointUrl().length() - 4);
                 var transport = HttpClientStreamableHttpTransport.builder(base).endpoint("/mcp").build();

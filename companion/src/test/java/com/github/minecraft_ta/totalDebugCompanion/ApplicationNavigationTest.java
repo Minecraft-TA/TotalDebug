@@ -113,6 +113,7 @@ class ApplicationNavigationTest {
         public boolean canExit() { return true; }
         public void setSwitching(boolean switching) { }
         public void refreshProfile() { onRefresh.run(); }
+        public void refreshProjects() { }
         public void runtimeChanged() { }
         public void setGameStatus(ServiceStatus status) { }
         public void setMcpStatus(ServiceStatus status) { }

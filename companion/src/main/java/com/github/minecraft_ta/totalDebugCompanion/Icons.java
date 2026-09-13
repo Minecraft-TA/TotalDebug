@@ -46,6 +46,7 @@ public class Icons {
     public static final FlatSVGIcon LIBRARY = new FlatSVGIcon("icons/library.svg");
     public static final FlatSVGIcon RESOURCE_BUNDLE = new FlatSVGIcon("icons/resourceBundle.svg");
     public static final FlatSVGIcon MODULE = new FlatSVGIcon("icons/module.svg");
+    public static final FlatSVGIcon PRISM_INSTANCE = new FlatSVGIcon("icons/prism-instance.svg");
 
     public static final FlatSVGIcon IMAGE_FILE = new FlatSVGIcon("icons/image.svg");
     public static final FlatSVGIcon JSON_FILE = new FlatSVGIcon("icons/json.svg");

@@ -40,7 +40,7 @@ class CompanionMcpServerTest {
                 dataDirectory,
                 jobs,
                 0, new DebuggerMcpService(() -> null, name -> null),
-                () -> { throw new IllegalStateException("No Minecraft project is loaded"); }
+                () -> { throw new IllegalStateException("No Minecraft project is loaded"); }, new TestProjectControls()
         );
         try (server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();
@@ -151,7 +151,7 @@ class CompanionMcpServerTest {
                 this.temporaryDirectory.resolve("data"),
                 jobs,
                 0, new DebuggerMcpService(() -> null, name -> null),
-                () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory())
+                () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory()), new TestProjectControls()
         );
         try (server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();

@@ -1,6 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
+import com.github.minecraft_ta.totalDebugCompanion.session.PrismInstances;
+import com.github.minecraft_ta.totalDebugCompanion.session.ProjectDirectories;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -38,6 +44,7 @@ public final class CompanionMcpServer implements AutoCloseable {
     private final DebuggerMcpService debugger;
     private final int port;
     private final Supplier<ProjectScope> project;
+    private final ProjectControls projects;
     private HttpServletStreamableServerTransportProvider transportProvider;
     private McpSyncServer mcpServer;
     private Tomcat tomcat;
@@ -48,10 +55,11 @@ public final class CompanionMcpServer implements AutoCloseable {
         this(application.appPaths().home(), jobs, port,
                 new DebuggerMcpService(application::getDebuggerController,
                         name -> application.requireProject().requireRuntime().decompiler().loadDebugSource(name)),
-                application::requireProject);
+                application::requireProject, application);
     }
 
-    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger, Supplier<ProjectScope> project) {
+    CompanionMcpServer(Path dataDirectory, CodeModeJobService jobs, int port, DebuggerMcpService debugger, Supplier<ProjectScope> project, ProjectControls projects) {
+        this.projects = Objects.requireNonNull(projects);
         this.project = Objects.requireNonNull(project);
         this.dataDirectory = normalize(dataDirectory);
         this.endpointDescriptor = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpEndpoint();
@@ -156,6 +164,8 @@ public final class CompanionMcpServer implements AutoCloseable {
             ProjectScope project = CompanionMcpToolCatalog.projectBound(request.name()) ? this.project.get() : null;
             Map<String, Object> result = switch (request.name()) {
                 case "status" -> status();
+                case "project_list" -> projectList(Boolean.TRUE.equals(request.arguments().get("include_prism")));
+                case "project_open" -> openProject(request.arguments());
                 case "client_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.CLIENT, project);
                 case "server_code_execute" -> execute(request.arguments(), CodeModeJobService.ExecutionSide.SERVER, project);
                 case "job_wait" -> this.jobs.waitFor(
@@ -199,11 +209,51 @@ public final class CompanionMcpServer implements AutoCloseable {
     }
 
     private Map<String, Object> status() {
-        return Map.of(
+        var result = new LinkedHashMap<String, Object>(Map.of(
                 "companion_available", true,
                 "minecraft_connected", this.jobs.isAvailable(),
-                "debugger_connected", this.debugger.isConnected()
-        );
+                "debugger_connected", this.debugger.isConnected(),
+                "project_switching", this.projects.isSwitching()
+        ));
+        var current = this.projects.currentProject();
+        if (current != null) {
+            var project = this.projects.projects().stream().filter(item -> item.profile().equals(current)).findFirst()
+                    .orElseGet(() -> new ProjectRegistry.Project(null, current));
+            result.put("selected_project", projectMap(project, current));
+        }
+        var sources = this.projects.getRuntimeIndexStatus();
+        result.put("sources", Map.of("state", sources.phase().name().toLowerCase(Locale.ROOT), "detail", sources.detail()));
+        return result;
+    }
+
+    private Map<String, Object> projectList(boolean includePrism) throws IOException {
+        var current = this.projects.currentProject();
+        var known = this.projects.projects().stream().map(project -> projectMap(project, current)).toList();
+        var prism = includePrism ? PrismInstances.discover(
+                PrismInstances.home()).stream()
+                .map(profile -> projectMap(new ProjectRegistry.Project(null, profile), current)).toList()
+                : List.of();
+        return Map.of("projects", known, "prism_instances", prism);
+    }
+
+    private Map<String, Object> openProject(Map<String, Object> arguments) {
+        String id = optionalString(arguments, "project_id");
+        String directory = optionalString(arguments, "directory");
+        if ((id == null) == (directory == null)) throw new IllegalArgumentException("Supply exactly one of project_id or directory");
+        var profile = id != null ? this.projects.projects().stream().filter(project -> project.profile().id().equals(id))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("Unknown project: " + id)).profile()
+                : ProjectDirectories.resolve(Path.of(directory));
+        this.projects.openProject(profile, optionalString(arguments, "name")).join();
+        ProjectScope selected = this.project.get();
+        if (!profile.equals(selected.profile())) throw new IllegalStateException("Another request changed the selected project");
+        return selected.admit(this::status);
+    }
+
+    private static Map<String, Object> projectMap(ProjectRegistry.Project project,
+                                                 CompanionProfile current) {
+        var profile = project.profile();
+        return Map.of("id", profile.id(), "name", project.name(), "directory", profile.workspaceDirectory().toString(),
+                "data_directory", profile.dataDirectory().toString(), "selected", profile.equals(current));
     }
 
     private Map<String, Object> execute(
@@ -216,7 +266,12 @@ public final class CompanionMcpServer implements AutoCloseable {
                 CodeModeJobService.ExecutionEnvironment.class,
                 Objects.requireNonNullElse(optionalString(arguments, "environment"), "thread")
         );
-        CodeModeJobService.JobSnapshot submitted = project.admit(() -> this.jobs.submit(code, imports, side, environment));
+        CodeModeJobService.JobSnapshot submitted = project.admit(() -> {
+            String expected = optionalString(arguments, "expected_project_id");
+            if (expected != null && !expected.equals(project.profile().id()))
+                throw new IllegalStateException("The selected project does not match expected_project_id");
+            return this.jobs.submit(code, imports, side, environment);
+        });
         return this.jobs.waitFor(
                 submitted.jobId(),
                 optionalInteger(arguments, "wait_ms", 10_000)
@@ -247,7 +302,7 @@ public final class CompanionMcpServer implements AutoCloseable {
         if (!(value instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException(name + " must be an object");
         }
-        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             if (!(entry.getKey() instanceof String key)) {
                 throw new IllegalArgumentException(name + " must have string keys");

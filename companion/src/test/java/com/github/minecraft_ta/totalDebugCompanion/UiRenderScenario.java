@@ -5,6 +5,8 @@ import java.util.Arrays;
 /** Stable names for complete Companion UI states rendered by {@link UiDevHarness}. */
 enum UiRenderScenario {
     MAIN("main", "Main window with the code editor selected"),
+    PROJECTS("projects", "Project switcher with current and recent projects"),
+    PRISM("prism", "Prism instance library picker"),
     INACTIVE_TABS("inactive-tabs", "Main window with inactive editor tabs visible"),
     TAB_HOVER("tab-hover", "Inactive editor tab with its hover and close affordance visible"),
     EDITOR_CURRENT_LINE("editor-current-line", "Current editor line and hierarchy gutter markers"),

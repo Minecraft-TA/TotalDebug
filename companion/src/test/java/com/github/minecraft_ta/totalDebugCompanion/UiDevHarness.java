@@ -904,9 +904,13 @@ public final class UiDevHarness {
         CompanionProfile profile = new CompanionProfile(
                 "ui-dev",
                 root,
-                workspace
+                argument(args, "--project-reference=").map(Path::of).orElse(workspace)
         );
         application = new CompanionApplication(new CompanionLaunchConfiguration(root), "ui-development");
+        var secondary = argument(args, "--project-secondary=");
+        if (secondary.isPresent()) {
+            application.openProject(new CompanionProfile("ui-secondary", root.resolve("secondary"), Path.of(secondary.get()))).join();
+        }
         application.openProject(profile).join();
         installRuntimeFixture(indexFile, sampleClasses);
         writeSampleSource(sample);
@@ -965,6 +969,7 @@ public final class UiDevHarness {
 
         SwingUtilities.invokeAndWait(() -> {
             mainWindow = application.createWindow();
+            if (argument(args, "--project-reference=").isPresent()) mainWindow.setTitle("Companion project selector preview");
             FlatInspector.install("F9");
             FlatUIDefaultsInspector.install("F10");
             mainWindow.getEditorTabs().openEditorTab(new CodeView(mainWindow.editorContext(), 
