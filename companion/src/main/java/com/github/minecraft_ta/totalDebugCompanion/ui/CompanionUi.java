@@ -12,6 +12,7 @@ public interface CompanionUi {
     boolean canExit();
     void setSwitching(boolean switching);
     void refreshProfile();
+    void refreshProjects();
     void runtimeChanged();
     void setGameStatus(ServiceStatus status);
     void setMcpStatus(ServiceStatus status);

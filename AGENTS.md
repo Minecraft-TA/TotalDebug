@@ -8,6 +8,8 @@ Use the owning module's test task for feedback. Root check includes packaging an
 
 Keep one current implementation. Remove superseded development code directly instead of adding migrations, compatibility adapters or no-op fallbacks. Report the exact unmet requirement when an operation cannot run.
 
+UI text must serve an action: labels, actual state, errors, or necessary instructions. Do not add decorative subtitles, promotional copy, welcome phrases, or filler under headings. Do not replace removed filler with another explanatory sentence. Do not repeat the window title as a large heading inside a dialog.
+
 Keep the evaluator and compiled Code mode within their existing responsibilities. Changes to that architecture require an explicit design decision.
 
 Match checks to the changed behavior and affected consumers. Documentation-only changes need link and diff checks. Preserve unrelated working-tree changes and coordinate file ownership when another task is editing the same repository.

@@ -12,6 +12,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
@@ -24,12 +25,27 @@ import java.util.Objects;
 public final class PrimarySecondaryLabel extends JPanel {
     private final SearchHighlightLabel primary = new SearchHighlightLabel();
     private final SearchHighlightLabel secondary = new SearchHighlightLabel();
-    private final Component gap = Box.createHorizontalStrut(8);
+    private final Component gap;
+    private final boolean stacked;
     private boolean selected;
     private Color selectionForeground;
 
     public PrimarySecondaryLabel() {
-        setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
+        this(false);
+    }
+
+    public PrimarySecondaryLabel(boolean stacked) {
+        this.stacked = stacked;
+        this.gap = stacked ? Box.createVerticalStrut(3) : Box.createHorizontalStrut(8);
+        setLayout(new BoxLayout(this, stacked ? BoxLayout.Y_AXIS : BoxLayout.X_AXIS));
+        this.primary.setAlignmentX(Component.LEFT_ALIGNMENT);
+        this.secondary.setAlignmentX(Component.LEFT_ALIGNMENT);
+        if (stacked) {
+            this.primary.setMinimumSize(new Dimension());
+            this.secondary.setMinimumSize(new Dimension());
+            this.primary.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+            this.secondary.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        }
         setOpaque(false);
         this.primary.setOpaque(false);
         this.secondary.setOpaque(false);
@@ -103,7 +119,7 @@ public final class PrimarySecondaryLabel extends JPanel {
                 ? this.selectionForeground
                 : ThemeColors.text();
         this.primary.setForeground(primaryColor);
-        this.secondary.setForeground(this.selected ? primaryColor : ThemeColors.mutedText());
+        this.secondary.setForeground(this.selected ? primaryColor : stacked ? ThemeColors.secondaryText() : ThemeColors.mutedText());
         super.paintComponent(graphics);
     }
 

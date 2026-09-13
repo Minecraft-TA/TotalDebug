@@ -1,0 +1,11 @@
+prism-instance.svg and prism-instance_dark.svg are Prism Launcher's grass
+instance icon, copied unchanged for both themes.
+
+Source: https://github.com/PrismLauncher/PrismLauncher/blob/4b3597596480a18f468708e74ff9fd61bc58f052/launcher/resources/multimc/scalable/instances/grass.svg
+Creator: Prism Launcher
+Contributors credited in the SVG: AutiOne, Boba, ely, Fulmine, gon sawa,
+Pankakes, tobimori, Zeke.
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+
+The original attribution metadata is preserved in the SVG.

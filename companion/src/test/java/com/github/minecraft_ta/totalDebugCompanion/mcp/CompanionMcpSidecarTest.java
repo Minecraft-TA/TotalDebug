@@ -177,7 +177,7 @@ class CompanionMcpSidecarTest {
         return new CompanionMcpServer(
                 this.temporaryDirectory.resolve(instance).resolve("data"),
                 jobs,
-                port, new DebuggerMcpService(() -> null, name -> null), () -> scope
+                port, new DebuggerMcpService(() -> null, name -> null), () -> scope, new TestProjectControls()
         );
     }
 

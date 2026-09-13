@@ -49,6 +49,8 @@ The [MCP API](MCP.md) exposes source queries, Java execution and debugger operat
 
 ## Ownership
 
+`ProjectControls` exposes application-level selection and naming to the project menu and MCP. `CompanionApplication` implements it using its existing project worker; controls never replace scopes or manage runtime resources themselves. Registry list reads use an immutable published snapshot so Swing does not wait for persistence. Name changes refresh the selector separately from project/editor refresh.
+
 `CompanionApp` is the process bootstrap: launch arguments, process lock, logging, look and feel, and application construction. `CompanionApplication` owns the session, debugger, compiler, index loader and project worker. It can run without a UI; `CompanionUi` is the boundary for window lifecycle and navigation. One `ProjectScope` owns the selected profile, instance state, navigation history, pending navigation and nullable `RuntimeBinding`. A scope admits work while ACTIVE; SWITCHING rejects new work but can be cancelled after an editor veto or failed state flush; RETIRED is terminal. Check-and-submit uses the same lifecycle lock as runtime installation. Swing hops and debugger waits run outside that lock.
 
 The scope publishes one `RuntimeBinding` for the installed inventory. The binding groups its identity, source catalog, classpath, decompiler and reference search, and owns the native index after installation succeeds. `CompanionClassIndex` is only JDT's process-wide lookup hook; setting or clearing it never closes an index.

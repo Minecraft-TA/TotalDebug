@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.PrismInstancePicker;
 import javax.swing.JLabel;
 import javax.swing.JPopupMenu;
 import javax.swing.Timer;
@@ -96,6 +97,23 @@ final class UiScenarioDriver {
         expandTree();
         switch (scenario) {
             case MAIN -> selectCodeEditor(context);
+            case PROJECTS -> {
+                selectCodeEditor(context);
+                context.once("project-menu", () -> {
+                    var menu = mainWindow.getJMenuBar().getMenu(0);
+                    OffscreenPopupFactory.expectAt(menu, new Point(0, menu.getHeight()));
+                    menu.doClick(0);
+                });
+            }
+            case PRISM -> {
+                selectCodeEditor(context);
+                context.once("prism-picker", () -> {
+                    var menu = mainWindow.getJMenuBar().getMenu(0);
+                    OffscreenPopupFactory.expectAt(menu, new Point(0, menu.getHeight()));
+                    menu.doClick(0);
+                    SwingUtilities.invokeLater(() -> menu.getItem(1).doClick(0));
+                });
+            }
             case INACTIVE_TABS -> context.once("select-resource", () -> {
                 int lastTab = mainWindow.getEditorTabs().getTabCount() - 1;
                 mainWindow.getEditorTabs().setSelectedIndex(lastTab);
@@ -202,6 +220,10 @@ final class UiScenarioDriver {
     private boolean ready(UiRenderScenario scenario, ScenarioContext context) {
         return switch (scenario) {
             case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
+            case PROJECTS -> mainWindow.getJMenuBar().getMenu(0).isPopupMenuVisible();
+            case PRISM -> Arrays.stream(mainWindow.getOwnedWindows())
+                    .filter(PrismInstancePicker.class::isInstance).map(PrismInstancePicker.class::cast)
+                    .anyMatch(picker -> picker.isShowing() && !picker.isLoading());
             case INACTIVE_TABS -> mainWindow.getEditorTabs().getSelectedIndex()
                     == mainWindow.getEditorTabs().getTabCount() - 1;
             case TAB_HOVER -> {

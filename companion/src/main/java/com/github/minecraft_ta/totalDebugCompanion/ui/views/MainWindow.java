@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectSelector;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
@@ -50,6 +52,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final FileTreeView fileTreeView;
     private final NavigationService navigationService;
     private final JMenu scriptMenu = new JMenu("Script");
+    private final ProjectSelector projectSelector;
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
     private final ApplicationStatusBar statusBar;
     private final Action evaluateExpressionAction;
@@ -75,7 +78,9 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final FrameNavigation frameNavigation;
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
-                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit) {
+                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
+                      ProjectControls projects) {
+        this.projectSelector = new ProjectSelector(projects);
         this.project = project;
         this.debugger = debugger;
         this.insights = insights;
@@ -101,6 +106,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
         var menuBar = new JMenuBar();
         menuBar.setBorder(BorderFactory.createEmptyBorder());
+        menuBar.add(this.projectSelector);
 
         var fileMenu = new JMenu("File");
         fileMenu.add(new AbstractAction("Settings...", Icons.SETTINGS) {
@@ -175,6 +181,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void dispose() {
         if (!disposed) {
             disposed = true;
+            projectSelector.dispose();
             debugger.removeListener(debuggerListener);
             debuggerActions.close();
             debuggerShortcuts.close();
@@ -189,7 +196,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     @Override public boolean canExit() { return editorTabs.canCloseAll(); }
-    @Override public void setSwitching(boolean switching) { setEnabled(!switching); }
+    @Override public void setSwitching(boolean switching) {
+        setEnabled(!switching);
+        this.projectSelector.refresh();
+    }
     @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
@@ -420,11 +430,14 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     @Override public void refreshProfile() {
+        this.projectSelector.refresh();
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
         refreshActions();
     }
+
+    @Override public void refreshProjects() { this.projectSelector.refresh(); }
 
     @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");

@@ -35,6 +35,11 @@ public final class ThemeColors {
         return first(new Color(0x9FA2A8), "Label.disabledForeground", "TextField.placeholderForeground");
     }
 
+    /** Supporting information that remains readable, rather than disabled control text. */
+    public static Color secondaryText() {
+        return first(new Color(0x80858F), "Label.infoForeground", "Component.infoForeground");
+    }
+
     /** Primary label text. */
     public static Color text() {
         return first(new Color(0xD1D3D9), "Label.foreground");

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.PendingNavigation;
@@ -59,7 +60,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
-public final class CompanionApplication implements AutoCloseable {
+public final class CompanionApplication implements AutoCloseable, ProjectControls {
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
     private ScriptExecutionService scriptExecutions;
@@ -265,12 +266,35 @@ public final class CompanionApplication implements AutoCloseable {
         return scope;
     }
 
-    /** Application API; selection controls and MCP project tools are added separately. */
     public CompletableFuture<Void> openProject(CompanionProfile requested) {
+        return openProject(requested, null);
+    }
+
+    @Override public CompletableFuture<Void> openProject(CompanionProfile requested, String nameOverride) {
         Objects.requireNonNull(requested);
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
         return CompletableFuture.runAsync(() -> {
-            try { switchProject(requested); }
+            try {
+                switchProject(requested);
+                if (nameOverride != null) projects.rename(requested.id(), nameOverride);
+                onUi(CompanionUi::refreshProjects);
+            }
+            catch (IOException failure) { throw new CompletionException(failure); }
+        }, projectWorker);
+    }
+
+    @Override public CompletableFuture<Void> renameProject(String id, String nameOverride) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        return CompletableFuture.runAsync(() -> {
+            try { projects.rename(id, nameOverride); onUi(CompanionUi::refreshProjects); }
+            catch (IOException failure) { throw new CompletionException(failure); }
+        }, projectWorker);
+    }
+
+    @Override public CompletableFuture<Void> forgetProject(String id) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        return CompletableFuture.runAsync(() -> {
+            try { projects.forget(id); }
             catch (IOException failure) { throw new CompletionException(failure); }
         }, projectWorker);
     }
@@ -438,7 +462,11 @@ public final class CompanionApplication implements AutoCloseable {
     }
 
     private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
-        CompanionUi view = ui;
+        CompanionUi view;
+        synchronized (lifecycleLock) {
+            if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+            view = ui;
+        }
         if (view != null) SwingUtilities.invokeLater(() -> {
             if (ui != view || !selected.isActive() || selected.runtime() != installed || current != selected) return;
             view.runtimeChanged();
@@ -555,7 +583,7 @@ public final class CompanionApplication implements AutoCloseable {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit);
+                scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit, this);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {

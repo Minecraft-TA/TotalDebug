@@ -14,7 +14,9 @@ final class CompanionMcpToolCatalog {
     static final String SERVER_NAME = "totaldebug-companion";
     static final String SERVER_VERSION = "2.0.0";
     static final String INSTRUCTIONS =
-            "Resolve exact symbols before finding usages. Read the relevant source_target values with "
+            "Use project_list and project_open to select an instance, then check status for sources and connectivity. "
+                    + "Carry selected_project.id as expected_project_id when executing code. Opening does not launch or connect Minecraft. "
+                    + "Resolve exact symbols before finding usages. Read the relevant source_target values with "
                     + "runtime_source, and request class scope only when a member does not provide enough context. "
                     + "Use client_code_execute for client runtime facts and server_code_execute for server runtime "
                     + "facts. Both execute unrestricted Java. Return maps, collections, arrays, records, and scalar "
@@ -25,6 +27,7 @@ final class CompanionMcpToolCatalog {
     static final Map<String, Object> EXECUTE_INPUT_SCHEMA = objectSchema(
             Map.of(
                     "code", stringSchema("Body of a Java method that returns the structured result."),
+                    "expected_project_id", stringSchema("Require this selected project ID before submitting code."),
                     "imports", arraySchema(
                             stringSchema("Java import target, for example java.util.Map or static java.lang.Math.*.")
                     ),
@@ -47,6 +50,25 @@ final class CompanionMcpToolCatalog {
                     false,
                     "Report Companion, Minecraft, and debugger connectivity.",
                     emptySchema(),
+                    statusOutputSchema()
+            ),
+            spec(
+                    "project_list", false,
+                    "List remembered Minecraft projects, optionally including local Prism instances. Does not open or launch anything.",
+                    objectSchema(Map.of("include_prism", booleanSchema("Also discover instances in the default Prism directory.")), List.of()),
+                    toolOutputSchema(objectSchema(Map.of(
+                            "projects", arraySchema(projectSchema()),
+                            "prism_instances", arraySchema(projectSchema())
+                    ), List.of("projects", "prism_instances")))
+            ),
+            spec(
+                    "project_open", false,
+                    "Select a remembered project or Minecraft directory. Saves and closes editors; returns before sources finish indexing. Does not launch or connect Minecraft.",
+                    objectSchema(Map.of(
+                            "project_id", stringSchema("Remembered project ID. Supply this or directory, not both."),
+                            "directory", stringSchema("Minecraft game directory or Prism instance directory."),
+                            "name", stringSchema("Optional display-name override; normally inferred from the directory.")
+                    ), List.of()),
                     statusOutputSchema()
             ),
             spec(
@@ -210,10 +232,26 @@ final class CompanionMcpToolCatalog {
                 Map.of(
                         "companion_available", booleanSchema("Whether Companion is reachable."),
                         "minecraft_connected", booleanSchema("Whether Minecraft is connected to Companion."),
-                        "debugger_connected", booleanSchema("Whether the debugger is attached.")
+                        "debugger_connected", booleanSchema("Whether the debugger is attached."),
+                        "project_switching", booleanSchema("Whether Companion is changing projects."),
+                        "selected_project", projectSchema(),
+                        "sources", objectSchema(Map.of(
+                                "state", stringSchema("Source index state: waiting, preparing, building, loading, ready or failed."),
+                                "detail", stringValueSchema("Source readiness or failure detail.")
+                        ), List.of("state", "detail"))
                 ),
                 List.of("companion_available", "minecraft_connected", "debugger_connected")
         ));
+    }
+
+    private static Map<String, Object> projectSchema() {
+        return objectSchema(Map.of(
+                "id", stringSchema("Stable instance identity."),
+                "name", stringSchema("Display name."),
+                "directory", stringSchema("Minecraft game directory."),
+                "data_directory", stringSchema("TotalDebug instance data directory."),
+                "selected", booleanSchema("Whether this project is currently selected.")
+        ), List.of("id", "name", "directory", "data_directory", "selected"));
     }
 
     private static Map<String, Object> jobOutputSchema() {

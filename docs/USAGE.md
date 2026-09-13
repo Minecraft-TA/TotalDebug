@@ -22,7 +22,13 @@ Switching saves and closes project editors; a failed save prevents the switch. I
 
 If remembering the selection fails, the new project remains open and Companion reports the save error. Selecting it again retries persistence; until then, restarting reopens the last successfully remembered project.
 
-The application API supports listing known projects and opening a `CompanionProfile`, including one created with `CompanionProfile.forGame(path)`. Project-selector UI, project MCP tools, launcher controls and restoring open tabs are subsequent work.
+The project menu at the top left opens a Minecraft directory or an instance found in the default Prism installation. The selected project appears above recent projects, with readable names and directory labels. Game connectivity remains in the status bar. Names come from the instance folder above `minecraft` or `.minecraft`; development `run` folders include their parent name. Rename is optional, and Reset to automatic name removes the override. Removing a recent project never deletes its files; the currently selected project cannot be removed.
+
+The Prism picker shows instance artwork, Minecraft and loader versions, with the current project first. Search filters by name or version. Double-click an instance or select it and press Enter to open its project in Companion. This does not launch Minecraft or change Prism's configuration.
+
+New directory selections must contain `mods/` or existing `total-debug/` data. Unsupported folders are rejected before Companion creates files or changes the selected project. Code browsing currently requires a saved runtime inventory; opening an unindexed instance does not yet scan its mod JARs. See the [offline browsing and indexing plan](PROJECT_OPENING_PLAN.md) for the next step.
+
+The header uses the project name and the shared dropdown SVG. Current and recent projects use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Launcher controls, Companion-initiated game attachment and restoring open tabs remain subsequent work.
 
 ## Scripts and evaluation
 
