@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import java.util.List;
@@ -13,6 +14,7 @@ final class TestProjectControls implements ProjectControls {
     public CompanionProfile currentProject() { return null; }
     public boolean isSwitching() { return false; }
     public boolean isConnected() { return false; }
+    public IndexIdentity.Kind indexSourceKind() { return null; }
     public RuntimeIndexService.Status getRuntimeIndexStatus() {
         return new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "No project", null);
     }

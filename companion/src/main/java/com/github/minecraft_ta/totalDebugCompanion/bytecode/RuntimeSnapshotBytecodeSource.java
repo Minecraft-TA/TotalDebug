@@ -48,23 +48,29 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource,
 
     private final Path inventoryFile;
     private final String inventoryId;
+    private final LocalSourceGuard localGuard;
     private volatile boolean closed;
     private final ClassIndex classIndex;
     private final Map<Integer, Source> sourcesById;
 
     public static RuntimeSnapshotBytecodeSource fromIndexedSources(List<Source> sources, ClassIndex classIndex) {
-        return new RuntimeSnapshotBytecodeSource(sources, classIndex, null, null);
+        return new RuntimeSnapshotBytecodeSource(sources, classIndex, null, null, null);
+    }
+
+    public static RuntimeSnapshotBytecodeSource fromLocal(List<Source> sources, ClassIndex index, LocalSourceGuard guard) {
+        return new RuntimeSnapshotBytecodeSource(sources, index, null, null, Objects.requireNonNull(guard));
     }
 
     public static RuntimeSnapshotBytecodeSource fromRuntime(List<Source> sources, ClassIndex classIndex,
                                                             Path inventoryFile, String inventoryId) {
         return new RuntimeSnapshotBytecodeSource(sources, classIndex,
-                Objects.requireNonNull(inventoryFile), Objects.requireNonNull(inventoryId));
+                Objects.requireNonNull(inventoryFile), Objects.requireNonNull(inventoryId), null);
     }
 
-    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex, Path inventoryFile, String inventoryId) {
+    private RuntimeSnapshotBytecodeSource(List<Source> sources, ClassIndex classIndex, Path inventoryFile, String inventoryId, LocalSourceGuard localGuard) {
         this.inventoryFile = inventoryFile;
         this.inventoryId = inventoryId;
+        this.localGuard = localGuard;
         List<Source> requestedSources = List.copyOf(Objects.requireNonNull(sources, "sources"));
         if (requestedSources.isEmpty()) {
             throw new IllegalArgumentException("sources must not be empty");
@@ -124,9 +130,11 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource,
         }
 
         Source source = requireIndexedSource(internalName, indexedClass);
+        if (localGuard != null) localGuard.check(source.path());
         byte[] bytes = "jrt:/".equals(source.logicalUri())
                 ? readJdk(resourceName)
                 : readSource(source.path(), resourceName);
+        if (localGuard != null) localGuard.check(source.path());
         if (bytes == null) {
             throw new IOException("Runtime index maps " + internalName.replace('/', '.')
                     + " to " + source.logicalUri() + ", but " + resourceName + " is missing");
@@ -149,6 +157,7 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource,
     /** Also validates cached decompilation results that do not need to read any class bytes. */
     public void requireCurrent() throws IOException {
         ensureOpen();
+        if (localGuard != null) localGuard.checkAll();
         if (this.inventoryFile != null) {
             CacheFiles.requireIdentity(this.inventoryFile, "id", this.inventoryId);
         }

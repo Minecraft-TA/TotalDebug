@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.PendingNavigation;
@@ -55,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
@@ -301,7 +303,15 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     private void switchProject(CompanionProfile requested) throws IOException {
         validateProfile(requested);
-        if (requested.equals(currentProject())) { projects.select(requested); return; }
+        if (requested.equals(currentProject())) {
+            projects.select(requested);
+            if (!isConnected()) {
+                requireProject().refreshLocalSources();
+                runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
+                onUi(CompanionUi::runtimeChanged);
+            }
+            return;
+        }
         // Prepare the actual replacement before disturbing the current project.
         ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
         replacement.beginSwitch();
@@ -362,7 +372,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 synchronized (lifecycleLock) {
                     if (old != null) old.cancelSwitch();
                     try {
-                        if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
+                        if (installed && runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
                     } finally {
                         if (installed) replacement.cancelSwitch();
                         switching = false;
@@ -388,7 +398,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         ProjectScope replacement = ProjectScope.open(lifecycleLock, requested);
         synchronized (lifecycleLock) { current = replacement; }
         restoreProjectState(replacement);
-        if (runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory());
+        if (runtimeIndexService != null) runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
     }
 
     private void restoreProjectState(ProjectScope scope) {
@@ -401,8 +411,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!Files.isDirectory(requested.workspaceDirectory())) {
             throw new IOException("Minecraft workspace not found");
         }
-        Files.createDirectories(requested.dataDirectory());
-        setupDataDirectories(requested.dataDirectory());
+        Path scripts = new InstancePaths(requested.dataDirectory()).scripts();
+        if (Files.exists(scripts) && !Files.isDirectory(scripts)) throw new IOException("Scripts path is not a directory: " + scripts);
     }
 
     private void handleRuntimeInventory(RuntimeInventoryMessage message) {
@@ -429,8 +439,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     private void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot) {
-        installRuntimeSnapshot(snapshot, RuntimeSnapshotBytecodeSource.fromRuntime(snapshot.sources(), snapshot.index(),
-                snapshot.indexFile().getParent().resolve("inventory.json"), snapshot.inventoryId()));
+        installRuntimeSnapshot(snapshot, snapshot.isRuntime()
+                ? RuntimeSnapshotBytecodeSource.fromRuntime(snapshot.sources(), snapshot.index(),
+                snapshot.indexFile().getParent().resolve("inventory.json"), snapshot.inventoryId())
+                : RuntimeSnapshotBytecodeSource.fromLocal(snapshot.sources(), snapshot.index(), snapshot.localGuard()));
     }
 
     void installRuntimeSnapshot(RuntimeIndexService.ReadySnapshot snapshot,
@@ -439,6 +451,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (switching) throw new IllegalStateException("Project is switching");
             ProjectScope scope = requireProject();
             CompanionProfile current = scope.profile();
+            var previous = scope.runtime();
+            if (previous != null && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
+                    && previous.snapshot().signature().equals(snapshot.signature())) {
+                bytecodeSource.close();
+                if (previous.snapshot() != snapshot) snapshot.close();
+                return;
+            }
             RuntimeBinding replacement;
             try {
                 replacement = new RuntimeBinding(snapshot, current.dataDirectory(), bytecodeSource, scriptCompiler, codeInsightService);
@@ -451,6 +470,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 // Queue before publication: rejected scheduling still leaves ownership with the loader.
                 // The follow-up acquires this lock after the loader finishes its installation callback.
                 projectWorker.execute(() -> finishRuntimeInstallation(replacement, scope));
+                if (snapshot.localGuard() != null) snapshot.localGuard().onInvalidated(failure -> refreshChangedLocalSources(scope, snapshot));
                 CompanionClassIndex.set(snapshot.index());
                 scope.bindRuntime(replacement);
                 replacement.acceptOwnership();
@@ -458,6 +478,25 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 replacement.close();
                 throw failure;
             }
+        }
+    }
+
+    private void refreshChangedLocalSources(ProjectScope scope, RuntimeIndexService.ReadySnapshot snapshot) {
+        if (closed) return;
+        try { projectWorker.execute(() -> {
+            synchronized (lifecycleLock) {
+                if (closed || current != scope || !scope.isActive() || scope.runtime() == null || scope.runtime().snapshot() != snapshot) return;
+                closeRuntime();
+            }
+            try {
+                scope.refreshLocalSources();
+                runtimeIndexService.restore(scope.profile().dataDirectory(), scope.profile().workspaceDirectory());
+            } catch (IOException failure) {
+                runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage());
+            }
+            onUi(CompanionUi::runtimeChanged);
+        }); } catch (RejectedExecutionException failure) {
+            if (!closed) throw failure;
         }
     }
 
@@ -493,11 +532,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             System.getLogger(CompanionApplication.class.getName()).log(System.Logger.Level.WARNING,
                     "Runtime installed, but debugger refresh failed", failure);
         }
-    }
-
-    static void setupDataDirectories(Path rootPath) throws IOException {
-
-        Files.createDirectories(new InstancePaths(rootPath).scripts());
     }
 
     private void prewarmJavaParser() {
@@ -637,7 +671,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             onUi(view -> view.setMcpStatus(status));
         }
     }
-    private void updateRuntimeIndexUi(RuntimeIndexService.Status status) { onUi(view -> view.setRuntimeIndexStatus(status)); }
+    private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
+        if (status.phase() == RuntimeIndexService.Phase.EMPTY) {
+            synchronized (lifecycleLock) { closeRuntime(); }
+            onUi(CompanionUi::runtimeChanged);
+        }
+        onUi(view -> view.setRuntimeIndexStatus(status));
+    }
     public void focusWindow() { onUi(CompanionUi::focus); }
 
     public void exit() {
@@ -764,6 +804,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         return service == null
                 ? new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "Waiting for runtime inventory", null)
                 : service.status();
+    }
+
+    @Override public IndexIdentity.Kind indexSourceKind() {
+        var installed = currentRuntime();
+        return installed == null ? null : installed.snapshot().identity().kind();
     }
 
     private CompanionProfile requireProfile() {

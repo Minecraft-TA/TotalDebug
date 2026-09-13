@@ -47,7 +47,7 @@ public final class RuntimeBinding implements AutoCloseable {
     public void attach() {
         if (closed || attached) throw new IllegalStateException("Runtime binding cannot be attached");
         attached = true;
-        compiler.bind(snapshot);
+        compiler.bind(snapshot.isRuntime() ? snapshot : null);
         insights.rebind(snapshot::index, sources);
     }
 

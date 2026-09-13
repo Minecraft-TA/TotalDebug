@@ -25,6 +25,7 @@ class ProjectControlsTest {
             var a = CompanionProfile.forGame(Files.createDirectories(root.resolve("ATM10/minecraft")));
             Files.createDirectory(a.workspaceDirectory().resolve("mods"));
             var b = CompanionProfile.forGame(Files.createDirectories(root.resolve("TotalDebug/run")));
+            Files.createDirectory(b.workspaceDirectory().resolve("mods"));
             var server = app.startMcpServer(ProjectSwitchJobs.create(), 0);
             String endpoint = server.endpointUrl();
             try (var client = McpClient.sync(HttpClientStreamableHttpTransport.builder(endpoint.substring(0, endpoint.length() - 4))
@@ -69,7 +70,7 @@ class ProjectControlsTest {
                 assertEquals("ATM", app.projects().getFirst().name());
                 assertEquals(b, other.currentProject(), "MCP selection must not affect another application");
                 app.forgetProject(b.id()).join();
-                assertTrue(Files.isDirectory(b.dataDirectory()));
+                assertTrue(Files.isDirectory(b.workspaceDirectory().resolve("mods")));
                 assertEquals(1, app.projects().size());
             }
         }

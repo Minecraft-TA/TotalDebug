@@ -131,7 +131,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs, editorContext());
+                var window = new CreateScriptWindow(editorTabs, editorContext(), MainWindow.this::refreshRuntimeSources);
                 window.setVisible(true);
                 window.setLocationRelativeTo(MainWindow.this);
             }
@@ -200,7 +200,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         setEnabled(!switching);
         this.projectSelector.refresh();
     }
-    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); }
+    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
@@ -478,7 +478,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private void refreshActions() {
         boolean hasProfile = project.get() != null;
         this.scriptMenu.setVisible(hasProfile);
-        this.evaluateExpressionAction.setEnabled(scripts.isConnected());
+        this.evaluateExpressionAction.setEnabled(scripts.isReady());
         this.newScriptAction.setEnabled(hasProfile);
         this.debuggerState.setVisible(hasProfile);
     }

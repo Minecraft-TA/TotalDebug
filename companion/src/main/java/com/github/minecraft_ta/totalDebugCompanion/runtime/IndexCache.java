@@ -21,17 +21,22 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Objects;
+import java.util.Map;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 
 /** The native index entry and its source identities are committed as one replaceable archive. */
 final class IndexCache {
-    static final int FORMAT = 1;
+    static final int FORMAT = 2;
     private static final String MANIFEST = "manifest.json";
 
-    record Manifest(String inventoryId, List<Source> sources) {
+    record Manifest(IndexIdentity identity, List<Source> sources, String detail) {
+        Manifest(String inventoryId, List<Source> sources) { this(IndexIdentity.runtime(inventoryId), sources, ""); }
+        String inventoryId() { return identity.kind() == IndexIdentity.Kind.RUNTIME ? identity.value() : null; }
         Manifest {
-            if (inventoryId == null || inventoryId.isBlank()) {
-                throw new IllegalArgumentException("The index must have an inventory identity");
-            }
+            Objects.requireNonNull(identity);
+            Objects.requireNonNull(detail);
             sources = List.copyOf(sources);
             if (sources.isEmpty()) {
                 throw new IllegalArgumentException("The index must have source metadata");
@@ -50,14 +55,14 @@ final class IndexCache {
     static ClassIndex write(Path target, ClassIndex index, Manifest manifest, Runnable checkpoint) throws IOException {
         ClassIndex[] verified = new ClassIndex[1];
         boolean published = false;
-        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.cache-publish")) {
+        try (var phase = RuntimePhase.start("index.cache-publish")) {
             AtomicFiles.replace(target, staged -> {
                 checkpoint.run();
                 // JIndex writes a ZIP with a Zstd entry. Copy it raw, preserving its
                 // compression and position: the native reader expects index at entry zero.
                 Path nativeFile = AtomicFiles.temporaryFile(staged.getParent());
                 try {
-                    try (var save = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.native-save")) {
+                    try (var save = RuntimePhase.start("index.native-save")) {
                         index.saveToFile(nativeFile.toString());
                     }
                     checkpoint.run();
@@ -82,7 +87,7 @@ final class IndexCache {
                     checkpoint.run();
                     // Native loading consumes the archive and releases its file handle. The
                     // validated object remains usable after the staged file is renamed.
-                    try (var validation = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("index.cache-validation")) {
+                    try (var validation = RuntimePhase.start("index.cache-validation")) {
                         verified[0] = ClassIndex.fromFile(staged.toString());
                     }
                     checkpoint.run();
@@ -126,13 +131,20 @@ final class IndexCache {
                 sources.add(new Source(id, path, JsonFiles.string(source, "logicalUri"),
                         RuntimeModule.fromJson(JsonFiles.object(source, "module"))));
             }
-            return new Manifest(JsonFiles.string(json, "inventoryId"), sources);
+            var fingerprints = new LinkedHashMap<Path, String>();
+            for (var entry : JsonFiles.object(json, "fingerprints").entrySet()) {
+                fingerprints.put(Path.of(URI.create(entry.getKey())), entry.getValue().getAsString());
+            }
+            var identity = new IndexIdentity(IndexIdentity.Kind.valueOf(JsonFiles.string(json, "sourceKind")),
+                    JsonFiles.string(json, "sourceIdentity"), fingerprints);
+            return new Manifest(identity, sources, json.has("detail") ? JsonFiles.string(json, "detail") : "");
         } catch (RuntimeException exception) {
             throw new IOException("Invalid runtime index " + file + ": " + exception.getMessage(), exception);
         }
     }
 
     static void requireSources(Manifest manifest) throws IOException {
+        manifest.identity().requireSourcesUnchanged();
         for (Source source : manifest.sources()) {
             Path path = source.path();
             if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {
@@ -144,7 +156,13 @@ final class IndexCache {
     private static JsonObject toJson(Manifest manifest) {
         JsonObject json = new JsonObject();
         json.addProperty("format", FORMAT);
-        json.addProperty("inventoryId", manifest.inventoryId());
+        json.addProperty("sourceKind", manifest.identity().kind().name());
+        json.addProperty("sourceIdentity", manifest.identity().value());
+        if (!manifest.detail().isBlank()) json.addProperty("detail", manifest.detail());
+        var fingerprints = new JsonObject();
+        manifest.identity().fingerprints().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> fingerprints.addProperty(entry.getKey().toUri().toString(), entry.getValue()));
+        json.add("fingerprints", fingerprints);
         JsonArray sources = new JsonArray();
         for (Source source : manifest.sources()) {
             JsonObject value = new JsonObject();

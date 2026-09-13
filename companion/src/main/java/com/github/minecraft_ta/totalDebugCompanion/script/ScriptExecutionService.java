@@ -22,13 +22,14 @@ public final class ScriptExecutionService {
     }
 
     public boolean isConnected() { return connected.getAsBoolean(); }
+    public boolean isReady() { return isConnected() && compiler.hasRuntime(); }
 
     public boolean run(ProjectScope project, int id, String source, boolean serverSide,
                        ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
         if (project == null || !project.isActive() || !isConnected()) return false;
         try {
             return project.admit(() -> {
-                if (!isConnected()) return false;
+                if (!isReady()) return false;
                 compiler.submit(id, source, serverSide, environment, failureHandler);
                 return true;
             });

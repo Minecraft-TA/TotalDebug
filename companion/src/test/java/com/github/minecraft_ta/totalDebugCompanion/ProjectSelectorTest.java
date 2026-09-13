@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectSelector;
@@ -42,6 +43,7 @@ class ProjectSelectorTest {
                     public CompanionProfile currentProject() { return null; }
                     public boolean isSwitching() { return false; }
                     public boolean isConnected() { return false; }
+                    public IndexIdentity.Kind indexSourceKind() { return null; }
                     public RuntimeIndexService.Status getRuntimeIndexStatus() { throw new AssertionError(); }
                     public CompletableFuture<Void> openProject(CompanionProfile selected, String name) {
                         opened.incrementAndGet();

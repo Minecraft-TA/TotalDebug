@@ -77,7 +77,7 @@ public final class ProjectSelector extends JMenu {
         var recent = known.stream().filter(project -> !project.profile().equals(current)).toList();
         if (!recent.isEmpty()) {
             addSeparator();
-            section("Recent projects");
+            section("Projects");
             recent.forEach(this::addProject);
         }
     }
@@ -108,7 +108,7 @@ public final class ProjectSelector extends JMenu {
             options.add("Reset to automatic name").addActionListener(event -> finish(projects.renameProject(project.profile().id(), null)));
         }
         if (!project.profile().equals(projects.currentProject())) {
-            options.add("Remove from recent projects").addActionListener(event -> finish(projects.forgetProject(project.profile().id())));
+            options.add("Remove from projects").addActionListener(event -> finish(projects.forgetProject(project.profile().id())));
         }
         item.setComponentPopupMenu(options);
         add(item);

@@ -121,8 +121,7 @@ public class FileTreeView extends JScrollPane {
 
     private RuntimeSourceCatalog sourceCatalog() {
         var scope = project.get();
-        var runtime = scope == null ? null : scope.runtime();
-        return runtime == null ? RuntimeSourceCatalog.empty() : runtime.sources();
+        return scope == null ? RuntimeSourceCatalog.empty() : scope.sources();
     }
 
     public void reloadProfile() {
@@ -132,19 +131,21 @@ public class FileTreeView extends JScrollPane {
             return;
         }
         var binding = scope.runtime();
-        RuntimeSourceCatalog catalog = binding == null ? RuntimeSourceCatalog.empty() : binding.sources();
+        RuntimeSourceCatalog catalog = scope.sources();
         List<DirectoryTreeItem> rootItems = new ArrayList<>();
-        var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts(), true);
-        scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
-        rootItems.add(scripts);
-        if (!catalog.modules().isEmpty()) {
+        if (Files.isDirectory(scope.paths().scripts())) {
+            var scripts = this.tree.getItemFactory().createFileSystemDirectoryItem(scope.paths().scripts(), true);
+            scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
+            rootItems.add(scripts);
+        }
+        if (binding != null && !catalog.modules().isEmpty()) {
             rootItems.add(new DecompiledSourcesTreeItem(this.tree, binding.decompiler()));
         }
 
         if (!catalog.modules().isEmpty()) {
             var runtime = new DirectoryTreeItem("runtime") {
                 {
-                    setPresentation(PrimarySecondaryText.primary("Runtime"));
+                    setPresentation(PrimarySecondaryText.primary(binding == null ? "Mods" : binding.snapshot().isRuntime() ? "Runtime" : "Sources"));
                 }
 
                 @Override

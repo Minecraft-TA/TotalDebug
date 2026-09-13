@@ -1,6 +1,6 @@
 # Project opening and offline indexing
 
-Status: implementation plan. No application changes are included in this document.
+Status: implemented on `codex/offline-project-indexing`; final validation and review are recorded with the change. The sections below retain the agreed scope. A real game launch remains a separate verification action; automated tests exercise runtime announcements and source handover.
 
 Opening an instance must expose useful content without starting Minecraft. Restore existing TotalDebug data first. Otherwise browse the installed mod JARs and build a local index automatically. When Minecraft publishes its runtime, replace the local index and retain the runtime snapshot for subsequent offline use.
 

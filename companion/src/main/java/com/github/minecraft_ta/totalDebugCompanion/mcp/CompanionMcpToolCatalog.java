@@ -66,7 +66,7 @@ final class CompanionMcpToolCatalog {
                     "Select a remembered project or Minecraft directory. Saves and closes editors; returns before sources finish indexing. Does not launch or connect Minecraft.",
                     objectSchema(Map.of(
                             "project_id", stringSchema("Remembered project ID. Supply this or directory, not both."),
-                            "directory", stringSchema("Minecraft game directory or Prism instance directory."),
+                            "directory", stringSchema("Minecraft or Prism instance directory, or its mods/total-debug child."),
                             "name", stringSchema("Optional display-name override; normally inferred from the directory.")
                     ), List.of()),
                     statusOutputSchema()
@@ -236,9 +236,10 @@ final class CompanionMcpToolCatalog {
                         "project_switching", booleanSchema("Whether Companion is changing projects."),
                         "selected_project", projectSchema(),
                         "sources", objectSchema(Map.of(
-                                "state", stringSchema("Source index state: waiting, preparing, building, loading, ready or failed."),
+                                "state", stringSchema("Source index state: waiting, preparing, building, loading, ready, empty or failed."),
+                                "kind", stringSchema("Installed source kind: local, runtime or none. Connectivity is reported separately."),
                                 "detail", stringValueSchema("Source readiness or failure detail.")
-                        ), List.of("state", "detail"))
+                        ), List.of("state", "detail", "kind"))
                 ),
                 List.of("companion_available", "minecraft_connected", "debugger_connected")
         ));

@@ -140,7 +140,7 @@ public final class NavigationService {
             if (!isCurrent(context)) return;
             this.tabs.closeMatching(editor -> editor.runtimeBinding() != context.runtime()
                     && (editor.getNavigationTarget() instanceof NavigationTarget.RuntimeClass
-                    || editor.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry
+                    || editor.getNavigationTarget() instanceof NavigationTarget.ArchiveEntry entry && !isLocalModArchive(entry.archive())
                     || editor.getNavigationTarget() instanceof NavigationTarget.SymbolUsages
                     || editor.getNavigationTarget() instanceof NavigationTarget.LiteralUsages));
         });
@@ -451,12 +451,17 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> openResource(ContentSource source, Activation activation) {
-        RuntimeBinding installed = source instanceof ArchiveEntrySource ? captureContext().runtime() : null;
+        RuntimeBinding installed = source instanceof ArchiveEntrySource entry && !isLocalModArchive(entry.archivePath())
+                ? captureContext().runtime() : null;
         return dispatchNavigation(() -> openRuntimeEditor(installed,
                 ResourceView.class,
                 view -> view.source().identity().equals(source.identity()),
                 () -> new ResourceView(editors.get(), source, installed)
         ).thenApply(ignored -> null), activation);
+    }
+
+    private boolean isLocalModArchive(Path archive) {
+        return project != null && archive.toAbsolutePath().normalize().startsWith(project.profile().workspaceDirectory().resolve("mods"));
     }
 
     private <T extends IEditorPanel> CompletableFuture<T> openRuntimeEditor(

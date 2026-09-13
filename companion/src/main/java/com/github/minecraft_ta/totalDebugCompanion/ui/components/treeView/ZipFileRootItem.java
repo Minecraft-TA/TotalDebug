@@ -8,6 +8,7 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 
 import javax.swing.*;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,9 +59,9 @@ public class ZipFileRootItem extends DirectoryTreeItem {
                         new Node(index == -1 ? name : name.substring(index + 1), el.getSize(), el.getCompressedSize())
                 );
             }
-        } catch (Throwable e) {
-            e.printStackTrace();
-            throw new IllegalArgumentException();
+        } catch (IOException e) {
+            this.root = null;
+            throw new IllegalArgumentException("Unable to read archive " + path + ": " + e.getMessage(), e);
         }
     }
 
