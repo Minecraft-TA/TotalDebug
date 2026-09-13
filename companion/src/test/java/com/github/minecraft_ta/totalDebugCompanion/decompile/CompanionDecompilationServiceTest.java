@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResul
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.JavaDecompiler;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
+import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
+import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,6 +27,39 @@ import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSou
 class CompanionDecompilationServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void cachedSourceReadsDoNotBlockTheEventDispatchThread() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)));
+             var service = service(bytecodeSource(List.of(classes), index), new AtomicInteger(), "cached")) {
+            service.load(CacheFixture.class.getName()).get(5, TimeUnit.SECONDS);
+            var blocker = CompletableFuture.runAsync(() -> {
+                try {
+                    CacheFiles.locked(service.cacheDirectory(), () -> {
+                        locked.countDown();
+                        assertTrue(release.await(10, TimeUnit.SECONDS));
+                        return null;
+                    });
+                } catch (Exception failure) { throw new AssertionError(failure); }
+            });
+            var returned = new CompletableFuture<CompletableFuture<DecompiledSource>>();
+            try {
+                assertTrue(locked.await(5, TimeUnit.SECONDS));
+                SwingUtilities.invokeLater(() -> {
+                    try { returned.complete(service.load(CacheFixture.class.getName())); }
+                    catch (Throwable failure) { returned.completeExceptionally(failure); }
+                });
+                var reading = returned.get(2, TimeUnit.SECONDS);
+                assertTrue(!reading.isDone(), "The read should still be waiting for its cache lock");
+                release.countDown();
+                assertEquals(CacheFixture.class.getName(), reading.get(5, TimeUnit.SECONDS).binaryName());
+            } finally { release.countDown(); blocker.get(5, TimeUnit.SECONDS); }
+        }
+    }
 
     @Test
     void reusesTheAuthoritativeDecompiledSourceCache() throws Exception {
