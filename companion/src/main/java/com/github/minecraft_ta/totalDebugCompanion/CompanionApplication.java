@@ -462,7 +462,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {
-        CompanionUi view = ui;
+        CompanionUi view;
+        synchronized (lifecycleLock) {
+            if (!selected.isActive() || selected.runtime() != installed || current != selected) return;
+            view = ui;
+        }
         if (view != null) SwingUtilities.invokeLater(() -> {
             if (ui != view || !selected.isActive() || selected.runtime() != installed || current != selected) return;
             view.runtimeChanged();

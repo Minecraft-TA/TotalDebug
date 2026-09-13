@@ -23,7 +23,13 @@ import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import javax.swing.SwingUtilities;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ApplicationNavigationTest {
@@ -38,10 +44,40 @@ class ApplicationNavigationTest {
             app.openDebugFrame(frame, true);
             assertFalse(ui.navigation.isDone(), "Frame navigation must wait for an installed runtime");
             var snapshot = RuntimeInstallationTest.snapshot(directory, "navigation");
+            advanceRuntimeFollowUpBeforePublication(app);
             try { app.installRuntimeSnapshot(snapshot, RuntimeSnapshotBytecodeSource.fromIndexedSources(snapshot.sources(), snapshot.index())); }
             catch (RuntimeException failure) { snapshot.close(); throw failure; }
             assertEquals(new NavigationTarget.RuntimeLine("java.lang.Object", 7), ui.navigation.get(10, TimeUnit.SECONDS));
         }
+    }
+
+    /** Force the project worker and EDT to run while installation still holds the lifecycle lock. */
+    private static void advanceRuntimeFollowUpBeforePublication(CompanionApplication app) throws Exception {
+        var field = CompanionApplication.class.getDeclaredField("projectWorker");
+        field.setAccessible(true);
+        var delegate = (ExecutorService) field.get(app);
+        var nextExecution = new AtomicBoolean(true);
+        var controlled = Proxy.newProxyInstance(ExecutorService.class.getClassLoader(), new Class<?>[]{ExecutorService.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("execute") && nextExecution.getAndSet(false)) {
+                        var started = new CountDownLatch(1);
+                        var worker = new AtomicReference<Thread>();
+                        delegate.execute(() -> {
+                            worker.set(Thread.currentThread());
+                            started.countDown();
+                            ((Runnable) arguments[0]).run();
+                        });
+                        assertTrue(started.await(3, TimeUnit.SECONDS));
+                        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                        while (worker.get().getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) Thread.sleep(1);
+                        assertEquals(Thread.State.BLOCKED, worker.get().getState(), "Follow-up must reach the held lifecycle lock");
+                        SwingUtilities.invokeAndWait(() -> { });
+                        return null;
+                    }
+                    try { return method.invoke(delegate, arguments); }
+                    catch (InvocationTargetException failure) { throw failure.getCause(); }
+                });
+        field.set(app, controlled);
     }
 
     @Test void replacementRejectsRequestsUntilUiRestorationFinishes() throws Exception {
