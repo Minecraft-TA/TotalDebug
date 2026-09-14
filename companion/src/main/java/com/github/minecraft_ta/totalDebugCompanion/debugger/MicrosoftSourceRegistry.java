@@ -1,32 +1,19 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.expression.DebuggerTypeScope;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.microsoft.java.debug.core.JavaBreakpointLocation;
 import com.microsoft.java.debug.core.adapter.ISourceLookUpProvider;
 import com.microsoft.java.debug.core.adapter.SourceType;
 import com.microsoft.java.debug.core.protocol.Types;
-import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.ASTParser;
-import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.Initializer;
-import org.eclipse.jdt.core.dom.LambdaExpression;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
 
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /** Source lookup and exact source-line ownership for the Microsoft Java debug adapter. */
 final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
@@ -269,134 +256,12 @@ final class MicrosoftSourceRegistry implements ISourceLookUpProvider {
         }
     }
 
-    private record RegisteredSource(
-            DebugEngine.Source source,
-            DebuggerTypeScope typeScope,
-            List<TypeRegion> typeRegions
-    ) {
+    private record RegisteredSource(DebugEngine.Source source, DebuggerTypeScope typeScope) {
         static RegisteredSource parse(DebugEngine.Source source) {
-            ASTParser parser = JdtConfiguration.createParser();
-            parser.setKind(ASTParser.K_COMPILATION_UNIT);
-            parser.setSource(source.contents().toCharArray());
-            parser.setStatementsRecovery(true);
-            CompilationUnit unit = (CompilationUnit) parser.createAST(null);
-            String parseErrors = Arrays.stream(unit.getProblems())
-                    .filter(org.eclipse.jdt.core.compiler.IProblem::isError)
-                    .map(problem -> "line " + problem.getSourceLineNumber() + ": " + problem.getMessage())
-                    .collect(Collectors.joining("; "));
-            if (!parseErrors.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Unable to parse debugger source " + source.uri() + ": " + parseErrors
-                );
-            }
-
-            String packageName = unit.getPackage() == null
-                    ? packageName(source.binaryName())
-                    : unit.getPackage().getName().getFullyQualifiedName();
-            Map<AbstractTypeDeclaration, String> names = new HashMap<>();
-            List<TypeRegion> regions = new ArrayList<>();
-            unit.accept(new org.eclipse.jdt.core.dom.ASTVisitor() {
-                @Override
-                public void preVisit(ASTNode node) {
-                    if (!(node instanceof AbstractTypeDeclaration declaration) || isLocalType(declaration)) {
-                        return;
-                    }
-                    AbstractTypeDeclaration parent = enclosingNamedType(declaration.getParent());
-                    String simpleName = declaration.getName().getIdentifier();
-                    String binaryName;
-                    if (parent != null) {
-                        String parentName = names.get(parent);
-                        if (parentName == null) {
-                            return;
-                        }
-                        binaryName = parentName + "$" + simpleName;
-                    } else if (simpleBinaryName(source.binaryName()).equals(simpleName)) {
-                        binaryName = source.binaryName();
-                    } else {
-                        binaryName = packageName.isBlank() ? simpleName : packageName + "." + simpleName;
-                    }
-                    names.put(declaration, binaryName);
-                    int firstLine = unit.getLineNumber(declaration.getStartPosition());
-                    int lastLine = unit.getLineNumber(
-                            declaration.getStartPosition() + Math.max(0, declaration.getLength() - 1)
-                    );
-                    if (firstLine > 0 && lastLine >= firstLine) {
-                        regions.add(new TypeRegion(firstLine, lastLine, binaryName));
-                    }
-                }
-            });
-            regions.sort(Comparator.comparingInt(TypeRegion::span));
-            return new RegisteredSource(
-                    source,
-                    DebuggerTypeScope.parse(source),
-                    List.copyOf(regions)
-            );
+            source.document().binaryNames(); // Validate the source before publishing a registration.
+            return new RegisteredSource(source, DebuggerTypeScope.from(source.document()));
         }
-
-        String binaryNameAt(int line) {
-            return this.typeRegions.stream()
-                    .filter(region -> region.contains(line))
-                    .map(TypeRegion::binaryName)
-                    .findFirst()
-                    .orElse(this.source.binaryName());
-        }
-
-        List<String> binaryNames() {
-            List<String> result = new ArrayList<>(this.typeRegions.size() + 1);
-            result.add(this.source.binaryName());
-            this.typeRegions.stream()
-                    .map(TypeRegion::binaryName)
-                    .filter(name -> !result.contains(name))
-                    .forEach(result::add);
-            return result;
-        }
-
-        private static boolean isLocalType(AbstractTypeDeclaration declaration) {
-            for (ASTNode current = declaration.getParent(); current != null; current = current.getParent()) {
-                if (current instanceof AbstractTypeDeclaration) {
-                    return false;
-                }
-                if (current instanceof MethodDeclaration
-                        || current instanceof Initializer
-                        || current instanceof LambdaExpression
-                        || current instanceof AnonymousClassDeclaration) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static AbstractTypeDeclaration enclosingNamedType(ASTNode node) {
-            for (ASTNode current = node; current != null; current = current.getParent()) {
-                if (current instanceof AbstractTypeDeclaration declaration) {
-                    return declaration;
-                }
-            }
-            return null;
-        }
-
-        private static String packageName(String binaryName) {
-            String topLevelName = binaryName.substring(0, binaryName.indexOf('$') < 0
-                    ? binaryName.length()
-                    : binaryName.indexOf('$'));
-            int separator = topLevelName.lastIndexOf('.');
-            return separator < 0 ? "" : topLevelName.substring(0, separator);
-        }
-
-        private static String simpleBinaryName(String binaryName) {
-            int packageSeparator = binaryName.lastIndexOf('.');
-            int nestedSeparator = binaryName.lastIndexOf('$');
-            return binaryName.substring(Math.max(packageSeparator, nestedSeparator) + 1);
-        }
-    }
-
-    private record TypeRegion(int firstLine, int lastLine, String binaryName) {
-        boolean contains(int line) {
-            return line >= this.firstLine && line <= this.lastLine;
-        }
-
-        int span() {
-            return this.lastLine - this.firstLine;
-        }
+        String binaryNameAt(int line) { return source.document().ownerAtLine(line); }
+        List<String> binaryNames() { return source.document().binaryNames(); }
     }
 }

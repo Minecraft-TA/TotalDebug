@@ -29,6 +29,23 @@ class CompanionDecompilationServiceTest {
     Path temporaryDirectory;
 
     @Test
+    void publishesPreparedDocumentsForColdAndCachedEditorLoads() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        try (var index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)));
+             var service = service(bytecodeSource(List.of(classes), index), new AtomicInteger(), "prepared")) {
+            for (int load = 0; load < 2; load++) {
+                var source = service.load(CacheFixture.class.getName()).get(5, TimeUnit.SECONDS);
+                // Assert preparation before posting to Swing, without relying on timing thresholds.
+                var syntax = source.document().getClass().getDeclaredField("unit");
+                syntax.setAccessible(true);
+                org.junit.jupiter.api.Assertions.assertNotNull(syntax.get(source.document()));
+                SwingUtilities.invokeAndWait(() -> source.document().classFallback(source.binaryName()));
+            }
+        }
+    }
+
+    @Test
     void cachedSourceReadsDoNotBlockTheEventDispatchThread() throws Exception {
         byte[] bytes = classBytes(CacheFixture.class);
         Path classes = writeClass(CacheFixture.class, bytes);

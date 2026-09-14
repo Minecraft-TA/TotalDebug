@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
-import com.github.minecraft_ta.totalDebugCompanion.decompile.SourceFileNavigation;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
 import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
@@ -202,19 +201,19 @@ public final class NavigationService {
             navigation = switch (target) {
                 case NavigationTarget.RuntimeClass runtimeClass -> openRuntimeSource(
                         runtimeClass.binaryName(),
-                        source -> SourceFileNavigation.topLevelTypeOffset(source.contents()),
+                        source -> source.document().classFallback(source.binaryName()).caret(),
                         -1,
                         activation
                 );
                 case NavigationTarget.RuntimeDeclaration declaration -> openRuntimeSource(
                         declaration.member().ownerClassName(),
-                        source -> SourceFileNavigation.memberOffset(source.contents(), declaration.member()),
+                        source -> source.document().navigate(declaration.member()).caret(),
                         -1,
                         activation
                 );
                 case NavigationTarget.RuntimeLine line -> openRuntimeSource(
                         line.binaryName(),
-                        source -> SourceFileNavigation.lineOffset(source.contents(), line.displayedLine()),
+                        source -> source.document().lineOffset(line.displayedLine()),
                         line.displayedLine(),
                         activation
                 );
@@ -227,11 +226,10 @@ public final class NavigationService {
                 case NavigationTarget.ArchiveDirectory directory -> revealArchivePath(directory);
                 case NavigationTarget.UsageSite site -> openRuntimeSource(
                         site.usage().location().className(),
-                        source -> SourceFileNavigation.usageOffset(
-                                source.contents(),
+                        source -> source.document().usage(
                                 site.usage().location(),
                                 site.query()
-                        ),
+                        ).caret(),
                         -1,
                         activation
                 );
@@ -448,7 +446,7 @@ public final class NavigationService {
                 return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
-                        () -> new CodeView(editors.get(), source, offset, SourceFileNavigation.location(source), installed)
+                        () -> new CodeView(editors.get(), source, offset, source.location(), installed)
                 ).thenAccept(view -> {
                     view.navigateToOffset(offset);
                     if (executionLine > 0) {
