@@ -7,6 +7,8 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import java.nio.file.Files;
@@ -23,6 +25,10 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.io.IOException;
+import java.time.Duration;
+import java.util.Random;
+import jdk.jfr.Recording;
+import jdk.jfr.consumer.RecordingFile;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LocalIndexTest {
@@ -61,6 +67,71 @@ class LocalIndexTest {
         try (var snapshot = open()) {
             assertFalse(snapshot.isRuntime());
             assertEquals("invalid saved inventory", Files.readString(paths.inventory()));
+        }
+    }
+
+    @Test void cachedReopenReadsEachModArchiveOnlyOnceForFingerprinting() throws Exception {
+        Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
+        byte[] resource = new byte[512 * 1024];
+        new Random(42).nextBytes(resource);
+        try (var archive = new JarOutputStream(Files.newOutputStream(jar))) {
+            archive.putNextEntry(new JarEntry("sample/Example.class"));
+            archive.write(classBytes("sample/Example", 1));
+            archive.closeEntry();
+            archive.putNextEntry(new JarEntry("asset.bin"));
+            archive.write(resource);
+        }
+        try (var ignored = open()) { }
+        Path recordingFile = game.resolve("cached-open.jfr");
+        try (var recording = new Recording()) {
+            recording.enable("jdk.FileRead").withThreshold(Duration.ZERO);
+            recording.start();
+            try (var snapshot = open()) { assertNotNull(snapshot.index().findClass("sample", "Example")); }
+            recording.stop();
+            recording.dump(recordingFile);
+        }
+        long bytesRead = RecordingFile.readAllEvents(recordingFile).stream()
+                .filter(event -> event.getEventType().getName().equals("jdk.FileRead"))
+                .filter(event -> jar.equals(Path.of(event.getString("path"))))
+                .mapToLong(event -> Math.max(0, event.getLong("bytesRead"))).sum();
+        long size = Files.size(jar);
+        assertTrue(bytesRead >= size, "The cached reopen must still fingerprint archive contents");
+        assertTrue(bytesRead < 2 * size, "Expected one full read plus ZIP metadata, got " + bytesRead + " bytes for " + size);
+    }
+
+    @Test void cachedLoadRejectsAnArchiveChangedAfterTheScan() throws Exception {
+        Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
+        writeJar(jar, "sample/Example", 1, false);
+        try (var ignored = open()) { }
+        var paths = InstancePaths.forGame(game);
+        FileTime written = Files.getLastModifiedTime(paths.index());
+        var failure = new CompletableFuture<RuntimeIndexService.Status>();
+        var discarded = new AtomicReference<ClassIndex>();
+        var published = new AtomicBoolean();
+        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+            published.set(true);
+            snapshot.close();
+        }, file -> {
+            var index = ClassIndex.fromFile(file);
+            discarded.set(index);
+            try {
+                writeJar(jar, "sample/Example", 2, false);
+                Files.setLastModifiedTime(jar, FileTime.fromMillis(System.currentTimeMillis() + 2000));
+            } catch (Exception exception) { index.close(); throw new AssertionError(exception); }
+            return index;
+        })) {
+            service.addStatusListener(status -> {
+                if (status.phase() == RuntimeIndexService.Phase.FAILED) failure.complete(status);
+            });
+            service.restore(paths.home(), game);
+            assertTrue(failure.get(10, TimeUnit.SECONDS).detail().contains("Mod archive changed"));
+            assertFalse(published.get());
+            assertTrue(discarded.get().isDestroyed());
+            assertEquals(written, Files.getLastModifiedTime(paths.index()));
+        }
+        try (var reopened = open();
+             var bytes = RuntimeSnapshotBytecodeSource.fromLocal(reopened.sources(), reopened.index(), reopened.localGuard())) {
+            assertArrayEquals(classBytes("sample/Example", 2), bytes.findClassBytes("sample.Example"));
         }
     }
 
@@ -158,6 +229,42 @@ class LocalIndexTest {
             assertTrue(reopened.isRuntime());
             assertEquals("captured-runtime", reopened.inventoryId());
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedRuntimePreparationDoesNotCancelALoadingLocalIndex(boolean beforeWorkerStarts) throws Exception {
+        Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
+        writeJar(jar, "sample/Example", 1, false);
+        try (var ignored = open()) { }
+        var loading = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
+        var readyStatus = new CompletableFuture<RuntimeIndexService.Status>();
+        Object lifecycle = new Object();
+        try (var service = new RuntimeIndexService(lifecycle, ready::complete, file -> {
+            loading.countDown();
+            try { assertTrue(release.await(10, TimeUnit.SECONDS)); }
+            catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+            return ClassIndex.fromFile(file);
+        })) {
+            service.addStatusListener(status -> {
+                if (status.phase() == RuntimeIndexService.Phase.READY) readyStatus.complete(status);
+            });
+            synchronized (lifecycle) {
+                service.restore(InstancePaths.forGame(game).home(), game);
+                if (beforeWorkerStarts) service.failedBeforeBuild("Runtime capture failed");
+            }
+            assertTrue(loading.await(15, TimeUnit.SECONDS));
+            if (!beforeWorkerStarts) service.failedBeforeBuild("Runtime capture failed");
+            assertTrue(service.status().active(), "Offline indexing must remain active after a runtime preparation failure");
+            release.countDown();
+            try (var installed = ready.get(10, TimeUnit.SECONDS)) {
+                assertFalse(installed.isRuntime());
+                assertNotNull(installed.index().findClass("sample", "Example"));
+                assertTrue(readyStatus.get(5, TimeUnit.SECONDS).detail().contains("Runtime capture failed"));
+            }
+        } finally { release.countDown(); }
     }
 
     private RuntimeIndexService.ReadySnapshot open() throws Exception {

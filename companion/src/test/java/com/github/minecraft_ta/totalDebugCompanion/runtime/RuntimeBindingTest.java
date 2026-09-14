@@ -16,11 +16,29 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimeBindingTest {
     @TempDir Path directory;
+
+    @Test
+    void localBindingDoesNotExposeACompilerOrDebuggerClasspath() throws Exception {
+        try (var compiler = new ScriptCompilationService(message -> false, request -> false);
+             var insights = new CodeInsightService(() -> null, RuntimeSourceCatalog.empty());
+             var runtime = snapshot()) {
+            var identity = IndexIdentity.local(Map.of());
+            var local = new RuntimeIndexService.ReadySnapshot(identity, identity.signature(), runtime.indexFile(),
+                    runtime.sources(), runtime.index(), null);
+            try (var binding = new RuntimeBinding(local, directory,
+                    RuntimeSnapshotBytecodeSource.fromIndexedSources(local.sources(), local.index()), compiler, insights)) {
+                binding.attach();
+                assertFalse(compiler.hasRuntime());
+                assertNull(binding.classpath(), "Compiled debugger evaluation must not receive local archives");
+            }
+        }
+    }
 
     @Test
     void acceptedRuntimeDetachesConsumersBeforeClosingItsIndexAndCanCloseTwice() throws Exception {
@@ -32,6 +50,7 @@ class RuntimeBindingTest {
             binding.attach();
             binding.acceptOwnership();
             assertTrue(compiler.isCurrentInventory("test"));
+            assertFalse(binding.classpath().isBlank());
             binding.close();
             binding.close();
             assertFalse(compiler.isCurrentInventory("test"));

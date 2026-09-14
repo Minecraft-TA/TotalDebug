@@ -29,7 +29,7 @@ public final class ScriptExecutionService {
         if (project == null || !project.isActive() || !isConnected()) return false;
         try {
             return project.admit(() -> {
-                if (!isReady()) return false;
+                if (!isConnected()) return false;
                 compiler.submit(id, source, serverSide, environment, failureHandler);
                 return true;
             });

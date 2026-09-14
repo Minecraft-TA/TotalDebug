@@ -145,6 +145,10 @@ final class IndexCache {
 
     static void requireSources(Manifest manifest) throws IOException {
         manifest.identity().requireSourcesUnchanged();
+        requireSourcePaths(manifest);
+    }
+
+    static void requireSourcePaths(Manifest manifest) throws IOException {
         for (Source source : manifest.sources()) {
             Path path = source.path();
             if (!Files.isRegularFile(path) && !Files.isDirectory(path)) {

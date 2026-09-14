@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source;
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.LocalSourceGuard;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.ModuleKind;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.PreparedInput;
@@ -20,8 +21,9 @@ import java.util.zip.ZipFile;
 
 /** Physical mod archives, independent of Minecraft and of index readiness. */
 public final class LocalModSources {
-    record Scan(List<Source> sources, List<Source> readable, IndexIdentity identity, String detail) {
+    record Scan(List<Source> sources, List<Source> readable, LocalSourceGuard guard, String detail) {
         Scan { sources = List.copyOf(sources); readable = List.copyOf(readable); }
+        IndexIdentity identity() { return guard.identity(); }
     }
 
     record Prepared(List<PreparedInput> inputs, String detail) {
@@ -49,13 +51,13 @@ public final class LocalModSources {
 
     static Scan scan(Path gameDirectory, Runnable checkpoint) throws IOException {
         var sources = discover(gameDirectory);
-        var fingerprints = new LinkedHashMap<Path, String>();
+        var fingerprints = new LinkedHashMap<Path, LocalSourceGuard.Fingerprint>();
         var readable = new ArrayList<Source>();
         var problems = new ArrayList<String>();
         for (var source : sources) {
             checkpoint.run();
             try {
-                fingerprints.put(source.path(), IndexIdentity.fingerprint(source.path()));
+                fingerprints.put(source.path(), LocalSourceGuard.capture(source.path()));
                 try (var archive = new JarFile(source.path().toFile(), false, ZipFile.OPEN_READ, Runtime.version())) {
                     archive.size();
                 }
@@ -65,7 +67,7 @@ public final class LocalModSources {
             }
         }
         String detail = problems.isEmpty() ? "" : "Some archives could not be indexed: " + String.join("; ", problems) + ". ";
-        return new Scan(sources, readable, IndexIdentity.local(fingerprints), detail);
+        return new Scan(sources, readable, new LocalSourceGuard(fingerprints), detail);
     }
 
     static Prepared prepare(Scan scan, Runnable checkpoint) throws IOException {
@@ -99,7 +101,7 @@ public final class LocalModSources {
             }
         }
         if (duplicates > 0) detail.append(duplicates).append(" duplicate classes use the first archive in filename order. ");
-        scan.identity().requireSourcesUnchanged();
+        scan.guard().checkAll();
         return new Prepared(inputs, detail.toString());
     }
 }

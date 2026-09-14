@@ -32,8 +32,8 @@ public final class RuntimeBinding implements AutoCloseable {
         this.compiler = compiler;
         this.insights = insights;
         this.sources = new RuntimeSourceCatalog(snapshot.sources());
-        this.classpath = snapshot.sources().stream().map(source -> source.path().toString())
-                .collect(Collectors.joining(File.pathSeparator));
+        this.classpath = snapshot.isRuntime() ? snapshot.sources().stream().map(source -> source.path().toString())
+                .collect(Collectors.joining(File.pathSeparator)) : null;
         try {
             this.decompiler = new CompanionDecompilationService(snapshot.signature(), dataDirectory, bytecode);
         } catch (IOException | RuntimeException failure) {

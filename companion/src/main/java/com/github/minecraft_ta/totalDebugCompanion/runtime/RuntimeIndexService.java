@@ -117,6 +117,8 @@ public final class RuntimeIndexService implements AutoCloseable {
         boolean allowLocalFallback;
         String detail = "";
         String sourceDetail = "";
+        String runtimeFailure = "";
+        LocalSourceGuard localGuard;
         List<RuntimeSnapshotBytecodeSource.Source> localSources = List.of();
         // Bound before loading; a matching live announcement can also bind a queued restore.
         String inventoryId;
@@ -226,10 +228,16 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     public void failedBeforeBuild(String detail) {
         synchronized (this.lifecycleLock) {
+            String message = Objects.requireNonNullElse(detail, "Runtime inventory failed");
+            if (this.pending != null && this.pending.allowLocalFallback) {
+                this.pending.runtimeFailure = message + ". ";
+                update(new Status(this.status.phase(), message + ". Offline index preparation continues", null));
+                return;
+            }
             this.pending = null;
             this.activeInventoryId = null;
             this.activeDataDirectory = null;
-            update(new Status(Phase.FAILED, Objects.requireNonNullElse(detail, "Runtime inventory failed"), null));
+            update(new Status(Phase.FAILED, message, null));
         }
     }
 
@@ -326,6 +334,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         checkpoint(work);
         update(work, new Status(Phase.PREPARING, work.detail + "Reading local mod archives", null));
         var scan = LocalModSources.scan(work.gameDirectory, () -> checkpoint(work));
+        work.localGuard = scan.guard();
         work.localSources = scan.sources();
         work.sourceDetail = scan.detail();
         if (work.localSources.isEmpty()) {
@@ -344,7 +353,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 try {
                     var manifest = IndexCache.read(indexFile);
                     if (identity.equals(manifest.identity())) {
-                        var cached = loadSnapshot(indexFile, manifest);
+                        var cached = loadSnapshot(indexFile, manifest, scan.guard());
                         work.sourceDetail = manifest.detail();
                         return cached;
                     }
@@ -411,7 +420,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             checkpoint(work);
             ClassIndex validated = IndexCache.write(indexFile, index,
                     new IndexCache.Manifest(identity, publishedSources, work.sourceDetail), () -> checkpoint(work));
-            return readySnapshot(identity, indexFile, publishedSources, validated);
+            return readySnapshot(identity, indexFile, publishedSources, validated, work.localGuard);
         } catch (CancellationException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -485,12 +494,16 @@ public final class RuntimeIndexService implements AutoCloseable {
         }
     }
 
-    private ReadySnapshot loadSnapshot(Path indexFile, IndexCache.Manifest manifest) throws IOException {
+    private ReadySnapshot loadSnapshot(Path indexFile, IndexCache.Manifest manifest, LocalSourceGuard guard) throws IOException {
         if (manifest.identity().kind() == IndexIdentity.Kind.RUNTIME)
             CacheFiles.requireIdentity(indexFile.getParent().resolve("inventory.json"), "id", manifest.inventoryId());
-        IndexCache.requireSources(manifest);
+        if (guard == null) IndexCache.requireSources(manifest);
+        else {
+            IndexCache.requireSourcePaths(manifest);
+            guard.checkAll();
+        }
         try (var phase = RuntimePhase.start("index.cache-load")) {
-            return readySnapshot(manifest.identity(), indexFile, manifest.sources(), this.indexLoader.apply(indexFile.toString()));
+            return readySnapshot(manifest.identity(), indexFile, manifest.sources(), this.indexLoader.apply(indexFile.toString()), guard);
         } catch (RuntimeException exception) {
             throw new IOException("Unable to load the runtime class index: " + indexFile, exception);
         }
@@ -505,7 +518,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             if (!inventoryId.equals(manifest.inventoryId())) {
                 return null;
             }
-            return loadSnapshot(indexFile, manifest);
+            return loadSnapshot(indexFile, manifest, null);
         } catch (IOException ignored) {
             // An unusable cache is rebuilt once from the validated inventory; rebuild failures still propagate.
             return null;
@@ -513,9 +526,10 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     private static ReadySnapshot readySnapshot(IndexIdentity identity, Path file,
-                                              List<RuntimeSnapshotBytecodeSource.Source> sources, ClassIndex index) throws IOException {
+                                              List<RuntimeSnapshotBytecodeSource.Source> sources, ClassIndex index,
+                                              LocalSourceGuard guard) throws IOException {
         try {
-            var guard = identity.kind() == IndexIdentity.Kind.LOCAL ? new LocalSourceGuard(identity) : null;
+            if (guard != null) guard.checkAll();
             return new ReadySnapshot(identity, identity.signature(), file, sources, index, guard);
         } catch (IOException | RuntimeException failure) { index.close(); throw failure; }
     }
@@ -529,7 +543,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 this.activeInventoryId = snapshot.inventoryId();
                 this.activeDataDirectory = work.root;
                 installed = true;
-                update(new Status(Phase.READY, work.detail + work.sourceDetail + (snapshot.isRuntime() ? "Runtime index ready" : "Local index ready"), null));
+                update(work, new Status(Phase.READY, work.detail + work.sourceDetail + (snapshot.isRuntime() ? "Runtime index ready" : "Local index ready"), null));
             }
         } finally {
             if (!installed) {
@@ -556,7 +570,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     private void update(Work work, Status status) {
         synchronized (this.lifecycleLock) {
             checkpoint(work);
-            update(status);
+            update(new Status(status.phase(), work.runtimeFailure + status.detail(), status.failure()));
         }
     }
 
