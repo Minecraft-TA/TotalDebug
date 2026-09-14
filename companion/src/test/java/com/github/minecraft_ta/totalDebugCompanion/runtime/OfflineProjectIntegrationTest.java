@@ -10,8 +10,11 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
@@ -20,6 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
+import javax.swing.JLabel;
+import java.awt.Window;
+import java.util.Arrays;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Color;
@@ -52,10 +58,103 @@ class OfflineProjectIntegrationTest {
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
             app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            assertEquals(IndexIdentity.Kind.LOCAL, app.getRuntimeIndexStatus().sourceKind());
             assertEquals(1, app.requireProject().sources().modules().size());
             assertNull(app.requireProject().runtime());
             assertFalse(Files.exists(paths.scripts()));
             assertEquals("existing file prevents cache-directory creation", Files.readString(paths.runtime()));
+            Files.delete(paths.runtime());
+            SwingUtilities.invokeAndWait(() -> {
+                var view = app.createWindow();
+                var bar = find(view, ApplicationStatusBar.class);
+                try {
+                    var retry = ApplicationStatusBar.class.getDeclaredField("retryIndex");
+                    retry.setAccessible(true);
+                    ((Runnable) retry.get(bar)).run();
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            assertEquals(IndexIdentity.Kind.LOCAL, app.indexSourceKind());
+        }
+    }
+
+    @Test void failedLocalRefreshRetiresItsIndexAndExposesTheNewCatalog() throws Exception {
+        Path game = Files.createDirectories(root.resolve("refresh"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        writeProjectJar(mods.resolve("old.jar"), 42);
+        var paths = InstancePaths.forGame(game);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            var profile = ProjectDirectories.resolve(game);
+            app.openProject(profile).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var previous = app.requireProject().requireRuntime().snapshot().index();
+            Files.delete(mods.resolve("old.jar"));
+            writeProjectJar(mods.resolve("new.jar"), 84);
+            Files.delete(paths.index());
+            Files.createDirectory(paths.index());
+            Files.writeString(paths.index().resolve("blocker"), "prevents replacing the index");
+            app.openProject(profile).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            assertNull(app.requireProject().runtime(), "A failed local refresh must retire stale code sources");
+            assertTrue(previous.isDestroyed());
+            assertEquals(List.of("new.jar"), app.requireProject().sources().modules().stream()
+                    .map(module -> module.displayName()).toList());
+        }
+    }
+
+    @Test void emptyProjectSearchShowsNoSourcesInsteadOfBuildingForever() throws Exception {
+        Path game = Files.createDirectories(root.resolve("empty"));
+        Files.createDirectory(game.resolve("mods"));
+        GlobalConfig.getInstance().loadFrom(root.resolve("application"));
+        var popup = new AtomicReference<SearchEverywherePopup>();
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.EMPTY);
+            SwingUtilities.invokeAndWait(() -> {
+                ThemeManager.installTheme(CompanionTheme.ISLANDS_DARK);
+                var view = app.createWindow();
+                view.setFocusableWindowState(false);
+                view.setBounds(-20000, -20000, 1280, 720);
+                view.setVisible(true);
+                view.openSearchEverywhere();
+                popup.set(Arrays.stream(Window.getWindows()).filter(SearchEverywherePopup.class::isInstance)
+                        .map(SearchEverywherePopup.class::cast).filter(Window::isShowing).findFirst().orElseThrow());
+                popup.get().setFocusableWindowState(false);
+            });
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    var message = SearchEverywherePopup.class.getDeclaredField("messageLabel");
+                    message.setAccessible(true);
+                    assertEquals("No mod archives found", ((JLabel) message.get(popup.get())).getText());
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+            captureThemes(popup.get(), "offline-empty-search");
+        } finally { SwingUtilities.invokeAndWait(() -> { if (popup.get() != null) popup.get().dispose(); }); }
+    }
+
+    @Test void failedRuntimeHandoverPreservesLocalBrowsingAndCanBeRetriedOffline() throws Exception {
+        Path game = Files.createDirectories(root.resolve("handover"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        writeProjectJar(mods.resolve("demo.jar"), 42);
+        var paths = InstancePaths.forGame(game);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var previous = app.requireProject().requireRuntime();
+            Files.writeString(paths.inventory(), "invalid runtime capture");
+            var receive = CompanionApplication.class.getDeclaredMethod("handleRuntimeInventory", RuntimeInventoryMessage.class);
+            receive.setAccessible(true);
+            receive.invoke(app, RuntimeInventoryMessage.available("invalid", paths.inventory().toString()));
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            assertEquals(IndexIdentity.Kind.RUNTIME, app.getRuntimeIndexStatus().sourceKind());
+            assertSame(previous, app.requireProject().runtime());
+            assertNotNull(previous.snapshot().index().findClass("demo", "Example"));
+            receive.invoke(app, RuntimeInventoryMessage.failed("Capture failed"));
+            assertSame(previous, app.requireProject().runtime());
+            app.retryIndex().get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            assertEquals(IndexIdentity.Kind.LOCAL, app.indexSourceKind());
+            assertSame(previous, app.requireProject().runtime());
         }
     }
 
@@ -136,7 +235,7 @@ class OfflineProjectIntegrationTest {
         assertTrue(tree.get().revealDirectoryPath("runtime", "demo.jar [demo.jar]", List.of("demo")).get(5, TimeUnit.SECONDS));
     }
 
-    private static void captureThemes(MainWindow view, String name) throws Exception {
+    private static void captureThemes(Window view, String name) throws Exception {
         Path screenshots = Files.createDirectories(Path.of("build/ui-screenshots"));
         for (var theme : List.of(CompanionTheme.ISLANDS_DARK, CompanionTheme.ISLANDS_LIGHT)) {
             SwingUtilities.invokeAndWait(() -> ThemeManager.apply(theme));

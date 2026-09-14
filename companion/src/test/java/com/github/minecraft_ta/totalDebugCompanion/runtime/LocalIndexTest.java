@@ -34,6 +34,32 @@ import static org.junit.jupiter.api.Assertions.*;
 class LocalIndexTest {
     @TempDir Path game;
 
+    @Test void retryRequestedByAFailureListenerIsNotLostBeforeWorkerCleanup() throws Exception {
+        Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
+        writeJar(jar, "sample/Example", 1, false);
+        var paths = InstancePaths.forGame(game);
+        Files.createDirectories(paths.index());
+        Path blocker = Files.writeString(paths.index().resolve("blocker"), "blocks publication");
+        var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
+        var retry = new AtomicBoolean(true);
+        try (var service = new RuntimeIndexService(new Object(), ready::complete)) {
+            service.addStatusListener(status -> {
+                if (status.phase() != RuntimeIndexService.Phase.FAILED) return;
+                if (!retry.getAndSet(false)) { ready.completeExceptionally(status.failure()); return; }
+                try {
+                    Files.delete(blocker);
+                    Files.delete(paths.index());
+                    service.restore(paths.home(), game);
+                } catch (IOException failure) { ready.completeExceptionally(failure); }
+            });
+            service.restore(paths.home(), game);
+            try (var snapshot = ready.get(10, TimeUnit.SECONDS)) {
+                assertFalse(snapshot.isRuntime());
+                assertNotNull(snapshot.index().findClass("sample", "Example"));
+            }
+        }
+    }
+
     @Test void buildsReusesAndInvalidatesTheLocalIndexWithoutInventingARuntime() throws Exception {
         Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
         writeJar(jar, "sample/Example", 1, false);

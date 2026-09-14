@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 
 /** Transport-only tests do not create an application or change projects. */
 final class TestProjectControls implements ProjectControls {
+    public CompletableFuture<Void> retryIndex() { throw new AssertionError(); }
     public List<ProjectRegistry.Project> projects() { return List.of(); }
     public CompanionProfile currentProject() { return null; }
     public boolean isSwitching() { return false; }

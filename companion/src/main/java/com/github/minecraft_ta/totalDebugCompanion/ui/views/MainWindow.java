@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectS
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
@@ -92,10 +91,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
         this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
-        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () -> {
-            indexLoader.waiting("Requesting runtime inventory again");
-            session.send(new RetryRuntimeInventoryMessage());
-        });
+        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () ->
+                projects.retryIndex().whenComplete((ignored, failure) -> UIUtils.onEdt(() -> {
+                    if (failure == null || disposed) return;
+                    Throwable cause = failure;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    showError("Unable to retry indexing", cause.getMessage());
+                })));
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,

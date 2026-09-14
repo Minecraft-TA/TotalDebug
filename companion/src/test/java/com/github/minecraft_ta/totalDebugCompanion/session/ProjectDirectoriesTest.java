@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectDirectoriesTest {
@@ -35,5 +36,25 @@ class ProjectDirectoriesTest {
     @Test void recognizesSavedScriptsWithoutAModsDirectory() throws Exception {
         Path scripts = Files.createDirectories(root.resolve("game/total-debug/scripts"));
         assertEquals(root.resolve("game"), ProjectDirectories.resolve(scripts.getParent()).workspaceDirectory());
+    }
+
+    @Test void prismInstanceNamesDoNotOverrideTheirGameChildren() throws Exception {
+        for (String name : List.of("mods", "total-debug")) {
+            for (String child : List.of("minecraft", ".minecraft")) {
+                Path instance = Files.createDirectories(root.resolve(child).resolve(name));
+                Path game = Files.createDirectory(instance.resolve(child));
+                Files.createDirectory(game.resolve("mods"));
+                assertEquals(CompanionProfile.forGame(game), ProjectDirectories.resolve(instance));
+            }
+        }
+    }
+
+    @Test void anOrphanedGeneratedIndexDoesNotMakeAProject() throws Exception {
+        Path game = Files.createDirectory(root.resolve("orphan"));
+        Path data = Files.createDirectories(game.resolve("total-debug/cache/runtime")).getParent().getParent();
+        Path index = Files.writeString(data.resolve("cache/runtime/index.jindex"), "orphaned generated index");
+        assertThrows(IllegalArgumentException.class, () -> ProjectDirectories.resolve(game));
+        assertThrows(IllegalArgumentException.class, () -> ProjectDirectories.resolve(data));
+        assertEquals("orphaned generated index", Files.readString(index));
     }
 }

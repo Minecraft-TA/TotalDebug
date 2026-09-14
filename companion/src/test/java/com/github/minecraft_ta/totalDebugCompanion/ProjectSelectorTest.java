@@ -44,6 +44,7 @@ class ProjectSelectorTest {
                     public boolean isSwitching() { return false; }
                     public boolean isConnected() { return false; }
                     public IndexIdentity.Kind indexSourceKind() { return null; }
+                    public CompletableFuture<Void> retryIndex() { throw new AssertionError(); }
                     public RuntimeIndexService.Status getRuntimeIndexStatus() { throw new AssertionError(); }
                     public CompletableFuture<Void> openProject(CompanionProfile selected, String name) {
                         opened.incrementAndGet();

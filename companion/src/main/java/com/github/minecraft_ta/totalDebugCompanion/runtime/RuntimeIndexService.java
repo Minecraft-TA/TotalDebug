@@ -43,9 +43,14 @@ public final class RuntimeIndexService implements AutoCloseable {
         FAILED
     }
 
-    public record Status(Phase phase, String detail, Throwable failure) {
+    public record Status(Phase phase, String detail, Throwable failure, IndexIdentity.Kind sourceKind) {
+        public Status(Phase phase, String detail, Throwable failure) {
+            this(phase, detail, failure, IndexIdentity.Kind.RUNTIME);
+        }
+
         public Status {
             Objects.requireNonNull(phase, "phase");
+            Objects.requireNonNull(sourceKind, "sourceKind");
             detail = Objects.requireNonNullElse(detail, "");
         }
 
@@ -183,7 +188,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             this.activeDataDirectory = null;
             Path root = normalizeDataDirectory(dataDirectory);
             Path inventoryFile = new InstancePaths(root).inventory();
-            if (this.pending != null && root.equals(this.pending.root)) {
+            if (this.pending != null && root.equals(this.pending.root) && this.status.active()) {
                 return;
             }
             this.pending = null;
@@ -231,7 +236,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             String message = Objects.requireNonNullElse(detail, "Runtime inventory failed");
             if (this.pending != null && this.pending.allowLocalFallback) {
                 this.pending.runtimeFailure = message + ". ";
-                update(new Status(this.status.phase(), message + ". Offline index preparation continues", null));
+                update(new Status(this.status.phase(), message + ". Offline index preparation continues", null, this.status.sourceKind()));
                 return;
             }
             this.pending = null;
@@ -314,7 +319,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             synchronized (this.lifecycleLock) {
                 if (this.pending == work && !this.closed) {
                     String message = reported.getMessage();
-                    update(new Status(
+                    update(work, new Status(
                         Phase.FAILED,
                         message == null || message.isBlank() ? "Class index preparation failed" : message,
                         reported
@@ -570,7 +575,8 @@ public final class RuntimeIndexService implements AutoCloseable {
     private void update(Work work, Status status) {
         synchronized (this.lifecycleLock) {
             checkpoint(work);
-            update(new Status(status.phase(), work.runtimeFailure + status.detail(), status.failure()));
+            update(new Status(status.phase(), work.runtimeFailure + status.detail(), status.failure(),
+                    work.local ? IndexIdentity.Kind.LOCAL : IndexIdentity.Kind.RUNTIME));
         }
     }
 

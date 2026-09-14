@@ -26,6 +26,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -298,6 +299,29 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         return CompletableFuture.runAsync(() -> {
             try { projects.forget(id); }
             catch (IOException failure) { throw new CompletionException(failure); }
+        }, projectWorker);
+    }
+
+    @Override public CompletableFuture<Void> retryIndex() {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        ProjectScope selected = current;
+        if (selected == null) return CompletableFuture.failedFuture(new IllegalStateException("No project is open"));
+        return CompletableFuture.runAsync(() -> {
+            boolean requestedRuntime = selected.admit(() -> {
+                if (!isConnected() || runtimeIndexService.status().sourceKind() == IndexIdentity.Kind.LOCAL) return false;
+                if (!session.send(new RetryRuntimeInventoryMessage()))
+                    throw new IllegalStateException("Minecraft disconnected before runtime inventory could be requested");
+                runtimeIndexService.waiting("Requesting runtime inventory again");
+                return true;
+            });
+            if (requestedRuntime) return;
+            try { selected.refreshLocalSources(); }
+            catch (IOException failure) { throw new CompletionException(failure); }
+            selected.admit(() -> {
+                runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
+                return null;
+            });
+            onUi(CompanionUi::runtimeChanged);
         }, projectWorker);
     }
 
@@ -672,9 +696,15 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }
     }
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
-        if (status.phase() == RuntimeIndexService.Phase.EMPTY) {
-            synchronized (lifecycleLock) { closeRuntime(); }
-            onUi(CompanionUi::runtimeChanged);
+        synchronized (lifecycleLock) {
+            var installed = current == null ? null : current.runtime();
+            boolean failedLocalRefresh = status.phase() == RuntimeIndexService.Phase.FAILED
+                    && status.sourceKind() == IndexIdentity.Kind.LOCAL
+                    && installed != null && !installed.snapshot().isRuntime();
+            if (status.phase() == RuntimeIndexService.Phase.EMPTY || failedLocalRefresh) {
+                closeRuntime();
+                onUi(CompanionUi::runtimeChanged);
+            }
         }
         onUi(view -> view.setRuntimeIndexStatus(status));
     }

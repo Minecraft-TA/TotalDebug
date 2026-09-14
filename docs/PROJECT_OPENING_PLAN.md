@@ -18,7 +18,7 @@ Normalize these selections to one game-directory identity:
 | An instance's `mods` directory | Use the parent game directory; never create `mods/total-debug` |
 | Unrelated directory | Reject without changing the current project or creating files |
 
-Recognition requires existing useful TotalDebug project data or an existing `mods` directory. A directory name alone is insufficient. Do not recursively search ancestors, descendants or other drives. This slice supports instance directories, including selecting their `mods` child; standalone loose-JAR workspaces need a separate storage/identity decision and are outside it.
+Recognition requires scripts, state, a runtime inventory, or an existing `mods` directory. A directory name or generated index alone is insufficient. Resolve an existing Prism game child before interpreting `mods` or `total-debug` as a child-directory shortcut. Do not recursively search ancestors, descendants or other drives. This slice supports instance directories, including selecting their `mods` child; standalone loose-JAR workspaces need a separate storage/identity decision and are outside it.
 
 Resolution returns the normalized profile and discovered data, without writes. Perform it before preparing or retiring the current project. Register a project only after it has opened successfully. An indexing failure after opening a recognized instance leaves its file browser usable and reports the index failure.
 
