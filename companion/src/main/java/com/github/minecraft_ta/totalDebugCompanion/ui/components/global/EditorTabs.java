@@ -9,12 +9,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class EditorTabs extends JTabbedPane {
 
@@ -24,6 +26,7 @@ public class EditorTabs extends JTabbedPane {
 
     private final List<IEditorPanel> editors = new ArrayList<>();
     private final List<Consumer<IEditorPanel>> selectedEditorListeners = new ArrayList<>();
+    private Function<IEditorPanel, Action> revealActionProvider;
 
     public EditorTabs() {
         super();
@@ -40,6 +43,17 @@ public class EditorTabs extends JTabbedPane {
                 }
             }
         });
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("shift F10"), "tabMenu");
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), "tabMenu");
+        getActionMap().put("tabMenu", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                int index = getSelectedIndex();
+                if (index < 0) return;
+                Rectangle bounds = getBoundsAt(index);
+                createContextMenu(index).show(EditorTabs.this, bounds.x, bounds.y + bounds.height);
+            }
+        });
         addChangeListener(event -> {
             refreshTabHeaders();
             notifySelectedEditorChanged();
@@ -54,6 +68,7 @@ public class EditorTabs extends JTabbedPane {
      */
     @Override
     protected void processMouseEvent(MouseEvent e) {
+        if (handlePopup(e, indexAtLocation(e.getX(), e.getY()))) return;
         if (!SwingUtilities.isMiddleMouseButton(e) || e.getID() != MouseEvent.MOUSE_PRESSED) {
             super.processMouseEvent(e);
             return;
@@ -66,6 +81,38 @@ public class EditorTabs extends JTabbedPane {
         }
 
         removeTabAt(tabIndex);
+    }
+
+    boolean handlePopup(MouseEvent event, int index) {
+        if (!event.isPopupTrigger() && !SwingUtilities.isRightMouseButton(event)) return false;
+        if (event.isPopupTrigger() && index >= 0) {
+            createContextMenu(index).show(event.getComponent(), event.getX(), event.getY());
+        }
+        event.consume();
+        return true;
+    }
+
+    public void setRevealActionProvider(Function<IEditorPanel, Action> provider) {
+        this.revealActionProvider = java.util.Objects.requireNonNull(provider, "provider");
+    }
+
+    JPopupMenu createContextMenu(int index) {
+        IEditorPanel editor = this.editors.get(index);
+        JPopupMenu menu = new JPopupMenu();
+        menu.add("Close").addActionListener(event -> closeMatching(candidate -> candidate == editor));
+        JMenuItem others = menu.add("Close others");
+        others.setEnabled(getTabCount() > 1);
+        others.addActionListener(event -> closeMatching(candidate -> candidate != editor));
+        menu.add("Close all").addActionListener(event -> closeMatching(candidate -> true));
+        String location = editor.getLocation().tooltip();
+        Action reveal = this.revealActionProvider == null ? null : this.revealActionProvider.apply(editor);
+        if (!location.isBlank() || reveal != null) menu.addSeparator();
+        if (!location.isBlank()) {
+            menu.add("Copy location").addActionListener(event -> Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(location), null));
+        }
+        if (reveal != null) menu.add(reveal);
+        return menu;
     }
 
     public boolean canCloseAll() {

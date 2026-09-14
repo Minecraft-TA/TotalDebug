@@ -81,7 +81,42 @@ public final class NavigationService {
         this.tabs = Objects.requireNonNull(tabs, "tabs");
         this.fileTree = Objects.requireNonNull(fileTree, "fileTree");
         this.tabs.addSelectedEditorListener(this::selectedEditorChanged);
+        this.tabs.setRevealActionProvider(this::revealAction);
         refreshHistoryActions();
+    }
+
+    private Action revealAction(IEditorPanel editor) {
+        NavigationTarget target = editor.getNavigationTarget();
+        if (this.project == null) return null;
+        boolean available = switch (target) {
+            case NavigationTarget.LocalFile file -> file.path().toAbsolutePath().normalize().startsWith(project.paths().scripts());
+            case NavigationTarget.RuntimeClass ignored -> project.runtime() != null;
+            case NavigationTarget.ArchiveEntry entry -> project.sources().modules().stream()
+                    .flatMap(module -> project.sources().sourcesForModule(module.id()).stream())
+                    .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
+            case null, default -> false;
+        };
+        if (!available) return null;
+        Context context = captureContext();
+        return new AbstractAction("Reveal in tree") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                if (!isCurrent(context)) return;
+                CompletableFuture<Void> result = switch (target) {
+                    case NavigationTarget.LocalFile file -> requireRevealed(fileTree.revealLocalPath(file.path()));
+                    case NavigationTarget.ArchiveEntry entry -> requireRevealed(fileTree.revealArchivePath(entry.archive(), entry.entryName()));
+                    case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
+                    default -> throw new IllegalArgumentException("Editor has no tree location");
+                };
+                reportFailure(result, target);
+            }
+        };
+    }
+
+    private static CompletableFuture<Void> requireRevealed(CompletableFuture<Boolean> result) {
+        return result.thenAccept(revealed -> {
+            if (!revealed) throw new IllegalStateException("The editor's location is not present in the Files tree");
+        });
     }
 
     public CompletableFuture<Void> navigate(NavigationTarget target) {
@@ -184,12 +219,12 @@ public final class NavigationService {
                         activation
                 );
                 case NavigationTarget.LocalFile file -> openLocalFile(file, activation);
-                case NavigationTarget.LocalDirectory directory -> revealLocalDirectory(directory);
+                case NavigationTarget.LocalDirectory directory -> revealLocalPath(directory);
                 case NavigationTarget.ArchiveEntry entry -> openResource(
                         new ArchiveEntrySource(entry.archive(), entry.entryName(), -1),
                         activation
                 );
-                case NavigationTarget.ArchiveDirectory directory -> revealArchiveDirectory(directory);
+                case NavigationTarget.ArchiveDirectory directory -> revealArchivePath(directory);
                 case NavigationTarget.UsageSite site -> openRuntimeSource(
                         site.usage().location().className(),
                         source -> SourceFileNavigation.usageOffset(
@@ -210,7 +245,7 @@ public final class NavigationService {
                         view -> view.literal().equals(usages.literal()),
                         () -> new LiteralUsagesView(editors.get(), usages.literal(), requestedRuntime)
                 ).thenAccept(LiteralUsagesView::restartSearch), activation);
-                case NavigationTarget.RuntimePackage runtimePackage -> revealPackage(runtimePackage);
+                case NavigationTarget.RuntimePackage runtimePackage -> revealRuntimePath(runtimePackage.ownerClassName(), runtimePackage.packageName().replace('.', '/'));
                 case NavigationTarget.ModuleSearch search -> dispatchNavigation(() -> {
                     this.window.openSearchEverywhere(search);
                     return CompletableFuture.completedFuture(null);
@@ -475,22 +510,22 @@ public final class NavigationService {
         return tabs.focusOrCreateIfAbsent(type, editor -> editor.runtimeBinding() == runtime && matches.test(editor), create);
     }
 
-    private CompletableFuture<Void> revealPackage(NavigationTarget.RuntimePackage target) {
+    private CompletableFuture<Void> revealRuntimePath(String ownerClassName, String entryPath) {
         var result = new CompletableFuture<Void>();
         Context context = captureContext();
-        editors.get().insights().locateClass(target.ownerClassName(), new CodeInsightService.Listener<>() {
+        editors.get().insights().locateClass(ownerClassName, new CodeInsightService.Listener<>() {
             @Override
             public void onCompleted(RuntimeSnapshotBytecodeSource.Source source) {
                 if (!isCurrent(context)) { result.cancel(false); return; }
                 if (source == null) {
                     result.completeExceptionally(new IllegalStateException(
-                            "Class " + target.ownerClassName() + " is not present in the runtime index"
+                            "Class " + ownerClassName + " is not present in the runtime index"
                     ));
                     return;
                 }
-                NavigationService.this.fileTree.revealPackage(
-                                target.packageName(),
-                                target.ownerClassName(),
+                NavigationService.this.fileTree.revealRuntimePath(
+                                ownerClassName,
+                                entryPath,
                                 source
                         )
                         .whenComplete((revealed, failure) -> {
@@ -498,7 +533,7 @@ public final class NavigationService {
                         result.completeExceptionally(failure);
                     } else if (!revealed) {
                         result.completeExceptionally(new IllegalStateException(
-                                "Package " + target.packageName() + " is not present in the owning archive"
+                                "Path " + entryPath + " is not present in the owning runtime source"
                         ));
                     } else {
                         result.complete(null);
@@ -514,16 +549,16 @@ public final class NavigationService {
         return result;
     }
 
-    private CompletableFuture<Void> revealLocalDirectory(NavigationTarget.LocalDirectory target) {
-        return this.fileTree.revealLocalDirectory(target.path()).thenCompose(revealed -> revealed
+    private CompletableFuture<Void> revealLocalPath(NavigationTarget.LocalDirectory target) {
+        return this.fileTree.revealLocalPath(target.path()).thenCompose(revealed -> revealed
                 ? CompletableFuture.completedFuture(null)
                 : CompletableFuture.failedFuture(new IllegalStateException(
                 "Directory is not present in the file tree: " + target.path()
         )));
     }
 
-    private CompletableFuture<Void> revealArchiveDirectory(NavigationTarget.ArchiveDirectory target) {
-        return this.fileTree.revealArchiveDirectory(target.archive(), target.entryName()).thenCompose(revealed ->
+    private CompletableFuture<Void> revealArchivePath(NavigationTarget.ArchiveDirectory target) {
+        return this.fileTree.revealArchivePath(target.archive(), target.entryName()).thenCompose(revealed ->
                 revealed
                         ? CompletableFuture.completedFuture(null)
                         : CompletableFuture.failedFuture(new IllegalStateException(

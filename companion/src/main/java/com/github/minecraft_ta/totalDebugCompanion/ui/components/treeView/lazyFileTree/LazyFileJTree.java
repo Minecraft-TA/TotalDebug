@@ -217,8 +217,8 @@ public class LazyFileJTree extends JTree {
         return load;
     }
 
-    /** Reveals a directory path below one named container beneath a top-level root. */
-    public CompletableFuture<Boolean> revealDirectoryPath(
+    /** Reveals an item below one named container beneath a top-level root. */
+    public CompletableFuture<Boolean> revealItemPath(
             String topLevelRoot,
             String containerName,
             List<String> directorySegments
@@ -234,7 +234,7 @@ public class LazyFileJTree extends JTree {
         }
 
         CompletableFuture<Boolean> result = new CompletableFuture<>();
-        SwingUtilities.invokeLater(() -> revealDirectoryPathOnEventThread(topLevelRoot, container, segments)
+        SwingUtilities.invokeLater(() -> revealItemPathOnEventThread(topLevelRoot, container, segments)
                 .whenComplete((revealed, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
@@ -245,8 +245,8 @@ public class LazyFileJTree extends JTree {
         return result;
     }
 
-    /** Reveals a directory path relative to a top-level directory root. */
-    public CompletableFuture<Boolean> revealDirectoryPath(String topLevelRoot, List<String> directorySegments) {
+    /** Reveals an item relative to a top-level directory root. */
+    public CompletableFuture<Boolean> revealItemPath(String topLevelRoot, List<String> directorySegments) {
         Objects.requireNonNull(topLevelRoot, "topLevelRoot");
         List<String> segments = List.copyOf(Objects.requireNonNull(directorySegments, "directorySegments"));
         if (segments.stream().anyMatch(String::isBlank)) {
@@ -258,13 +258,13 @@ public class LazyFileJTree extends JTree {
             LazyTreeNode root = findTopLevelNode(topLevelRoot);
             CompletableFuture<TreePath> path = root == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(root, segments, 0);
+                    : findItemPath(root, segments, 0);
             path.whenComplete((revealedPath, failure) -> completeReveal(result, revealedPath, failure));
         });
         return result;
     }
 
-    private CompletableFuture<Boolean> revealDirectoryPathOnEventThread(
+    private CompletableFuture<Boolean> revealItemPathOnEventThread(
             String topLevelRoot,
             String containerName,
             List<String> segments
@@ -281,7 +281,7 @@ public class LazyFileJTree extends JTree {
                     .orElse(null);
             return container == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(container, segments, 0);
+                    : findItemPath(container, segments, 0);
         }).thenApply(this::revealPath);
     }
 
@@ -308,7 +308,7 @@ public class LazyFileJTree extends JTree {
         return true;
     }
 
-    private CompletableFuture<TreePath> findDirectoryPath(
+    private CompletableFuture<TreePath> findItemPath(
             LazyTreeNode parent,
             List<String> segments,
             int segmentIndex
@@ -319,13 +319,13 @@ public class LazyFileJTree extends JTree {
         return loadItemsForNode(parent).thenCompose(ignored -> {
             String segment = segments.get(segmentIndex);
             LazyTreeNode child = children(parent).stream()
-                    .filter(node -> node.getUserObject().isDirectory())
+                    .filter(node -> node.getUserObject().isDirectory() || segmentIndex == segments.size() - 1)
                     .filter(node -> node.getUserObject().getName().equals(segment))
                     .findFirst()
                     .orElse(null);
             return child == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(child, segments, segmentIndex + 1);
+                    : findItemPath(child, segments, segmentIndex + 1);
         });
     }
 

@@ -2,6 +2,10 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
+import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +17,7 @@ import java.awt.event.MouseEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,6 +26,138 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorTabsTest {
 
+    @Test
+    void rightPressOnTabPaddingDoesNotSelectAnInactiveTabAndKeyboardOpensItsMenu() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            EditorTabs tabs = new EditorTabs();
+            tabs.openEditorTab(new TestEditor());
+            TestEditor active = new TestEditor();
+            tabs.openEditorTab(active);
+            JFrame window = new JFrame();
+            PopupFactory previous = PopupFactory.getSharedInstance();
+            AtomicReference<JPopupMenu> popup = new AtomicReference<>();
+            PopupFactory.setSharedInstance(new PopupFactory() {
+                @Override public Popup getPopup(Component owner, Component contents, int x, int y) {
+                    popup.set((JPopupMenu) contents);
+                    return new Popup() {
+                        @Override public void show() { }
+                        @Override public void hide() { }
+                    };
+                }
+            });
+            try {
+                window.setAutoRequestFocus(false);
+                window.setFocusableWindowState(false);
+                window.setContentPane(tabs);
+                window.setBounds(-20000, -20000, 600, 300);
+                window.setVisible(true);
+                var bounds = tabs.getBoundsAt(0);
+                tabs.dispatchEvent(mouseEvent(tabs, MouseEvent.MOUSE_PRESSED, bounds.x + 1, bounds.y + 1, MouseEvent.BUTTON3));
+                assertSame(active, tabs.getSelectedEditor());
+                for (KeyStroke key : new KeyStroke[]{KeyStroke.getKeyStroke("shift F10"), KeyStroke.getKeyStroke("CONTEXT_MENU")}) {
+                    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(tabs,
+                            new java.awt.event.KeyEvent(tabs, java.awt.event.KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                                    key.getModifiers(), key.getKeyCode(), java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                    assertTrue(item(popup.get(), "Close").isEnabled());
+                    assertSame(active, tabs.getSelectedEditor());
+                    popup.getAndSet(null).setVisible(false);
+                }
+            } finally {
+                window.dispose();
+                tabs.closeMatching(editor -> true);
+                PopupFactory.setSharedInstance(previous);
+            }
+        });
+    }
+
+    @Test
+    void tabMenusCloseTheClickedTabWithoutChangingTheActiveEditor() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            EditorTabs tabs = new EditorTabs();
+            TestEditor first = new TestEditor();
+            TestEditor active = new TestEditor();
+            tabs.openEditorTab(first);
+            tabs.openEditorTab(active);
+            JPopupMenu menu = tabs.createContextMenu(0);
+            assertSame(active, tabs.getSelectedEditor());
+            item(menu, "Close").doClick();
+            assertTrue(first.disposed);
+            assertSame(active, tabs.getSelectedEditor());
+            assertFalse(item(tabs.createContextMenu(0), "Close others").isEnabled());
+        });
+    }
+
+    @Test
+    void bulkCloseRespectsEditorSaveVetoes() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            EditorTabs tabs = new EditorTabs();
+            TestEditor close = new TestEditor();
+            TestEditor keep = new TestEditor();
+            TestEditor unsaved = new TestEditor();
+            unsaved.canClose = false;
+            tabs.openEditorTab(close);
+            tabs.openEditorTab(keep);
+            tabs.openEditorTab(unsaved);
+            item(tabs.createContextMenu(1), "Close others").doClick();
+            assertTrue(close.disposed);
+            assertFalse(keep.disposed);
+            assertFalse(unsaved.disposed);
+            assertEquals(2, tabs.getTabCount());
+            item(tabs.createContextMenu(0), "Close all").doClick();
+            assertTrue(keep.disposed);
+            assertFalse(unsaved.disposed);
+            assertEquals(1, tabs.getTabCount());
+            unsaved.canClose = true;
+            item(tabs.createContextMenu(0), "Close").doClick();
+            assertTrue(unsaved.disposed);
+        });
+    }
+
+    @Test
+    void revealUsesTheClickedEditorAndLocationActionsRequireALocation() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            EditorTabs tabs = new EditorTabs();
+            AtomicReference<IEditorPanel> revealed = new AtomicReference<>();
+            tabs.setRevealActionProvider(editor -> new AbstractAction("Reveal in tree") {
+                @Override public void actionPerformed(java.awt.event.ActionEvent event) { revealed.set(editor); }
+            });
+            TestEditor file = new TestEditor();
+            file.location = EditorLocation.forFile(java.nio.file.Path.of("script.java"), null);
+            TestEditor active = new TestEditor();
+            tabs.openEditorTab(file);
+            tabs.openEditorTab(active);
+            JPopupMenu menu = tabs.createContextMenu(0);
+            assertTrue(item(menu, "Copy location").isEnabled());
+            item(menu, "Reveal in tree").doClick();
+            assertSame(file, revealed.get());
+            assertSame(active, tabs.getSelectedEditor());
+            assertFalse(java.util.Arrays.stream(tabs.createContextMenu(1).getComponents())
+                    .anyMatch(component -> component instanceof JMenuItem item && "Copy location".equals(item.getText())));
+        });
+    }
+
+    @Test
+    void tabHeightIsCompactInBothThemesWithoutClippingTheHeader() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (CompanionTheme theme : CompanionTheme.available()) {
+                ThemeManager.installTheme(theme);
+                EditorTabs tabs = new EditorTabs();
+                tabs.openEditorTab(new TestEditor());
+                tabs.setSize(500, 200);
+                tabs.doLayout();
+                int height = tabs.getBoundsAt(0).height;
+                assertEquals(com.formdev.flatlaf.util.UIScale.scale(UiMetrics.TAB_HEIGHT), height);
+                assertTrue(height < com.formdev.flatlaf.util.UIScale.scale(40));
+                assertTrue(height >= tabs.getTabComponentAt(0).getPreferredSize().height);
+                tabs.closeMatching(editor -> true);
+            }
+        });
+    }
+
+    private static JMenuItem item(JPopupMenu menu, String label) {
+        return java.util.Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance)
+                .map(JMenuItem.class::cast).filter(item -> label.equals(item.getText())).findFirst().orElseThrow();
+    }
 
     @Test
     void selectiveClosePreservesOtherEditorsAndSelection() throws Exception {
@@ -210,6 +347,11 @@ class EditorTabsTest {
         private final JPanel panel = new JPanel();
         private final CompletableFuture<Void> ready = new CompletableFuture<>();
         private boolean disposed;
+        private boolean canClose = true;
+        private EditorLocation location = EditorLocation.empty();
+
+        @Override public boolean canClose() { return this.canClose; }
+        @Override public EditorLocation getLocation() { return this.location; }
 
         @Override
         public String getTitle() {

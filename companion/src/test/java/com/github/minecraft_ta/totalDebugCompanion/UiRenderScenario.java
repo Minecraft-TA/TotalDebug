@@ -9,6 +9,8 @@ enum UiRenderScenario {
     PRISM("prism", "Prism instance library picker"),
     INACTIVE_TABS("inactive-tabs", "Main window with inactive editor tabs visible"),
     TAB_HOVER("tab-hover", "Inactive editor tab with its hover and close affordance visible"),
+    TAB_MENU("tab-menu", "Context menu on an inactive editor tab"),
+    TAB_REVEAL("tab-reveal", "Inactive source tab revealed in the Files tree"),
     EDITOR_CURRENT_LINE("editor-current-line", "Current editor line and hierarchy gutter markers"),
     BREAKPOINT_EDITOR("breakpoint-editor", "Conditional breakpoint marker and anchored editor"),
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),

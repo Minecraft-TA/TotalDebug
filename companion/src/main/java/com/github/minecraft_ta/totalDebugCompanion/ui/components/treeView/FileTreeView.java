@@ -182,13 +182,13 @@ public class FileTreeView extends JScrollPane {
         return List.copyOf(modules);
     }
 
-    public CompletableFuture<Boolean> revealPackage(
-            String packageName,
+    public CompletableFuture<Boolean> revealRuntimePath(
             String ownerClassName,
+            String entryPath,
             RuntimeSnapshotBytecodeSource.Source source
     ) {
-        if (packageName == null || packageName.isBlank()) {
-            throw new IllegalArgumentException("A package name must not be blank");
+        if (entryPath == null || entryPath.isBlank()) {
+            throw new IllegalArgumentException("A runtime path must not be blank");
         }
         RuntimeSourceCatalog catalog = sourceCatalog();
         List<String> path = new ArrayList<>();
@@ -204,11 +204,11 @@ public class FileTreeView extends JScrollPane {
             }
             path.add(module);
         }
-        path.addAll(List.of(packageName.split("\\.")));
+        path.addAll(List.of(entryPath.split("/")));
         return revealRuntimeDirectory(source.module(), path);
     }
 
-    public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
+    public CompletableFuture<Boolean> revealLocalPath(Path directory) {
         Path target = directory.toAbsolutePath().normalize();
         for (Path root : List.of(
                 project.get().paths().scripts()
@@ -220,12 +220,12 @@ public class FileTreeView extends JScrollPane {
             for (Path segment : root.relativize(target)) {
                 relative.add(segment.toString());
             }
-            return this.tree.revealDirectoryPath(root.getFileName().toString(), relative);
+            return this.tree.revealItemPath(root.getFileName().toString(), relative);
         }
         return CompletableFuture.completedFuture(false);
     }
 
-    public CompletableFuture<Boolean> revealArchiveDirectory(Path archive, String entryName) {
+    public CompletableFuture<Boolean> revealArchivePath(Path archive, String entryName) {
         Path normalizedArchive = archive.toAbsolutePath().normalize();
         RuntimeSourceCatalog catalog = sourceCatalog();
         for (var module : catalog.modules()) {
@@ -251,7 +251,7 @@ public class FileTreeView extends JScrollPane {
             RuntimeInventory.RuntimeModule module,
             List<String> directorySegments
     ) {
-        return this.tree.revealDirectoryPath("runtime", runtimeDirectoryPath(module, directorySegments));
+        return this.tree.revealItemPath("runtime", runtimeDirectoryPath(module, directorySegments));
     }
 
     static List<String> runtimeDirectoryPath(

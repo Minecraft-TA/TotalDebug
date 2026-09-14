@@ -94,6 +94,21 @@ class LazyFileJTreeTest {
     }
 
     @Test
+    void revealsFilesInsideCollapsedDirectoriesWithoutTreatingFilesAsContainers() throws Exception {
+        LazyFileJTree tree = new LazyFileJTree();
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(directory("scripts", List.of(
+                directory("nested", List.of(new TreeItem("example.java")))))));
+        assertTrue(tree.revealItemPath("scripts", List.of("nested", "example.java")).get(3, TimeUnit.SECONDS));
+        SwingUtilities.invokeAndWait(() -> {
+            var node = (LazyTreeNode) tree.getSelectionPath().getLastPathComponent();
+            assertEquals("example.java", node.getUserObject().getName());
+            assertTrue(tree.isVisible(tree.getSelectionPath()));
+        });
+        org.junit.jupiter.api.Assertions.assertFalse(tree.revealItemPath(
+                "scripts", List.of("nested", "example.java", "missing")).get(3, TimeUnit.SECONDS));
+    }
+
+    @Test
     void revealsARequestedPackageInItsOwningContainer() throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
         DirectoryTreeItem mods = directory("mods", List.of(
@@ -105,7 +120,7 @@ class LazyFileJTreeTest {
         ));
         SwingUtilities.invokeAndWait(() -> tree.setRootNodes(mods));
 
-        boolean revealed = tree.revealDirectoryPath(
+        boolean revealed = tree.revealItemPath(
                 "mods",
                 "second.jar",
                 List.of("com", "example")

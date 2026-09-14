@@ -119,6 +119,28 @@ final class UiScenarioDriver {
                 mainWindow.getEditorTabs().setSelectedIndex(lastTab);
             });
             case TAB_HOVER -> advanceTabHover(context);
+            case TAB_MENU, TAB_REVEAL -> {
+                var tabs = mainWindow.getEditorTabs();
+                context.once("select-resource", () -> tabs.setSelectedIndex(tabs.getTabCount() - 1));
+                context.once("tab-menu", () -> {
+                    Component header = tabs.getTabComponentAt(0);
+                    Point location = new Point(8, header.getHeight());
+                    OffscreenPopupFactory.expectAt(header, location);
+                    header.dispatchEvent(new MouseEvent(header, MouseEvent.MOUSE_RELEASED,
+                            System.currentTimeMillis(), 0, location.x, location.y, 1, true, MouseEvent.BUTTON3));
+                });
+                if (scenario == UiRenderScenario.TAB_REVEAL && visibleMenuPopup() != null) {
+                    context.once("reveal-tab", () -> {
+                        for (Component item : visibleMenuPopup().getComponents()) {
+                            if (item instanceof javax.swing.JMenuItem action && "Reveal in tree".equals(action.getText())) {
+                                action.doClick();
+                                return;
+                            }
+                        }
+                        throw new IllegalStateException("Source tab has no reveal action");
+                    });
+                }
+            }
             case EDITOR_CURRENT_LINE -> {
                 selectCodeEditor(context);
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
@@ -251,6 +273,15 @@ final class UiScenarioDriver {
 
     private boolean ready(UiRenderScenario scenario, ScenarioContext context) {
         return switch (scenario) {
+            case TAB_MENU -> visibleMenuPopup() != null && mainWindow.getEditorTabs().getSelectedIndex()
+                    == mainWindow.getEditorTabs().getTabCount() - 1;
+            case TAB_REVEAL -> {
+                LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
+                yield tree != null && tree.getSelectionPath() != null
+                        && tree.getSelectionPath().getLastPathComponent() instanceof com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode node
+                        && "ThemeSample.class".equals(node.getUserObject().getName())
+                        && mainWindow.getEditorTabs().getSelectedIndex() == mainWindow.getEditorTabs().getTabCount() - 1;
+            }
             case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
             case PROJECTS -> mainWindow.getJMenuBar().getMenu(0).isPopupMenuVisible();
             case PRISM -> Arrays.stream(mainWindow.getOwnedWindows())
