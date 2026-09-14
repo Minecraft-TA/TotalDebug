@@ -28,6 +28,12 @@ public class NavigationFixture<T> {
  public static final Supplier<ArrayList<String>> CONSTRUCTOR = ArrayList::new;
  public static String FIRST = "first".trim();
  public static String SECOND = "second".trim();
+ public static String mutable = "mutable";
+ public static final String copied = mutable;
+ public static int[] numbers = {1, 2};
+ public static final int size = numbers.length;
+ public static final int CONSTANT = 7;
+ public static String outerMarker = "anon-initializer";
  static { FIRST = FIRST + SECOND; }
  public String field = "field".trim();
  { field += "instance"; }
@@ -45,6 +51,7 @@ public class NavigationFixture<T> {
    Supplier<String> anonymous = new Supplier<>() { public String get() { return input.toUpperCase(); } };
    return new Local().read() + anonymous.get();
  }
+ public static Object fieldOnlyAnonymous() { return new Object() { static String marker = "anon-initializer"; }; }
  public String pattern(Object value) {
    return switch(value) {
      case String text when !text.isEmpty() -> text.trim();
@@ -63,4 +70,3 @@ public class NavigationFixture<T> {
  public List<? extends T> generic(List<? extends T> values) { return values; }
  public native void nativeMethod();
 }
-

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.decompiler.fixture.Navigation
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerBreakpointResolver;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
@@ -111,6 +112,27 @@ final class SourceDocumentIntegrationTest {
         assertEquals(SourceDocument.Kind.OCCURRENCE, staticUse.kind());
         assertTrue(document.contents().startsWith("\"first\"", staticUse.caret()));
         assertEquals(staticUse, restored.usage(init, ReferenceQuery.stringLiteral("first")));
+        assertTrue(document.symbols().stream().anyMatch(span -> span.role() == SourceDocument.SymbolRole.CONSTANT_FIELD));
+        for (var field : List.of(new CodeSymbol.FieldSymbol(OWNER, "mutable", "Ljava/lang/String;"),
+                new CodeSymbol.FieldSymbol(OWNER, "numbers", "[I"))) {
+            var read = document.usage(init, field.referenceQuery());
+            assertEquals(SourceDocument.Kind.OCCURRENCE, read.kind());
+            assertTrue(document.contents().startsWith(field.name(), read.caret()));
+            assertEquals(read, restored.usage(init, field.referenceQuery()));
+        }
+        String anonymousOwner = document.symbols().stream().map(SourceDocument.SymbolSpan::symbol)
+                .filter(symbol -> symbol instanceof CodeSymbol.FieldSymbol field && field.name().equals("marker"))
+                .map(CodeSymbol::ownerClassName).findFirst().orElseThrow();
+        assertTrue(document.binaryNames().contains(anonymousOwner));
+        var anonymousInit = document.usage(ReferenceLocation.method(anonymousOwner, "<clinit>", "()V"),
+                ReferenceQuery.stringLiteral("anon-initializer"));
+        var anonymousField = document.navigate(new RuntimeMember.Field(anonymousOwner, "marker"));
+        assertEquals(SourceDocument.Kind.OCCURRENCE, anonymousInit.kind());
+        assertTrue(anonymousInit.caret() >= anonymousField.start()
+                && anonymousInit.caret() < anonymousField.start() + anonymousField.length());
+        assertEquals(SourceDocument.Kind.CLASS, document.usage(
+                ReferenceLocation.method(OWNER + "$Missing", "<clinit>", "()V"),
+                ReferenceQuery.stringLiteral("anon-initializer")).kind());
 
         var constructor = ReferenceLocation.method(OWNER, "<init>", "()V");
         var instanceField = document.usage(constructor, ReferenceQuery.stringLiteral("field"));

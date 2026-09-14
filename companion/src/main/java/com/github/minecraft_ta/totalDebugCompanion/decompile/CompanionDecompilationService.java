@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-source-symbols-8";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-source-symbols-9";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
@@ -143,9 +143,10 @@ public final class CompanionDecompilationService implements AutoCloseable {
             throw new IOException("Vineflower produced partial source for " + binaryName);
         }
         this.bytecodeSource.requireCurrent();
+        SourceDocument document = new SourceDocument(binaryName, result.source(), result.lineMap(), result.variableNames(), result.symbols());
+        document.prepare();
         synchronized (this.publicationLock) {
             ensureOpen();
-            SourceDocument document = new SourceDocument(binaryName, result.source(), result.lineMap(), result.variableNames(), result.symbols());
             Path path = this.sourceStore.write(document);
             return new DecompiledSource(path, document, this.bytecodeSource.findClassOrigin(binaryName));
         }
@@ -158,6 +159,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
             return null;
         }
         this.bytecodeSource.requireCurrent();
+        stored.document().prepare();
         return new DecompiledSource(stored.path(), stored.document(), this.bytecodeSource.findClassOrigin(binaryName));
     }
 

@@ -2,10 +2,12 @@ package com.github.minecraft_ta.totalDebugCompanion.decompiler;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument.SymbolRole;
 import org.jetbrains.java.decompiler.main.DecompilerContext;
 import org.jetbrains.java.decompiler.main.extern.TextTokenVisitor;
 import org.jetbrains.java.decompiler.struct.gen.FieldDescriptor;
 import org.jetbrains.java.decompiler.struct.gen.MethodDescriptor;
+import org.jetbrains.java.decompiler.struct.attr.StructGeneralAttribute;
 import org.jetbrains.java.decompiler.util.token.TextRange;
 
 import java.util.ArrayList;
@@ -42,27 +44,30 @@ public final class SourceSymbolCapture {
 
             @Override public void visitClass(TextRange range, boolean declaration, String name) {
                 super.visitClass(range, declaration, name);
-                add(range, declaration, new CodeSymbol.ClassSymbol(name.replace('/', '.')));
+                add(range, declaration ? SymbolRole.DECLARATION : SymbolRole.REFERENCE, new CodeSymbol.ClassSymbol(name.replace('/', '.')));
             }
 
             @Override public void visitField(TextRange range, boolean declaration, String owner, String name, FieldDescriptor descriptor) {
                 super.visitField(range, declaration, owner, name, descriptor);
-                add(range, declaration, new CodeSymbol.FieldSymbol(owner.replace('/', '.'), name, descriptor.descriptorString));
+                SymbolRole role = declaration ? SymbolRole.DECLARATION : SymbolRole.REFERENCE;
+                if (declaration) {
+                    var type = DecompilerContext.getStructContext().getClass(owner);
+                    var field = type == null ? null : type.getField(name, descriptor.descriptorString);
+                    if (field != null && field.hasAttribute(StructGeneralAttribute.ATTRIBUTE_CONSTANT_VALUE)) role = SymbolRole.CONSTANT_FIELD;
+                }
+                add(range, role, new CodeSymbol.FieldSymbol(owner.replace('/', '.'), name, descriptor.descriptorString));
             }
 
             @Override public void visitMethod(TextRange range, boolean declaration, String owner, String name, MethodDescriptor descriptor) {
                 super.visitMethod(range, declaration, owner, name, descriptor);
-                add(range, declaration, new CodeSymbol.MethodSymbol(owner.replace('/', '.'), name, descriptor.toString()));
+                add(range, declaration ? SymbolRole.DECLARATION : SymbolRole.REFERENCE, new CodeSymbol.MethodSymbol(owner.replace('/', '.'), name, descriptor.toString()));
             }
 
             @Override public void visitParameter(TextRange range, boolean declaration, String owner, String method,
                                                  MethodDescriptor descriptor, int index, String name) {
                 super.visitParameter(range, declaration, owner, method, descriptor, index, name);
-                if (declaration && range.length > 0) {
-                    this.spans.add(new SourceDocument.SymbolSpan(
-                            new CodeSymbol.MethodSymbol(owner.replace('/', '.'), method, descriptor.toString()),
-                            SourceDocument.SymbolRole.METHOD_PARAMETER, range.start, range.length));
-                }
+                if (declaration) add(range, SymbolRole.METHOD_PARAMETER,
+                        new CodeSymbol.MethodSymbol(owner.replace('/', '.'), method, descriptor.toString()));
             }
 
             @Override public void visitLocal(TextRange range, boolean declaration, String owner, String method,
@@ -70,17 +75,12 @@ public final class SourceSymbolCapture {
                 super.visitLocal(range, declaration, owner, method, descriptor, index, name);
                 // References to captured variables report their original declaration's method.
                 // Only declarations establish the lambda that owns this source scope.
-                if (declaration && range.length > 0) {
-                    this.spans.add(new SourceDocument.SymbolSpan(
-                            new CodeSymbol.MethodSymbol(owner.replace('/', '.'), method, descriptor.toString()),
-                            SourceDocument.SymbolRole.METHOD_LOCAL, range.start, range.length));
-                }
+                if (declaration) add(range, SymbolRole.METHOD_LOCAL,
+                        new CodeSymbol.MethodSymbol(owner.replace('/', '.'), method, descriptor.toString()));
             }
 
-            private void add(TextRange range, boolean declaration, CodeSymbol symbol) {
-                if (range.length > 0) this.spans.add(new SourceDocument.SymbolSpan(symbol,
-                        declaration ? SourceDocument.SymbolRole.DECLARATION : SourceDocument.SymbolRole.REFERENCE,
-                        range.start, range.length));
+            private void add(TextRange range, SymbolRole role, CodeSymbol symbol) {
+                if (range.length > 0) this.spans.add(new SourceDocument.SymbolSpan(symbol, role, range.start, range.length));
             }
 
             @Override public void end() {

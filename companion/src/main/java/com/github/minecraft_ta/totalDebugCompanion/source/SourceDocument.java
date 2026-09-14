@@ -21,7 +21,6 @@ import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ConstructorInvocation;
 import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
 import org.eclipse.jdt.core.dom.EnumDeclaration;
-import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -29,10 +28,8 @@ import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.Initializer;
 import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NodeFinder;
-import org.eclipse.jdt.core.dom.PrimitiveType;
 import org.eclipse.jdt.core.dom.RecordDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
@@ -95,12 +92,18 @@ public final class SourceDocument {
     public SourceVariableNames variableNames() { return this.variableNames; }
     public List<SymbolSpan> symbols() { return this.symbols; }
 
-    public enum SymbolRole { DECLARATION, REFERENCE, METHOD_PARAMETER, METHOD_LOCAL }
+    /** Prepare on the source-loading worker before an editor can query this snapshot on the EDT. */
+    public synchronized void prepare() { initialize(); }
+
+    public enum SymbolRole { DECLARATION, REFERENCE, METHOD_PARAMETER, METHOD_LOCAL, CONSTANT_FIELD }
 
     public record SymbolSpan(CodeSymbol symbol, SymbolRole role, int offset, int length) {
         public SymbolSpan {
             Objects.requireNonNull(symbol);
             Objects.requireNonNull(role);
+            if (role == SymbolRole.CONSTANT_FIELD && !(symbol instanceof CodeSymbol.FieldSymbol)) {
+                throw new IllegalArgumentException("A constant must identify its field");
+            }
             if ((role == SymbolRole.METHOD_PARAMETER || role == SymbolRole.METHOD_LOCAL)
                     && !(symbol instanceof CodeSymbol.MethodSymbol)) {
                 throw new IllegalArgumentException("A variable declaration must identify its owning method");
@@ -146,7 +149,8 @@ public final class SourceDocument {
         initialize();
         Objects.requireNonNull(query);
         if (location.site() instanceof ReferenceLocation.Method method && method.name().equals("<clinit>")) {
-            Entry owner = owner(location.className());
+            Entry owner = this.declarations.get(new CodeSymbol.ClassSymbol(location.className()));
+            if (owner == null) return classFallback(location.className());
             for (ASTNode scope : initializers(owner.node, true)) {
                 OptionalInt offset = occurrence(scope, query);
                 if (offset.isPresent()) return occurrenceResolution(offset.getAsInt());
@@ -161,7 +165,8 @@ public final class SourceDocument {
             if (bodyOffset.isPresent()) return occurrenceResolution(bodyOffset.getAsInt());
             // A this(...) constructor delegates initialization to the target constructor.
             if (body.statements().isEmpty() || !(body.statements().getFirst() instanceof ConstructorInvocation)) {
-                for (ASTNode scope : initializers(owner(location.className()).node, false)) {
+                Entry owner = this.declarations.get(new CodeSymbol.ClassSymbol(location.className()));
+                for (ASTNode scope : owner == null ? List.<ASTNode>of() : initializers(owner.node, false)) {
                     OptionalInt initializerOffset = occurrence(scope, query);
                     if (initializerOffset.isPresent()) return occurrenceResolution(initializerOffset.getAsInt());
                 }
@@ -258,7 +263,7 @@ public final class SourceDocument {
         if (parsed.types().isEmpty()) throw new IllegalArgumentException("Source has no Java type declaration");
         this.unit = parsed;
         for (SymbolSpan span : this.symbols) {
-            if (span.role() != SymbolRole.DECLARATION) continue;
+            if (span.role() != SymbolRole.DECLARATION && span.role() != SymbolRole.CONSTANT_FIELD) continue;
             ASTNode node = NodeFinder.perform(parsed, span.offset(), span.length());
             while (node != null && !declarationNode(node, span.symbol())) node = node.getParent();
             if (node != null) add(span.symbol(), node, span.offset());
@@ -348,9 +353,10 @@ public final class SourceDocument {
     private void add(CodeSymbol symbol, ASTNode node, int caret) {
         boolean component = node instanceof SingleVariableDeclaration && node.getParent() instanceof RecordDeclaration;
         this.declarations.put(symbol, new Entry(node, caret, component ? Kind.CONSTRUCT : Kind.DECLARATION));
-        if (symbol instanceof CodeSymbol.MethodSymbol method && node.getParent() instanceof AnonymousClassDeclaration anonymous) {
-            // The emitted method identifies this anonymous class without guessing compiler numbering.
-            this.declarations.putIfAbsent(new CodeSymbol.ClassSymbol(method.ownerClassName()),
+        if ((symbol instanceof CodeSymbol.MethodSymbol || symbol instanceof CodeSymbol.FieldSymbol)
+                && node.getParent() instanceof AnonymousClassDeclaration anonymous) {
+            // Emitted members identify this anonymous class without guessing compiler numbering.
+            this.declarations.putIfAbsent(new CodeSymbol.ClassSymbol(symbol.ownerClassName()),
                     new Entry(anonymous, anonymous.getStartPosition(), Kind.DECLARATION));
         }
         if (component && symbol instanceof CodeSymbol.FieldSymbol field) {
@@ -420,42 +426,40 @@ public final class SourceDocument {
         return false;
     }
 
-    private static List<ASTNode> initializers(ASTNode node, boolean staticScope) {
-        if (!(node instanceof AbstractTypeDeclaration type)) return List.of();
+    private List<ASTNode> initializers(ASTNode node, boolean staticScope) {
+        List<?> members = switch (node) {
+            case AbstractTypeDeclaration type -> type.bodyDeclarations();
+            case AnonymousClassDeclaration anonymous -> anonymous.bodyDeclarations();
+            default -> List.of();
+        };
         var scopes = new ArrayList<ASTNode>();
-        if (staticScope && type instanceof EnumDeclaration enumeration) {
+        if (staticScope && node instanceof EnumDeclaration enumeration) {
             for (Object constant : enumeration.enumConstants()) scopes.add((ASTNode) constant);
         }
-        for (Object value : type.bodyDeclarations()) {
+        for (Object value : members) {
             if (value instanceof Initializer initializer && Modifier.isStatic(initializer.getModifiers()) == staticScope) {
                 scopes.add(initializer.getBody());
-            } else if (value instanceof FieldDeclaration field && (Modifier.isStatic(field.getModifiers())
-                    || type instanceof TypeDeclaration owner && owner.isInterface() || type instanceof AnnotationTypeDeclaration) == staticScope) {
+            } else if (value instanceof FieldDeclaration field) {
+                boolean staticField = Modifier.isStatic(field.getModifiers())
+                        || node instanceof TypeDeclaration owner && owner.isInterface()
+                        || node instanceof AnnotationTypeDeclaration;
+                if (staticField != staticScope) continue;
                 for (Object fragment : field.fragments()) {
-                    var initializer = ((VariableDeclarationFragment) fragment).getInitializer();
+                    var variable = (VariableDeclarationFragment) fragment;
+                    var initializer = variable.getInitializer();
                     if (initializer != null && !(initializer instanceof LambdaExpression)
-                            && (!staticScope || executableInitializer(field, initializer))) scopes.add(initializer);
+                            && (!staticScope || !constantField(variable))) scopes.add(initializer);
                 }
             }
         }
         return scopes;
     }
 
-    private static boolean executableInitializer(FieldDeclaration field, Expression initializer) {
-        // ConstantValue fields have no <clinit> instructions. With an unbound AST, avoid
-        // claiming a constant-capable final field unless its initializer visibly executes code.
-        boolean finalField = Modifier.isFinal(field.getModifiers())
-                || field.getParent() instanceof AnnotationTypeDeclaration
-                || field.getParent() instanceof TypeDeclaration type && type.isInterface();
-        String typeName = field.getType().toString();
-        if (!finalField || !(field.getType() instanceof PrimitiveType
-                || typeName.equals("String") || typeName.equals("java.lang.String"))) return true;
-        boolean[] executes = {false};
-        initializer.accept(new ASTVisitor() {
-            @Override public boolean visit(MethodInvocation node) { executes[0] = true; return false; }
-            @Override public boolean visit(ClassInstanceCreation node) { executes[0] = true; return false; }
-        });
-        return executes[0];
+    private boolean constantField(VariableDeclarationFragment variable) {
+        int offset = variable.getName().getStartPosition();
+        if (this.symbols.stream().anyMatch(span -> span.role() == SymbolRole.CONSTANT_FIELD && span.offset() == offset)) return true;
+        IVariableBinding binding = variable.resolveBinding();
+        return binding != null && binding.getConstantValue() != null;
     }
 
     private Resolution occurrenceResolution(int offset) {
