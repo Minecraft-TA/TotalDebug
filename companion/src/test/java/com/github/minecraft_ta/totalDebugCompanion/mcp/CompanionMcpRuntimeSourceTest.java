@@ -153,14 +153,7 @@ class CompanionMcpRuntimeSourceTest {
     }
 
     private CompanionMcpRuntimeSource source() {
-        DecompiledSource source = new DecompiledSource(
-                this.temporaryDirectory.resolve("RuntimeSourceFixture.java"),
-                RuntimeSourceFixture.class.getName(),
-                SOURCE,
-                SourceLineMap.empty(),
-                SourceVariableNames.empty(),
-                null
-        );
+        DecompiledSource source = new DecompiledSource(this.temporaryDirectory.resolve("RuntimeSourceFixture.java"), new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(RuntimeSourceFixture.class.getName(), SOURCE, SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()), null);
         return new CompanionMcpRuntimeSource(binaryName -> source);
     }
 

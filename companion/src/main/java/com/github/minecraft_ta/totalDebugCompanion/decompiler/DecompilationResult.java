@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 
 import java.util.List;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import java.util.Objects;
 
 public record DecompilationResult(
@@ -11,7 +12,8 @@ public record DecompilationResult(
         Status status,
         List<DecompilerDiagnostic> diagnostics,
         SourceLineMap lineMap,
-        SourceVariableNames variableNames
+        SourceVariableNames variableNames,
+        List<SourceDocument.SymbolSpan> symbols
 ) {
     public DecompilationResult {
         Objects.requireNonNull(source, "source");
@@ -19,6 +21,7 @@ public record DecompilationResult(
         diagnostics = List.copyOf(diagnostics);
         Objects.requireNonNull(lineMap, "lineMap");
         Objects.requireNonNull(variableNames, "variableNames");
+        symbols = List.copyOf(symbols);
         if (source.isBlank()) {
             throw new IllegalArgumentException("Decompiled source must not be blank");
         }
@@ -29,7 +32,7 @@ public record DecompilationResult(
             Status status,
             List<DecompilerDiagnostic> diagnostics
     ) {
-        this(source, status, diagnostics, SourceLineMap.empty(), SourceVariableNames.empty());
+        this(source, status, diagnostics, SourceLineMap.empty(), SourceVariableNames.empty(), List.of());
     }
 
     public boolean isComplete() {

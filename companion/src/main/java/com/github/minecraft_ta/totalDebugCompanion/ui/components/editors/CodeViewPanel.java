@@ -552,12 +552,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private Optional<DebugEngine.SourceBreakpoint> breakpointRequestAtLine(int displayedLine) {
-        var unit = context.astCache().getFromCache(this.identifier);
-        if (unit == null) {
-            throw new IllegalStateException("Source analysis is still loading");
-        }
-        return DebuggerBreakpointResolver.resolve(
-                this.debugSource, unit, displayedLine, null, null);
+        return DebuggerBreakpointResolver.resolve(this.debugSource, displayedLine, null, null);
     }
 
     private void updateBreakpointMarkers(DebuggerSessionController debugger) {

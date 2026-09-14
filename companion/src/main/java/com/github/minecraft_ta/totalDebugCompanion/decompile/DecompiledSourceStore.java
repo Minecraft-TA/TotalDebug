@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -23,7 +25,7 @@ import java.util.Objects;
 /** One current runtime's readable source/debug pairs. The manifest commits each complete pair. */
 final class DecompiledSourceStore {
     private static final int MAGIC = 0x54444442;
-    private static final int FORMAT = 2;
+    private static final int FORMAT = 4;
     private final Path directory;
     private final String identity;
 
@@ -76,11 +78,11 @@ final class DecompiledSourceStore {
             }
             Path file = this.directory.resolve(stem + ".java");
             String source = Files.readString(file, StandardCharsets.UTF_8);
-            return new StoredSource(file, source, readDebug(this.directory.resolve(stem + ".debug"), binaryName, source));
+            return new StoredSource(file, readDebug(this.directory.resolve(stem + ".debug"), binaryName, source));
         });
     }
 
-    private static DebugMetadata readDebug(Path file, String binaryName, String source) throws IOException {
+    private static SourceDocument readDebug(Path file, String binaryName, String source) throws IOException {
         try (DataInputStream input = new DataInputStream(Files.newInputStream(file))) {
             if (!readHeader(input).equals(binaryName) || !input.readUTF().equals(fingerprint(source))) {
                 throw new IOException("Decompiled source/debug pair does not match: " + file);
@@ -109,19 +111,35 @@ final class DecompiledSourceStore {
                     throw new IOException("Duplicate method variable names: " + method);
                 }
             }
+            int symbolCount = readCount(input, 12);
+            var symbols = new java.util.ArrayList<SourceDocument.SymbolSpan>(symbolCount);
+            for (int i = 0; i < symbolCount; i++) {
+                int kind = input.readUnsignedByte();
+                String owner = input.readUTF();
+                CodeSymbol symbol = switch (kind) {
+                    case 0 -> new CodeSymbol.ClassSymbol(owner);
+                    case 1 -> new CodeSymbol.FieldSymbol(owner, input.readUTF(), input.readUTF());
+                    case 2 -> new CodeSymbol.MethodSymbol(owner, input.readUTF(), input.readUTF());
+                    default -> throw new IOException("Invalid source symbol kind: " + kind);
+                };
+                int role = input.readUnsignedByte();
+                if (role >= SourceDocument.SymbolRole.values().length) throw new IOException("Invalid source symbol role: " + role);
+                symbols.add(new SourceDocument.SymbolSpan(symbol, SourceDocument.SymbolRole.values()[role], input.readInt(), input.readInt()));
+            }
             if (input.read() != -1) {
                 throw new IOException("Trailing data in decompiled debug metadata: " + file);
             }
-            return new DebugMetadata(SourceLineMap.fromOriginalToDisplayed(mapping), SourceVariableNames.of(methods));
+            return new SourceDocument(binaryName, source, SourceLineMap.fromOriginalToDisplayed(mapping), SourceVariableNames.of(methods), symbols);
         } catch (IllegalArgumentException exception) {
             throw new IOException("Invalid decompiled debug metadata: " + file, exception);
         }
     }
 
-    Path write(String binaryName, String source, SourceLineMap lines, SourceVariableNames names) throws IOException {
-        Objects.requireNonNull(source);
-        Objects.requireNonNull(lines);
-        Objects.requireNonNull(names);
+    Path write(SourceDocument document) throws IOException {
+        String binaryName = document.binaryName();
+        String source = document.contents();
+        SourceLineMap lines = document.lineMap();
+        SourceVariableNames names = document.variableNames();
         if (Objects.requireNonNull(binaryName).isBlank() || binaryName.contains("/") || binaryName.contains("\\")) {
             throw new IllegalArgumentException("Expected a Java binary name: " + binaryName);
         }
@@ -158,6 +176,15 @@ final class DecompiledSourceStore {
                             output.writeUTF(variable.getKey());
                             output.writeUTF(variable.getValue());
                         }
+                    }
+                    output.writeInt(document.symbols().size());
+                    for (var span : document.symbols()) {
+                        switch (span.symbol()) {
+                            case CodeSymbol.ClassSymbol symbol -> { output.writeByte(0); output.writeUTF(symbol.className()); }
+                            case CodeSymbol.FieldSymbol symbol -> { output.writeByte(1); output.writeUTF(symbol.ownerClassName()); output.writeUTF(symbol.name()); output.writeUTF(symbol.descriptor()); }
+                            case CodeSymbol.MethodSymbol symbol -> { output.writeByte(2); output.writeUTF(symbol.ownerClassName()); output.writeUTF(symbol.name()); output.writeUTF(symbol.descriptor()); }
+                        }
+                        output.writeByte(span.role().ordinal()); output.writeInt(span.offset()); output.writeInt(span.length());
                     }
                 }
             });
@@ -225,7 +252,7 @@ final class DecompiledSourceStore {
         }
     }
 
-    record StoredSource(Path path, String source, DebugMetadata debug) { }
+    record StoredSource(Path path, SourceDocument document) { }
 
     private static String fingerprint(String... values) {
         try {
@@ -256,5 +283,4 @@ final class DecompiledSourceStore {
         return count;
     }
 
-    record DebugMetadata(SourceLineMap lines, SourceVariableNames names) { }
 }

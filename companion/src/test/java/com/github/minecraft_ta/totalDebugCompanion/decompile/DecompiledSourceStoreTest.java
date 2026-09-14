@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompile;
 
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,18 +24,18 @@ class DecompiledSourceStoreTest {
                 "()V",
                 java.util.Map.of("p_1_", "level")
         );
-        Path source = store.write("sample.Target", "class Target {}", lineMap, variableNames);
+        Path source = store.write(new SourceDocument("sample.Target", "class Target {}", lineMap, variableNames, java.util.List.of()));
 
         assertEquals(source, store.read("sample.Target").path());
         assertEquals("class Target {}", Files.readString(source));
         assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"), fileNames(source.getParent()));
         assertEquals(java.util.List.of("sample.Target"), store.cachedClasses());
         SourceLineMap restored = DecompiledSourceStore.open(directory, "runtime", "format")
-                .read("sample.Target").debug().lines();
+                .read("sample.Target").document().lineMap();
         assertArrayEquals(new int[]{10, 4, 20, 8, 21, 8}, restored.originalToDisplayed());
         assertArrayEquals(new int[]{4, 10, 8, 20, 8, 21}, restored.displayedToOriginal());
         assertEquals(variableNames, DecompiledSourceStore.open(directory, "runtime", "format")
-                .read("sample.Target").debug().names());
+                .read("sample.Target").document().variableNames());
     }
 
     @Test
@@ -50,15 +51,15 @@ class DecompiledSourceStoreTest {
     @Test
     void replacesTheCurrentRuntimeAndRejectsLateWrites(@TempDir Path directory) throws Exception {
         var old = DecompiledSourceStore.open(directory, "first", "format");
-        Path target = old.write("sample.Target", "first", SourceLineMap.empty(), SourceVariableNames.empty());
-        old.write("sample.Removed", "removed", SourceLineMap.empty(), SourceVariableNames.empty());
+        Path target = old.write(new SourceDocument("sample.Target", "first", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
+        old.write(new SourceDocument("sample.Removed", "removed", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
         var current = DecompiledSourceStore.open(directory, "second", "format");
         assertNull(current.read("sample.Target"));
         org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
-                () -> old.write("sample.Late", "stale", SourceLineMap.empty(), SourceVariableNames.empty()));
+                () -> old.write(new SourceDocument("sample.Late", "stale", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
         org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> old.read("sample.Target"));
-        assertEquals(target, current.write("sample.Target", "second", SourceLineMap.empty(), SourceVariableNames.empty()));
-        assertEquals("second", current.read("sample.Target").source());
+        assertEquals(target, current.write(new SourceDocument("sample.Target", "second", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
+        assertEquals("second", current.read("sample.Target").document().contents());
         assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"),
                 fileNames(current.directory()));
     }
@@ -67,10 +68,10 @@ class DecompiledSourceStoreTest {
     void disambiguatesCaseReservedAndLongNamesWithoutHashDirectories(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
         for (String name : java.util.List.of("sample.Target", "sample.target", "CON", "long.".repeat(60) + "Target")) {
-            Path file = store.write(name, name, SourceLineMap.empty(), SourceVariableNames.empty());
+            Path file = store.write(new SourceDocument(name, name, SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
             assertEquals(store.directory(), file.getParent());
             org.junit.jupiter.api.Assertions.assertTrue(file.getFileName().toString().length() < 140);
-            assertEquals(name, store.read(name).source());
+            assertEquals(name, store.read(name).document().contents());
         }
         assertEquals("sample.target-2.java", store.read("sample.target").path().getFileName().toString());
         assertEquals("_CON.java", store.read("CON").path().getFileName().toString());
@@ -79,7 +80,7 @@ class DecompiledSourceStoreTest {
     @Test
     void detectsMismatchedSourceAndDebugFiles(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        Path file = store.write("sample.Target", "complete", SourceLineMap.empty(), SourceVariableNames.empty());
+        Path file = store.write(new SourceDocument("sample.Target", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
         Files.writeString(file, "different");
         org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> store.read("sample.Target"));
     }
@@ -88,13 +89,13 @@ class DecompiledSourceStoreTest {
     @Test
     void failedPairPublicationIsInvisibleAndItsFilesAreReclaimed(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        store.write("sample.Complete", "complete", SourceLineMap.empty(), SourceVariableNames.empty());
+        store.write(new SourceDocument("sample.Complete", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
         String invalidHeader = "x".repeat(70_000);
         org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
-                () -> store.write(invalidHeader, "incomplete", SourceLineMap.empty(), SourceVariableNames.empty()));
+                () -> store.write(new SourceDocument(invalidHeader, "incomplete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
         assertNull(store.read(invalidHeader));
         var reopened = DecompiledSourceStore.open(directory, "runtime", "format");
-        assertEquals("complete", reopened.read("sample.Complete").source());
+        assertEquals("complete", reopened.read("sample.Complete").document().contents());
         assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Complete.debug", "sample.Complete.java"),
                 fileNames(reopened.directory()));
     }

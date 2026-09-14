@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceL
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -15,7 +16,7 @@ import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-final class SourceFileNavigationTest {
+final class SourceDocumentNavigationTest {
     private static final String SOURCE = """
             package example;
 
@@ -109,14 +110,11 @@ final class SourceFileNavigationTest {
 
         assertEquals(
                 source.indexOf("apply(int"),
-                SourceFileNavigation.memberOffset(
-                        source,
-                        new RuntimeMember.Method("sample.Target", "apply", "(I)V")
-                )
+                new SourceDocument("sample.Target", source).navigate(new RuntimeMember.Method("sample.Target", "apply", "(I)V")).caret()
         );
         assertEquals(
                 source.indexOf("selected;"),
-                SourceFileNavigation.memberOffset(source, new RuntimeMember.Field("sample.Target", "selected"))
+                new SourceDocument("sample.Target", source).navigate(new RuntimeMember.Field("sample.Target", "selected")).caret()
         );
     }
 
@@ -134,11 +132,11 @@ final class SourceFileNavigationTest {
                 }
                 """;
 
-        assertEquals(source.indexOf("Target {"), SourceFileNavigation.topLevelTypeOffset(source));
+        assertEquals(source.indexOf("Target {"), new SourceDocument("sample.Target", source).classFallback("sample.Target").caret());
     }
 
     private static int offset(ReferenceQuery query) {
-        return SourceFileNavigation.usageOffset(SOURCE, METHOD_SITE, query);
+        return new SourceDocument(METHOD_SITE.className(), SOURCE).usage(METHOD_SITE, query).caret();
     }
 
     private static byte[] classBytes(Class<?> type) throws IOException {

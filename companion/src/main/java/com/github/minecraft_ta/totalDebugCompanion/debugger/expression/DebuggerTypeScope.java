@@ -1,13 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
-import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.VirtualMachine;
-import org.eclipse.jdt.core.dom.ASTParser;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.ImportDeclaration;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,30 +32,18 @@ public final class DebuggerTypeScope {
         this.onDemandImports = List.copyOf(onDemandImports);
     }
 
-    public static DebuggerTypeScope parse(DebugEngine.Source source) {
-        Objects.requireNonNull(source, "source");
-        ASTParser parser = JdtConfiguration.createParser();
-        parser.setKind(ASTParser.K_COMPILATION_UNIT);
-        parser.setSource(source.contents().toCharArray());
-        parser.setStatementsRecovery(true);
-        CompilationUnit unit = (CompilationUnit) parser.createAST(null);
-
-        String packageName = unit.getPackage() == null
-                ? packageName(source.binaryName())
-                : unit.getPackage().getName().getFullyQualifiedName();
+    public static DebuggerTypeScope from(SourceDocument document) {
+        Objects.requireNonNull(document);
+        String packageName = document.packageName().isEmpty() ? packageName(document.binaryName()) : document.packageName();
         Map<String, String> singleImports = new LinkedHashMap<>();
         List<String> onDemandImports = new ArrayList<>();
-        for (Object value : unit.imports()) {
-            ImportDeclaration declaration = (ImportDeclaration) value;
-            String importedName = declaration.getName().getFullyQualifiedName();
-            if (declaration.isOnDemand()) {
-                onDemandImports.add(importedName);
-            } else {
-                singleImports.put(simpleName(importedName), importedName);
-            }
-        }
         List<String> compilerImports = new ArrayList<>();
-        for (Object declaration : unit.imports()) compilerImports.add(declaration.toString());
+        for (String imported : document.imports()) {
+            compilerImports.add("import " + imported + ";\n");
+            String name = imported.startsWith("static ") ? imported.substring(7) : imported;
+            if (name.endsWith(".*")) onDemandImports.add(name.substring(0, name.length() - 2));
+            else singleImports.put(simpleName(name), name);
+        }
         return new DebuggerTypeScope(packageName, singleImports, onDemandImports, compilerImports);
     }
 
