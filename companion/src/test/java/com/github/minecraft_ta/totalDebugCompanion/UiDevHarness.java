@@ -895,14 +895,7 @@ public final class UiDevHarness {
         String sampleSource = CodeView.readCode(sample);
         int sampleEntryLine = sampleSource.substring(0, sampleSource.indexOf("double ratio"))
                 .split("\\n", -1).length;
-        DecompiledSource decompiledSample = new DecompiledSource(
-                sample,
-                "sample.ThemeSample",
-                sampleSource,
-                SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}),
-                SourceVariableNames.empty(),
-                null
-        );
+        DecompiledSource decompiledSample = new DecompiledSource(sample, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument("sample.ThemeSample", sampleSource, SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}), SourceVariableNames.empty(), java.util.List.of()), null);
         Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
         compileSampleSource(sample, sampleClasses);
         Path indexFile = root.resolve("classes.jindex");

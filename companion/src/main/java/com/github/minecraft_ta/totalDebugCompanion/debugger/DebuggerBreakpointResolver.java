@@ -1,64 +1,27 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
-import org.eclipse.jdt.core.dom.ASTVisitor;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-
 import java.util.Objects;
 import java.util.Optional;
 
-/** Resolves displayed source lines identically for the editor and remote debugger callers. */
+/** Breakpoint policy over the same source scopes used by navigation and MCP. */
 public final class DebuggerBreakpointResolver {
-    private DebuggerBreakpointResolver() {
-    }
-
+    private DebuggerBreakpointResolver() {}
     public static Optional<DebugEngine.SourceBreakpoint> resolve(
-            DebugEngine.Source source, int line, String condition, String hitCondition
-    ) {
-        return resolve(source, JavaAst.parse("DebuggerBreakpoint", source.contents()),
-                line, condition, hitCondition);
-    }
-
-    public static Optional<DebugEngine.SourceBreakpoint> resolve(
-            DebugEngine.Source source, CompilationUnit unit, int line, String condition, String hitCondition
-    ) {
-        Objects.requireNonNull(source, "source");
-        Objects.requireNonNull(unit, "unit");
+            DebugEngine.Source source, int line, String condition, String hitCondition) {
+        Objects.requireNonNull(source);
         if (line < 1 || line > source.contents().lines().count()) {
             throw new IllegalArgumentException("Source has no displayed line " + line);
         }
-        if (source.lineMap().isEmpty()) {
-            return Optional.of(new DebugEngine.SourceBreakpoint(line, condition, hitCondition));
+        if (source.lineMap().isEmpty()) return Optional.of(new DebugEngine.SourceBreakpoint(line, condition, hitCondition));
+        var scope = source.document().methodAtLine(line);
+        if (scope.isEmpty()) {
+            return source.lineMap().containsDisplayedLine(line)
+                    ? Optional.of(new DebugEngine.SourceBreakpoint(line, condition, hitCondition)) : Optional.empty();
         }
-        MethodDeclaration[] selected = new MethodDeclaration[1];
-        unit.accept(new ASTVisitor() {
-            @Override
-            public boolean visit(MethodDeclaration declaration) {
-                if (selected[0] == null && unit.getLineNumber(declaration.getName().getStartPosition()) == line) {
-                    selected[0] = declaration;
-                }
-                return true;
-            }
-        });
-        MethodDeclaration declaration = selected[0];
-        if (declaration == null) {
-            if (!source.lineMap().containsDisplayedLine(line)) {
-                return Optional.empty();
-            }
-            return Optional.of(new DebugEngine.SourceBreakpoint(line, condition, hitCondition));
-        }
-        int endLine = unit.getLineNumber(declaration.getStartPosition() + declaration.getLength() - 1);
-        var debuggerLine = source.lineMap().firstMappedDisplayedLine(line, endLine);
+        var debuggerLine = source.lineMap().firstMappedDisplayedLine(line, scope.get().lastLine());
         if (debuggerLine.isEmpty()) return Optional.empty();
-        var binding = declaration.resolveBinding();
-        if (binding == null || !(JavaSymbolResolver.trySymbolForBinding(binding) instanceof CodeSymbol.MethodSymbol method)) {
-            throw new IllegalArgumentException("Cannot resolve the runtime method declared at line " + line);
-        }
+        var method = scope.get().method();
         return Optional.of(DebugEngine.SourceBreakpoint.methodEntry(line, debuggerLine.getAsInt(),
-                new DebugEngine.MethodTarget(method.ownerClassName(), method.name(), method.descriptor()),
-                condition, hitCondition));
+                new DebugEngine.MethodTarget(method.ownerClassName(), method.name(), method.descriptor()), condition, hitCondition));
     }
 }

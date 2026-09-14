@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,11 +35,9 @@ class DebuggerBreakpointResolverTest {
             """;
 
     @Test
-    void editorAndRemoteCallsResolveTheSameMethodEntryAndExecutableLine() {
+    void resolvesMethodEntryAndExecutableLinesFromTheSharedDocument() {
         DebugEngine.Source source = source(SourceLineMap.fromOriginalToDisplayed(new int[]{40, 4}));
-        var unit = JavaAst.parse("Test", SOURCE);
         var remote = DebuggerBreakpointResolver.resolve(source, 3, "true", "5").orElseThrow();
-        assertEquals(remote, DebuggerBreakpointResolver.resolve(source, unit, 3, "true", "5").orElseThrow());
         assertTrue(remote.isMethodEntry());
         assertEquals(3, remote.line());
         assertEquals(4, remote.debuggerLine());

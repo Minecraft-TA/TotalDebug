@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilerDiagnost
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.JavaDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -20,7 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-selective-naming-debug-metadata-5";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-source-symbols-8";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
@@ -144,20 +145,9 @@ public final class CompanionDecompilationService implements AutoCloseable {
         this.bytecodeSource.requireCurrent();
         synchronized (this.publicationLock) {
             ensureOpen();
-            Path path = this.sourceStore.write(
-                    binaryName,
-                    result.source(),
-                    result.lineMap(),
-                    result.variableNames()
-            );
-            return new DecompiledSource(
-                    path,
-                    binaryName,
-                    result.source(),
-                    result.lineMap(),
-                    result.variableNames(),
-                    this.bytecodeSource.findClassOrigin(binaryName)
-            );
+            SourceDocument document = new SourceDocument(binaryName, result.source(), result.lineMap(), result.variableNames(), result.symbols());
+            Path path = this.sourceStore.write(document);
+            return new DecompiledSource(path, document, this.bytecodeSource.findClassOrigin(binaryName));
         }
     }
 
@@ -168,15 +158,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
             return null;
         }
         this.bytecodeSource.requireCurrent();
-        var metadata = stored.debug();
-        return new DecompiledSource(
-                stored.path(),
-                binaryName,
-                stored.source(),
-                metadata.lines(),
-                metadata.names(),
-                this.bytecodeSource.findClassOrigin(binaryName)
-        );
+        return new DecompiledSource(stored.path(), stored.document(), this.bytecodeSource.findClassOrigin(binaryName));
     }
 
     private static String requireBinaryName(String binaryName) {

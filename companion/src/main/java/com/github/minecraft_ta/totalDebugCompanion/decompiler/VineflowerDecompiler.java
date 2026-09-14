@@ -58,6 +58,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
         InMemoryResultSaver resultSaver = new InMemoryResultSaver();
         DiagnosticLogger logger = new DiagnosticLogger();
 
+        SourceSymbolCapture symbolCapture = new SourceSymbolCapture();
         SourceVariableNames variableNames;
         SourceLineMap lineMap;
         try (VariableNameCapture capture = VariableNameCapture.open(internalName)) {
@@ -67,6 +68,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                         .libraries(new BytecodeLookupContext(bytecodeSource))
                         .output(resultSaver)
                         .logger(logger)
+                        .option(SourceSymbolCapture.CONTEXT_KEY, symbolCapture)
                         .option(IFernflowerPreferences.THREADS, "1")
                         .option(IFernflowerPreferences.INCLUDE_JAVA_RUNTIME, "current")
                         .option(IFernflowerPreferences.DECOMPILER_COMMENTS, true)
@@ -97,7 +99,8 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 status,
                 diagnostics,
                 lineMap,
-                variableNames
+                variableNames,
+                symbolCapture.forSource(source)
         );
     }
 

@@ -103,32 +103,24 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record Source(
-            URI uri,
-            String binaryName,
-            String contents,
-            SourceLineMap lineMap,
-            SourceVariableNames variableNames
-    ) {
+    record Source(URI uri, com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument document) {
         public Source {
             Objects.requireNonNull(uri, "uri");
-            if (!uri.isAbsolute()) {
-                throw new IllegalArgumentException("Debug source URI must be absolute");
-            }
-            if (binaryName == null || binaryName.isBlank()) {
-                throw new IllegalArgumentException("Debug source binary name must not be blank");
-            }
-            Objects.requireNonNull(contents, "contents");
-            Objects.requireNonNull(lineMap, "lineMap");
-            Objects.requireNonNull(variableNames, "variableNames");
+            if (!uri.isAbsolute()) throw new IllegalArgumentException("Debug source URI must be absolute");
+            Objects.requireNonNull(document);
         }
-
+        public String binaryName() { return document.binaryName(); }
+        public String contents() { return document.contents(); }
+        public SourceLineMap lineMap() { return document.lineMap(); }
+        public SourceVariableNames variableNames() { return document.variableNames(); }
+        public Source(URI uri, String binaryName, String contents, SourceLineMap lineMap, SourceVariableNames names) {
+            this(uri, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(binaryName, contents, lineMap, names, List.of()));
+        }
         public Source(URI uri, String binaryName, String contents, SourceLineMap lineMap) {
             this(uri, binaryName, contents, lineMap, SourceVariableNames.empty());
         }
-
         public Source(URI uri, String binaryName, String contents) {
-            this(uri, binaryName, contents, SourceLineMap.empty(), SourceVariableNames.empty());
+            this(uri, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(binaryName, contents));
         }
     }
 
