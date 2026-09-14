@@ -19,6 +19,8 @@ import javax.swing.tree.TreePath;
 import java.awt.Rectangle;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
@@ -31,7 +33,11 @@ final class SpeedSearchTargets {
     }
 
     static SpeedSearchTarget tree(JTree tree, Function<? super TreePath, String> text) {
-        return new TreeTarget(tree, text);
+        return new TreeTarget(tree, text, false);
+    }
+
+    static SpeedSearchTarget loadedTree(JTree tree, Function<? super TreePath, String> text) {
+        return new TreeTarget(tree, text, true);
     }
 
     static SpeedSearchTarget table(JTable table, IntFunction<String> text) {
@@ -128,36 +134,38 @@ final class SpeedSearchTargets {
     private static final class TreeTarget extends ModelTarget implements SpeedSearchTarget {
         private final JTree tree;
         private final Function<? super TreePath, String> text;
+        private final boolean includeCollapsed;
+        private final List<TreePath> paths = new ArrayList<>();
         private final TreeModelListener modelListener = new TreeModelListener() {
             @Override
             public void treeNodesChanged(TreeModelEvent event) {
-                changed();
+                modelChanged();
             }
 
             @Override
             public void treeNodesInserted(TreeModelEvent event) {
-                changed();
+                modelChanged();
             }
 
             @Override
             public void treeNodesRemoved(TreeModelEvent event) {
-                changed();
+                modelChanged();
             }
 
             @Override
             public void treeStructureChanged(TreeModelEvent event) {
-                changed();
+                modelChanged();
             }
         };
         private final TreeExpansionListener expansionListener = new TreeExpansionListener() {
             @Override
             public void treeExpanded(TreeExpansionEvent event) {
-                changed();
+                if (!includeCollapsed) changed();
             }
 
             @Override
             public void treeCollapsed(TreeExpansionEvent event) {
-                changed();
+                if (!includeCollapsed) changed();
             }
         };
         private final PropertyChangeListener modelPropertyListener = event -> {
@@ -167,12 +175,34 @@ final class SpeedSearchTargets {
             if (event.getNewValue() instanceof javax.swing.tree.TreeModel replacement) {
                 replacement.addTreeModelListener(this.modelListener);
             }
-            changed();
+            modelChanged();
         };
 
-        private TreeTarget(JTree tree, Function<? super TreePath, String> text) {
+        private TreeTarget(JTree tree, Function<? super TreePath, String> text, boolean includeCollapsed) {
             this.tree = Objects.requireNonNull(tree, "tree");
             this.text = Objects.requireNonNull(text, "text");
+            this.includeCollapsed = includeCollapsed;
+            modelChanged();
+        }
+
+        private void modelChanged() {
+            if (this.includeCollapsed) {
+                this.paths.clear();
+                Object root = this.tree.getModel().getRoot();
+                if (root != null) collectPaths(new TreePath(root));
+                // JTree clears the old selection later in this same model notification.
+                javax.swing.SwingUtilities.invokeLater(this::changed);
+            } else {
+                changed();
+            }
+        }
+
+        private void collectPaths(TreePath path) {
+            this.paths.add(path);
+            Object node = path.getLastPathComponent();
+            for (int index = 0; index < this.tree.getModel().getChildCount(node); index++) {
+                collectPaths(path.pathByAddingChild(this.tree.getModel().getChild(node, index)));
+            }
         }
 
         @Override
@@ -182,24 +212,26 @@ final class SpeedSearchTargets {
 
         @Override
         public int size() {
-            return this.tree.getRowCount();
+            return this.includeCollapsed ? this.paths.size() : this.tree.getRowCount();
         }
 
         @Override
         public String textAt(int index) {
-            TreePath path = this.tree.getPathForRow(index);
+            TreePath path = this.includeCollapsed ? this.paths.get(index) : this.tree.getPathForRow(index);
             return path == null ? "" : this.text.apply(path);
         }
 
         @Override
         public int selectedIndex() {
-            return this.tree.getLeadSelectionRow();
+            return this.includeCollapsed ? this.paths.indexOf(this.tree.getSelectionPath()) : this.tree.getLeadSelectionRow();
         }
 
         @Override
         public void select(int index) {
-            this.tree.setSelectionRow(index);
-            scrollCenteredVertically(this.tree, this.tree.getRowBounds(index));
+            TreePath path = this.includeCollapsed ? this.paths.get(index) : this.tree.getPathForRow(index);
+            this.tree.setSelectionPath(path);
+            this.tree.makeVisible(path);
+            scrollCenteredVertically(this.tree, this.tree.getPathBounds(path));
         }
 
         @Override

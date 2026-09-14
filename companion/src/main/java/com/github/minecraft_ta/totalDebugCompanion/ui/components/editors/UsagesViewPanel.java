@@ -10,6 +10,8 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.search.reference.ReferenceSearchService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.RuntimeModulePresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import org.objectweb.asm.Type;
@@ -29,6 +31,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import javax.swing.TransferHandler;
 import javax.swing.border.CompoundBorder;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -37,12 +40,16 @@ import javax.swing.tree.TreePath;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
+import java.awt.Rectangle;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 
 public final class UsagesViewPanel extends JPanel {
@@ -66,6 +73,7 @@ public final class UsagesViewPanel extends JPanel {
     private final JTree resultsTree = new JTree(this.treeModel);
     private final JLabel messageLabel = new JLabel("Looking up indexed references...", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
+    private SpeedSearch speedSearch;
 
     private ReferenceSearchService.SearchHandle activeSearch;
     private long searchGeneration;
@@ -118,6 +126,7 @@ public final class UsagesViewPanel extends JPanel {
         this.disposed = true;
         this.detached = true;
         cancelActiveSearch();
+        this.speedSearch.close();
     }
 
     public void restartSearch() {
@@ -209,11 +218,10 @@ public final class UsagesViewPanel extends JPanel {
         this.resultsTree.setRootVisible(false);
         this.resultsTree.setShowsRootHandles(true);
         this.resultsTree.setCellRenderer(new UsageTreeCellRenderer());
-        SpeedSearch.install(this.resultsTree, path -> {
+        this.speedSearch = SpeedSearch.installLoadedTree(this.resultsTree, path -> {
             Object node = path.getLastPathComponent();
-            return node instanceof DefaultMutableTreeNode mutable
-                    ? String.valueOf(mutable.getUserObject())
-                    : String.valueOf(node);
+            return node instanceof DefaultMutableTreeNode mutable && mutable.getUserObject() != null
+                    ? mutable.getUserObject().toString() : "";
         });
         this.resultsTree.getSelectionModel().setSelectionMode(
                 javax.swing.tree.TreeSelectionModel.SINGLE_TREE_SELECTION
@@ -222,20 +230,124 @@ public final class UsagesViewPanel extends JPanel {
 
         this.resultsTree.addMouseListener(new MouseAdapter() {
             @Override
+            public void mousePressed(MouseEvent event) { showPopup(event); }
+
+            @Override
+            public void mouseReleased(MouseEvent event) { showPopup(event); }
+
+            private void showPopup(MouseEvent event) {
+                if (!event.isPopupTrigger()) return;
+                TreePath path = resultsTree.getPathForLocation(event.getX(), event.getY());
+                if (path == null) return;
+                resultsTree.setSelectionPath(path);
+                resultsTree.requestFocusInWindow();
+                createContextMenu(path).show(resultsTree, event.getX(), event.getY());
+                event.consume();
+            }
+
+            @Override
             public void mouseClicked(MouseEvent event) {
-                if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2
+                        && resultsTree.getPathForLocation(event.getX(), event.getY()) != null) {
                     openSelectedUsage();
                 }
             }
         });
         this.resultsTree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openUsage");
-        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction() {
+        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction("Open source") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 openSelectedUsage();
             }
         });
+        this.resultsTree.setTransferHandler(new TransferHandler() {
+            @Override
+            public int getSourceActions(JComponent component) { return COPY; }
+
+            @Override
+            protected Transferable createTransferable(JComponent component) {
+                TreePath path = resultsTree.getSelectionPath();
+                return path == null ? null : new StringSelection(copyText(path));
+            }
+        });
+        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke("ctrl C"), "copyUsages");
+        this.resultsTree.getActionMap().put("copyUsages", TransferHandler.getCopyAction());
+        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke("shift F10"), "usageMenu");
+        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_CONTEXT_MENU, 0), "usageMenu");
+        this.resultsTree.getActionMap().put("usageMenu", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                TreePath path = resultsTree.getSelectionPath();
+                if (path == null) return;
+                resultsTree.scrollPathToVisible(path);
+                Rectangle bounds = resultsTree.getPathBounds(path);
+                JPopupMenu menu = createContextMenu(path);
+                if (bounds != null && menu != null) menu.show(resultsTree, bounds.x, bounds.y + bounds.height);
+            }
+        });
+    }
+
+    JPopupMenu createContextMenu(TreePath path) {
+        if (path == null) return null;
+        var node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        Object value = node.getUserObject();
+        if (!(value instanceof UsageNode) && !(value instanceof GroupNode)) return null;
+        JPopupMenu menu = new JPopupMenu();
+        if (value instanceof UsageNode) {
+            menu.add(this.resultsTree.getActionMap().get("openUsage"));
+            menu.addSeparator();
+        }
+        JMenuItem copy = menu.add(value instanceof UsageNode ? "Copy reference" : "Copy results");
+        copy.setIcon(Icons.COPY);
+        copy.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
+        copy.addActionListener(event -> TransferHandler.getCopyAction().actionPerformed(
+                new ActionEvent(this.resultsTree, ActionEvent.ACTION_PERFORMED, "copyUsages")));
+        if (value instanceof GroupNode) {
+            menu.addSeparator();
+            menu.add("Expand branch").addActionListener(event -> setBranchExpanded(path, true));
+            menu.add("Collapse branch").addActionListener(event -> setBranchExpanded(path, false));
+        }
+        return menu;
+    }
+
+    private void setBranchExpanded(TreePath path, boolean expanded) {
+        var node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        var nodes = node.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            var child = (DefaultMutableTreeNode) nodes.nextElement();
+            if (!(child.getUserObject() instanceof GroupNode)) continue;
+            TreePath childPath = new TreePath(child.getPath());
+            if (expanded) this.resultsTree.expandPath(childPath);
+            else this.resultsTree.collapsePath(childPath);
+        }
+        this.resultsTree.setSelectionPath(path);
+    }
+
+    private String copyText(TreePath path) {
+        var node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        var lines = new ArrayList<String>();
+        var nodes = node.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            var child = (DefaultMutableTreeNode) nodes.nextElement();
+            if (child.getUserObject() instanceof UsageNode usage) lines.add(reference(usage.usage().location()));
+        }
+        if (node.getUserObject() instanceof GroupNode && this.resultTruncated) {
+            lines.add("Result set is incomplete; only loaded usages are copied.");
+        }
+        return String.join(System.lineSeparator(), lines);
+    }
+
+    private static String reference(ReferenceLocation location) {
+        String member = switch (location.site()) {
+            case ReferenceLocation.ClassDeclaration ignored -> "";
+            case ReferenceLocation.Field field -> "#" + field.name();
+            case ReferenceLocation.RecordComponent component -> "#" + component.name();
+            case ReferenceLocation.Method method -> "#" + method.name() + '(' + java.util.Arrays.stream(
+                    Type.getArgumentTypes(method.descriptor())).map(Type::getClassName)
+                    .collect(java.util.stream.Collectors.joining(", ")) + ')';
+        };
+        return location.className() + member;
     }
 
     private void showResult(ReferenceUsagePage result) {
@@ -517,6 +629,7 @@ public final class UsagesViewPanel extends JPanel {
     }
 
     private static final class UsageTreeCellRenderer extends DefaultTreeCellRenderer {
+        private final PrimarySecondaryLabel label = new PrimarySecondaryLabel();
         @Override
         public Component getTreeCellRendererComponent(
                 JTree tree,
@@ -547,7 +660,11 @@ public final class UsagesViewPanel extends JPanel {
                                 + usageLabel(usage.usage(), false)
                 );
             }
-            return component;
+            if (!(userValue instanceof UsageNode) && !(userValue instanceof GroupNode)) return component;
+            this.label.configure(PrimarySecondaryText.primary(getText()), getIcon(), tree.getFont(),
+                    selected, getTextSelectionColor(), getBackgroundSelectionColor(), tree);
+            this.label.setToolTipText(getToolTipText());
+            return this.label;
         }
     }
 }

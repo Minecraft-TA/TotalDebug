@@ -181,11 +181,43 @@ final class UiScenarioDriver {
             );
             case IMPLEMENTATION_CHOOSER -> advanceImplementationChooser(context);
             case SEARCH_EMPTY, SEARCH_RESULTS, MODULE_FILTER -> advanceSearch(scenario, context);
-            case USAGES_RESULTS -> context.once("open-usages", () -> {
-                UsagesView view = new UsagesView(mainWindow.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), mainWindow.editorContext().project().runtime());
-                mainWindow.getEditorTabs().openEditorTab(view)
-                        .thenRun(() -> SwingUtilities.invokeLater(view::restartSearch));
-            });
+            case USAGES_RESULTS, USAGES_SEARCH, USAGES_MENU -> {
+                context.once("open-usages", () -> {
+                    UsagesView view = new UsagesView(mainWindow.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), mainWindow.editorContext().project().runtime());
+                    mainWindow.getEditorTabs().openEditorTab(view)
+                            .thenRun(() -> SwingUtilities.invokeLater(view::restartSearch));
+                });
+                if (scenario == UiRenderScenario.USAGES_RESULTS) break;
+                var selected = mainWindow.getEditorTabs().getSelectedEditor();
+                var tree = selected instanceof UsagesView
+                        ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class) : null;
+                if (tree == null) break;
+                for (int row = 0; row < tree.getRowCount(); row++) {
+                    var path = tree.getPathForRow(row);
+                    if (!path.getLastPathComponent().toString().startsWith("apply(")) continue;
+                    context.once("usages-interaction", () -> {
+                        tree.setSelectionPath(path);
+                        tree.requestFocusInWindow();
+                        var keyboard = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+                        if (scenario == UiRenderScenario.USAGES_SEARCH) {
+                            tree.collapsePath(path.getParentPath());
+                            for (char character : "apply".toCharArray()) {
+                                keyboard.redispatchEvent(tree, new java.awt.event.KeyEvent(tree,
+                                        java.awt.event.KeyEvent.KEY_TYPED, System.currentTimeMillis(), 0,
+                                        java.awt.event.KeyEvent.VK_UNDEFINED, character));
+                            }
+                        } else {
+                            var bounds = tree.getPathBounds(path);
+                            OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
+                            keyboard.redispatchEvent(tree, new java.awt.event.KeyEvent(tree,
+                                    java.awt.event.KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                                    java.awt.event.KeyEvent.SHIFT_DOWN_MASK, java.awt.event.KeyEvent.VK_F10,
+                                    java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                        }
+                    });
+                    break;
+                }
+            }
             case SETTINGS -> {
                 selectCodeEditor(context);
                 context.once("open-settings", () -> {
@@ -294,6 +326,14 @@ final class UiScenarioDriver {
                         : null;
                 yield tree != null && tree.getRowCount() > 0;
             }
+            case USAGES_SEARCH -> {
+                var selected = mainWindow.getEditorTabs().getSelectedEditor();
+                var tree = selected instanceof UsagesView
+                        ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class) : null;
+                yield tree != null && !com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch
+                        .matchingRanges(tree, "apply").isEmpty();
+            }
+            case USAGES_MENU -> visibleMenuPopup() != null;
             case SETTINGS -> findShowingWindow(SettingsWindow.class) != null;
             case SERVICE_STATUS -> visibleMenuPopup() != null
                     && findButton(mainWindow, "Game: Connected") != null
