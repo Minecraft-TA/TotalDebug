@@ -24,6 +24,8 @@ enum UiRenderScenario {
     SEARCH_RESULTS("search-results", "Search Everywhere with selected results"),
     MODULE_FILTER("module-filter", "Search Everywhere module selection popup"),
     USAGES_RESULTS("usages-results", "Find Usages with indexed results"),
+    USAGES_SEARCH("usages-search", "Find Usages with matching text highlighted"),
+    USAGES_MENU("usages-menu", "Find Usages with the keyboard context menu open"),
     SETTINGS("settings", "Settings controls"),
     SERVICE_STATUS("service-status", "Published Game and MCP states with the MCP detail popup"),
     INDEXING("indexing", "Runtime index activity in the status bar");

@@ -120,6 +120,11 @@ public final class SpeedSearch implements AutoCloseable {
         return new SpeedSearch(SpeedSearchTargets.tree(tree, text), tree);
     }
 
+    /** Searches a fully loaded tree, revealing collapsed ancestors when selecting a match. */
+    public static SpeedSearch installLoadedTree(JTree tree, Function<? super TreePath, String> text) {
+        return new SpeedSearch(SpeedSearchTargets.loadedTree(tree, text), tree);
+    }
+
     public static SpeedSearch install(JTable table, IntFunction<String> text) {
         return new SpeedSearch(SpeedSearchTargets.table(table, text), table);
     }
