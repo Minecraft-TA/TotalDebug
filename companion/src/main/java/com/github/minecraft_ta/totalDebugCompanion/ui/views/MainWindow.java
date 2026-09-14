@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectS
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.RetryRuntimeInventoryMessage;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
@@ -92,10 +91,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
         this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
-        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () -> {
-            indexLoader.waiting("Requesting runtime inventory again");
-            session.send(new RetryRuntimeInventoryMessage());
-        });
+        this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () ->
+                projects.retryIndex().whenComplete((ignored, failure) -> UIUtils.onEdt(() -> {
+                    if (failure == null || disposed) return;
+                    Throwable cause = failure;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    showError("Unable to retry indexing", cause.getMessage());
+                })));
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -131,7 +133,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs, editorContext());
+                var window = new CreateScriptWindow(editorTabs, editorContext(), MainWindow.this::refreshRuntimeSources);
                 window.setVisible(true);
                 window.setLocationRelativeTo(MainWindow.this);
             }
@@ -200,7 +202,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         setEnabled(!switching);
         this.projectSelector.refresh();
     }
-    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); }
+    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
@@ -478,7 +480,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private void refreshActions() {
         boolean hasProfile = project.get() != null;
         this.scriptMenu.setVisible(hasProfile);
-        this.evaluateExpressionAction.setEnabled(scripts.isConnected());
+        this.evaluateExpressionAction.setEnabled(scripts.isReady());
         this.newScriptAction.setEnabled(hasProfile);
         this.debuggerState.setVisible(hasProfile);
     }

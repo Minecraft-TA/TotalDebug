@@ -10,7 +10,7 @@ Minecraft source with an illustrated debugger pause and a nested Java evaluation
 
 Open a block, entity or item from Minecraft with F6, then navigate its decompiled source. Companion includes class and member search, Find Usages, type hierarchies, editor completion and archive resource previews.
 
-The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Live tools reconnect when TotalDebug starts again.
+The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. Live tools reconnect when TotalDebug starts again; local indexes do not enable execution.
 
 ## Evaluate and debug
 
@@ -53,7 +53,7 @@ The [MCP API](MCP.md) exposes source queries, Java execution and debugger operat
 
 `CompanionApp` is the process bootstrap: launch arguments, process lock, logging, look and feel, and application construction. `CompanionApplication` owns the session, debugger, compiler, index loader and project worker. It can run without a UI; `CompanionUi` is the boundary for window lifecycle and navigation. One `ProjectScope` owns the selected profile, instance state, navigation history, pending navigation and nullable `RuntimeBinding`. A scope admits work while ACTIVE; SWITCHING rejects new work but can be cancelled after an editor veto or failed state flush; RETIRED is terminal. Check-and-submit uses the same lifecycle lock as runtime installation. Swing hops and debugger waits run outside that lock.
 
-The scope publishes one `RuntimeBinding` for the installed inventory. The binding groups its identity, source catalog, classpath, decompiler and reference search, and owns the native index after installation succeeds. `CompanionClassIndex` is only JDT's process-wide lookup hook; setting or clearing it never closes an index.
+The scope owns a local file catalog before indexing and publishes one `RuntimeBinding` for the installed local or runtime snapshot. The binding groups its identity, source catalog, classpath, decompiler and reference search, and owns the native index after installation succeeds. Only runtime snapshots bind the script compiler. Local source guards are prepared on the index worker before publication; detecting changed bytes rejects the stale index and queues an application-owned rescan. `CompanionClassIndex` is only JDT's process-wide lookup hook; setting or clearing it never closes an index.
 
 The index loader retains ownership while a candidate is prepared. The application detaches the previous runtime, attaches the new compiler/insight bindings, and completes publication under the existing lifecycle lock. Debugger and UI follow-up runs afterward and cannot return an installed index to the loader's failure cleanup. Closing a runtime detaches its consumers before releasing the index, and is idempotent. A rejected candidate closes its own prepared consumers while leaving index disposal to the loader.
 

@@ -11,9 +11,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -24,7 +26,9 @@ public final class CompanionDecompilationService implements AutoCloseable {
     private final RuntimeSnapshotBytecodeSource bytecodeSource;
     private final JavaDecompiler javaDecompiler;
     private final ExecutorService worker;
+    private final ExecutorService cacheReaders;
     private final Map<String, CompletableFuture<DecompiledSource>> inFlightRequests = new HashMap<>();
+    private final Object publicationLock = new Object();
     private volatile boolean closed;
 
     public CompanionDecompilationService(
@@ -52,6 +56,7 @@ public final class CompanionDecompilationService implements AutoCloseable {
                 .daemon()
                 .name("Companion decompiler")
                 .unstarted(task));
+        this.cacheReaders = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     CompletableFuture<Path> decompile(String binaryName) {
@@ -61,39 +66,37 @@ public final class CompanionDecompilationService implements AutoCloseable {
     public CompletableFuture<DecompiledSource> load(String binaryName) {
         ensureOpen();
         String normalizedName = requireBinaryName(binaryName);
-        try {
-            DecompiledSource cached = readStoredSource(normalizedName);
-            if (cached != null) {
-                return CompletableFuture.completedFuture(cached);
-            }
-        } catch (IOException exception) {
-            return CompletableFuture.failedFuture(exception);
-        }
         synchronized (this.inFlightRequests) {
             ensureOpen();
             CompletableFuture<DecompiledSource> existing = this.inFlightRequests.get(normalizedName);
             if (existing != null && !existing.isDone()) {
                 return existing;
             }
-            try {
-                DecompiledSource cached = readStoredSource(normalizedName);
-                if (cached != null) {
-                    return CompletableFuture.completedFuture(cached);
-                }
-            } catch (IOException exception) {
-                return CompletableFuture.failedFuture(exception);
-            }
-
-            CompletableFuture<DecompiledSource> task = CompletableFuture.supplyAsync(() -> {
+            var task = new CompletableFuture<DecompiledSource>();
+            this.inFlightRequests.put(normalizedName, task);
+            CompletableFuture.supplyAsync(() -> {
                 try {
-                    return decompileNow(normalizedName);
+                    if (task.isCancelled()) throw new CancellationException();
+                    ensureOpen();
+                    return readStoredSource(normalizedName);
                 } catch (IOException exception) {
                     throw new CompletionException(exception);
                 }
-            }, this.worker);
-            this.inFlightRequests.put(normalizedName, task);
-            task.whenComplete((ignored, failure) -> {
+            }, this.cacheReaders).thenCompose(cached -> {
+                if (cached != null) return CompletableFuture.completedFuture(cached);
+                return CompletableFuture.supplyAsync(() -> {
+                    try {
+                        if (task.isCancelled()) throw new CancellationException();
+                        ensureOpen();
+                        return decompileNow(normalizedName);
+                    }
+                    catch (IOException exception) { throw new CompletionException(exception); }
+                }, this.worker);
+            }).whenComplete((source, failure) -> {
                 synchronized (this.inFlightRequests) {
+                    if (closed) task.cancel(false);
+                    else if (failure != null) task.completeExceptionally(failure);
+                    else task.complete(source);
                     this.inFlightRequests.remove(normalizedName, task);
                 }
             });
@@ -105,11 +108,9 @@ public final class CompanionDecompilationService implements AutoCloseable {
         return this.sourceStore.directory();
     }
 
-    public java.util.List<String> cachedClasses() throws IOException {
-        synchronized (this.inFlightRequests) {
-            // A retired tree may finish refreshing after its runtime has been replaced.
-            return this.closed ? java.util.List.of() : this.sourceStore.cachedClasses();
-        }
+    public List<String> cachedClasses() throws IOException {
+        // A retired tree may finish refreshing after its runtime has been replaced.
+        return this.closed ? List.of() : this.sourceStore.cachedClasses();
     }
 
     public DebugEngine.Source loadDebugSource(String binaryName) throws IOException {
@@ -140,9 +141,9 @@ public final class CompanionDecompilationService implements AutoCloseable {
         if (!result.isComplete()) {
             throw new IOException("Vineflower produced partial source for " + binaryName);
         }
-        synchronized (this.inFlightRequests) {
+        this.bytecodeSource.requireCurrent();
+        synchronized (this.publicationLock) {
             ensureOpen();
-            this.bytecodeSource.requireCurrent();
             Path path = this.sourceStore.write(
                     binaryName,
                     result.source(),
@@ -196,12 +197,13 @@ public final class CompanionDecompilationService implements AutoCloseable {
 
     @Override
     public void close() {
+        synchronized (this.publicationLock) { this.closed = true; }
         synchronized (this.inFlightRequests) {
-            this.closed = true;
-            for (var task : java.util.List.copyOf(this.inFlightRequests.values())) {
+            for (var task : List.copyOf(this.inFlightRequests.values())) {
                 task.cancel(false);
             }
             this.worker.shutdownNow();
+            this.cacheReaders.shutdownNow();
         }
         this.bytecodeSource.close();
     }

@@ -87,6 +87,12 @@ public final class UiDevHarness {
     }
 
     private static void installRuntimeFixture(Path indexFile, Path classes) throws Exception {
+        // Opening now starts offline indexing. Let it finish before replacing it with the fixed UI fixture.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (application.getRuntimeIndexStatus().active()) {
+            if (System.nanoTime() >= deadline) throw new IllegalStateException("Offline bootstrap did not finish before UI fixture installation");
+            Thread.sleep(10);
+        }
         ClassIndex index = ClassIndex.fromFile(indexFile.toString());
         var source = new RuntimeSnapshotBytecodeSource.Source(0, classes, classes.toUri().toASCIIString(),
                 new RuntimeInventory.RuntimeModule("ui-development", "UI development classes", RuntimeInventory.ModuleKind.LIBRARY));

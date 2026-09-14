@@ -80,7 +80,7 @@ public final class ProjectRegistry {
     }
 
     public synchronized void forget(String id) throws IOException {
-        if (Objects.equals(id, this.selected)) throw new IllegalArgumentException("Open another project before removing this one from recent projects");
+        if (Objects.equals(id, this.selected)) throw new IllegalArgumentException("Open another project before removing this one from projects");
         var replacement = new LinkedHashMap<>(this.projects);
         if (replacement.remove(id) != null) write(replacement, this.selected);
     }

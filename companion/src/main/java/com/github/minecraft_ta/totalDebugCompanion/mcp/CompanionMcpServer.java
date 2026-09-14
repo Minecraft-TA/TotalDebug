@@ -222,7 +222,9 @@ public final class CompanionMcpServer implements AutoCloseable {
             result.put("selected_project", projectMap(project, current));
         }
         var sources = this.projects.getRuntimeIndexStatus();
-        result.put("sources", Map.of("state", sources.phase().name().toLowerCase(Locale.ROOT), "detail", sources.detail()));
+        var kind = projects.indexSourceKind();
+        result.put("sources", Map.of("state", sources.phase().name().toLowerCase(Locale.ROOT), "detail", sources.detail(),
+                "kind", kind == null ? "none" : kind.name().toLowerCase(Locale.ROOT)));
         return result;
     }
 
@@ -270,6 +272,8 @@ public final class CompanionMcpServer implements AutoCloseable {
             String expected = optionalString(arguments, "expected_project_id");
             if (expected != null && !expected.equals(project.profile().id()))
                 throw new IllegalStateException("The selected project does not match expected_project_id");
+            if (project.runtime() != null && !project.runtime().snapshot().isRuntime())
+                throw new IllegalStateException("Execution requires a runtime index from Minecraft; the current index contains local mod files");
             return this.jobs.submit(code, imports, side, environment);
         });
         return this.jobs.waitFor(

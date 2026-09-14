@@ -192,6 +192,7 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     /** Must complete before the old native index is closed by its owner. */
     public void bind(ReadySnapshot snapshot) {
+        if (snapshot != null && !snapshot.isRuntime()) throw new IllegalArgumentException("Script compilation requires a runtime inventory");
         synchronized (this.compilerLock) {
             if (this.compiler != null) {
                 try { this.compiler.close(); }
@@ -213,6 +214,8 @@ public final class ScriptCompilationService implements AutoCloseable {
             }
         }
     }
+
+    public boolean hasRuntime() { return !closed && snapshot != null; }
 
     /** Compiles a named Java class without submitting it for execution. */
     public CompletableFuture<CompilationResult> compile(String source, String entryClass) {

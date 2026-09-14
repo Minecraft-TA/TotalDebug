@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import java.util.List;
@@ -13,6 +14,8 @@ public interface ProjectControls {
     boolean isSwitching();
     boolean isConnected();
     RuntimeIndexService.Status getRuntimeIndexStatus();
+    IndexIdentity.Kind indexSourceKind();
+    CompletableFuture<Void> retryIndex();
     CompletableFuture<Void> openProject(CompanionProfile profile, String nameOverride);
     CompletableFuture<Void> renameProject(String id, String nameOverride);
     CompletableFuture<Void> forgetProject(String id);

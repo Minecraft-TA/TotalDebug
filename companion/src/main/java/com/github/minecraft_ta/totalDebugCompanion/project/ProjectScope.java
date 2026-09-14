@@ -6,6 +6,8 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationState;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.LocalModSources;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -35,6 +37,7 @@ public final class ProjectScope implements AutoCloseable {
     private final List<PendingNavigation> pending = new ArrayList<>();
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
+    private volatile RuntimeSourceCatalog localSources = RuntimeSourceCatalog.empty();
     private boolean closed;
 
     public ProjectScope(Object lock, CompanionProfile profile, InstanceState state) {
@@ -44,7 +47,23 @@ public final class ProjectScope implements AutoCloseable {
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {
-        return new ProjectScope(lock, profile, InstanceState.open(new InstancePaths(profile.dataDirectory())));
+        var sources = RuntimeSourceCatalog.empty();
+        try { sources = new RuntimeSourceCatalog(LocalModSources.discover(profile.workspaceDirectory())); }
+        catch (IOException ignored) {
+            // The loader reports local discovery failures after trying the saved runtime.
+        }
+        var scope = new ProjectScope(lock, profile, InstanceState.open(new InstancePaths(profile.dataDirectory())));
+        scope.localSources = sources;
+        return scope;
+    }
+
+    public RuntimeSourceCatalog sources() {
+        var installed = runtime;
+        return installed == null ? localSources : installed.sources();
+    }
+
+    public void refreshLocalSources() throws IOException {
+        localSources = new RuntimeSourceCatalog(LocalModSources.discover(profile.workspaceDirectory()));
     }
 
     public CompanionProfile profile() { return profile; }

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
@@ -203,6 +204,14 @@ public class LazyFileJTree extends JTree {
             this.activeLoads.remove(node, load);
             if (failure != null) {
                 failure.printStackTrace(System.err);
+                if (isAttached(node)) {
+                    Throwable cause = failure;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    var error = new TreeItem(Objects.requireNonNullElse(cause.getMessage(), cause.toString()));
+                    error.setIcon(Icons.ERROR);
+                    node.replaceChildren(List.of(error));
+                    getModel().nodeStructureChanged(node);
+                }
             }
         }));
         return load;

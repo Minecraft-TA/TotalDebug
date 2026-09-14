@@ -46,7 +46,7 @@ class RuntimeInstallationTest {
             try (var accepted = snapshot(root, "accepted"); var rejected = snapshot(root, "")) {
                 var bytes = RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index());
                 app.installRuntimeSnapshot(accepted, bytes);
-                app.openProject(profile).get(10, TimeUnit.SECONDS);
+                app.renameProject(profile.id(), null).get(10, TimeUnit.SECONDS);
                 SwingUtilities.invokeAndWait(() -> {});
                 SwingUtilities.invokeAndWait(() -> assertEquals(0, window.getEditorTabs().getTabCount(),
                         "Old runtime tabs must close even when breakpoint restoration fails"));
@@ -71,7 +71,7 @@ class RuntimeInstallationTest {
             try (var accepted = snapshot(directory, "accepted")) {
                 app.installRuntimeSnapshot(accepted,
                         RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index()));
-                app.openProject(app.currentProject()).get(10, TimeUnit.SECONDS);
+                app.renameProject(app.currentProject().id(), null).get(10, TimeUnit.SECONDS);
                 var createdWindow = new AtomicReference<MainWindow>();
                 var currentView = new AtomicReference<ResourceView>();
                 SwingUtilities.invokeAndWait(() -> {

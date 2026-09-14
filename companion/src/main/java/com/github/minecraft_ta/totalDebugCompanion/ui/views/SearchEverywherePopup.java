@@ -537,10 +537,10 @@ public class SearchEverywherePopup extends JFrame {
     private void showIndexStatus(RuntimeIndexService.Status status) {
         this.searchPending = false;
         this.resultModel.clear();
-        this.resultCount.setText("Index unavailable");
+        this.resultCount.setText(status.phase() == RuntimeIndexService.Phase.EMPTY ? "No sources" : "Index unavailable");
         showMessage(status.phase() == RuntimeIndexService.Phase.FAILED
-                ? "Runtime index unavailable — use Retry in the bottom bar"
-                : "Building runtime index... " + status.detail());
+                ? "Index unavailable. Use Retry in the bottom bar."
+                : status.detail());
     }
 
     private void showMessage(String message) {

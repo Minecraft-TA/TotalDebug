@@ -24,7 +24,7 @@ Project switching preserves this endpoint and initialized MCP clients. Outstandi
 
 Each tool returns the values needed to use it. Project tools and status include project identity, name and directories so callers can choose and verify their target. Internal runtime hashes and artifact locations do not appear in normal status or job responses.
 
-- `status` returns connectivity, `project_switching`, source readiness, and `selected_project` when a project is open.
+- `status` returns connectivity, `project_switching`, source readiness, and `selected_project` when a project is open. `sources.kind` is `local`, `runtime` or `none`; index state can also be `empty` when there are no inputs.
 - Job responses return `job_id`, `state`, and any available `logs`, `result`, or `error`.
 - A sidecar connection failure returns one `error` object with `code`, `stage`, `endpoint_health`, and `retryable`.
 
@@ -35,7 +35,7 @@ Every tool advertises an `outputSchema` covering its exact success result and th
 - `status` reports Companion, Minecraft, and debugger connectivity, selected project identity/name/directories, switching state and source index state/detail.
 - `project_list(include_prism=false)` lists remembered projects and optionally local instances in the default Prism directory. Discovery does not modify them.
 - `project_open(project_id | directory, name?)` opens exactly one remembered ID or game/Prism instance directory. The optional name overrides the automatic folder name. It returns the status shape before indexing finishes. It saves/closes editors, but does not launch Minecraft or ask another running game to attach.
-- New directory selections require `mods/` or existing `total-debug/` data. Unsupported folders are rejected without creating files. Code browsing still requires a saved runtime inventory; local mod indexing is planned separately.
+- Directory selection also accepts an instance's `mods/` or `total-debug/` child. Unsupported folders are rejected without creating files. Saved runtime data takes priority; otherwise Companion browses and indexes the installed top-level mod JARs locally. Source-query tools work once that index is ready. Execution still requires a runtime index and the existing connection/permission checks.
 - Both execution tools accept `expected_project_id` to reject execution against an unintended project. This check runs inside the captured scope's admission gate.
 - `client_code_execute` runs a value-returning Java body in the Minecraft client JVM.
 - `server_code_execute` runs the same contract with server authority.
