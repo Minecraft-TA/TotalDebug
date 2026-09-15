@@ -235,9 +235,11 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         StyleConstants.setSpaceBelow(spacingAttributeSet, 2);
         logPanelTextPane.setParagraphAttributes(spacingAttributeSet, false);
         logPanelTextPane.setEditable(false);
+        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(logPanelTextPane, "Copy output");
         logPanelTextPane.setFont(auxiliaryEditorFont());
         logPanelTextPane.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 0));
         errorTextPane.setEditable(false);
+        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(errorTextPane, "Copy all");
         errorTextPane.setFont(auxiliaryEditorFont());
         errorTextPane.setBorder(BorderFactory.createEmptyBorder(3, 5, 3, 5));
 

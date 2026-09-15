@@ -4,12 +4,15 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
 import javax.swing.Icon;
 import javax.swing.JTree;
+import javax.swing.JPopupMenu;
+import javax.swing.tree.TreePath;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -72,6 +75,21 @@ final class DebuggerValueTree {
             case ExpressionValue expressionValue -> expressionValue.value();
             default -> null;
         };
+    }
+
+    static JPopupMenu copyMenu(TreePath path) {
+        JPopupMenu menu = new JPopupMenu();
+        if (path == null || !(path.getLastPathComponent() instanceof DefaultMutableTreeNode node)) return menu;
+        DebugValue value = debugValue(node.getUserObject());
+        if (value != null) {
+            menu.add(ContextMenus.copyItem("Copy value", value.value()));
+            if (!value.evaluateName().isBlank()) menu.add(ContextMenus.copyItem("Copy expression", value.evaluateName()));
+            if (!value.type().isBlank()) menu.add(ContextMenus.copyItem("Copy type", value.type()));
+        } else {
+            String expression = expressionOf(node.getUserObject());
+            if (!expression.isBlank()) menu.add(ContextMenus.copyItem("Copy expression", expression));
+        }
+        return menu;
     }
 
     static String expressionOf(Object value) {

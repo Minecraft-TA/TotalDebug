@@ -94,6 +94,8 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, Runnable refreshSources) {
         super(owner, "Evaluate Expression", false);
+        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(this.output, "Copy output");
+        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(this.problems, "Copy all");
         this.editorContext = editorContext;
         this.refreshSources = refreshSources;
         this.executions = executions;
@@ -288,7 +290,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                         }
                         if (!isVisible()) return;
                         this.results.addTab("Result", new com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel(
-                                controller, pauseId, value));
+                                controller, pauseId, requested, value));
                         this.status.setText("Evaluation completed in " + frame.name());
                     }));
                 }));

@@ -279,11 +279,12 @@ class DebuggerPanelTest {
             JPopupMenu menu = inspector.createContextMenu(variables.getPathForRow(0));
             assertEquals(
                     List.of(
-                            "Jump to Source",
-                            "Jump to Type Source",
-                            "Set Value…",
-                            "Copy Value",
-                            "Copy Expression"
+                            "Open source",
+                            "Open type source",
+                            "Set value…",
+                            "Copy value",
+                            "Copy expression",
+                            "Copy type"
                     ),
                     menuItems(menu)
             );

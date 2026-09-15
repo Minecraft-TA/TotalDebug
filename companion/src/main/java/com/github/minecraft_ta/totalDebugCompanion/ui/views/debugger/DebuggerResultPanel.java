@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 
 import javax.swing.*;
 import javax.swing.event.TreeExpansionEvent;
@@ -16,12 +17,16 @@ public final class DebuggerResultPanel extends JPanel implements AutoCloseable {
     private DebuggerValueLease retained = DebuggerValueLease.NONE;
     private boolean closed;
 
-    public DebuggerResultPanel(DebuggerSessionController controller, String pauseId, DebugEngine.EvaluationResult result) {
+    public DebuggerResultPanel(DebuggerSessionController controller, String pauseId, String expression, DebugEngine.EvaluationResult result) {
         super(new BorderLayout());
         var root = new DefaultMutableTreeNode();
-        root.add(DebuggerValueTree.valueNode(DebuggerValueTree.DebugValue.from("Result", result)));
+        root.add(DebuggerValueTree.valueNode(new DebuggerValueTree.DebugValue(
+                "Result", expression, result.value(), result.type(), DebugEngine.VariableKind.EXPRESSION,
+                result.variablesReference(), 0, result.indexedVariables(), DebugEngine.ValuePreview.NONE, null)));
         var model = new DefaultTreeModel(root);
         var tree = DebuggerValueTree.create(model);
+        ContextMenus.installTree(tree, DebuggerValueTree::copyMenu, "Copy value");
+        tree.setSelectionRow(0);
         tree.addTreeWillExpandListener(new TreeWillExpandListener() {
             @Override public void treeWillExpand(TreeExpansionEvent event) {
                 var node = (DefaultMutableTreeNode) event.getPath().getLastPathComponent();

@@ -9,6 +9,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScriptResultTreeTest {
     @Test
+    void copyMenuKeepsTheCapturedValueBeyondTheRendererLimitAndDoesNotInventAnExpression() throws Exception {
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            String value = "x".repeat(800);
+            ScriptResultTree tree = new ScriptResultTree();
+            tree.showResult(new ExecutionValue(text("java.lang.String"), text(value), text(""),
+                    ExecutionValue.Kind.STRING, 0, 0, false, List.of()));
+            var menu = tree.createContextMenu(tree.getSelectionPath());
+            assertEquals(2, menu.getComponentCount());
+            var copyValue = (javax.swing.JMenuItem) menu.getComponent(0);
+            var copyType = (javax.swing.JMenuItem) menu.getComponent(1);
+            assertEquals("Copy value", copyValue.getText());
+            assertEquals('"' + value + '"', copyValue.getActionCommand());
+            assertEquals("Copy type", copyType.getText());
+            assertEquals("java.lang.String", copyType.getActionCommand());
+            tree.clearResult();
+            assertEquals(0, tree.createContextMenu(tree.getSelectionPath()).getComponentCount());
+        });
+    }
+
+    @Test
     void boundsSearchTextWithoutChangingTheCanonicalValue() {
         String value = "x".repeat(1_000_000);
         ExecutionValue snapshot = new ExecutionValue(

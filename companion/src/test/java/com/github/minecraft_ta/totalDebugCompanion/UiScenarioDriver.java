@@ -179,10 +179,20 @@ final class UiScenarioDriver {
                     }
                 });
             }
-            case DEBUGGER, DEBUGGER_FRAMES_MENU -> {
+            case DEBUGGER, DEBUGGER_FRAMES_MENU, DEBUGGER_VALUES_MENU -> {
                 context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
                 var window = findShowingWindow(DebuggerWindow.class);
                 if (window == null || scenario == UiRenderScenario.DEBUGGER) break;
+                if (scenario == UiRenderScenario.DEBUGGER_VALUES_MENU) {
+                    javax.swing.JTree tree = findComponent(window, javax.swing.JTree.class);
+                    context.once("open-value-menu", () -> {
+                        tree.setSelectionRow(1);
+                        var bounds = tree.getRowBounds(1);
+                        OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
+                        tree.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(tree, 0, ""));
+                    });
+                    break;
+                }
                 JList<?> frames = findComponent(window, JList.class);
                 context.once("open-frame-menu", () -> {
                     frames.requestFocusInWindow();
@@ -359,6 +369,7 @@ final class UiScenarioDriver {
             case DEBUGGER_LOCATION -> mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
             case DEBUGGER_FRAMES_MENU -> visibleMenuPopup() != null;
+            case DEBUGGER_VALUES_MENU -> visibleMenuPopup() != null;
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
             case BREAKPOINTS_MENU -> visibleMenuPopup() != null;
             case BREAKPOINTS_SIMPLE -> context.completedActions.contains("breakpoint-list-action");
