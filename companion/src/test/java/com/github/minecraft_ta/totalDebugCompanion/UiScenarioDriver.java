@@ -152,6 +152,7 @@ final class UiScenarioDriver {
                 }
             }
             case BREAKPOINT_EDITOR -> advanceBreakpointEditor(context);
+            case BREAKPOINT_INTERACTION -> advanceBreakpointInteraction(context);
             case METHOD_BREAKPOINT -> advanceMethodBreakpoint(context);
             case DEBUGGER_LOCATION -> {
                 selectCodeEditor(context);
@@ -305,6 +306,7 @@ final class UiScenarioDriver {
             }
             case BREAKPOINT_EDITOR -> visibleMenuPopup() != null
                     && findLabelContaining(visibleMenuPopup(), "Line breakpoint") != null;
+            case BREAKPOINT_INTERACTION -> context.completedActions.contains("breakpoint-interaction");
             case METHOD_BREAKPOINT -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 if (!(selected instanceof CodeView codeView)) {
@@ -426,6 +428,39 @@ final class UiScenarioDriver {
         });
     }
 
+    private void advanceBreakpointInteraction(ScenarioContext context) throws Exception {
+        selectCodeEditor(context);
+        if (!(mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)) return;
+        var editor = findComponent(mainWindow, RSyntaxTextArea.class);
+        var lineNumbers = findComponent(mainWindow, LineNumberList.class);
+        if (editor == null || lineNumbers == null) return;
+        int offset = context.source().indexOf("double ratio");
+        var row = editor.modelToView2D(offset);
+        if (row == null) return;
+        int line = editor.getLineOfOffset(offset) + 1;
+        var source = codeView.getDebugSource().orElseThrow();
+        var debugger = mainWindow.editorContext().debugger();
+        int x = lineNumbers.getWidth() / 2;
+        int y = (int) row.getCenterY();
+        context.once("breakpoint-interaction", () -> {
+            lineNumbers.dispatchEvent(new MouseEvent(lineNumbers, MouseEvent.MOUSE_MOVED,
+                    System.currentTimeMillis(), 0, x, y, 0, false, MouseEvent.NOBUTTON));
+            for (int count = 1; count <= 7; count++) {
+                boolean expected = count % 2 == 1;
+                for (int eventId : new int[]{MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED}) {
+                    lineNumbers.dispatchEvent(new MouseEvent(lineNumbers, eventId, System.currentTimeMillis(),
+                            0, x, y, count, false, MouseEvent.BUTTON1));
+                    if ((debugger.breakpoint(source.uri(), line) != null) != expected) {
+                        throw new IllegalStateException("Gutter toggle did not match press " + count);
+                    }
+                    if ((lineNumbers.getToolTipText() != null) != expected) {
+                        throw new IllegalStateException("Gutter presentation did not update on press " + count);
+                    }
+                }
+            }
+        });
+    }
+
     private void advanceMethodBreakpoint(ScenarioContext context) throws Exception {
         selectCodeEditor(context);
         var selected = mainWindow.getEditorTabs().getSelectedEditor();
@@ -445,7 +480,7 @@ final class UiScenarioDriver {
         }
         context.once("toggle-method-breakpoint", () -> lineNumbers.dispatchEvent(new MouseEvent(
                 lineNumbers,
-                MouseEvent.MOUSE_CLICKED,
+                MouseEvent.MOUSE_PRESSED,
                 System.currentTimeMillis(),
                 0,
                 Math.max(0, lineNumbers.getWidth() / 2),

@@ -21,6 +21,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChoose
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.eclipse.jdt.core.JavaModelException;
 
 import javax.swing.AbstractAction;
@@ -228,12 +229,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     if (!debugSource.uri().equals(sourceUri)) {
                         return;
                     }
-                    SwingUtilities.invokeLater(() -> updateBreakpointMarkers(debugger));
+                    UIUtils.onEdt(() -> updateBreakpointMarkers(debugger));
                 }
 
                 @Override
                 public void breakpointsMutedChanged(boolean muted) {
-                    SwingUtilities.invokeLater(() -> updateBreakpointMarkers(debugger));
+                    UIUtils.onEdt(() -> updateBreakpointMarkers(debugger));
                 }
             };
             debugger.addListener(this.debuggerListener);

@@ -13,6 +13,7 @@ enum UiRenderScenario {
     TAB_REVEAL("tab-reveal", "Inactive source tab revealed in the Files tree"),
     EDITOR_CURRENT_LINE("editor-current-line", "Current editor line and hierarchy gutter markers"),
     BREAKPOINT_EDITOR("breakpoint-editor", "Conditional breakpoint marker and anchored editor"),
+    BREAKPOINT_INTERACTION("breakpoint-interaction", "Rapid gutter clicks and stationary hover without a game connection"),
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),
     DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
