@@ -179,7 +179,21 @@ final class UiScenarioDriver {
                     }
                 });
             }
-            case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
+            case DEBUGGER, DEBUGGER_FRAMES_MENU -> {
+                context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
+                var window = findShowingWindow(DebuggerWindow.class);
+                if (window == null || scenario == UiRenderScenario.DEBUGGER) break;
+                JList<?> frames = findComponent(window, JList.class);
+                context.once("open-frame-menu", () -> {
+                    frames.requestFocusInWindow();
+                    var bounds = frames.getCellBounds(frames.getSelectedIndex(), frames.getSelectedIndex());
+                    OffscreenPopupFactory.expectAt(frames, new Point(bounds.x, bounds.y + bounds.height));
+                    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(frames,
+                            new java.awt.event.KeyEvent(frames, java.awt.event.KeyEvent.KEY_PRESSED,
+                                    System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
+                                    java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                });
+            }
             case BREAKPOINTS, BREAKPOINTS_MENU, BREAKPOINTS_SIMPLE -> {
                 context.once("open-breakpoints", () -> BreakpointsWindowPreview.open(mainWindow));
                 var window = findShowingWindow(BreakpointsWindow.class);
@@ -344,6 +358,7 @@ final class UiScenarioDriver {
             }
             case DEBUGGER_LOCATION -> mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
+            case DEBUGGER_FRAMES_MENU -> visibleMenuPopup() != null;
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
             case BREAKPOINTS_MENU -> visibleMenuPopup() != null;
             case BREAKPOINTS_SIMPLE -> context.completedActions.contains("breakpoint-list-action");

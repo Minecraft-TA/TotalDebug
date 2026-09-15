@@ -17,6 +17,7 @@ enum UiRenderScenario {
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),
     DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
+    DEBUGGER_FRAMES_MENU("debugger-frames-menu", "Stack-frame actions opened from the keyboard"),
     BREAKPOINTS("breakpoints", "Persisted breakpoint list and selected breakpoint details"),
     BREAKPOINTS_MENU("breakpoints-menu", "Breakpoint list with its keyboard context menu open"),
     BREAKPOINTS_SIMPLE("breakpoints-simple", "Breakpoint without an action, with action fields hidden"),

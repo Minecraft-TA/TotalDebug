@@ -9,6 +9,11 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 
 import javax.swing.AbstractListModel;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.Icon;
+import javax.swing.JPopupMenu;
+import javax.swing.MenuSelectionManager;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -20,6 +25,9 @@ import javax.swing.SwingUtilities;
 import javax.swing.KeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
@@ -27,19 +35,41 @@ import java.net.URI;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.IntConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /** Stack-frame list and its selection behavior. */
 final class DebuggerFramesPane extends JPanel {
     private final FrameListModel model = new FrameListModel();
     private final JList<DebugEngine.StackFrame> frames = new JList<>(this.model);
+    private final Action open;
+    private final Action copyFrame;
+    private final Action copyStack;
 
     DebuggerFramesPane(
             IntConsumer selection,
             DebuggerPanel.FrameNavigation navigation
     ) {
+        this(selection, navigation, DebuggerFramesPane::copy);
+    }
+
+    DebuggerFramesPane(
+            IntConsumer selection,
+            DebuggerPanel.FrameNavigation navigation,
+            Consumer<String> clipboard
+    ) {
         super(new BorderLayout());
         Objects.requireNonNull(selection, "selection");
         Objects.requireNonNull(navigation, "navigation");
+        Objects.requireNonNull(clipboard, "clipboard");
+        this.open = action("Open source", Icons.JUMP_TO_SOURCE, "ENTER",
+                () -> navigation.open(this.frames.getSelectedValue(), true));
+        this.copyFrame = action("Copy frame", Icons.COPY, "ctrl C",
+                () -> clipboard.accept(frameText(this.frames.getSelectedValue())));
+        this.copyStack = action("Copy stack trace", Icons.COPY, "ctrl shift C",
+                () -> clipboard.accept(this.model.frames.stream().map(DebuggerFramesPane::frameText)
+                        .collect(Collectors.joining(System.lineSeparator()))));
+        updateActions();
 
         JLabel heading = new JLabel("Frames");
         heading.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
@@ -53,29 +83,42 @@ final class DebuggerFramesPane extends JPanel {
         SpeedSearch.install(this.frames, DebuggerFramesPane::searchText);
         this.frames.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
+                updateActions();
                 selection.accept(this.frames.getSelectedIndex());
             }
         });
         this.frames.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent event) { showPopup(event); }
+            @Override public void mouseReleased(MouseEvent event) { showPopup(event); }
+
+            private void showPopup(MouseEvent event) {
+                if (!event.isPopupTrigger()) return;
+                int row = rowAt(event);
+                if (row < 0) return;
+                frames.setSelectedIndex(row);
+                createContextMenu().show(frames, event.getX(), event.getY());
+            }
+
             @Override
             public void mouseClicked(MouseEvent event) {
-                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    DebugEngine.StackFrame frame = frames.getSelectedValue();
-                    if (frame != null) {
-                        navigation.open(frame, true);
-                    }
+                int row = rowAt(event);
+                if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
+                    frames.setSelectedIndex(row);
+                    open.actionPerformed(new ActionEvent(frames, ActionEvent.ACTION_PERFORMED, "openFrame"));
                 }
             }
         });
         this.frames.getInputMap(WHEN_FOCUSED)
-                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openFrame");
-        this.frames.getActionMap().put("openFrame", new javax.swing.AbstractAction() {
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F4, 0), "Open source");
+        this.frames.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("shift F10"), "frameMenu");
+        this.frames.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), "frameMenu");
+        this.frames.getActionMap().put("frameMenu", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                DebugEngine.StackFrame frame = frames.getSelectedValue();
-                if (frame != null) {
-                    navigation.open(frame, true);
-                }
+            public void actionPerformed(ActionEvent event) {
+                int row = frames.getSelectedIndex();
+                if (row < 0) return;
+                var bounds = frames.getCellBounds(row, row);
+                createContextMenu().show(frames, bounds.x, bounds.y + bounds.height);
             }
         });
 
@@ -85,7 +128,56 @@ final class DebuggerFramesPane extends JPanel {
     }
 
     void setFrames(List<DebugEngine.StackFrame> frames) {
+        // A menu opened for an old pause must not act on the next pause's frames.
+        var menuPath = MenuSelectionManager.defaultManager().getSelectedPath();
+        if (menuPath.length > 0 && menuPath[0] instanceof JPopupMenu menu && menu.getInvoker() == this.frames) {
+            MenuSelectionManager.defaultManager().clearSelectedPath();
+        }
         this.model.setFrames(frames);
+        updateActions();
+    }
+
+    private int rowAt(MouseEvent event) {
+        int row = this.frames.locationToIndex(event.getPoint());
+        return row >= 0 && this.frames.getCellBounds(row, row).contains(event.getPoint()) ? row : -1;
+    }
+
+    private Action action(String name, Icon icon, String shortcut, Runnable handler) {
+        Action action = new AbstractAction(name, icon) {
+            @Override public void actionPerformed(ActionEvent event) {
+                if (isEnabled()) handler.run();
+            }
+        };
+        action.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(shortcut));
+        this.frames.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(shortcut), name);
+        this.frames.getActionMap().put(name, action);
+        return action;
+    }
+
+    private void updateActions() {
+        DebugEngine.StackFrame frame = this.frames.getSelectedValue();
+        this.open.setEnabled(frame != null && !frame.binaryName().isBlank() && frame.line() > 0);
+        this.copyFrame.setEnabled(frame != null);
+        this.copyStack.setEnabled(this.model.getSize() > 0);
+    }
+
+    JPopupMenu createContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(this.open);
+        menu.addSeparator();
+        menu.add(this.copyFrame);
+        menu.add(this.copyStack);
+        return menu;
+    }
+
+    static String frameText(DebugEngine.StackFrame frame) {
+        String location = frame.binaryName().isBlank() ? sourceName(frame.sourceUri()) : frame.binaryName();
+        if (frame.line() > 0) location += ":" + frame.line();
+        return "at " + (frame.name().isBlank() ? "Unknown frame" : frame.name()) + " (" + location + ")";
+    }
+
+    private static void copy(String text) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
     }
 
     DebugEngine.StackFrame frame(int row) {
