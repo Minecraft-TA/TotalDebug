@@ -37,7 +37,7 @@ public final class BreakpointsWindowPreview {
 
         BreakpointsWindow window = new BreakpointsWindow(new ASTCache(), owner, controller, target -> {
         });
-        window.setBounds(owner.getX() + 50, owner.getY() + 20, 940, 680);
+        window.setLocation(owner.getX() + 190, owner.getY() + 90);
         window.showWindow();
         return window;
     }

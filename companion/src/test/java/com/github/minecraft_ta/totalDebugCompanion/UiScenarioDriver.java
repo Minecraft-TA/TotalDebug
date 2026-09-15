@@ -180,10 +180,25 @@ final class UiScenarioDriver {
                 });
             }
             case DEBUGGER -> context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
-            case BREAKPOINTS -> context.once(
-                    "open-breakpoints",
-                    () -> BreakpointsWindowPreview.open(mainWindow)
-            );
+            case BREAKPOINTS, BREAKPOINTS_MENU, BREAKPOINTS_SIMPLE -> {
+                context.once("open-breakpoints", () -> BreakpointsWindowPreview.open(mainWindow));
+                var window = findShowingWindow(BreakpointsWindow.class);
+                if (window == null || scenario == UiRenderScenario.BREAKPOINTS) break;
+                var list = findComponent(window, JList.class);
+                context.once("breakpoint-list-action", () -> {
+                    if (scenario == UiRenderScenario.BREAKPOINTS_SIMPLE) {
+                        list.setSelectedIndex(1);
+                    } else {
+                        list.requestFocusInWindow();
+                        var bounds = list.getCellBounds(0, 0);
+                        OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
+                        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(list,
+                                new java.awt.event.KeyEvent(list, java.awt.event.KeyEvent.KEY_PRESSED,
+                                        System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
+                                        java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                    }
+                });
+            }
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
                 var window = new com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow(
                         mainWindow, null, mainWindow.editorContext(), mainWindow::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
@@ -330,6 +345,8 @@ final class UiScenarioDriver {
             case DEBUGGER_LOCATION -> mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView;
             case DEBUGGER -> findShowingWindow(DebuggerWindow.class) != null;
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
+            case BREAKPOINTS_MENU -> visibleMenuPopup() != null;
+            case BREAKPOINTS_SIMPLE -> context.completedActions.contains("breakpoint-list-action");
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> findShowingWindow(com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);

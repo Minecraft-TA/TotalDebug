@@ -114,13 +114,14 @@ final class BreakpointEditorPopup {
         constraints.weightx = 0;
         constraints.fill = GridBagConstraints.NONE;
         constraints.insets = new Insets(0, 0, 0, 10);
-        fields.add(new JLabel("Hit count:"), constraints);
+        fields.add(new JLabel("Trigger on hit:"), constraints);
 
         constraints.gridx = 1;
         constraints.weightx = 1;
         constraints.fill = GridBagConstraints.HORIZONTAL;
         constraints.insets = new Insets(0, 0, 0, 0);
-        this.hitCount.putClientProperty("JTextField.placeholderText", "Optional positive integer");
+        this.hitCount.putClientProperty("JTextField.placeholderText", "Every hit");
+        this.hitCount.setToolTipText("Leave empty for every hit. Enter 3 to trigger on the third hit.");
         fields.add(this.hitCount, constraints);
         content.add(fields, BorderLayout.CENTER);
 
@@ -161,7 +162,7 @@ final class BreakpointEditorPopup {
     }
 
     private void showInvalidHitCount() {
-        this.validation.setText("Hit count must be a positive integer");
+        this.validation.setText("Hit number must be a positive integer");
         this.validation.putClientProperty("FlatLaf.styleClass", "error");
         this.hitCount.putClientProperty("JComponent.outline", "error");
         this.hitCount.requestFocusInWindow();
