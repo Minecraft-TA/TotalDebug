@@ -45,6 +45,7 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | runServer | `actions/deploy` | | | |
 | | | | arrow_down | `general/chevronDown` |
 | previousOccurrence | `general/chevronUp` | | nextOccurrence | `general/chevronDown` |
+| jumpToSource | [`general/edit`](https://github.com/JetBrains/intellij-community/blob/master/platform/icons/src/expui/general/edit.svg) | | | |
 
 File-tree and navigation assets:
 

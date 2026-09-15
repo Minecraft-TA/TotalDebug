@@ -255,7 +255,7 @@ public final class UsagesViewPanel extends JPanel {
         });
         this.resultsTree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openUsage");
-        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction("Open source") {
+        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction("Open source", Icons.JUMP_TO_SOURCE) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 openSelectedUsage();

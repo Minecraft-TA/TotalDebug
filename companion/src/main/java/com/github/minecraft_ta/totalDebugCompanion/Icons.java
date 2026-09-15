@@ -105,6 +105,7 @@ public class Icons {
     public static final FlatSVGIcon NEXT_OCCURRENCE = new FlatSVGIcon("icons/nextOccurrence.svg");
 
     public static final FlatSVGIcon COPY = new FlatSVGIcon("icons/copy.svg");
+    public static final FlatSVGIcon JUMP_TO_SOURCE = new FlatSVGIcon("icons/jumpToSource.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 
     public static final FlatSVGIcon PRIMITIVE = new FlatSVGIcon("icons/primitive.svg");
