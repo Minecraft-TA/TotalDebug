@@ -13,6 +13,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 
 /** Context commands shared by trees and read-only output. */
 public final class ContextMenus {
@@ -34,7 +35,7 @@ public final class ContextMenus {
                 if (!event.isPopupTrigger()) return;
                 TreePath path = tree.getPathForLocation(event.getX(), event.getY());
                 if (path == null) return;
-                tree.setSelectionPath(path);
+                if (!tree.isPathSelected(path)) tree.setSelectionPath(path);
                 show(menu.apply(path), tree, event.getX(), event.getY(), defaultCopy);
             }
         });
@@ -47,6 +48,36 @@ public final class ContextMenus {
         };
         bind(tree, "shift F10", "rowMenu", keyboardMenu);
         bind(tree, "CONTEXT_MENU", "rowMenu", keyboardMenu);
+    }
+
+    public static void installList(JList<?> list, IntFunction<JPopupMenu> menu, String defaultCopy) {
+        list.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent event) { popup(event); }
+            @Override public void mouseReleased(MouseEvent event) { popup(event); }
+            private void popup(MouseEvent event) {
+                if (!event.isPopupTrigger()) return;
+                int row = list.locationToIndex(event.getPoint());
+                if (row < 0 || !list.getCellBounds(row, row).contains(event.getPoint())) return;
+                list.setSelectedIndex(row);
+                show(menu.apply(row), list, event.getX(), event.getY(), defaultCopy);
+            }
+        });
+        bind(list, "ctrl C", "copyRow", () -> invoke(menu.apply(list.getSelectedIndex()), defaultCopy));
+        bind(list, "shift F10", "rowMenu", () -> showListMenu(list, menu, defaultCopy));
+        bind(list, "CONTEXT_MENU", "rowMenu", () -> showListMenu(list, menu, defaultCopy));
+    }
+
+    public static void showListMenu(JList<?> list, IntFunction<JPopupMenu> menu, String defaultCopy) {
+        int row = list.getSelectedIndex();
+        if (row < 0) return;
+        var bounds = list.getCellBounds(row, row);
+        show(menu.apply(row), list, bounds.x, bounds.y + bounds.height, defaultCopy);
+    }
+
+    public static boolean isOpenFor(java.awt.Component owner) {
+        var path = MenuSelectionManager.defaultManager().getSelectedPath();
+        return path.length > 0 && path[0] instanceof JPopupMenu menu
+                && (menu.getInvoker() == owner || SwingUtilities.isDescendingFrom(menu.getInvoker(), owner));
     }
 
     public static void installOutput(JTextComponent output, String copyAllLabel) {

@@ -11,6 +11,23 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ContextMenusTest {
     @Test
+    void outputMenuPreservesSelectionAndOffersTheCompleteOutput() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JTextPane output = new JTextPane();
+            output.setText("first\nsecond");
+            output.select(6, 12);
+            ContextMenus.installOutput(output, "Copy output");
+            JPopupMenu menu = output.getComponentPopupMenu();
+            for (var listener : menu.getPopupMenuListeners()) {
+                listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+            }
+            assertEquals("second", output.getSelectedText());
+            assertEquals("second", ((JMenuItem) menu.getComponent(0)).getActionCommand());
+            assertEquals(output.getText(), ((JMenuItem) menu.getComponent(1)).getActionCommand());
+        });
+    }
+
+    @Test
     void keyboardAndRightClickUseTheSelectedRowAndIgnoreBlankSpace() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var root = new DefaultMutableTreeNode("root");

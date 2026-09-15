@@ -241,8 +241,39 @@ final class UiScenarioDriver {
                     context,
                     context.source().indexOf("public interface ThemeSample")
             );
-            case IMPLEMENTATION_CHOOSER -> advanceImplementationChooser(context);
-            case SEARCH_EMPTY, SEARCH_RESULTS, MODULE_FILTER -> advanceSearch(scenario, context);
+            case IMPLEMENTATION_CHOOSER, IMPLEMENTATION_MENU -> {
+                advanceImplementationChooser(context);
+                var popup = findShowingWindow(ImplementationChooserPopup.class);
+                JList<?> list = popup == null ? null : findComponent(popup, JList.class);
+                if (scenario == UiRenderScenario.IMPLEMENTATION_MENU && list != null && list.getModel().getSize() > 0) {
+                    context.once("implementation-menu", () -> {
+                        list.setSelectedIndex(0);
+                        var bounds = list.getCellBounds(0, 0);
+                        OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
+                        var editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(editor,
+                                new java.awt.event.KeyEvent(editor, java.awt.event.KeyEvent.KEY_PRESSED,
+                                        System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
+                                        java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                    });
+                }
+            }
+            case SEARCH_EMPTY, SEARCH_RESULTS, SEARCH_MENU, MODULE_FILTER -> advanceSearch(scenario, context);
+            case FILE_MENU -> {
+                LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
+                for (int row = 0; tree != null && row < tree.getRowCount(); row++) {
+                    var path = tree.getPathForRow(row);
+                    if (!(path.getLastPathComponent() instanceof com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode node)
+                            || !node.getUserObject().getName().equals("ThemeSample.class")) continue;
+                    context.once("file-menu", () -> {
+                        tree.setSelectionPath(path);
+                        var bounds = tree.getPathBounds(path);
+                        OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
+                        tree.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(tree, 0, ""));
+                    });
+                    break;
+                }
+            }
             case USAGES_RESULTS, USAGES_SEARCH, USAGES_MENU -> {
                 context.once("open-usages", () -> {
                     UsagesView view = new UsagesView(mainWindow.editorContext(), new CodeSymbol.ClassSymbol("sample.ThemeSample"), mainWindow.editorContext().project().runtime());
@@ -395,6 +426,7 @@ final class UiScenarioDriver {
                 yield list != null && list.getModel().getSize() > 0 && list.getSelectedIndex() >= 0;
             }
             case MODULE_FILTER -> visibleMenuPopup() != null;
+            case SEARCH_MENU, IMPLEMENTATION_MENU, FILE_MENU -> visibleMenuPopup() != null;
             case USAGES_RESULTS -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 javax.swing.JTree tree = selected instanceof UsagesView
@@ -621,10 +653,19 @@ final class UiScenarioDriver {
                 mainWindow.getX() + 220,
                 mainWindow.getY() + 70
         ));
-        if (scenario == UiRenderScenario.SEARCH_RESULTS) {
+        if (scenario == UiRenderScenario.SEARCH_RESULTS || scenario == UiRenderScenario.SEARCH_MENU) {
             FlatIconTextField field = findComponent(popup, FlatIconTextField.class);
             if (field != null) {
                 context.once("search-query", () -> field.setText("Theme"));
+            }
+            JList<?> list = findComponent(popup, JList.class);
+            if (scenario == UiRenderScenario.SEARCH_MENU && list != null && list.getModel().getSize() > 0
+                    && list.getSelectedIndex() >= 0) {
+                context.once("search-menu", () -> {
+                    var bounds = list.getCellBounds(list.getSelectedIndex(), list.getSelectedIndex());
+                    OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
+                    list.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(list, 0, ""));
+                });
             }
         } else if (scenario == UiRenderScenario.MODULE_FILTER) {
             JButton filter = findButton(popup, "All modules");

@@ -6,6 +6,8 @@ import java.util.function.Consumer;
 import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -129,6 +131,10 @@ public class SearchEverywherePopup extends JFrame {
                 this::setSelectedModules
         );
         configureResultList();
+        ContextMenus.installList(this.resultList, this::createResultMenu, "Copy reference");
+        ContextMenus.bind(this.resultList, "ctrl C", "copyResult", () -> ContextMenus.invoke(
+                createResultMenu(this.resultList.getSelectedIndex()),
+                this.resultList.getSelectedValue() instanceof TextResult ? "Copy value" : "Copy reference"));
         configureSearchField();
         configureFilterButton();
 
@@ -151,6 +157,13 @@ public class SearchEverywherePopup extends JFrame {
                 KeyStroke.getKeyStroke("ENTER"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+        getRootPane().registerKeyboardAction(event -> openSelectedResult(), KeyStroke.getKeyStroke("F4"),
+                JComponent.WHEN_IN_FOCUSED_WINDOW);
+        for (String shortcut : new String[]{"shift F10", "CONTEXT_MENU"}) {
+            getRootPane().registerKeyboardAction(event -> ContextMenus.showListMenu(
+                    this.resultList, this::createResultMenu, "Copy reference"), KeyStroke.getKeyStroke(shortcut),
+                    JComponent.WHEN_IN_FOCUSED_WINDOW);
+        }
 
         indexLoader.addStatusListener(this.indexStatusListener);
 
@@ -160,7 +173,7 @@ public class SearchEverywherePopup extends JFrame {
         addWindowFocusListener(new WindowAdapter() {
             @Override
             public void windowLostFocus(WindowEvent event) {
-                if (!moduleFilterPopup.isVisible()) {
+                if (!moduleFilterPopup.isVisible() && !ContextMenus.isOpenFor(SearchEverywherePopup.this)) {
                     setVisible(false);
                 }
             }
@@ -556,6 +569,10 @@ public class SearchEverywherePopup extends JFrame {
         if (selected == null) {
             return;
         }
+        openResult(selected);
+    }
+
+    private void openResult(Result selected) {
         setVisible(false);
         switch (selected) {
             case ClassResult type -> navigator.accept(
@@ -574,6 +591,31 @@ public class SearchEverywherePopup extends JFrame {
                     new NavigationTarget.LiteralUsages(text.value())
             );
         }
+    }
+
+    javax.swing.JPopupMenu createResultMenu(int row) {
+        var menu = new javax.swing.JPopupMenu();
+        if (this.searchPending || row < 0 || row >= this.resultModel.size()) return menu;
+        Result result = this.resultModel.get(row);
+        var open = new javax.swing.JMenuItem(result instanceof TextResult ? "Find usages" : "Open source",
+                result instanceof TextResult ? Icons.SEARCH_ICON : Icons.JUMP_TO_SOURCE);
+        open.addActionListener(event -> openResult(result));
+        menu.add(open);
+        menu.addSeparator();
+        var copy = ContextMenus.copyItem(result instanceof TextResult ? "Copy value" : "Copy reference", resultReference(result));
+        copy.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
+        menu.add(copy);
+        return menu;
+    }
+
+    static String resultReference(Result result) {
+        return switch (result) {
+            case ClassResult type -> type.binaryName();
+            case SymbolResult symbol -> symbol.kind() == SymbolKind.FIELD
+                    ? new CodeSymbol.FieldSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName()
+                    : new CodeSymbol.MethodSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName();
+            case TextResult text -> text.value();
+        };
     }
 
     private ModuleSummary moduleSummary(Result result) {

@@ -96,13 +96,6 @@ public class LazyFileJTree extends JTree {
                 if (treeItem.isDirectory())
                     return;
 
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    if (!getSelectionModel().isPathSelected(pathForRow))
-                        setSelectionPath(pathForRow);
-                    showPopupMenu(node, treeItem, e.getX(), e.getY());
-                    return;
-                }
-
                 if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2)
                     return;
 
@@ -142,10 +135,6 @@ public class LazyFileJTree extends JTree {
         if (background != null) {
             setBackground(background);
         }
-    }
-
-    protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
-
     }
 
     public void addMouseDoubleClickListener(BiConsumer<LazyTreeNode, TreeItem> listener) {

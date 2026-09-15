@@ -12,8 +12,10 @@ The findings and action counts below describe the original audit. These slices h
 - Breakpoint list actions, keyboard shortcuts, validation, preserved edits, conditional fields, and clearer labels.
 - JetBrains Jump to Source icons in Find Usages and debugger source actions.
 - Stack-frame source navigation, copying a frame or the displayed stack, and context-menu shortcuts.
+- Consistent value, expression, and type copying across debugger and evaluation results, plus output copying.
+- Source and reference actions in Search Everywhere, hierarchy results, and file-tree classes; path copying for files and archives.
 
-The next planned slice is consistent value, expression, and type copying across debugger and evaluation results. Script selection, bulk breakpoint operations, global keyboard focus, and the remaining audit items are still open.
+Script selection, bulk breakpoint operations, global keyboard focus, and the remaining audit items are still open. Broader context-menu refactoring is pending discussion.
 
 ## Original audit
 

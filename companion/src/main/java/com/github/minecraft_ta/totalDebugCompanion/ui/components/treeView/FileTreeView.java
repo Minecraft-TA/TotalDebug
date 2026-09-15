@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import javax.swing.tree.TreePath;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -32,22 +34,16 @@ public class FileTreeView extends JScrollPane {
         this.project = project;
         java.util.Objects.requireNonNull(navigator, "navigator");
 
-        this.tree = new LazyFileJTree() {
-            @Override
-            protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
-                if (!(treeItem instanceof FileSystemFileItem))
-                    return;
+        this.tree = new LazyFileJTree();
+        ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
+                ? node.getUserObject() : null, navigator), "Copy reference");
+        ContextMenus.bind(this.tree, "ctrl C", "copyFile", () -> {
+            TreePath path = this.tree.getSelectionPath();
+            if (path == null || !(path.getLastPathComponent() instanceof LazyTreeNode node)) return;
+            ContextMenus.invoke(createContextMenu(node.getUserObject(), navigator), reference(node.getUserObject()) == null ? "Copy path" : "Copy reference");
+        });
 
-                var popupMenu = new JPopupMenu();
-                var deleteItem = popupMenu.add("Delete");
-                deleteItem.setIcon(Icons.DELETE);
-                deleteItem.addActionListener(event -> deleteSelectedItems());
-
-                popupMenu.show(this, x, y);
-            }
-        };
-
-        this.tree.addMouseDoubleClickListener((node, item) -> openItem(node, item, navigator));
+        this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "openSelectedFile");
         this.tree.getActionMap().put("openSelectedFile", new AbstractAction() {
@@ -57,7 +53,7 @@ public class FileTreeView extends JScrollPane {
                         || !(tree.getSelectionPath().getLastPathComponent() instanceof LazyTreeNode node)) {
                     return;
                 }
-                openItem(node, node.getUserObject(), navigator);
+                openItem(node.getUserObject(), navigator);
             }
         });
 
@@ -87,7 +83,6 @@ public class FileTreeView extends JScrollPane {
     }
 
     private void openItem(
-            LazyTreeNode node,
             TreeItem item,
             Consumer<NavigationTarget> navigator
     ) {
@@ -117,6 +112,52 @@ public class FileTreeView extends JScrollPane {
                     ? new NavigationTarget.LocalFile(runtimeFile.path())
                     : new NavigationTarget.RuntimeClass(binaryName));
         }
+    }
+
+    JPopupMenu createContextMenu(TreeItem item, Consumer<NavigationTarget> navigator) {
+        JPopupMenu menu = new JPopupMenu();
+        if (item == null) return menu;
+        String reference = reference(item);
+        String location = location(item);
+        if (!item.isDirectory()) {
+            JMenuItem open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
+            open.addActionListener(event -> openItem(item, navigator));
+            menu.add(open);
+            if (reference != null || location != null && !location.isBlank()) menu.addSeparator();
+        }
+        if (reference != null) menu.add(ContextMenus.copyItem("Copy reference", reference));
+        if (location != null && !location.isBlank()) {
+            JMenuItem copyPath = ContextMenus.copyItem("Copy path", location);
+            if (reference == null) copyPath.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
+            menu.add(copyPath);
+        }
+        if (item instanceof FileSystemFileItem) {
+            if (menu.getComponentCount() > 0) menu.addSeparator();
+            JMenuItem delete = new JMenuItem("Delete file", Icons.DELETE);
+            delete.addActionListener(event -> this.tree.deleteSelectedItems());
+            menu.add(delete);
+        }
+        return menu;
+    }
+
+    private static String reference(TreeItem item) {
+        if (item instanceof DecompiledSourcesTreeItem.SourceItem source) return source.binaryName();
+        if (item instanceof RuntimeSourceTreeItem.RuntimeFileEntry file) return file.binaryName();
+        if (item instanceof ZipFileRootItem.Entry entry && entry.getEntryPath().endsWith(".class")) {
+            return entry.getEntryPath().substring(0, entry.getEntryPath().length() - 6).replace('/', '.');
+        }
+        return null;
+    }
+
+    private static String location(TreeItem item) {
+        if (item instanceof FileSystemFileItem file) return file.getPath().toAbsolutePath().normalize().toString();
+        if (item instanceof ZipFileRootItem.Entry entry) {
+            return entry.getArchivePath().toAbsolutePath().normalize() + "!/" + entry.getEntryPath();
+        }
+        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem
+                || item instanceof RuntimeSourceTreeItem || item instanceof RuntimeSourceTreeItem.RuntimeDirectoryEntry
+                || item instanceof RuntimeSourceTreeItem.RuntimeFileEntry) return item.getTooltip();
+        return null;
     }
 
     private RuntimeSourceCatalog sourceCatalog() {

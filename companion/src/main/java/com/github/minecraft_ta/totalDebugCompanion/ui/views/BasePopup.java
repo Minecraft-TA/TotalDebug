@@ -15,6 +15,7 @@ public class BasePopup extends JWindow {
     private final FocusAdapter focusListener = new FocusAdapter() {
         @Override
         public void focusLost(FocusEvent event) {
+            if (com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.isOpenFor(BasePopup.this)) return;
             setVisible(false);
         }
     };
