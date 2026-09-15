@@ -14,8 +14,9 @@ The findings and action counts below describe the original audit. These slices h
 - Stack-frame source navigation, copying a frame or the displayed stack, and context-menu shortcuts.
 - Consistent value, expression, and type copying across debugger and evaluation results, plus output copying.
 - Source and reference actions in Search Everywhere, hierarchy results, and file-tree classes; path copying for files and archives.
+- Shared tree/list menu handling and explicit default-copy actions, with feature actions and validation kept in their owning views.
 
-Script selection, bulk breakpoint operations, global keyboard focus, and the remaining audit items are still open. Broader context-menu refactoring is pending discussion.
+Script selection, bulk breakpoint operations, global keyboard focus, and the remaining audit items are still open.
 
 ## Original audit
 

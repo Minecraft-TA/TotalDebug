@@ -82,12 +82,12 @@ final class DebuggerValueTree {
         if (path == null || !(path.getLastPathComponent() instanceof DefaultMutableTreeNode node)) return menu;
         DebugValue value = debugValue(node.getUserObject());
         if (value != null) {
-            menu.add(ContextMenus.copyItem("Copy value", value.value()));
-            if (!value.evaluateName().isBlank()) menu.add(ContextMenus.copyItem("Copy expression", value.evaluateName()));
-            if (!value.type().isBlank()) menu.add(ContextMenus.copyItem("Copy type", value.type()));
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", value.value())));
+            if (!value.evaluateName().isBlank()) menu.add(ContextMenus.copyAction("Copy expression", value.evaluateName()));
+            if (!value.type().isBlank()) menu.add(ContextMenus.copyAction("Copy type", value.type()));
         } else {
             String expression = expressionOf(node.getUserObject());
-            if (!expression.isBlank()) menu.add(ContextMenus.copyItem("Copy expression", expression));
+            if (!expression.isBlank()) menu.add(ContextMenus.copyAction("Copy expression", expression));
         }
         return menu;
     }

@@ -4,7 +4,6 @@ import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
-import javax.swing.tree.TreePath;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -36,12 +35,7 @@ public class FileTreeView extends JScrollPane {
 
         this.tree = new LazyFileJTree();
         ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
-                ? node.getUserObject() : null, navigator), "Copy reference");
-        ContextMenus.bind(this.tree, "ctrl C", "copyFile", () -> {
-            TreePath path = this.tree.getSelectionPath();
-            if (path == null || !(path.getLastPathComponent() instanceof LazyTreeNode node)) return;
-            ContextMenus.invoke(createContextMenu(node.getUserObject(), navigator), reference(node.getUserObject()) == null ? "Copy path" : "Copy reference");
-        });
+                ? node.getUserObject() : null, navigator));
 
         this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
@@ -125,10 +119,10 @@ public class FileTreeView extends JScrollPane {
             menu.add(open);
             if (reference != null || location != null && !location.isBlank()) menu.addSeparator();
         }
-        if (reference != null) menu.add(ContextMenus.copyItem("Copy reference", reference));
+        if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
         if (location != null && !location.isBlank()) {
-            JMenuItem copyPath = ContextMenus.copyItem("Copy path", location);
-            if (reference == null) copyPath.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
+            Action copyPath = ContextMenus.copyAction("Copy path", location);
+            if (reference == null) ContextMenus.defaultCopy(copyPath);
             menu.add(copyPath);
         }
         if (item instanceof FileSystemFileItem) {

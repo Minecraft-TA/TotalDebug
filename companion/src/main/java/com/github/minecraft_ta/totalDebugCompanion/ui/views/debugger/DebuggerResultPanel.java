@@ -25,7 +25,7 @@ public final class DebuggerResultPanel extends JPanel implements AutoCloseable {
                 result.variablesReference(), 0, result.indexedVariables(), DebugEngine.ValuePreview.NONE, null)));
         var model = new DefaultTreeModel(root);
         var tree = DebuggerValueTree.create(model);
-        ContextMenus.installTree(tree, DebuggerValueTree::copyMenu, "Copy value");
+        ContextMenus.installTree(tree, DebuggerValueTree::copyMenu);
         tree.setSelectionRow(0);
         tree.addTreeWillExpandListener(new TreeWillExpandListener() {
             @Override public void treeWillExpand(TreeExpansionEvent event) {

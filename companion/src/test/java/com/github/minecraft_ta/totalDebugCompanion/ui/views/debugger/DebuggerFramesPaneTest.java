@@ -33,7 +33,7 @@ class DebuggerFramesPaneTest {
             list.setSelectedIndex(1);
             JPopupMenu menu = pane.createContextMenu();
             assertSame(Icons.JUMP_TO_SOURCE, ((JMenuItem) menu.getComponent(0)).getIcon());
-            assertSame(list.getActionMap().get("Copy frame"), ((JMenuItem) menu.getComponent(2)).getAction());
+            assertEquals("Copy frame", ((JMenuItem) menu.getComponent(2)).getAction().getValue(Action.NAME));
             assertSame(Icons.COPY, ((JMenuItem) menu.getComponent(3)).getIcon());
             invoke(list, "ENTER");
             invoke(list, "F4");

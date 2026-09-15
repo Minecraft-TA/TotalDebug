@@ -215,7 +215,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             }
         });
         installExpansion();
-        ContextMenus.installTree(this.tree, this::createContextMenu, "Copy value");
+        ContextMenus.installTree(this.tree, this::createContextMenu);
 
         JPanel input = new JPanel(new BorderLayout(6, 0));
         input.setBorder(BorderFactory.createCompoundBorder(

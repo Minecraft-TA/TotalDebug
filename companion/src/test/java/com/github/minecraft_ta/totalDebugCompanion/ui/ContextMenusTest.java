@@ -38,9 +38,10 @@ class ContextMenusTest {
             List<String> copied = new ArrayList<>();
             ContextMenus.installTree(tree, path -> {
                 JPopupMenu menu = new JPopupMenu();
-                if (path != null) menu.add("Copy value").addActionListener(event -> copied.add(path.getLastPathComponent().toString()));
+                if (path != null) menu.add(ContextMenus.defaultCopy(ContextMenus.action("Copy value", null, null,
+                        () -> copied.add(path.getLastPathComponent().toString()))));
                 return menu;
-            }, "Copy value");
+            });
             JFrame window = new JFrame();
             try {
                 window.add(tree);
@@ -60,6 +61,29 @@ class ContextMenusTest {
                         0, 20, 250, 1, true, MouseEvent.BUTTON3));
                 assertEquals(0, MenuSelectionManager.defaultManager().getSelectedPath().length);
             } finally { window.dispose(); }
+        });
+    }
+
+    @Test
+    void defaultCopyUsesItsActionEvenAfterRenamingAndRespectsEnabledState() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JTree tree = new JTree();
+            int[] copies = {0};
+            Action copy = ContextMenus.defaultCopy(ContextMenus.action("Copy value", null, null, () -> copies[0]++));
+            ContextMenus.installTree(tree, path -> {
+                JPopupMenu menu = new JPopupMenu();
+                menu.add(ContextMenus.action("Copy value", null, null, () -> fail("Dispatched by label")));
+                menu.add(copy);
+                return menu;
+            });
+            copy.putValue(Action.NAME, "Renamed command");
+            Object key = tree.getInputMap().get(KeyStroke.getKeyStroke("ctrl C"));
+            Action shortcut = tree.getActionMap().get(key);
+            shortcut.actionPerformed(new ActionEvent(tree, 0, ""));
+            assertEquals(1, copies[0]);
+            copy.setEnabled(false);
+            shortcut.actionPerformed(new ActionEvent(tree, 0, ""));
+            assertEquals(1, copies[0]);
         });
     }
 }

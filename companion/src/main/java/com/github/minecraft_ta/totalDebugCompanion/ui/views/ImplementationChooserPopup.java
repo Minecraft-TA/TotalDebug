@@ -81,13 +81,13 @@ public final class ImplementationChooserPopup extends BasePopup {
             }
             if (event.getKeyCode() == KeyEvent.VK_CONTEXT_MENU
                     || event.getKeyCode() == KeyEvent.VK_F10 && event.isShiftDown()) {
-                ContextMenus.showListMenu(list, ImplementationChooserPopup.this::createResultMenu, "Copy reference");
+                ContextMenus.showKeyboardMenu(list);
                 event.consume();
                 return;
             }
             if (event.getKeyCode() == KeyEvent.VK_C && event.isControlDown()
                     && (invoker.getSelectedText() == null || invoker.getSelectedText().isEmpty())) {
-                ContextMenus.invoke(createResultMenu(list.getSelectedIndex()), "Copy reference");
+                ContextMenus.copy(createResultMenu(list.getSelectedIndex()));
                 event.consume();
                 return;
             }
@@ -247,7 +247,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         this.list.setCellRenderer(new ResultRenderer());
         this.list.setFixedCellHeight(28);
         this.list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
-        ContextMenus.installList(this.list, this::createResultMenu, "Copy reference");
+        ContextMenus.installList(this.list, this::createResultMenu);
         this.list.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
@@ -356,7 +356,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         });
         menu.add(open);
         menu.addSeparator();
-        menu.add(ContextMenus.copyItem("Copy reference", result.symbol().displayName()));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", result.symbol().displayName())));
         return menu;
     }
 

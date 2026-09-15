@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -22,7 +23,6 @@ import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
-import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JPopupMenu;
 import javax.swing.JToolBar;
@@ -49,8 +49,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -89,10 +87,10 @@ public final class BreakpointsWindow extends JDialog {
     private final JLabel actionError = new JLabel();
     private final JLabel sourceLabel = new JLabel("Java:");
     private final JPanel sourceField = fieldWithError(this.actionSource.component(), this.actionError);
-    private final Action navigate = listAction("Open source", Icons.JUMP_TO_SOURCE, "ENTER", this::navigateSelected);
-    private final Action remove = listAction("Remove", Icons.DELETE, "DELETE", this::removeSelected);
-    private final Action toggle = listAction("Disable", Icons.BREAKPOINT_DISABLED, "SPACE", this::toggleSelected);
-    private final Action copy = listAction("Copy location", Icons.COPY, "ctrl C", this::copyLocation);
+    private final Action navigate = ContextMenus.action("Open source", Icons.JUMP_TO_SOURCE, "ENTER", this::navigateSelected);
+    private final Action remove = ContextMenus.action("Remove", Icons.DELETE, "DELETE", this::removeSelected);
+    private final Action toggle = ContextMenus.action("Disable", Icons.BREAKPOINT_DISABLED, "SPACE", this::toggleSelected);
+    private final Action copy = ContextMenus.action("Copy location", Icons.COPY, "ctrl C", this::copyLocation);
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void breakpointsChanged(
@@ -124,6 +122,8 @@ public final class BreakpointsWindow extends JDialog {
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(UiMetrics.TREE_ROW_HEIGHT);
         this.list.setCellRenderer(new BreakpointRenderer());
+        for (Action action : List.of(this.navigate, this.remove, this.toggle, this.copy)) ContextMenus.bindAction(this.list, action);
+        ContextMenus.installList(this.list, row -> createContextMenu());
         SpeedSearch search = SpeedSearch.install(this.list, entry -> entry.binaryName() + ' '
                 + simpleName(entry.binaryName()) + ' ' + entry.breakpoint().line() + ' '
                 + entry.breakpoint().request().condition());
@@ -151,26 +151,6 @@ public final class BreakpointsWindow extends JDialog {
         });
         this.list.addMouseListener(new MouseAdapter() {
             @Override
-            public void mousePressed(MouseEvent event) {
-                showPopup(event);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent event) {
-                showPopup(event);
-            }
-
-            private void showPopup(MouseEvent event) {
-                if (!event.isPopupTrigger()) return;
-                int index = list.locationToIndex(event.getPoint());
-                if (index < 0 || !list.getCellBounds(index, index).contains(event.getPoint())) return;
-                list.setSelectedIndex(index);
-                if (list.getSelectedIndex() == index) {
-                    createContextMenu().show(list, event.getX(), event.getY());
-                }
-            }
-
-            @Override
             public void mouseClicked(MouseEvent event) {
                 int index = list.locationToIndex(event.getPoint());
                 if (index < 0 || !list.getCellBounds(index, index).contains(event.getPoint())) {
@@ -183,17 +163,6 @@ public final class BreakpointsWindow extends JDialog {
                 } else if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
                     navigateSelected();
                 }
-            }
-        });
-        this.list.getInputMap().put(KeyStroke.getKeyStroke("shift F10"), "breakpointMenu");
-        this.list.getInputMap().put(KeyStroke.getKeyStroke("CONTEXT_MENU"), "breakpointMenu");
-        this.list.getActionMap().put("breakpointMenu", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                int index = list.getSelectedIndex();
-                if (index < 0) return;
-                var bounds = list.getCellBounds(index, index);
-                createContextMenu().show(list, bounds.x, bounds.y + bounds.height);
             }
         });
 
@@ -288,24 +257,11 @@ public final class BreakpointsWindow extends JDialog {
         }
     }
 
-    private Action listAction(String name, Icon icon, String shortcut, Runnable handler) {
-        Action action = new AbstractAction(name, icon) {
-            @Override public void actionPerformed(ActionEvent event) {
-                if (isEnabled()) handler.run();
-            }
-        };
-        action.putValue(Action.SHORT_DESCRIPTION, name);
-        action.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(shortcut));
-        this.list.getInputMap().put(KeyStroke.getKeyStroke(shortcut), name);
-        this.list.getActionMap().put(name, action);
-        return action;
-    }
-
     JPopupMenu createContextMenu() {
         JPopupMenu menu = new JPopupMenu();
         menu.add(this.navigate);
         menu.add(this.toggle);
-        menu.add(this.copy);
+        menu.add(ContextMenus.defaultCopy(this.copy));
         menu.addSeparator();
         menu.add(this.remove);
         return menu;
@@ -314,8 +270,7 @@ public final class BreakpointsWindow extends JDialog {
     private void copyLocation() {
         var entry = this.list.getSelectedValue();
         if (entry != null) {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-                    new StringSelection(entry.binaryName() + ":" + entry.breakpoint().line()), null);
+            ContextMenus.copyText(entry.binaryName() + ":" + entry.breakpoint().line());
         }
     }
 

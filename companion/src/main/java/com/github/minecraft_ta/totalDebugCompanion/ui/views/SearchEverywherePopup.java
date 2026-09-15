@@ -131,10 +131,7 @@ public class SearchEverywherePopup extends JFrame {
                 this::setSelectedModules
         );
         configureResultList();
-        ContextMenus.installList(this.resultList, this::createResultMenu, "Copy reference");
-        ContextMenus.bind(this.resultList, "ctrl C", "copyResult", () -> ContextMenus.invoke(
-                createResultMenu(this.resultList.getSelectedIndex()),
-                this.resultList.getSelectedValue() instanceof TextResult ? "Copy value" : "Copy reference"));
+        ContextMenus.installList(this.resultList, this::createResultMenu);
         configureSearchField();
         configureFilterButton();
 
@@ -160,8 +157,7 @@ public class SearchEverywherePopup extends JFrame {
         getRootPane().registerKeyboardAction(event -> openSelectedResult(), KeyStroke.getKeyStroke("F4"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (String shortcut : new String[]{"shift F10", "CONTEXT_MENU"}) {
-            getRootPane().registerKeyboardAction(event -> ContextMenus.showListMenu(
-                    this.resultList, this::createResultMenu, "Copy reference"), KeyStroke.getKeyStroke(shortcut),
+            getRootPane().registerKeyboardAction(event -> ContextMenus.showKeyboardMenu(this.resultList), KeyStroke.getKeyStroke(shortcut),
                     JComponent.WHEN_IN_FOCUSED_WINDOW);
         }
 
@@ -602,9 +598,8 @@ public class SearchEverywherePopup extends JFrame {
         open.addActionListener(event -> openResult(result));
         menu.add(open);
         menu.addSeparator();
-        var copy = ContextMenus.copyItem(result instanceof TextResult ? "Copy value" : "Copy reference", resultReference(result));
-        copy.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
-        menu.add(copy);
+        var copy = ContextMenus.copyAction(result instanceof TextResult ? "Copy value" : "Copy reference", resultReference(result));
+        menu.add(ContextMenus.defaultCopy(copy));
         return menu;
     }
 

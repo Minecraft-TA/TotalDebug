@@ -84,8 +84,10 @@ class BreakpointsWindowTest {
                 JList<?> list = field(fixture.window, "list", JList.class);
                 list.setSelectedIndex(1);
                 JPopupMenu menu = fixture.window.createContextMenu();
-                assertSame(list.getActionMap().get("Open source"), ((JMenuItem) menu.getComponent(0)).getAction());
-                assertSame(list.getActionMap().get("Remove"), ((JMenuItem) menu.getComponent(4)).getAction());
+                assertSame(list.getActionMap().get(list.getInputMap().get(KeyStroke.getKeyStroke("ENTER"))),
+                        ((JMenuItem) menu.getComponent(0)).getAction());
+                assertSame(list.getActionMap().get(list.getInputMap().get(KeyStroke.getKeyStroke("DELETE"))),
+                        ((JMenuItem) menu.getComponent(4)).getAction());
                 invoke(list, JComponent.WHEN_FOCUSED, "ENTER");
                 assertEquals(List.of(new NavigationTarget.RuntimeLine("example.Example", 3)), fixture.navigation);
                 invoke(list, JComponent.WHEN_FOCUSED, "SPACE");
@@ -155,6 +157,23 @@ class BreakpointsWindowTest {
                         System.currentTimeMillis(), 0, KeyEvent.VK_UNDEFINED, ' '));
                 assertNotEquals(DebuggerSessionController.BreakpointState.DISABLED,
                         fixture.controller.breakpoint(fixture.source.uri(), 2).state());
+            });
+        }
+    }
+
+    @Test
+    void rightClickCannotOpenAnotherRowsMenuWhenAnEditIsInvalid() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            SwingUtilities.invokeAndWait(() -> {
+                fixture.window.setVisible(true);
+                field(fixture.window, "hitCount", JTextField.class).setText("bad");
+                JList<?> list = field(fixture.window, "list", JList.class);
+                var bounds = list.getCellBounds(1, 1);
+                list.dispatchEvent(new MouseEvent(list, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                        0, 50, bounds.y + bounds.height / 2, 1, true, MouseEvent.BUTTON3));
+                assertEquals(0, list.getSelectedIndex());
+                assertEquals("bad", field(fixture.window, "hitCount", JTextField.class).getText());
+                assertEquals(0, MenuSelectionManager.defaultManager().getSelectedPath().length);
             });
         }
     }
