@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import javax.swing.*;
 import java.awt.*;
 
@@ -10,7 +11,7 @@ public class FileTreeViewHeader extends JPanel {
     public FileTreeViewHeader() {
         super();
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
-        Dimension size = new Dimension(10000, scale(29));
+        Dimension size = new Dimension(10000, scale(UiMetrics.TAB_HEIGHT) + scale(UiMetrics.TAB_SEPARATOR_HEIGHT));
         setMinimumSize(new Dimension(0, size.height));
         setPreferredSize(size);
         setMaximumSize(size);
