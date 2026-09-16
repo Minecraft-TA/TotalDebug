@@ -2,7 +2,7 @@
 
 Audit date: 13 September 2026. Planning document, not an implementation change.
 
-## Implementation progress, 15 September 2026
+## Implementation progress, 16 September 2026
 
 The findings and action counts below describe the original audit. These slices have since been completed:
 
@@ -15,8 +15,13 @@ The findings and action counts below describe the original audit. These slices h
 - Consistent value, expression, and type copying across debugger and evaluation results, plus output copying.
 - Source and reference actions in Search Everywhere, hierarchy results, and file-tree classes; path copying for files and archives.
 - Shared tree/list menu handling and explicit default-copy actions, with feature actions and validation kept in their owning views.
+- Restored theme focus indicators and shared toolbar sizing and states. Debugger, module-filter, and image controls support keyboard activation while mouse clicks preserve editor focus. Editor Find toggles use the normal button model; image tools use JetBrains icons and show Fit state and zoom limits.
+- Search Everywhere keeps Tab category switching and adds Ctrl+Tab focus traversal and Alt+M for the module filter.
+- Script creation uses a compact, buttonless popup with a name field, selected Script type, Enter/Escape, and explicit name validation. It dismisses on focus loss. The script toolbar exposes the existing Format action with its icon and shortcut. Saving behavior and menu organization are unchanged.
+- File-tree refreshes retain surviving nodes, expanded folders, and selected files across script creation, atomic saves, deletion, and runtime-source refreshes. Changes arriving during an active directory scan trigger another scan; switching projects still replaces the roots.
+- Script creation and Save as Script refresh only the scripts directory. Unchanged rows emit no model events, insertions/removals are batched, and filesystem refreshes retain loaded subfolders. Synthetic checks cover 1,000, 5,000, and 10,000 entries; directory reads and sorting remain off the Swing event thread.
 
-Script selection, bulk breakpoint operations, global keyboard focus, and the remaining audit items are still open.
+Script selection, bulk breakpoint operations, keyboard access to remaining secondary controls, and the remaining audit items are still open. The toolbar slice has behavioral tests and captures in both themes; full keyboard traversal and Windows scaling still need interactive verification.
 
 ## Original audit
 

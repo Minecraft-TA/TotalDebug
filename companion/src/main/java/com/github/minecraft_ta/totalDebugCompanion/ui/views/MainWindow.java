@@ -133,7 +133,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs, editorContext(), MainWindow.this::refreshRuntimeSources);
+                var window = new CreateScriptWindow(editorTabs, editorContext(), fileTreeView::refreshScripts);
                 window.setLocationRelativeTo(MainWindow.this);
                 window.setVisible(true);
             }
@@ -320,7 +320,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             this.snippetExecutions = new SnippetExecutionService(session, scripts, project.get());
         }
         if (this.evaluateExpressionWindow == null) {
-            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this::refreshRuntimeSources);
+            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this.fileTreeView::refreshScripts);
         }
         return this.evaluateExpressionWindow;
     }

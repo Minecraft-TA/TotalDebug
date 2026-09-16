@@ -45,8 +45,6 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         try {
             if (Files.isDirectory(child))
                 return tree.getItemFactory().createFileSystemDirectoryItem(child, false);
-            if (!Files.exists(child))
-                return null;
             return tree.getItemFactory().createFileSystemFileItem(child);
         } catch (IllegalArgumentException exception) {
             if (!Files.exists(child))

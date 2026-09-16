@@ -27,6 +27,7 @@ public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
 
     private final Supplier<ProjectScope> project;
+    private ProjectScope displayedProject;
 
     public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
@@ -117,7 +118,6 @@ public class FileTreeView extends JScrollPane {
             JMenuItem open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
             open.addActionListener(event -> openItem(item, navigator));
             menu.add(open);
-            if (reference != null || location != null && !location.isBlank()) menu.addSeparator();
         }
         if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
         if (location != null && !location.isBlank()) {
@@ -126,7 +126,6 @@ public class FileTreeView extends JScrollPane {
             menu.add(copyPath);
         }
         if (item instanceof FileSystemFileItem) {
-            if (menu.getComponentCount() > 0) menu.addSeparator();
             JMenuItem delete = new JMenuItem("Delete file", Icons.DELETE);
             delete.addActionListener(event -> this.tree.deleteSelectedItems());
             menu.add(delete);
@@ -163,6 +162,7 @@ public class FileTreeView extends JScrollPane {
         var scope = project.get();
         if (scope == null) {
             this.tree.setRootNodes();
+            this.displayedProject = null;
             return;
         }
         var binding = scope.runtime();
@@ -191,7 +191,23 @@ public class FileTreeView extends JScrollPane {
             runtime.setIcon(Icons.LIBRARY);
             rootItems.add(runtime);
         }
-        this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
+        var roots = rootItems.toArray(DirectoryTreeItem[]::new);
+        if (this.displayedProject == scope) this.tree.refreshRootNodes(roots);
+        else this.tree.setRootNodes(roots);
+        this.displayedProject = scope;
+    }
+
+    public void refreshScripts() {
+        var root = (LazyTreeNode) this.tree.getModel().getRoot();
+        for (int i = 0; i < root.getChildCount(); i++) {
+            var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
+            if (item instanceof FileSystemDirectoryItem && item.getName().equals("scripts")) {
+                this.tree.loadItemsForTopLevelItem(item);
+                return;
+            }
+        }
+        // The first script can create a directory that did not exist when the project opened.
+        reloadProfile();
     }
 
     static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {
