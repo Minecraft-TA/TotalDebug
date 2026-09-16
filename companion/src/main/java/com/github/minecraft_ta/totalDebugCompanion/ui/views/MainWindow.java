@@ -134,8 +134,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             @Override
             public void actionPerformed(ActionEvent e) {
                 var window = new CreateScriptWindow(editorTabs, editorContext(), MainWindow.this::refreshRuntimeSources);
-                window.setVisible(true);
                 window.setLocationRelativeTo(MainWindow.this);
+                window.setVisible(true);
             }
         };
         this.scriptMenu.add(this.newScriptAction);

@@ -5,6 +5,11 @@ import java.util.Arrays;
 /** Stable names for complete Companion UI states rendered by {@link UiDevHarness}. */
 enum UiRenderScenario {
     MAIN("main", "Main window with the code editor selected"),
+    NEW_SCRIPT("new-script", "Compact script creation popup with a selected Script type"),
+    NEW_SCRIPT_INVALID("new-script-invalid", "Script creation with an invalid name"),
+    SCRIPT_TOOLBAR("script-toolbar", "Script toolbar with the Format action"),
+    IMAGE_TOOLBAR("image-toolbar", "Image tools with visible fit selection"),
+    EDITOR_FIND_TOOLBAR("editor-find-toolbar", "Editor Find with an active keyboard-operated option"),
     PROJECTS("projects", "Project switcher with current and recent projects"),
     PRISM("prism", "Prism instance library picker"),
     INACTIVE_TABS("inactive-tabs", "Main window with inactive editor tabs visible"),
@@ -17,6 +22,7 @@ enum UiRenderScenario {
     METHOD_BREAKPOINT("method-breakpoint", "Method-entry breakpoint marker on a declaration"),
     DEBUGGER_LOCATION("debugger-location", "Breakpoint and selected debugger-frame source rows"),
     DEBUGGER("debugger", "Paused debugger window with frames and variables"),
+    DEBUGGER_TOOLBAR("debugger-toolbar", "Debugger mute toggle activated with Space and focused"),
     DEBUGGER_FRAMES_MENU("debugger-frames-menu", "Stack-frame actions opened from the keyboard"),
     DEBUGGER_VALUES_MENU("debugger-values-menu", "Debugger value copying and navigation actions"),
     BREAKPOINTS("breakpoints", "Persisted breakpoint list and selected breakpoint details"),

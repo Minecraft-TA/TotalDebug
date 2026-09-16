@@ -97,6 +97,45 @@ final class UiScenarioDriver {
         expandTree();
         switch (scenario) {
             case MAIN -> selectCodeEditor(context);
+            case NEW_SCRIPT, NEW_SCRIPT_INVALID -> {
+                selectCodeEditor(context);
+                context.once("new-script", () -> {
+                    var dialog = new com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow(
+                            mainWindow.getEditorTabs(), mainWindow.editorContext(), () -> {});
+                    findComponent(dialog, javax.swing.JTextField.class).setText(
+                            scenario == UiRenderScenario.NEW_SCRIPT ? "" : "My Script");
+                    dialog.setLocation(mainWindow.getX() + (mainWindow.getWidth() - dialog.getWidth()) / 2,
+                            mainWindow.getY() + (mainWindow.getHeight() - dialog.getHeight()) / 2);
+                    dialog.setVisible(true);
+                });
+            }
+            case SCRIPT_TOOLBAR -> context.once("script-toolbar", () ->
+                    mainWindow.getEditorTabs().openEditorTab(new com.github.minecraft_ta.totalDebugCompanion.model.ScriptView(
+                            mainWindow.editorContext(), "MyScript")));
+            case IMAGE_TOOLBAR -> {
+                var panel = findComponent(mainWindow, com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ImageViewPanel.class);
+                if (panel == null) break;
+                context.completedActions.add("image-toolbar");
+            }
+            case EDITOR_FIND_TOOLBAR -> {
+                selectCodeEditor(context);
+                var editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                if (editor == null) break;
+                context.once("open-editor-find", () -> {
+                    var key = editor.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
+                            .get(javax.swing.KeyStroke.getKeyStroke("ctrl F"));
+                    editor.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(editor, 0, ""));
+                });
+                var header = findComponent(mainWindow, com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar.class);
+                if (header == null) break;
+                context.once("editor-find-toolbar", () -> {
+                    var field = findComponent(header, FlatIconTextField.class);
+                    field.setText("Theme");
+                    var option = findComponent(header, com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton.class);
+                    pressSpace(option);
+                    if (!option.isSelected()) throw new IllegalStateException("Find option did not toggle with Space");
+                });
+            }
             case PROJECTS -> {
                 selectCodeEditor(context);
                 context.once("project-menu", () -> {
@@ -179,10 +218,19 @@ final class UiScenarioDriver {
                     }
                 });
             }
-            case DEBUGGER, DEBUGGER_FRAMES_MENU, DEBUGGER_VALUES_MENU -> {
+            case DEBUGGER, DEBUGGER_TOOLBAR, DEBUGGER_FRAMES_MENU, DEBUGGER_VALUES_MENU -> {
                 context.once("open-debugger", () -> DebuggerWindowPreview.open(mainWindow));
                 var window = findShowingWindow(DebuggerWindow.class);
                 if (window == null || scenario == UiRenderScenario.DEBUGGER) break;
+                if (scenario == UiRenderScenario.DEBUGGER_TOOLBAR) {
+                    context.once("debugger-toolbar", () -> {
+                        var mute = findComponent(window, javax.swing.JToggleButton.class);
+                        pressSpace(mute);
+                        mute.putClientProperty("JComponent.focusOwner", (java.util.function.Predicate<javax.swing.JComponent>) component -> true);
+                        if (!mute.isSelected()) throw new IllegalStateException("Mute did not toggle with Space");
+                    });
+                    break;
+                }
                 if (scenario == UiRenderScenario.DEBUGGER_VALUES_MENU) {
                     javax.swing.JTree tree = findComponent(window, javax.swing.JTree.class);
                     context.once("open-value-menu", () -> {
@@ -354,6 +402,14 @@ final class UiScenarioDriver {
                         && mainWindow.getEditorTabs().getSelectedIndex() == mainWindow.getEditorTabs().getTabCount() - 1;
             }
             case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
+            case NEW_SCRIPT, NEW_SCRIPT_INVALID -> Arrays.stream(mainWindow.getOwnedWindows())
+                    .anyMatch(window -> window instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow
+                            && window.isShowing());
+            case SCRIPT_TOOLBAR -> mainWindow.getEditorTabs().getSelectedEditor()
+                    instanceof com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+            case IMAGE_TOOLBAR -> context.completedActions.contains("image-toolbar");
+            case EDITOR_FIND_TOOLBAR -> context.completedActions.contains("editor-find-toolbar");
+            case DEBUGGER_TOOLBAR -> context.completedActions.contains("debugger-toolbar");
             case PROJECTS -> mainWindow.getJMenuBar().getMenu(0).isPopupMenuVisible();
             case PRISM -> Arrays.stream(mainWindow.getOwnedWindows())
                     .filter(PrismInstancePicker.class::isInstance).map(PrismInstancePicker.class::cast)
@@ -672,7 +728,10 @@ final class UiScenarioDriver {
             if (filter != null) {
                 context.once("module-filter", () -> {
                     OffscreenPopupFactory.expectBelowEnd(filter);
-                    filter.doClick();
+                    var root = popup.getRootPane();
+                    var key = root.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
+                            .get(javax.swing.KeyStroke.getKeyStroke("alt M"));
+                    root.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(root, 0, ""));
                 });
             }
         }
@@ -680,6 +739,13 @@ final class UiScenarioDriver {
 
     private void selectCodeEditor(ScenarioContext context) {
         context.once("select-code", () -> mainWindow.getEditorTabs().setSelectedIndex(0));
+    }
+
+    private static void pressSpace(javax.swing.AbstractButton button) {
+        for (String stroke : new String[]{"pressed SPACE", "released SPACE"}) {
+            var key = button.getInputMap().get(javax.swing.KeyStroke.getKeyStroke(stroke));
+            button.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(button, 0, stroke));
+        }
     }
 
     private void expandTree() {
