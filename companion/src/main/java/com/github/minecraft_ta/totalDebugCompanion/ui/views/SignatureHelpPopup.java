@@ -1,77 +1,65 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
-import javax.swing.*;
+import com.formdev.flatlaf.util.UIScale;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.SignatureHelp;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+
 import java.awt.*;
+import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
 
 public class SignatureHelpPopup extends BasePopup {
-
-    private final JLabel label = new JLabel();
-    {
-        this.label.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
-    }
+    private final JPanel rows = new JPanel();
+    private final JScrollPane scroll = new JScrollPane(rows);
+    private SignatureHelp current;
 
     public SignatureHelpPopup(Window owner) {
         super(owner);
-        add(this.label, BorderLayout.CENTER);
+        rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        super.setFont(UIManager.getFont("TextArea.font"));
+        rows.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        add(scroll, BorderLayout.CENTER);
         ((JPanel) getContentPane()).setBorder(DynamicMatteBorder.rule(1, 1, 1, 1));
+    }
+
+    public void apply(SignatureHelp help) {
+        current = help;
+        rows.removeAll();
+        for (var signature : help.signatures()) {
+            var parameters = Box.createHorizontalBox();
+            parameters.setAlignmentX(Component.LEFT_ALIGNMENT);
+            parameters.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+            if (signature.parameters().isEmpty()) parameters.add(label("No parameters", false));
+            int active = signature.varargs() ? Math.min(help.argument(), signature.parameters().size() - 1) : help.argument();
+            for (int i = 0; i < signature.parameters().size(); i++) {
+                if (i > 0) parameters.add(label(", ", false));
+                parameters.add(label(signature.parameters().get(i), i == active));
+            }
+            rows.add(parameters);
+        }
+        Dimension content = rows.getPreferredSize();
+        int width = Math.min(UIScale.scale(650), content.width);
+        int height = Math.min(UIScale.scale(200), content.height);
+        scroll.setPreferredSize(new Dimension(width + (content.height > height ? scroll.getVerticalScrollBar().getPreferredSize().width : 0),
+                height + (content.width > width ? scroll.getHorizontalScrollBar().getPreferredSize().height : 0)));
         pack();
     }
 
-    /*public void apply(SignatureHelp signatureHelp) {
-        var text = new StringBuilder("<html>");
-        var rawMaxLength = 0;
-        var lineCount = 0;
+    private JLabel label(String text, boolean bold) {
+        var label = new JLabel(text);
+        label.setFont(getFont().deriveFont(bold ? Font.BOLD : Font.PLAIN));
+        return label;
+    }
 
-        var signatures = signatureHelp.getSignatures();
-        {
-            //We remove all "invalid" signatures because the Language Server sometimes decides to send the correct signature
-            // and all other signatures that can be found in the class as well
-            var activeSignatureStart = signatures.get(signatureHelp.getActiveSignature()).getLabel();
-            activeSignatureStart = activeSignatureStart.substring(0, activeSignatureStart.indexOf('('));
-            var finalActiveSignatureStart = activeSignatureStart;
-            signatures.removeIf(s -> !s.getLabel().startsWith(finalActiveSignatureStart));
-        }
+    public void showAtCall(JTextComponent editor, int openingOffset) throws BadLocationException {
+        var position = editor.modelToView2D(openingOffset);
+        if (position != null) show(editor, (int) position.getX(), (int) position.getY() - UIScale.scale(4), Alignment.TOP_CENTER);
+    }
 
-        for (int i = 0; i < signatures.size(); i++) {
-            var signature = signatures.get(i);
-            var parameters = signature.getParameters();
-            var isActiveSignature = i == signatureHelp.getActiveSignature();
-            var lineLength = 0;
-
-            text.append("<p style='border-bottom: %spx solid gray;'>".formatted(i != signatures.size() - 1 ? "1" : "0"));
-
-            for (int j = 0; j < parameters.size(); j++) {
-                var isActiveParameter = j == signatureHelp.getActiveParameter();
-                var color = isActiveSignature && isActiveParameter ? "rgb(187, 187, 187)" : "rgb(127, 127, 127)";
-
-                var label = parameters.get(j).getLabel().getLeft() + (j != parameters.size() - 1 ? ", " : "");
-                lineLength += label.length();
-                text.append("<span style='color: %s;'>%s</span>".formatted(color, label));
-            }
-
-            if (parameters.isEmpty()) {
-                var color = isActiveSignature ? "rgb(187, 187, 187)" : "rgb(127, 127, 127)";
-                text.append("<span style='color: %s;'>&#60;no parameters&#62;</span>".formatted(color));
-                lineLength = "<no parameters>".length();
-            }
-
-            text.append("</p>");
-
-            if (lineLength > rawMaxLength) rawMaxLength = lineLength;
-            lineCount++;
-        }
-
-        text.append("</html>");
-        this.label.setText(text.toString());
-
-        var fontMetrics = this.label.getFontMetrics(this.label.getFont());
-        this.label.setPreferredSize(new Dimension(fontMetrics.stringWidth("9".repeat(rawMaxLength)) + 5, fontMetrics.getHeight() * lineCount + 6));
-        pack();
-    }*/
-
-    @Override
-    public void setFont(Font f) {
-        this.label.setFont(f);
+    @Override public void setFont(Font font) {
+        super.setFont(font);
+        if (current != null) apply(current);
     }
 }

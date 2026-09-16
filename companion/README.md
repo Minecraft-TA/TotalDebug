@@ -16,6 +16,10 @@ The workspace remains open when Minecraft exits. Source browsing and indexed nav
 
 Evaluate expressions or Java statement bodies, inspect their results, and save reusable code as scripts. Run scripts on the client or server according to the server's execution policy.
 
+In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the selected suggestion. Selection survives result updates. Ctrl+P shows call parameters and emphasizes the current argument; Escape closes the popup. Field and method icons show visibility, static and final modifiers. Private members remain available through the script linker.
+
+After at least two characters of a member name, completion also offers matching instance members from indexed subtypes, labelled with the required cast. Accepting one inserts the cast and imports in the same undo step. These are possible types, not observations of the live object. Searches skip `Object`, inspect at most 256 subtypes with the receiver's package first, and resolve at most six matching cast targets. No game code runs during completion.
+
 The debugger provides breakpoints, stepping, stack frames, variables, watches and breakpoint actions. Paused evaluation uses the selected frame. Code that invokes methods or changes fields can affect Minecraft, and cancellation does not undo those effects.
 
 See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior.

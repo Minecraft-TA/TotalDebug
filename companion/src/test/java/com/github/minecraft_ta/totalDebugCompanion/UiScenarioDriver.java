@@ -1,50 +1,87 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.PrismInstancePicker;
-import javax.swing.JLabel;
-import javax.swing.JPopupMenu;
-import javax.swing.Timer;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.SignatureHelp;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.model.CodeView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ImageViewPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.PrismInstancePicker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SettingsWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindowPreview;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.BreakpointsWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.BreakpointsWindowPreview;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerWindowPreview;
+
+import org.eclipse.jdt.core.Flags;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
 import org.fife.ui.rtextarea.LineNumberList;
 
-import javax.imageio.ImageIO;
-import javax.swing.JButton;
-import javax.swing.JList;
-import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Graphics2D;
+import java.awt.KeyboardFocusManager;
 import java.awt.Point;
+import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntConsumer;
+import java.util.function.Predicate;
+import javax.imageio.ImageIO;
+import javax.swing.AbstractButton;
+import javax.swing.Action;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.JTree;
+import javax.swing.JViewport;
+import javax.swing.KeyStroke;
+import javax.swing.MenuSelectionManager;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.tree.TreePath;
 
 /** Applies one named UI state, waits until it is stable, and optionally captures it. */
 final class UiScenarioDriver {
@@ -60,7 +97,7 @@ final class UiScenarioDriver {
 
     void schedule(UiRenderScenario scenario, String source, Path screenshot) {
         ScenarioContext context = new ScenarioContext(source);
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
         int[] stableReadyPolls = {0};
         Timer timer = new Timer(50, event -> {
             try {
@@ -97,26 +134,82 @@ final class UiScenarioDriver {
         expandTree();
         switch (scenario) {
             case MAIN -> selectCodeEditor(context);
+            case COMPLETION_MODIFIERS, COMPLETION_CASTS, SIGNATURE_HELP -> {
+                selectCodeEditor(context);
+                var editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                if (editor == null) break;
+                context.once("completion-detail", () -> {
+                    if (scenario == UiRenderScenario.SIGNATURE_HELP) {
+                        var popup = new SignatureHelpPopup(mainWindow);
+                        popup.setFont(editor.getFont());
+                        popup.apply(new SignatureHelp(0, 1, List.of(
+                                new SignatureHelp.Signature("ItemStack", List.of("ItemLike item", "int count"), "", false, true),
+                                new SignatureHelp.Signature("ItemStack", List.of("ItemLike item", "int count", "PatchedDataComponentMap components"), "", false, false))));
+                        popup.show(editor, 0, 90);
+                    } else if (scenario == UiRenderScenario.COMPLETION_CASTS) {
+                        var popup = new CodeCompletionPopup(mainWindow);
+                        popup.setFont(editor.getFont());
+                        popup.setToken("listen");
+                        var items = new ArrayList<CompletionItem>();
+                        String[][] rows = {{"listeners", "", "ConcurrentHashMap<Object, List<EventListener>>"},
+                                {"listenerLists", "", "LockHelper<Class<?>, ListenerList>"},
+                                {"addListener", "(EventPriority priority, Predicate<? super T> filter, Class<T> eventClass, Consumer<T> consumer)", "void"}};
+                        for (int i = 0; i < rows.length; i++) {
+                            var item = new CompletionItem(null) {
+                                @Override public String getCastType() { return "EventBus"; }
+                            };
+                            item.setPresentation(rows[i][0], rows[i][1], rows[i][2]);
+                            item.setKind(i < 2 ? CompletionItemKind.FIELD : CompletionItemKind.METHOD);
+                            item.setModifiers(Flags.AccPrivate | (i < 2 ? Flags.AccFinal : 0));
+                            items.add(item);
+                        }
+                        popup.setItems(items);
+                        popup.show(editor, 0, 90);
+                    } else {
+                        var popup = new CodeCompletionPopup(mainWindow);
+                        popup.setFont(editor.getFont());
+                        popup.setToken("co");
+                        var items = new ArrayList<CompletionItem>();
+                        String[][] rows = {{"count", "", "int"}, {"EMPTY", "", "ItemStack"},
+                                {"components", "", "PatchedDataComponentMap"}, {"CACHE", "", "Map"},
+                                {"DEFAULT_SIZE", "", "int"}, {"SHARED_CACHE", "", "Map"},
+                                {"copyWithCount", "(int count)", "ItemStack"}, {"consume", "(int amount, LivingEntity entity)", "void"}};
+                        int[] flags = {Flags.AccPrivate, Flags.AccPublic | Flags.AccStatic | Flags.AccFinal,
+                                Flags.AccPrivate | Flags.AccFinal, Flags.AccPrivate | Flags.AccStatic | Flags.AccFinal,
+                                Flags.AccProtected | Flags.AccStatic | Flags.AccFinal, Flags.AccStatic | Flags.AccFinal,
+                                Flags.AccPublic, Flags.AccPublic};
+                        for (int i = 0; i < rows.length; i++) {
+                            var item = new CompletionItem(null);
+                            item.setKind(i < 6 ? CompletionItemKind.FIELD : CompletionItemKind.METHOD);
+                            item.setPresentation(rows[i][0], rows[i][1], rows[i][2]);
+                            item.setModifiers(flags[i]);
+                            items.add(item);
+                        }
+                        popup.setItems(items);
+                        popup.show(editor, 0, 90);
+                    }
+                });
+            }
             case COMPLETION_SINGLE, COMPLETION_SHORTLIST -> {
                 selectCodeEditor(context);
                 var editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 if (editor == null) break;
                 context.once("completion", () -> {
-                    var popup = new com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup(mainWindow);
+                    var popup = new CodeCompletionPopup(mainWindow);
                     popup.setFont(editor.getFont());
-                    var item = new com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem(null);
-                    item.setKind(com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind.METHOD);
-                    item.setLabel("fillReport(Minecraft minecraft, ClientLevel level, Options options, CrashReport report) : CrashReport");
-                    popup.setItems(java.util.Collections.nCopies(scenario == UiRenderScenario.COMPLETION_SINGLE ? 1 : 2, item));
-                    popup.show(editor, 0, 90, com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup.Alignment.BOTTOM_RIGHT);
+                    var item = new CompletionItem(null);
+                    item.setKind(CompletionItemKind.METHOD);
+                    item.setPresentation("fillReport", "(Minecraft minecraft, ClientLevel level, Options options, CrashReport report)", "CrashReport");
+                    popup.setItems(Collections.nCopies(scenario == UiRenderScenario.COMPLETION_SINGLE ? 1 : 2, item));
+                    popup.show(editor, 0, 90, BasePopup.Alignment.BOTTOM_RIGHT);
                 });
             }
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> {
                 selectCodeEditor(context);
                 context.once("new-script", () -> {
-                    var dialog = new com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow(
+                    var dialog = new CreateScriptWindow(
                             mainWindow.getEditorTabs(), mainWindow.editorContext(), () -> {});
-                    findComponent(dialog, javax.swing.JTextField.class).setText(
+                    findComponent(dialog, JTextField.class).setText(
                             scenario == UiRenderScenario.NEW_SCRIPT ? "" : "My Script");
                     dialog.setLocation(mainWindow.getX() + (mainWindow.getWidth() - dialog.getWidth()) / 2,
                             mainWindow.getY() + (mainWindow.getHeight() - dialog.getHeight()) / 2);
@@ -124,10 +217,10 @@ final class UiScenarioDriver {
                 });
             }
             case SCRIPT_TOOLBAR -> context.once("script-toolbar", () ->
-                    mainWindow.getEditorTabs().openEditorTab(new com.github.minecraft_ta.totalDebugCompanion.model.ScriptView(
+                    mainWindow.getEditorTabs().openEditorTab(new ScriptView(
                             mainWindow.editorContext(), "MyScript")));
             case IMAGE_TOOLBAR -> {
-                var panel = findComponent(mainWindow, com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ImageViewPanel.class);
+                var panel = findComponent(mainWindow, ImageViewPanel.class);
                 if (panel == null) break;
                 context.completedActions.add("image-toolbar");
             }
@@ -136,16 +229,16 @@ final class UiScenarioDriver {
                 var editor = findComponent(mainWindow, RSyntaxTextArea.class);
                 if (editor == null) break;
                 context.once("open-editor-find", () -> {
-                    var key = editor.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
-                            .get(javax.swing.KeyStroke.getKeyStroke("ctrl F"));
-                    editor.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(editor, 0, ""));
+                    var key = editor.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                            .get(KeyStroke.getKeyStroke("ctrl F"));
+                    editor.getActionMap().get(key).actionPerformed(new ActionEvent(editor, 0, ""));
                 });
-                var header = findComponent(mainWindow, com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar.class);
+                var header = findComponent(mainWindow, SearchHeaderBar.class);
                 if (header == null) break;
                 context.once("editor-find-toolbar", () -> {
                     var field = findComponent(header, FlatIconTextField.class);
                     field.setText("Theme");
-                    var option = findComponent(header, com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton.class);
+                    var option = findComponent(header, FlatIconButton.class);
                     pressSpace(option);
                     if (!option.isSelected()) throw new IllegalStateException("Find option did not toggle with Space");
                 });
@@ -185,7 +278,7 @@ final class UiScenarioDriver {
                 if (scenario == UiRenderScenario.TAB_REVEAL && visibleMenuPopup() != null) {
                     context.once("reveal-tab", () -> {
                         for (Component item : visibleMenuPopup().getComponents()) {
-                            if (item instanceof javax.swing.JMenuItem action && "Reveal in tree".equals(action.getText())) {
+                            if (item instanceof JMenuItem action && "Reveal in tree".equals(action.getText())) {
                                 action.doClick();
                                 return;
                             }
@@ -219,7 +312,7 @@ final class UiScenarioDriver {
                                 1,
                                 "ThemeSample.describe",
                                 "sample.ThemeSample",
-                                java.net.URI.create("decompiled:///sample/ThemeSample.java"),
+                                URI.create("decompiled:///sample/ThemeSample.java"),
                                 line,
                                 1
                         );
@@ -238,20 +331,20 @@ final class UiScenarioDriver {
                 if (window == null || scenario == UiRenderScenario.DEBUGGER) break;
                 if (scenario == UiRenderScenario.DEBUGGER_TOOLBAR) {
                     context.once("debugger-toolbar", () -> {
-                        var mute = findComponent(window, javax.swing.JToggleButton.class);
+                        var mute = findComponent(window, JToggleButton.class);
                         pressSpace(mute);
-                        mute.putClientProperty("JComponent.focusOwner", (java.util.function.Predicate<javax.swing.JComponent>) component -> true);
+                        mute.putClientProperty("JComponent.focusOwner", (Predicate<JComponent>) component -> true);
                         if (!mute.isSelected()) throw new IllegalStateException("Mute did not toggle with Space");
                     });
                     break;
                 }
                 if (scenario == UiRenderScenario.DEBUGGER_VALUES_MENU) {
-                    javax.swing.JTree tree = findComponent(window, javax.swing.JTree.class);
+                    JTree tree = findComponent(window, JTree.class);
                     context.once("open-value-menu", () -> {
                         tree.setSelectionRow(1);
                         var bounds = tree.getRowBounds(1);
                         OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
-                        tree.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(tree, 0, ""));
+                        tree.getActionMap().get("rowMenu").actionPerformed(new ActionEvent(tree, 0, ""));
                     });
                     break;
                 }
@@ -260,10 +353,10 @@ final class UiScenarioDriver {
                     frames.requestFocusInWindow();
                     var bounds = frames.getCellBounds(frames.getSelectedIndex(), frames.getSelectedIndex());
                     OffscreenPopupFactory.expectAt(frames, new Point(bounds.x, bounds.y + bounds.height));
-                    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(frames,
-                            new java.awt.event.KeyEvent(frames, java.awt.event.KeyEvent.KEY_PRESSED,
-                                    System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
-                                    java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                    KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(frames,
+                            new KeyEvent(frames, KeyEvent.KEY_PRESSED,
+                                    System.currentTimeMillis(), KeyEvent.SHIFT_DOWN_MASK,
+                                    KeyEvent.VK_F10, KeyEvent.CHAR_UNDEFINED));
                 });
             }
             case BREAKPOINTS, BREAKPOINTS_MENU, BREAKPOINTS_SIMPLE -> {
@@ -278,17 +371,17 @@ final class UiScenarioDriver {
                         list.requestFocusInWindow();
                         var bounds = list.getCellBounds(0, 0);
                         OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
-                        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(list,
-                                new java.awt.event.KeyEvent(list, java.awt.event.KeyEvent.KEY_PRESSED,
-                                        System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
-                                        java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                        KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(list,
+                                new KeyEvent(list, KeyEvent.KEY_PRESSED,
+                                        System.currentTimeMillis(), KeyEvent.SHIFT_DOWN_MASK,
+                                        KeyEvent.VK_F10, KeyEvent.CHAR_UNDEFINED));
                     }
                 });
             }
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
-                var window = new com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow(
+                var window = new EvaluateExpressionWindow(
                         mainWindow, null, mainWindow.editorContext(), mainWindow::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
-                var editor = findComponent(window, com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField.class);
+                var editor = findComponent(window, JavaExpressionField.class);
                 editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
                         ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
                         : "getServer()");
@@ -313,10 +406,10 @@ final class UiScenarioDriver {
                         var bounds = list.getCellBounds(0, 0);
                         OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
                         var editor = findComponent(mainWindow, RSyntaxTextArea.class);
-                        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(editor,
-                                new java.awt.event.KeyEvent(editor, java.awt.event.KeyEvent.KEY_PRESSED,
-                                        System.currentTimeMillis(), java.awt.event.KeyEvent.SHIFT_DOWN_MASK,
-                                        java.awt.event.KeyEvent.VK_F10, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                        KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(editor,
+                                new KeyEvent(editor, KeyEvent.KEY_PRESSED,
+                                        System.currentTimeMillis(), KeyEvent.SHIFT_DOWN_MASK,
+                                        KeyEvent.VK_F10, KeyEvent.CHAR_UNDEFINED));
                     });
                 }
             }
@@ -325,13 +418,13 @@ final class UiScenarioDriver {
                 LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
                 for (int row = 0; tree != null && row < tree.getRowCount(); row++) {
                     var path = tree.getPathForRow(row);
-                    if (!(path.getLastPathComponent() instanceof com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode node)
+                    if (!(path.getLastPathComponent() instanceof LazyTreeNode node)
                             || !node.getUserObject().getName().equals("ThemeSample.class")) continue;
                     context.once("file-menu", () -> {
                         tree.setSelectionPath(path);
                         var bounds = tree.getPathBounds(path);
                         OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
-                        tree.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(tree, 0, ""));
+                        tree.getActionMap().get("rowMenu").actionPerformed(new ActionEvent(tree, 0, ""));
                     });
                     break;
                 }
@@ -345,7 +438,7 @@ final class UiScenarioDriver {
                 if (scenario == UiRenderScenario.USAGES_RESULTS) break;
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 var tree = selected instanceof UsagesView
-                        ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class) : null;
+                        ? findComponent((Container) selected.getComponent(), JTree.class) : null;
                 if (tree == null) break;
                 for (int row = 0; row < tree.getRowCount(); row++) {
                     var path = tree.getPathForRow(row);
@@ -353,21 +446,21 @@ final class UiScenarioDriver {
                     context.once("usages-interaction", () -> {
                         tree.setSelectionPath(path);
                         tree.requestFocusInWindow();
-                        var keyboard = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+                        var keyboard = KeyboardFocusManager.getCurrentKeyboardFocusManager();
                         if (scenario == UiRenderScenario.USAGES_SEARCH) {
                             tree.collapsePath(path.getParentPath());
                             for (char character : "apply".toCharArray()) {
-                                keyboard.redispatchEvent(tree, new java.awt.event.KeyEvent(tree,
-                                        java.awt.event.KeyEvent.KEY_TYPED, System.currentTimeMillis(), 0,
-                                        java.awt.event.KeyEvent.VK_UNDEFINED, character));
+                                keyboard.redispatchEvent(tree, new KeyEvent(tree,
+                                        KeyEvent.KEY_TYPED, System.currentTimeMillis(), 0,
+                                        KeyEvent.VK_UNDEFINED, character));
                             }
                         } else {
                             var bounds = tree.getPathBounds(path);
                             OffscreenPopupFactory.expectAt(tree, new Point(bounds.x, bounds.y + bounds.height));
-                            keyboard.redispatchEvent(tree, new java.awt.event.KeyEvent(tree,
-                                    java.awt.event.KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
-                                    java.awt.event.KeyEvent.SHIFT_DOWN_MASK, java.awt.event.KeyEvent.VK_F10,
-                                    java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                            keyboard.redispatchEvent(tree, new KeyEvent(tree,
+                                    KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                                    KeyEvent.SHIFT_DOWN_MASK, KeyEvent.VK_F10,
+                                    KeyEvent.CHAR_UNDEFINED));
                         }
                     });
                     break;
@@ -411,19 +504,21 @@ final class UiScenarioDriver {
             case TAB_REVEAL -> {
                 LazyFileJTree tree = findComponent(mainWindow, LazyFileJTree.class);
                 yield tree != null && tree.getSelectionPath() != null
-                        && tree.getSelectionPath().getLastPathComponent() instanceof com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode node
+                        && tree.getSelectionPath().getLastPathComponent() instanceof LazyTreeNode node
                         && "ThemeSample.class".equals(node.getUserObject().getName())
                         && mainWindow.getEditorTabs().getSelectedIndex() == mainWindow.getEditorTabs().getTabCount() - 1;
             }
             case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
-            case COMPLETION_SINGLE, COMPLETION_SHORTLIST -> Arrays.stream(mainWindow.getOwnedWindows())
-                    .anyMatch(window -> window instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup
+            case COMPLETION_SINGLE, COMPLETION_SHORTLIST, COMPLETION_MODIFIERS, COMPLETION_CASTS -> Arrays.stream(mainWindow.getOwnedWindows())
+                    .anyMatch(window -> window instanceof CodeCompletionPopup
                             && window.isShowing());
+            case SIGNATURE_HELP -> Arrays.stream(mainWindow.getOwnedWindows())
+                    .anyMatch(window -> window instanceof SignatureHelpPopup && window.isShowing());
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> Arrays.stream(mainWindow.getOwnedWindows())
-                    .anyMatch(window -> window instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow
+                    .anyMatch(window -> window instanceof CreateScriptWindow
                             && window.isShowing());
             case SCRIPT_TOOLBAR -> mainWindow.getEditorTabs().getSelectedEditor()
-                    instanceof com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+                    instanceof ScriptView;
             case IMAGE_TOOLBAR -> context.completedActions.contains("image-toolbar");
             case EDITOR_FIND_TOOLBAR -> context.completedActions.contains("editor-find-toolbar");
             case DEBUGGER_TOOLBAR -> context.completedActions.contains("debugger-toolbar");
@@ -477,7 +572,7 @@ final class UiScenarioDriver {
             case BREAKPOINTS -> findShowingWindow(BreakpointsWindow.class) != null;
             case BREAKPOINTS_MENU -> visibleMenuPopup() != null;
             case BREAKPOINTS_SIMPLE -> context.completedActions.contains("breakpoint-list-action");
-            case EVALUATE_CODE, EVALUATE_EXPRESSION -> findShowingWindow(com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow.class) != null;
+            case EVALUATE_CODE, EVALUATE_EXPRESSION -> findShowingWindow(EvaluateExpressionWindow.class) != null;
             case HIERARCHY_ONE, HIERARCHY_MANY -> {
                 HierarchyPreviewPopup popup = findShowingWindow(HierarchyPreviewPopup.class);
                 yield popup != null && findLabelContaining(popup, "Looking up") == null;
@@ -502,16 +597,16 @@ final class UiScenarioDriver {
             case SEARCH_MENU, IMPLEMENTATION_MENU, FILE_MENU -> visibleMenuPopup() != null;
             case USAGES_RESULTS -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
-                javax.swing.JTree tree = selected instanceof UsagesView
-                        ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class)
+                JTree tree = selected instanceof UsagesView
+                        ? findComponent((Container) selected.getComponent(), JTree.class)
                         : null;
                 yield tree != null && tree.getRowCount() > 0;
             }
             case USAGES_SEARCH -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
                 var tree = selected instanceof UsagesView
-                        ? findComponent((Container) selected.getComponent(), javax.swing.JTree.class) : null;
-                yield tree != null && !com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch
+                        ? findComponent((Container) selected.getComponent(), JTree.class) : null;
+                yield tree != null && !SpeedSearch
                         .matchingRanges(tree, "apply").isEmpty();
             }
             case USAGES_MENU -> visibleMenuPopup() != null;
@@ -676,11 +771,11 @@ final class UiScenarioDriver {
             editor.setCaretPosition(
                     context.source().indexOf("void apply(ThemeSample other)") + "void ".length()
             );
-            javax.swing.Action action = editor.getActionMap().get("findImplementations");
+            Action action = editor.getActionMap().get("findImplementations");
             if (action == null) {
                 throw new IllegalStateException("Find implementations action is unavailable");
             }
-            action.actionPerformed(new java.awt.event.ActionEvent(editor, 0, "findImplementations"));
+            action.actionPerformed(new ActionEvent(editor, 0, "findImplementations"));
         });
     }
 
@@ -696,8 +791,8 @@ final class UiScenarioDriver {
             return;
         }
         Rectangle2D declaration = editor.modelToView2D(declarationOffset);
-        var viewport = (javax.swing.JViewport) SwingUtilities.getAncestorOfClass(
-                javax.swing.JViewport.class,
+        var viewport = (JViewport) SwingUtilities.getAncestorOfClass(
+                JViewport.class,
                 editor
         );
         if (viewport != null) {
@@ -737,7 +832,7 @@ final class UiScenarioDriver {
                 context.once("search-menu", () -> {
                     var bounds = list.getCellBounds(list.getSelectedIndex(), list.getSelectedIndex());
                     OffscreenPopupFactory.expectAt(list, new Point(bounds.x, bounds.y + bounds.height));
-                    list.getActionMap().get("rowMenu").actionPerformed(new java.awt.event.ActionEvent(list, 0, ""));
+                    list.getActionMap().get("rowMenu").actionPerformed(new ActionEvent(list, 0, ""));
                 });
             }
         } else if (scenario == UiRenderScenario.MODULE_FILTER) {
@@ -746,9 +841,9 @@ final class UiScenarioDriver {
                 context.once("module-filter", () -> {
                     OffscreenPopupFactory.expectBelowEnd(filter);
                     var root = popup.getRootPane();
-                    var key = root.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
-                            .get(javax.swing.KeyStroke.getKeyStroke("alt M"));
-                    root.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(root, 0, ""));
+                    var key = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                            .get(KeyStroke.getKeyStroke("alt M"));
+                    root.getActionMap().get(key).actionPerformed(new ActionEvent(root, 0, ""));
                 });
             }
         }
@@ -758,10 +853,10 @@ final class UiScenarioDriver {
         context.once("select-code", () -> mainWindow.getEditorTabs().setSelectedIndex(0));
     }
 
-    private static void pressSpace(javax.swing.AbstractButton button) {
+    private static void pressSpace(AbstractButton button) {
         for (String stroke : new String[]{"pressed SPACE", "released SPACE"}) {
-            var key = button.getInputMap().get(javax.swing.KeyStroke.getKeyStroke(stroke));
-            button.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(button, 0, stroke));
+            var key = button.getInputMap().get(KeyStroke.getKeyStroke(stroke));
+            button.getActionMap().get(key).actionPerformed(new ActionEvent(button, 0, stroke));
         }
     }
 
@@ -776,7 +871,7 @@ final class UiScenarioDriver {
     }
 
     private JPopupMenu visibleMenuPopup() {
-        return Arrays.stream(javax.swing.MenuSelectionManager.defaultManager().getSelectedPath())
+        return Arrays.stream(MenuSelectionManager.defaultManager().getSelectedPath())
                 .filter(JPopupMenu.class::isInstance)
                 .map(JPopupMenu.class::cast)
                 .filter(JPopupMenu::isShowing)
@@ -784,11 +879,11 @@ final class UiScenarioDriver {
                 .orElse(null);
     }
 
-    private <T extends java.awt.Window> T findShowingWindow(Class<T> type) {
-        return Arrays.stream(java.awt.Window.getWindows())
+    private <T extends Window> T findShowingWindow(Class<T> type) {
+        return Arrays.stream(Window.getWindows())
                 .filter(type::isInstance)
                 .map(type::cast)
-                .filter(java.awt.Window::isShowing)
+                .filter(Window::isShowing)
                 .findFirst()
                 .orElse(null);
     }
@@ -875,7 +970,7 @@ final class UiScenarioDriver {
         );
         Graphics2D graphics = image.createGraphics();
         mainWindow.paintAll(graphics);
-        for (java.awt.Window window : java.awt.Window.getWindows()) {
+        for (Window window : Window.getWindows()) {
             if (window == mainWindow || !window.isShowing()) {
                 continue;
             }
@@ -919,7 +1014,7 @@ final class UiScenarioDriver {
                 return false;
             }
             for (int row = 0; row < tree.getRowCount(); row++) {
-                javax.swing.tree.TreePath path = tree.getPathForRow(row);
+                TreePath path = tree.getPathForRow(row);
                 if (path != null && path.getLastPathComponent().toString().contains("Loading...")) {
                     this.stableTreePolls = 0;
                     this.previousTreeRows = tree.getRowCount();

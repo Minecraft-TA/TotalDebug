@@ -1,25 +1,32 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
-import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CloseButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
@@ -27,21 +34,24 @@ import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import javax.swing.*;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
-import javax.swing.border.CompoundBorder;
-import javax.swing.text.*;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import javax.swing.*;
+import javax.swing.Timer;
+import javax.swing.border.CompoundBorder;
+import javax.swing.text.*;
 
 public class ScriptPanel extends AbstractCodeViewPanel {
     private static final System.Logger LOGGER = System.getLogger(ScriptPanel.class.getName());
@@ -68,7 +78,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
                 var c = (JLabel) super.getListCellRendererComponent(list, environmentLabel((ScriptExecutionEnvironment) value), index, isSelected, cellHasFocus);
-                c.setIcon((value == ScriptExecutionEnvironment.THREAD ? null : com.github.minecraft_ta.totalDebugCompanion.Icons.WARNING));
+                c.setIcon((value == ScriptExecutionEnvironment.THREAD ? null : Icons.WARNING));
                 return c;
             }
         });
@@ -108,6 +118,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     private final SnippetCompletionAdapter snippetCompletionAdapter = new SnippetCompletionAdapter(this.editorPane);
     private CustomCompletionRequestor completionRequestor;
+    private long signatureRequest;
+    private boolean signatureHelpActive;
+    private final Timer signatureTimer = new Timer(120, event -> requestSignatureHelp());
     private boolean disposed;
     private final Runnable unsubscribeResults;
     private boolean didTypeBeforeCaretMove;
@@ -242,11 +255,11 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         StyleConstants.setSpaceBelow(spacingAttributeSet, 2);
         logPanelTextPane.setParagraphAttributes(spacingAttributeSet, false);
         logPanelTextPane.setEditable(false);
-        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(logPanelTextPane, "Copy output");
+        ContextMenus.installOutput(logPanelTextPane, "Copy output");
         logPanelTextPane.setFont(auxiliaryEditorFont());
         logPanelTextPane.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 0));
         errorTextPane.setEditable(false);
-        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(errorTextPane, "Copy all");
+        ContextMenus.installOutput(errorTextPane, "Copy all");
         errorTextPane.setFont(auxiliaryEditorFont());
         errorTextPane.setBorder(BorderFactory.createEmptyBorder(3, 5, 3, 5));
 
@@ -267,14 +280,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             this.runOutputTabs.addTab("Result", Icons.EVALUATE_EXPRESSION, this.resultScrollPane);
         }
         if (!result.logs().text().isEmpty()) {
-            this.logPanelTextPane.setText(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(result.logs()));
+            this.logPanelTextPane.setText(ExecutionTextDisplay.format(result.logs()));
             this.runOutputTabs.addTab("Output", Icons.TEXT_FILE, this.logPanelScrollPane);
         }
         if (!result.error().text().isEmpty()) {
             if (!problems.isEmpty()) {
                 problems.append(System.lineSeparator());
             }
-            problems.append(mapDiagnostics(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(result.error())));
+            problems.append(mapDiagnostics(ExecutionTextDisplay.format(result.error())));
         }
         if (!problems.isEmpty()) {
             this.errorTextPane.setText(problems.toString());
@@ -341,12 +354,12 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         ));
     }
 
-    private javax.swing.Timer saveTimer;
+    private Timer saveTimer;
     private String savedText;
 
     private void setupSaveBehavior() {
         this.savedText = this.scriptView.getSourceText();
-        this.saveTimer = new javax.swing.Timer(500, event -> saveScript());
+        this.saveTimer = new Timer(500, event -> saveScript());
         this.saveTimer.setRepeats(false);
         addHierarchyListener(e -> {
             if (e.getChangeFlags() == HierarchyEvent.PARENT_CHANGED && getParent() == null) {
@@ -371,6 +384,25 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void setupAutocompletion() {
+        signatureTimer.setRepeats(false);
+        editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl P"), "signatureHelp");
+        editorPane.getActionMap().put("signatureHelp", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) {
+                signatureHelpActive = true;
+                requestSignatureHelp();
+            }
+        });
+        editorPane.addFocusListener(new FocusAdapter() {
+            @Override public void focusLost(FocusEvent event) { hideSignatureHelp(); }
+        });
+        editorPane.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent event) {
+                if (event.getKeyCode() == KeyEvent.VK_ESCAPE && signatureHelpActive) {
+                    hideSignatureHelp();
+                    event.consume();
+                }
+            }
+        });
         this.editorPane.getCaret().addChangeListener(e -> {
             var caretPos = this.editorPane.getCaretPosition();
             if (caretPos == this.lastCaretPos)
@@ -384,7 +416,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 hideCompletionPopup();
 
             this.didTypeBeforeCaretMove = false;
-            signatureHelpPopup.setVisible(false);
+            if (signatureHelpActive) {
+                signatureRequest++;
+                signatureTimer.restart();
+            }
         });
 
         this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl SPACE"), "autoComplete");
@@ -465,9 +500,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private static List<ReplaceEdit> replacementEdits(TextEdit root) {
-        List<ReplaceEdit> result = new java.util.ArrayList<>();
+        List<ReplaceEdit> result = new ArrayList<>();
         collectReplacementEdits(root, result);
-        result.sort(java.util.Comparator.comparingInt(ReplaceEdit::getOffset));
+        result.sort(Comparator.comparingInt(ReplaceEdit::getOffset));
         return result;
     }
 
@@ -479,6 +514,32 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         for (TextEdit child : edit.getChildren()) {
             collectReplacementEdits(child, result);
         }
+    }
+
+    private void hideSignatureHelp() {
+        signatureHelpActive = false;
+        signatureRequest++;
+        signatureTimer.stop();
+        signatureHelpPopup.setVisible(false);
+    }
+
+    private void requestSignatureHelp() {
+        if (disposed || !signatureHelpActive) return;
+        long request = ++signatureRequest;
+        var generated = JavaSnippetSource.body(scriptView.getScriptName(), UIUtils.getText(editorPane));
+        int caret = generated.sourceMap().toGeneratedOffset(editorPane.getCaretPosition());
+        if (caret < 0) { hideSignatureHelp(); return; }
+        CompletableFuture.supplyAsync(() -> SignatureHelp.find(scriptView.getScriptName(), generated.source(), caret))
+                .whenComplete((help, failure) -> SwingUtilities.invokeLater(() -> {
+                    if (disposed || request != signatureRequest || !signatureHelpActive || !editorPane.isFocusOwner()) return;
+                    if (failure != null) LOGGER.log(System.Logger.Level.WARNING, "Unable to load parameter information", failure);
+                    if (help == null || failure != null) { hideSignatureHelp(); return; }
+                    int opening = generated.sourceMap().toEditorOffset(help.openingOffset());
+                    if (opening < 0) { hideSignatureHelp(); return; }
+                    signatureHelpPopup.apply(help);
+                    try { signatureHelpPopup.showAtCall(editorPane, opening); }
+                    catch (BadLocationException exception) { hideSignatureHelp(); }
+                }));
     }
 
     private void requestCompletionProposals() {
@@ -557,6 +618,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
             try {
                 codeCompletionPopup.setKeyEnterListener(this::doAutoCompletion);
+                var token = requestor.getContext().getToken();
+                codeCompletionPopup.setToken(token == null ? "" : new String(token));
                 codeCompletionPopup.setItems(completions);
                 codeCompletionPopup.show(this.editorPane);
             } catch (Throwable t) {
@@ -601,6 +664,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         if (this.completionRequestor != null)
             this.completionRequestor.setCanceled(true);
         this.codeCompletionPopup.dispose();
+        hideSignatureHelp();
         this.signatureHelpPopup.dispose();
         super.dispose();
     }
@@ -619,7 +683,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             return true;
         }
         try {
-            com.github.minecraft_ta.totaldebug.storage.AtomicFiles.writeString(this.scriptView.getPath(), text);
+            AtomicFiles.writeString(this.scriptView.getPath(), text);
             this.savedText = text;
             return true;
         } catch (IOException exception) {
