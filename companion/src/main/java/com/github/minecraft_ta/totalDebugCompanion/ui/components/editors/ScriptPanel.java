@@ -147,6 +147,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupSaveBehavior();
         setupAutocompletion();
         setupFormatting();
+        var format = new JButton(this.editorPane.getActionMap().get("formatFile"));
+        format.setHideActionText(true);
+        format.setToolTipText("Format (Ctrl+Shift+F)");
+        format.getAccessibleContext().setAccessibleName("Format");
+        FlatIconButton.configure(format);
+        headerBar.add(Box.createHorizontalStrut(8));
+        headerBar.add(format);
 
         Consumer<ExecutionResultMessage> listener = this::acceptResult;
         context.session().addExecutionResultListener(listener);
@@ -422,7 +429,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void setupFormatting() {
-        this.editorPane.getActionMap().put("formatFile", new AbstractAction() {
+        this.editorPane.getActionMap().put("formatFile", new AbstractAction("Format", Icons.REFORMAT_CODE) {
             @Override
             public void actionPerformed(ActionEvent e) {
                 String editorText = UIUtils.getText(editorPane);

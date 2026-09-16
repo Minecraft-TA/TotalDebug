@@ -106,6 +106,11 @@ public class Icons {
 
     public static final FlatSVGIcon COPY = new FlatSVGIcon("icons/copy.svg");
     public static final FlatSVGIcon JUMP_TO_SOURCE = new FlatSVGIcon("icons/jumpToSource.svg");
+    public static final FlatSVGIcon ZOOM_IN = new FlatSVGIcon("icons/zoomIn.svg");
+    public static final FlatSVGIcon ZOOM_OUT = new FlatSVGIcon("icons/zoomOut.svg");
+    public static final FlatSVGIcon FIT_CONTENT = new FlatSVGIcon("icons/fitContent.svg");
+    public static final FlatSVGIcon ACTUAL_ZOOM = new FlatSVGIcon("icons/actualZoom.svg");
+    public static final FlatSVGIcon REFORMAT_CODE = new FlatSVGIcon("icons/reformatCode.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 
     public static final FlatSVGIcon PRIMITIVE = new FlatSVGIcon("icons/primitive.svg");

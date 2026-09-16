@@ -35,6 +35,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerPanelTest {
     @Test
+    void toolbarButtonsRemainKeyboardReachableAndMuteWorksWithSpace() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var controller = new DebuggerSessionController(ignored -> null);
+            var actions = new DebuggerActions(controller);
+            var panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activate) -> {});
+            try {
+                for (String tooltip : List.of("Attach debugger", "Continue (F9)", "Step Over (F8)",
+                        "Step Into (F7)", "Step Out (Shift+F8)", "Detach debugger", "View breakpoints", "Add Watch (Shift+Enter)")) {
+                    JButton button = findButtonByTooltip(panel, tooltip);
+                    assertNotNull(button, tooltip);
+                    assertTrue(button.isFocusable(), tooltip);
+                    assertTrue(button.isFocusPainted(), tooltip);
+                    assertFalse(button.isRequestFocusEnabled(), tooltip);
+                }
+                var mute = find(panel, javax.swing.JToggleButton.class);
+                assertNotNull(mute);
+                assertTrue(mute.isFocusable());
+                assertFalse(mute.isRequestFocusEnabled());
+                for (String stroke : new String[]{"pressed SPACE", "released SPACE"}) {
+                    Object key = mute.getInputMap().get(javax.swing.KeyStroke.getKeyStroke(stroke));
+                    mute.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(mute, 0, stroke));
+                }
+                assertTrue(mute.isSelected());
+                assertTrue(controller.breakpointsMuted());
+            } finally {
+                panel.dispose();
+                actions.close();
+                controller.close();
+            }
+        });
+    }
+
+    @Test
     void exposesExplicitEvaluateAndAddWatchActions() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);

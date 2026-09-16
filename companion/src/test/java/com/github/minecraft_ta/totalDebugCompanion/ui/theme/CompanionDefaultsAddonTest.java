@@ -42,7 +42,9 @@ class CompanionDefaultsAddonTest {
 
         Color focus = UIManager.getColor("Component.focusColor");
         assertNotNull(focus);
-        assertEquals(0, focus.getAlpha(), "focus ring is suppressed app wide");
+        assertEquals(255, focus.getAlpha(), "keyboard focus must remain visible");
+        assertEquals(Boolean.TRUE, UIManager.get("ToolBar.focusableButtons"));
+        assertEquals(Boolean.FALSE, UIManager.get("ToolBar.arrowKeysOnlyNavigation"));
         assertScrollbarClearingColors();
     }
 

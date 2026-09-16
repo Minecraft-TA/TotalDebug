@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
@@ -86,7 +87,7 @@ public class SearchEverywherePopup extends JFrame {
     private final JLabel messageLabel = new JLabel("Type to search the runtime index", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
     private final JLabel resultCount = new JLabel(" ");
-    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Tab Category    Enter Open    Esc Close");
+    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Tab Category    Ctrl+Tab Controls    Enter Open    Esc Close");
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton moduleFilterButton = new JButton(Icons.FILTER);
     private final Map<Category, JToggleButton> categoryButtons = new LinkedHashMap<>();
@@ -320,6 +321,10 @@ public class SearchEverywherePopup extends JFrame {
         );
         component.getActionMap().put(NEXT_CATEGORY_ACTION, this.nextCategoryAction);
         component.getActionMap().put(PREVIOUS_CATEGORY_ACTION, this.previousCategoryAction);
+        component.registerKeyboardAction(event -> component.transferFocus(), KeyStroke.getKeyStroke("ctrl TAB"),
+                JComponent.WHEN_FOCUSED);
+        component.registerKeyboardAction(event -> component.transferFocusBackward(), KeyStroke.getKeyStroke("ctrl shift TAB"),
+                JComponent.WHEN_FOCUSED);
     }
 
     private void queueDocumentRefresh() {
@@ -334,11 +339,11 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void configureFilterButton() {
-        this.moduleFilterButton.putClientProperty("JButton.buttonType", "toolBarButton");
-        this.moduleFilterButton.setFocusable(false);
+        this.moduleFilterButton.setName("searchEverywhere.moduleFilter");
+        FlatIconButton.configure(this.moduleFilterButton);
         this.moduleFilterButton.setHorizontalTextPosition(SwingConstants.LEFT);
         this.moduleFilterButton.setIconTextGap(6);
-        this.moduleFilterButton.setToolTipText("Filter search results by module");
+        this.moduleFilterButton.setToolTipText("Filter search results by module (Alt+M)");
         this.moduleFilterButton.addActionListener(event -> {
             RuntimeBinding installed = runtime.get();
             if (installed == null) return;
@@ -351,6 +356,8 @@ public class SearchEverywherePopup extends JFrame {
             );
             SwingUtilities.invokeLater(this.moduleFilterPopup::focusSearch);
         });
+        getRootPane().registerKeyboardAction(event -> this.moduleFilterButton.doClick(),
+                KeyStroke.getKeyStroke("alt M"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         updateFilterButton();
     }
 
@@ -428,6 +435,7 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void updateFilterButton() {
+        this.moduleFilterButton.setEnabled(!this.modules.isEmpty());
         int selected = this.selectedModuleIds.size();
         if (this.modules.isEmpty() || selected == this.modules.size()) {
             this.moduleFilterButton.setText("All modules");

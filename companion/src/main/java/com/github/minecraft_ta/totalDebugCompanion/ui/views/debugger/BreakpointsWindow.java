@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -218,7 +219,7 @@ public final class BreakpointsWindow extends JDialog {
         for (Action action : List.of(this.navigate, this.remove)) {
             JButton button = toolbar.add(action);
             button.setHideActionText(true);
-            button.setMargin(new Insets(4, 6, 4, 6));
+            FlatIconButton.configure(button);
             button.getAccessibleContext().setAccessibleName((String) action.getValue(Action.NAME));
         }
         JPanel listPanel = new JPanel(new BorderLayout());

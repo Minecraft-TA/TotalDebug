@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
@@ -33,7 +34,6 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.BorderLayout;
-import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -851,10 +851,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
 
     private static JButton createAddWatchButton() {
         JButton button = new JButton(Icons.ADD_TO_WATCH);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        FlatIconButton.configure(button);
         button.setToolTipText("Add Watch (Shift+Enter)");
-        button.setFocusable(false);
-        button.setMargin(new Insets(4, 6, 4, 6));
         return button;
     }
 

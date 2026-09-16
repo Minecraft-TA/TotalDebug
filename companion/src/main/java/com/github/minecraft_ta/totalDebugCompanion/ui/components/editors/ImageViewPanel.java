@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -25,6 +27,9 @@ public final class ImageViewPanel extends JPanel {
     private final JScrollPane scrollPane;
     private final BottomInformationBar informationBar;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
+    private final FlatIconButton zoomOut = new FlatIconButton(Icons.ZOOM_OUT, false);
+    private final FlatIconButton zoomIn = new FlatIconButton(Icons.ZOOM_IN, false);
+    private final FlatIconButton fit = new FlatIconButton(Icons.FIT_CONTENT, true);
 
     private boolean fitMode = true;
     private boolean disposed;
@@ -70,19 +75,22 @@ public final class ImageViewPanel extends JPanel {
     }
 
     private JComponent createToolbar() {
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
         toolbar.setBorder(DynamicMatteBorder.rule(0, 0, 1, 0));
-        toolbar.add(button("-", "Zoom out", () -> setScale(this.canvas.scale() / 1.25, false)));
-        toolbar.add(button("+", "Zoom in", () -> setScale(this.canvas.scale() * 1.25, false)));
-        toolbar.add(button("Fit", "Fit image to the available space", this::fitImage));
-        toolbar.add(button("100%", "Show the image at its actual size", () -> setScale(1, false)));
+        toolbar.add(button(this.zoomOut, "Zoom out", () -> setScale(this.canvas.scale() / 1.25, false)));
+        toolbar.add(button(this.zoomIn, "Zoom in", () -> setScale(this.canvas.scale() * 1.25, false)));
+        this.fit.setSelected(this.fitMode);
+        toolbar.add(button(this.fit, "Fit image to the available space", () -> {
+            if (this.fit.isSelected()) fitImage();
+            else setScale(this.canvas.scale(), false);
+        }));
+        toolbar.add(button(new FlatIconButton(Icons.ACTUAL_ZOOM, false), "Actual size (100%)", () -> setScale(1, false)));
         return toolbar;
     }
 
-    private JButton button(String text, String tooltip, Runnable action) {
-        JButton button = new JButton(text);
-        button.setFocusable(false);
+    private JButton button(JButton button, String tooltip, Runnable action) {
         button.setToolTipText(tooltip);
+        button.getAccessibleContext().setAccessibleName(tooltip);
         button.addActionListener(event -> action.run());
         return button;
     }
@@ -100,6 +108,9 @@ public final class ImageViewPanel extends JPanel {
     private void setScale(double scale, boolean fitMode) {
         this.fitMode = fitMode;
         this.canvas.setScale(Math.clamp(scale, MINIMUM_SCALE, MAXIMUM_SCALE));
+        this.fit.setSelected(fitMode);
+        this.zoomOut.setEnabled(this.canvas.scale() > MINIMUM_SCALE);
+        this.zoomIn.setEnabled(this.canvas.scale() < MAXIMUM_SCALE);
         updateStatus();
     }
 

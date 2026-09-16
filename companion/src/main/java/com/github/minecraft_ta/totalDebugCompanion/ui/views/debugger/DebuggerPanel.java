@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -24,7 +25,6 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
-import java.awt.Insets;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
@@ -326,28 +326,22 @@ public final class DebuggerPanel extends JPanel {
 
     private static JButton createViewBreakpointsButton() {
         JButton button = new JButton(Icons.VIEW_BREAKPOINTS);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        FlatIconButton.configure(button);
         button.setToolTipText("View breakpoints");
-        button.setFocusable(false);
-        button.setMargin(new Insets(4, 6, 4, 6));
         return button;
     }
 
     private static JButton toolbarButton(Action action) {
         JButton button = new JButton(action);
         button.setHideActionText(true);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setFocusable(false);
-        button.setMargin(new Insets(4, 6, 4, 6));
+        FlatIconButton.configure(button);
         return button;
     }
 
     private static JToggleButton createMuteBreakpointsButton() {
         JToggleButton button = new JToggleButton(Icons.MUTE_BREAKPOINTS);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        FlatIconButton.configure(button);
         button.setToolTipText("Mute breakpoints");
-        button.setFocusable(false);
-        button.setMargin(new Insets(4, 6, 4, 6));
         return button;
     }
 

@@ -8,9 +8,43 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 class ImageViewPanelTest {
+    @Test
+    void toolbarTracksFitModeAndDisablesZoomAtItsLimits() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            ImageViewPanel panel = new ImageViewPanel(new LoadedResource.Image(
+                    new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB), 201));
+            try {
+                JPanel toolbar = (JPanel) panel.getComponent(0);
+                JButton out = (JButton) toolbar.getComponent(0);
+                JButton in = (JButton) toolbar.getComponent(1);
+                JButton fit = (JButton) toolbar.getComponent(2);
+                JButton actual = (JButton) toolbar.getComponent(3);
+                for (var component : toolbar.getComponents()) {
+                    JButton button = (JButton) component;
+                    assertTrue(button.isFocusable());
+                    assertFalse(button.isRequestFocusEnabled());
+                    assertNotNull(button.getIcon());
+                    assertNotNull(button.getToolTipText());
+                }
+                assertTrue(fit.isSelected());
+                actual.doClick(0);
+                assertFalse(fit.isSelected());
+                for (int i = 0; i < 40; i++) out.doClick(0);
+                assertFalse(out.isEnabled());
+                assertTrue(in.isEnabled());
+                for (int i = 0; i < 40; i++) in.doClick(0);
+                assertFalse(in.isEnabled());
+                assertTrue(out.isEnabled());
+                actual.doClick(0);
+                assertTrue(in.isEnabled());
+                assertTrue(out.isEnabled());
+            } finally { panel.dispose(); }
+        });
+    }
+
 
     @Test
     void viewportUsesFullRepaintsForTheDynamicallySizedCanvas() throws Exception {
