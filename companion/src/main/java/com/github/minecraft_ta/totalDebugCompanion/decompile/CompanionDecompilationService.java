@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class CompanionDecompilationService implements AutoCloseable {
-    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-source-symbols-9";
+    private static final String DECOMPILER_FORMAT = "vineflower-1.12.0-parameter-names-10";
 
     private final DecompiledSourceStore sourceStore;
     private final RuntimeSnapshotBytecodeSource bytecodeSource;

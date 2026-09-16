@@ -22,6 +22,16 @@ public class JIndexResolvedBinaryMethod implements IMethodStub {
     }
 
     @Override
+    public String[] getParameterNames() {
+        return java.util.Arrays.stream(this.binaryMethod.getArgumentNames()).map(String::new).toArray(String[]::new);
+    }
+
+    @Override
+    public String[] getRawParameterNames() {
+        return getParameterNames();
+    }
+
+    @Override
     public String getElementName() {
         return new String(this.binaryMethod.getSelector());
     }

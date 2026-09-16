@@ -6,21 +6,30 @@ import java.util.Objects;
 
 /** Process-wide lookup hook for JDT. Installed runtime resources own the native index. */
 public final class CompanionClassIndex {
-    private static volatile ClassIndex classIndex;
+    private record RuntimeIndex(ClassIndex index, IndexedParameterNames parameterNames) { }
+    private static volatile RuntimeIndex runtime;
 
     private CompanionClassIndex() {
     }
 
     public static void set(ClassIndex replacement) {
-        classIndex = Objects.requireNonNull(replacement, "replacement");
+        runtime = new RuntimeIndex(Objects.requireNonNull(replacement, "replacement"), new IndexedParameterNames(replacement));
     }
 
     public static boolean isOpen() {
-        return classIndex != null;
+        return runtime != null;
     }
 
     public static ClassIndex get() {
-        ClassIndex index = classIndex;
+        return current().index();
+    }
+
+    public static String[] parameterNames(String owner, String name, String descriptor) {
+        return current().parameterNames().resolve(owner, name, descriptor);
+    }
+
+    private static RuntimeIndex current() {
+        RuntimeIndex index = runtime;
         if (index == null) {
             throw new IllegalStateException("Companion class index is not initialized");
         }
@@ -28,6 +37,6 @@ public final class CompanionClassIndex {
     }
 
     public static void clear() {
-        classIndex = null;
+        runtime = null;
     }
 }

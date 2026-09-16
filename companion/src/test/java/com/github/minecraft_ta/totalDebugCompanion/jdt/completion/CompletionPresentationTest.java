@@ -40,10 +40,11 @@ class CompletionPresentationTest {
         CompletionProposal proposal = proposal(CompletionProposal.METHOD_REF, "collect", "collect()",
                 "(Ljava.util.List<+Ljava.lang.Number;>;[Ljava.lang.String;)V", source);
         proposal.setFlags(Flags.AccVarargs);
-        assertEquals("collect(List<? extends Number> arg0, String... arg1) : void",
+        CompletionParameterNames.prepare(proposal, new CompletionContext());
+        assertEquals("collect(List<? extends Number> list, String... astring) : void",
                 CompletionLabels.label(proposal, new CompletionContext()));
         CompletionItem item = convert(source, proposal);
-        assertEquals("collect(${1:arg0}, ${2:arg1})${0};", item.getTextEdits().getFirst().getNewText());
+        assertEquals("collect(${1:list}, ${2:astring})${0};", item.getTextEdits().getFirst().getNewText());
         assertTrue(item.getTextEdits().getFirst().isSnippet());
     }
 
@@ -60,7 +61,7 @@ class CompletionPresentationTest {
     void createsLambdaArgumentStops() {
         String source = "class Proof { void run() { lambda } }";
         CompletionProposal lambda = proposal(CompletionProposal.LAMBDA_EXPRESSION, "lambda", "", "(II)I", source);
-        assertEquals("(${1:arg0}, ${2:arg1}) -> ${0}", convert(source, lambda).getTextEdits().getFirst().getNewText());
+        assertEquals("(${1:i}, ${2:j}) -> ${0}", convert(source, lambda).getTextEdits().getFirst().getNewText());
     }
 
     @Test
@@ -113,7 +114,7 @@ class CompletionPresentationTest {
         CompletionItem item = convert(source, constructor);
         String result = apply(source, item);
         assertTrue(result.contains("import org.example.Box;"), result);
-        assertTrue(result.contains("new Box<>(${1:arg0})${0}"), result);
+        assertTrue(result.contains("new Box<>(${1:object})${0}"), result);
         assertEquals(start, item.getTextEdits().getFirst().getRange().getOffset());
     }
 
@@ -138,6 +139,7 @@ class CompletionPresentationTest {
     }
 
     private static CompletionItem convert(String source, CompletionProposal proposal) {
+        CompletionParameterNames.prepare(proposal, new CompletionContext());
         CompletionItem item = new CompletionItem(null);
         new CompletionEdits(new CompilationUnitImpl("Proof", source), new CompletionContext()).populate(proposal, item);
         return item;

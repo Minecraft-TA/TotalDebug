@@ -71,6 +71,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     }
 
     private CompletionItem toCompletionItem(CompletionProposal proposal) {
+        CompletionParameterNames.prepare(proposal, this.context);
         final CompletionItem item = new CompletionItem(this);
         item.setRelevance(mapRelevance(proposal));
         item.setKind(mapKind(proposal));

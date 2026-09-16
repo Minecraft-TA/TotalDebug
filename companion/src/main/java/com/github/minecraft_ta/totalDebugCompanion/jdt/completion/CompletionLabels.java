@@ -40,13 +40,14 @@ final class CompletionLabels {
 
     private static String method(CompletionProposal proposal, boolean lambda) {
         char[][] types = Signature.getParameterTypes(Signature.removeCapture(proposal.getSignature()));
+        char[][] names = proposal.findParameterNames(null);
         StringJoiner arguments = new StringJoiner(", ", "(", ")");
         for (int i = 0; i < types.length; i++) {
             String name = type(types[i]);
             if (i == types.length - 1 && Flags.isVarargs(proposal.getFlags()) && name.endsWith("[]")) {
                 name = name.substring(0, name.length() - 2) + "...";
             }
-            arguments.add(name + " arg" + i);
+            arguments.add(name + " " + new String(names[i]));
         }
         String label = (lambda ? "" : text(proposal.getName())) + arguments;
         if (lambda) label += " ->";

@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public class SnippetCompletionAdapter {
 
     private static final String SNIPPET_NEXT_ACTION_KEY = "SnippetCompletionAdapter.snippetNextAction";
-    private static final Matcher SNIPPET_MATCHER = Pattern.compile("\\$\\{(\\d+)(:([\\w\\d]+))?}").matcher("");
+    private static final Matcher SNIPPET_MATCHER = Pattern.compile("\\$\\{(\\d+)(:([\\p{javaJavaIdentifierPart}]+))?}").matcher("");
     private static final Highlighter.HighlightPainter EMPTY_HIGHLIGHT_PAINTER = new DefaultHighlighter.DefaultHighlightPainter(null) {
         @Override
         public void paint(Graphics g, int offs0, int offs1, Shape bounds, JTextComponent c) {

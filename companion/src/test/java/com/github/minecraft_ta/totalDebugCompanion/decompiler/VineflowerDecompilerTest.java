@@ -48,13 +48,16 @@ class VineflowerDecompilerTest {
     }
 
     @Test
-    void givesGeneratedMinecraftVariablesJadStyleNames() throws Exception {
+    void givesGeneratedMinecraftVariablesJadStyleNames(@TempDir Path outputDirectory) throws Exception {
         DecompilationResult result = decompile(GeneratedNamesFixture.class);
 
         assertEquals(DecompilationResult.Status.COMPLETE, result.status(), result.source());
         assertTrue(result.source().contains("format(String s, int i)"), result.source());
         assertTrue(result.source().contains("String s1 = s"), result.source());
         assertTrue(result.source().contains("for (int j = 0; j < i; j++)"), result.source());
+        assertTrue(result.source().contains("nonCapturingOperator(int i)"), result.source());
+        assertTrue(result.source().contains("return j -> j + 1;"), result.source());
+        assertTrue(result.source().contains("return j -> i + j;"), result.source());
         assertFalse(result.source().contains("p_100_"), result.source());
         assertFalse(result.source().contains("var3"), result.source());
         assertFalse(result.source().contains("var4"), result.source());
@@ -63,6 +66,7 @@ class VineflowerDecompilerTest {
         assertEquals("i", result.variableNames().displayedName("format", descriptor, "p_101_"));
         assertEquals("s1", result.variableNames().displayedName("format", descriptor, "var3"));
         assertEquals("j", result.variableNames().displayedName("format", descriptor, "var4"));
+        assertCompiles(GeneratedNamesFixture.class.getName(), result.source(), outputDirectory);
     }
 
     @Test

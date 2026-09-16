@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompiler.naming;
 
+import com.github.minecraft_ta.totalDebugCompanion.naming.GeneratedVariableNames;
+import com.github.minecraft_ta.totalDebugCompanion.naming.JadLikeNameGenerator;
 import org.jetbrains.java.decompiler.code.CodeConstants;
 import org.jetbrains.java.decompiler.main.extern.IVariableNameProvider;
 import org.jetbrains.java.decompiler.modules.decompiler.ExprProcessor;
@@ -8,7 +10,6 @@ import org.jetbrains.java.decompiler.struct.StructMethod;
 import org.jetbrains.java.decompiler.struct.attr.StructGeneralAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructLineNumberTableAttribute;
 import org.jetbrains.java.decompiler.struct.attr.StructLocalVariableTableAttribute;
-import org.jetbrains.java.decompiler.struct.attr.StructMethodParametersAttribute;
 import org.jetbrains.java.decompiler.struct.gen.MethodDescriptor;
 import org.jetbrains.java.decompiler.struct.gen.VarType;
 import org.jetbrains.java.decompiler.util.Pair;
@@ -24,30 +25,26 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
     private static final String MINECRAFT_PACKAGE = "net/minecraft/";
     private final StructMethod method;
     private final boolean minecraftMethod;
-    private final Map<Integer, String> parchmentNames;
+    private final Map<Integer, String> parameterNames;
     private final Map<Integer, String> methodParameterNames;
-    private final Map<Integer, String> generatedParameterNames = new HashMap<>();
     private final JadLikeNameGenerator nameGenerator = new JadLikeNameGenerator();
 
     SelectiveVariableNameProvider(StructMethod method) {
         this.method = method;
         this.minecraftMethod = method.getClassQualifiedName().startsWith(MINECRAFT_PACKAGE);
-        this.parchmentNames = this.minecraftMethod ? ParchmentParameterResolver.resolve(method) : Map.of();
-        this.methodParameterNames = this.minecraftMethod ? readMethodParameterNames(method) : Map.of();
+        this.methodParameterNames = DecompilerParameterNames.originals(method);
+        this.parameterNames = new LinkedHashMap<>(DecompilerParameterNames.resolve(method, this.methodParameterNames));
+        this.nameGenerator.reserve(this.parameterNames.values());
     }
 
     @Override
     public synchronized Map<VarVersionPair, String> rename(
             Map<VarVersionPair, Pair<VarType, String>> variables
     ) {
-        if (!this.minecraftMethod) {
-            return null;
-        }
-
         Map<Integer, List<String>> localVariableNamesBySlot = readLocalVariableNamesBySlot(this.method);
         localVariableNamesBySlot.values().forEach(this.nameGenerator::reserve);
         this.nameGenerator.reserve(this.methodParameterNames.values());
-        this.nameGenerator.reserve(this.parchmentNames.values());
+        this.nameGenerator.reserve(this.parameterNames.values());
 
         int parameterEnd = parameterEnd(this.method);
         Map<VarVersionPair, String> resolvedLocalNames = LocalVariableNameResolver.resolve(
@@ -75,12 +72,20 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
             String runtimeName = existingName == null
                     ? uniqueGeneratedName(localVariableNamesBySlot.get(variable.var))
                     : existingName;
-            String mappedName = variable.var < parameterEnd ? this.parchmentNames.get(variable.var) : null;
+            String mappedName = variable.var < parameterEnd ? this.parameterNames.get(variable.var) : null;
             if (mappedName != null) {
                 replacements.put(variable, mappedName);
                 recordRename(runtimeName, mappedName);
                 continue;
             }
+
+            if (existingName != null && this.parameterNames.containsValue(existingName)) {
+                String replacement = this.nameGenerator.next(variables.get(variable).b);
+                replacements.put(variable, replacement);
+                recordRename(existingName, replacement);
+                continue;
+            }
+            if (!this.minecraftMethod) continue;
 
             if (existingName == null && hasMeaningfulName(localVariableNamesBySlot.get(variable.var))) {
                 continue;
@@ -90,9 +95,7 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
                 continue;
             }
             if (isGenerated(existingName)) {
-                String replacement = variable.var < parameterEnd
-                        ? generatedParameterName(variable.var, variables.get(variable).b)
-                        : this.nameGenerator.next(variables.get(variable).b);
+                String replacement = this.nameGenerator.next(variables.get(variable).b);
                 replacements.put(variable, replacement);
                 recordRename(runtimeName, replacement);
             }
@@ -102,32 +105,14 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
 
     @Override
     public synchronized String renameAbstractParameter(String name, int index) {
-        if (!this.minecraftMethod) {
-            return name;
-        }
-        String mappedName = this.parchmentNames.get(index);
-        if (mappedName != null) {
-            recordRename(name, mappedName);
-            return mappedName;
-        }
-        String renamed = isGenerated(name) ? generatedParameterName(index, parameterType(index)) : name;
+        String renamed = this.parameterNames.getOrDefault(index, name);
         recordRename(name, renamed);
         return renamed;
     }
 
     @Override
     public synchronized String renameParameter(int flags, VarType type, String name, int index) {
-        if (!this.minecraftMethod) {
-            return name;
-        }
-        String mappedName = this.parchmentNames.get(index);
-        if (mappedName != null) {
-            recordRename(name, mappedName);
-            return mappedName;
-        }
-        String renamed = isGenerated(name)
-                ? generatedParameterName(index, ExprProcessor.getCastTypeName(type))
-                : name;
+        String renamed = this.parameterNames.getOrDefault(index, name);
         recordRename(name, renamed);
         return renamed;
     }
@@ -167,25 +152,17 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
     public synchronized void addParentContext(IVariableNameProvider renamer) {
         if (renamer instanceof SelectiveVariableNameProvider parent) {
             this.nameGenerator.inherit(parent.nameGenerator);
-        }
-    }
-
-    private String parameterType(int localVariableIndex) {
-        int slot = this.method.hasModifier(CodeConstants.ACC_STATIC) ? 0 : 1;
-        for (VarType parameter : MethodDescriptor.parseDescriptor(this.method.getDescriptor()).params) {
-            if (slot == localVariableIndex) {
-                return ExprProcessor.getCastTypeName(parameter);
+            // Lambda parameters share their enclosing scope, unlike ordinary method declarations.
+            if (this.method.hasModifier(CodeConstants.ACC_SYNTHETIC)) {
+                int slot = this.method.hasModifier(CodeConstants.ACC_STATIC) ? 0 : 1;
+                for (VarType type : MethodDescriptor.parseDescriptor(this.method.getDescriptor()).params) {
+                    if (parent.nameGenerator.isReserved(this.parameterNames.get(slot))) {
+                        this.parameterNames.put(slot, this.nameGenerator.next(ExprProcessor.getCastTypeName(type)));
+                    }
+                    slot += type.stackSize;
+                }
             }
-            slot += parameter.stackSize;
         }
-        return "Object";
-    }
-
-    private String generatedParameterName(int localVariableIndex, String displayedType) {
-        return this.generatedParameterNames.computeIfAbsent(
-                localVariableIndex,
-                ignored -> this.nameGenerator.next(displayedType)
-        );
     }
 
     private static boolean isGenerated(String name) {
@@ -235,25 +212,4 @@ final class SelectiveVariableNameProvider implements IVariableNameProvider {
         return names;
     }
 
-    private static Map<Integer, String> readMethodParameterNames(StructMethod method) {
-        StructMethodParametersAttribute attribute = method.getAttribute(
-                StructGeneralAttribute.ATTRIBUTE_METHOD_PARAMETERS
-        );
-        if (attribute == null) {
-            return Map.of();
-        }
-
-        List<StructMethodParametersAttribute.Entry> entries = attribute.getEntries();
-        VarType[] parameterTypes = MethodDescriptor.parseDescriptor(method.getDescriptor()).params;
-        Map<Integer, String> names = new HashMap<>();
-        int slot = method.hasModifier(CodeConstants.ACC_STATIC) ? 0 : 1;
-        for (int parameterIndex = 0; parameterIndex < Math.min(entries.size(), parameterTypes.length); parameterIndex++) {
-            String name = entries.get(parameterIndex).myName;
-            if (name != null) {
-                names.put(slot, name);
-            }
-            slot += parameterTypes[parameterIndex].stackSize;
-        }
-        return names;
-    }
 }

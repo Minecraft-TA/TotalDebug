@@ -103,9 +103,9 @@ final class CompletionEdits {
     }
 
     private static String arguments(CompletionProposal proposal) {
-        int count = Signature.getParameterCount(Signature.removeCapture(proposal.getSignature()));
+        char[][] names = proposal.findParameterNames(null);
         StringJoiner arguments = new StringJoiner(", ");
-        for (int i = 0; i < count; i++) arguments.add("${" + (i + 1) + ":arg" + i + "}");
+        for (int i = 0; i < names.length; i++) arguments.add("${" + (i + 1) + ":" + new String(names[i]) + "}");
         return arguments.toString();
     }
 
@@ -124,6 +124,9 @@ final class CompletionEdits {
 
     private String constructorTypeArguments(CompletionProposal type, CompletionProposal constructor) {
         if (nextNonWhitespace(type.getReplaceEnd()) == '<') return "";
+        if (constructor instanceof org.eclipse.jdt.internal.codeassist.InternalCompletionProposal internal
+                && internal.getBinding() instanceof org.eclipse.jdt.internal.compiler.lookup.MethodBinding method
+                && method.original().declaringClass.typeVariables().length == 0) return "";
         if (constructor.canUseDiamond(context)) return "<>";
         char[][] arguments = Signature.getTypeArguments(type.getSignature());
         if (arguments.length == 0) return "";

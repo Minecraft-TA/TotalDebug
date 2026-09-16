@@ -13,7 +13,7 @@ public final class SelectiveVariableNamingPlugin implements Plugin {
 
     @Override
     public String description() {
-        return "Applies Parchment parameter names and JAD-style names to unnamed Minecraft variables.";
+        return "Shares parameter names with completion and gives unnamed Minecraft locals JAD-style names.";
     }
 
     @Override

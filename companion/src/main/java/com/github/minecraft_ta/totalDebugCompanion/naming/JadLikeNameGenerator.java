@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totalDebugCompanion.decompiler.naming;
+package com.github.minecraft_ta.totalDebugCompanion.naming;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-final class JadLikeNameGenerator {
+public final class JadLikeNameGenerator {
     private static final Map<String, String> BASE_NAMES = Map.ofEntries(
             Map.entry("byte", "b"),
             Map.entry("char", "c"),
@@ -28,11 +28,15 @@ final class JadLikeNameGenerator {
     private final Set<String> usedNames = new HashSet<>();
     private int integerNameIndex;
 
-    void reserve(Iterable<String> names) {
+    public void reserve(Iterable<String> names) {
         names.forEach(this.usedNames::add);
     }
 
-    String next(String displayedType) {
+    public boolean isReserved(String name) {
+        return this.usedNames.contains(name);
+    }
+
+    public String next(String displayedType) {
         String type = cleanType(displayedType);
         if ("int".equals(type) || "long".equals(type)) {
             return nextIntegerName();
@@ -44,12 +48,13 @@ final class JadLikeNameGenerator {
         do {
             candidate = suffix == 0 ? baseName : baseName + suffix;
             suffix++;
-        } while (!this.usedNames.add(candidate));
+        } while (javax.lang.model.SourceVersion.isKeyword(candidate, javax.lang.model.SourceVersion.RELEASE_21)
+                || !this.usedNames.add(candidate));
         this.counters.put(baseName, suffix);
         return candidate;
     }
 
-    void inherit(JadLikeNameGenerator parent) {
+    public void inherit(JadLikeNameGenerator parent) {
         this.integerNameIndex = Math.max(this.integerNameIndex, parent.integerNameIndex);
         parent.counters.forEach((name, value) -> this.counters.merge(name, value, Math::max));
         this.usedNames.addAll(parent.usedNames);
