@@ -1,9 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.formdev.flatlaf.util.UIScale;
-import javax.swing.*;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.JTextComponent;
+
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -11,6 +9,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.function.Consumer;
+import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
 
 public class BaseListPopup<ITEM> extends BasePopup {
 
@@ -28,6 +29,9 @@ public class BaseListPopup<ITEM> extends BasePopup {
     private static final int MINIMUM_LIST_WIDTH = 200;
     private static final int MAXIMUM_LIST_HEIGHT = 200;
     private int boundXPos = -1;
+
+    protected Object selectionKey(ITEM item) { return item; }
+    protected boolean acceptsTab() { return false; }
 
     public BaseListPopup(Window owner) {
         super(owner);
@@ -107,11 +111,17 @@ public class BaseListPopup<ITEM> extends BasePopup {
 
     public void setItems(List<? extends ITEM> items) {
         var prevWidth = getWidth();
+        Object selection = isVisible() && list.getSelectedValue() != null ? selectionKey(list.getSelectedValue()) : null;
 
         var model = ((DefaultListModel<ITEM>) this.list.getModel());
         model.removeAllElements();
         model.addAll(items);
         this.list.setSelectedIndex(0);
+        if (selection != null) {
+            for (int i = 0; i < items.size(); i++) {
+                if (selection.equals(selectionKey(items.get(i)))) { this.list.setSelectedIndex(i); break; }
+            }
+        }
         this.scrollPane.getVerticalScrollBar().setValue(0);
 
         Dimension listSize = this.list.getPreferredSize();
@@ -123,6 +133,7 @@ public class BaseListPopup<ITEM> extends BasePopup {
         this.scrollPane.setPreferredSize(preferredSize);
         setMinimumSize(UIScale.scale(new Dimension(MINIMUM_LIST_WIDTH, 20)));
         pack();
+        if (list.getSelectedIndex() >= 0) list.ensureIndexIsVisible(list.getSelectedIndex());
 
         if (this.boundXPos != -1) {
             setLocation(getX() - (getWidth() - prevWidth) / 2, getY());
@@ -154,7 +165,7 @@ public class BaseListPopup<ITEM> extends BasePopup {
 
         @Override
         public void keyPressed(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+            if (e.getKeyCode() == KeyEvent.VK_ENTER || (acceptsTab() && e.getKeyCode() == KeyEvent.VK_TAB && e.getModifiersEx() == 0)) {
                 runEnterKeyListener();
                 e.consume();
             } else if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {

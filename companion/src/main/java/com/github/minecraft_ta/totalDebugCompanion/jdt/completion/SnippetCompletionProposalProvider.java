@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
 import org.eclipse.jdt.core.CompletionContext;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.JavaModelException;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -18,7 +19,7 @@ public class SnippetCompletionProposalProvider {
         return Arrays.stream(Snippets.values()).filter(s -> s.getKey().startsWith(token)).map(s -> {
             var item = new CompletionItem(requestor);
 
-            item.setLabel(s.getKey());
+            item.setPresentation(s.getKey(), "", "");
             item.setKind(CompletionItemKind.KEYWORD);
             item.addTextEdit(new CustomTextEdit(
                     new Range(context.getTokenStart(), token.length()),
@@ -37,7 +38,7 @@ public class SnippetCompletionProposalProvider {
             int end = start;
             while (end < source.length() && (source.charAt(end) == ' ' || source.charAt(end) == '\t')) end++;
             return source.substring(start, end);
-        } catch (org.eclipse.jdt.core.JavaModelException e) {
+        } catch (JavaModelException e) {
             throw new IllegalStateException("Cannot read snippet indentation", e);
         }
     }

@@ -3,6 +3,10 @@
 Most icons use JetBrains' New UI (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0.
 See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
 
+Completion modifier/visibility icons (`finalMark`, `staticMark`, `accessPrivate`, `accessProtected`,
+`accessLocal`) are the matching light/dark assets from `platform/icons/src/expui/nodes` in
+[intellij-community](https://github.com/JetBrains/intellij-community/tree/master/platform/icons/src/expui/nodes).
+
 `runServer.svg` and `runServer_dark.svg` combine the unchanged JetBrains `run/run` triangle with a custom
 8 × 7 px server badge and one green LED pixel on the upper row. The triangle is cut out at the badge's
 rounded outer edge without an extra gap or halo.

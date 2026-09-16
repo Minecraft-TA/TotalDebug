@@ -4,11 +4,20 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.fixture.ParameterNamesFixture;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.tth05.jindex.ClassIndex;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.BonemealableBlock;
+import net.minecraft.world.level.block.state.BlockState;
+
 import org.junit.jupiter.api.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class CompletionParameterNamesTest {
@@ -16,8 +25,8 @@ class CompletionParameterNamesTest {
         List<byte[]> classes = new ArrayList<>();
         for (Class<?> type : List.of(Object.class, String.class, ParameterNamesFixture.class, ParameterNamesFixture.Inner.class,
                 ParameterNamesFixture.GenericInner.class,
-                BonemealableBlock.class, net.minecraft.server.level.ServerLevel.class, net.minecraft.util.RandomSource.class,
-                net.minecraft.core.BlockPos.class, net.minecraft.world.level.block.state.BlockState.class)) {
+                BonemealableBlock.class, ServerLevel.class, RandomSource.class,
+                BlockPos.class, BlockState.class)) {
             try (var input = type.getResourceAsStream("/" + type.getName().replace('.', '/') + ".class")) {
                 classes.add(input.readAllBytes());
             }
@@ -48,8 +57,8 @@ class CompletionParameterNamesTest {
 
     @Test void insertsUnicodeAndDollarNamesAsEditableArguments() throws Exception {
         assertCompletion("fixture.unico|", "unicode(String 名前, int $count) : void", "unicode(${1:名前}, ${2:$count})${0};");
-        javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var text = new javax.swing.JTextArea();
+        SwingUtilities.invokeAndWait(() -> {
+            var text = new JTextArea();
             new SnippetCompletionAdapter(text).insert(new CustomTextEdit(new Range(0, 0), "unicode(${1:名前}, ${2:$count})${0};"));
             assertEquals("unicode(名前, $count);", text.getText());
             assertEquals("名前", text.getSelectedText());
@@ -69,6 +78,15 @@ class CompletionParameterNamesTest {
                 "(int value3, int value1) -> : int", "(${1:value3}, ${2:value1}) -> ${0}");
         assertSourceCompletion("interface Fn { int apply(int fn); } class Proof { void run() { Fn fn = |; } }",
                 "(int fn1) -> : int", "(${1:fn1}) -> ${0}");
+    }
+
+    @Test void sourceInitializerPreviewPreservesLiteralWhitespace() throws Exception {
+        assertSourceCompletion("class Proof { static final String VALUE = \"a  b\"; void run() { VAL|; } }",
+                "VALUE (= \"a  b\") : String", "VALUE");
+        assertSourceCompletion("class Proof { static final String FIRST = \"first\", VALUE = \"second\"; void run() { VAL|; } }",
+                "VALUE (= \"second\") : String", "VALUE");
+        assertSourceCompletion("class Proof { static final Object VALUE = new Object(); void run() { VAL|; } }",
+                "VALUE (= new Object()) : Object", "VALUE");
     }
 
     private static void assertCompletion(String expression, String label, String insertion) throws Exception {

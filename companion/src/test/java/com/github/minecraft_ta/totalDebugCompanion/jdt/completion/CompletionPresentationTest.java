@@ -3,9 +3,11 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.tth05.jindex.ClassIndex;
+
 import org.eclipse.jdt.core.CompletionContext;
 import org.eclipse.jdt.core.CompletionProposal;
 import org.eclipse.jdt.core.Flags;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,7 @@ class CompletionPresentationTest {
         proposal.setFlags(Flags.AccVarargs);
         CompletionParameterNames.prepare(proposal, new CompletionContext());
         assertEquals("collect(List<? extends Number> list, String... astring) : void",
-                CompletionLabels.label(proposal, new CompletionContext()));
+                label(proposal));
         CompletionItem item = convert(source, proposal);
         assertEquals("collect(${1:list}, ${2:astring})${0};", item.getTextEdits().getFirst().getNewText());
         assertTrue(item.getTextEdits().getFirst().isSnippet());
@@ -99,7 +101,7 @@ class CompletionPresentationTest {
     void constructorCompletionUsesTheRequiredTypeRangeAndDiamond() {
         String source = "class Proof { void run() { new Box } }";
         int start = source.indexOf("Box");
-        CompletionProposal constructor = new org.eclipse.jdt.internal.codeassist.InternalCompletionProposal(
+        CompletionProposal constructor = new InternalCompletionProposal(
                 CompletionProposal.CONSTRUCTOR_INVOCATION, start + 3) {
             @Override public boolean isConstructor() { return true; }
             @Override public boolean canUseDiamond(CompletionContext context) { return true; }
@@ -136,6 +138,12 @@ class CompletionPresentationTest {
         proposal.setSignature(signature.toCharArray());
         proposal.setReplaceRange(offset, offset + token.length());
         return proposal;
+    }
+
+    private static String label(CompletionProposal proposal) {
+        var item = new CompletionItem(null);
+        CompletionLabels.populate(proposal, item, new CompletionContext());
+        return item.getLabel();
     }
 
     private static CompletionItem convert(String source, CompletionProposal proposal) {

@@ -18,6 +18,11 @@ public class Icons {
     }
 
     public static final FlatSVGIcon JAVA_METHOD = new FlatSVGIcon("icons/method.svg");
+    public static final FlatSVGIcon FINAL_MARK = new FlatSVGIcon("icons/finalMark.svg");
+    public static final FlatSVGIcon STATIC_MARK = new FlatSVGIcon("icons/staticMark.svg");
+    public static final FlatSVGIcon ACCESS_PRIVATE = new FlatSVGIcon("icons/accessPrivate.svg");
+    public static final FlatSVGIcon ACCESS_PROTECTED = new FlatSVGIcon("icons/accessProtected.svg");
+    public static final FlatSVGIcon ACCESS_LOCAL = new FlatSVGIcon("icons/accessLocal.svg");
     public static final FlatSVGIcon JAVA_CLASS = new FlatSVGIcon("icons/class.svg");
     public static final FlatSVGIcon JAVA_CONSTANT = new FlatSVGIcon("icons/constant.svg");
     public static final FlatSVGIcon JAVA_PROPERTY = new FlatSVGIcon("icons/property.svg");
