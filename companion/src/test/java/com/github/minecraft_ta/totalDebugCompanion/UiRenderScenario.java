@@ -8,6 +8,8 @@ enum UiRenderScenario {
     NEW_SCRIPT("new-script", "Compact script creation popup with a selected Script type"),
     NEW_SCRIPT_INVALID("new-script-invalid", "Script creation with an invalid name"),
     SCRIPT_TOOLBAR("script-toolbar", "Script toolbar with the Format action"),
+    COMPLETION_SINGLE("completion-single", "One long completion with a horizontal scrollbar"),
+    COMPLETION_SHORTLIST("completion-shortlist", "Two completion rows above a horizontal scrollbar"),
     IMAGE_TOOLBAR("image-toolbar", "Image tools with visible fit selection"),
     EDITOR_FIND_TOOLBAR("editor-find-toolbar", "Editor Find with an active keyboard-operated option"),
     PROJECTS("projects", "Project switcher with current and recent projects"),

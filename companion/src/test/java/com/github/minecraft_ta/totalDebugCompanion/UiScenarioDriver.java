@@ -97,6 +97,20 @@ final class UiScenarioDriver {
         expandTree();
         switch (scenario) {
             case MAIN -> selectCodeEditor(context);
+            case COMPLETION_SINGLE, COMPLETION_SHORTLIST -> {
+                selectCodeEditor(context);
+                var editor = findComponent(mainWindow, RSyntaxTextArea.class);
+                if (editor == null) break;
+                context.once("completion", () -> {
+                    var popup = new com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup(mainWindow);
+                    popup.setFont(editor.getFont());
+                    var item = new com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem(null);
+                    item.setKind(com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind.METHOD);
+                    item.setLabel("fillReport(Minecraft minecraft, ClientLevel level, Options options, CrashReport report) : CrashReport");
+                    popup.setItems(java.util.Collections.nCopies(scenario == UiRenderScenario.COMPLETION_SINGLE ? 1 : 2, item));
+                    popup.show(editor, 0, 90, com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup.Alignment.BOTTOM_RIGHT);
+                });
+            }
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> {
                 selectCodeEditor(context);
                 context.once("new-script", () -> {
@@ -402,6 +416,9 @@ final class UiScenarioDriver {
                         && mainWindow.getEditorTabs().getSelectedIndex() == mainWindow.getEditorTabs().getTabCount() - 1;
             }
             case MAIN -> mainWindow.getEditorTabs().getSelectedIndex() == 0;
+            case COMPLETION_SINGLE, COMPLETION_SHORTLIST -> Arrays.stream(mainWindow.getOwnedWindows())
+                    .anyMatch(window -> window instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup
+                            && window.isShowing());
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> Arrays.stream(mainWindow.getOwnedWindows())
                     .anyMatch(window -> window instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow
                             && window.isShowing());

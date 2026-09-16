@@ -1,11 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.BaseListPopup;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class CompletionItem implements BaseListPopup.ListItem {
+public class CompletionItem {
 
     private String label;
     private CompletionItemKind kind;
@@ -57,8 +56,4 @@ public class CompletionItem implements BaseListPopup.ListItem {
         return requestor;
     }
 
-    @Override
-    public int getLabelLength() {
-        return this.label.length();
-    }
 }

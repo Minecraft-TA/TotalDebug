@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.formdev.flatlaf.util.UIScale;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
@@ -11,7 +12,7 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.function.Consumer;
 
-public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopup {
+public class BaseListPopup<ITEM> extends BasePopup {
 
     private Consumer<ITEM> enterKeyListener;
     private final Listener listener = new Listener();
@@ -25,6 +26,7 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
     private Component invoker;
     private static final int MAXIMUM_LIST_WIDTH = 600;
     private static final int MINIMUM_LIST_WIDTH = 200;
+    private static final int MAXIMUM_LIST_HEIGHT = 200;
     private int boundXPos = -1;
 
     public BaseListPopup(Window owner) {
@@ -112,12 +114,14 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         this.list.setSelectedIndex(0);
         this.scrollPane.getVerticalScrollBar().setValue(0);
 
-        var longestItemLength = this.list.getFontMetrics(this.list.getFont()).stringWidth(
-                "9".repeat(items.stream().mapToInt(ListItem::getLabelLength).max().orElse(0))
-        );
-        var preferredSize = new Dimension(Math.min(MAXIMUM_LIST_WIDTH, longestItemLength) + 35, Math.min(MINIMUM_LIST_WIDTH, this.list.getPreferredSize().height));
+        Dimension listSize = this.list.getPreferredSize();
+        int viewportWidth = Math.clamp(listSize.width, UIScale.scale(MINIMUM_LIST_WIDTH), UIScale.scale(MAXIMUM_LIST_WIDTH));
+        int viewportHeight = Math.min(UIScale.scale(MAXIMUM_LIST_HEIGHT), listSize.height);
+        var preferredSize = new Dimension(viewportWidth, viewportHeight);
+        if (listSize.width > viewportWidth) preferredSize.height += this.scrollPane.getHorizontalScrollBar().getPreferredSize().height;
+        if (listSize.height > viewportHeight) preferredSize.width += this.scrollPane.getVerticalScrollBar().getPreferredSize().width;
         this.scrollPane.setPreferredSize(preferredSize);
-        setMinimumSize(new Dimension(MINIMUM_LIST_WIDTH, 20));
+        setMinimumSize(UIScale.scale(new Dimension(MINIMUM_LIST_WIDTH, 20)));
         pack();
 
         if (this.boundXPos != -1) {
@@ -144,11 +148,6 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
 
         var val = this.list.getSelectedValue();
         this.enterKeyListener.accept(val);
-    }
-
-    public interface ListItem {
-
-        int getLabelLength();
     }
 
     private class Listener extends KeyAdapter {

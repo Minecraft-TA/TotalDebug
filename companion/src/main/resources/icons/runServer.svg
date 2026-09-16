@@ -1,6 +1,10 @@
-<!-- Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license. -->
-<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M1.5 7.5H14.5M14.5 7.5L11.5 4.5M14.5 7.5L11.5 10.5" stroke="#208A3C" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M8.5 11.5V14.5M8.5 14.5H5.5M8.5 14.5L4.5 10.5" stroke="#208A3C" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M8.5 3.5V0.5M8.5 0.5H5.5M8.5 0.5L4.5 4.5" stroke="#208A3C" stroke-linecap="round" stroke-linejoin="round"/>
+<!-- Copyright 2000-2023 JetBrains s.r.o. and contributors. Apache 2.0. Adapted for TotalDebug Companion with a custom server badge. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+<defs><clipPath id="runCutout"><path d="M0 0H16V9H9A1 1 0 0 0 8 10V16H0Z"/></clipPath></defs>
+<path d="M13.5 7.13397C14.1667 7.51888 14.1667 8.48112 13.5 8.86602L4.5 14.0622C3.83333 14.4471 3 13.966 3 13.1962L3 2.80385C3 2.03405 3.83333 1.55292 4.5 1.93782L13.5 7.13397Z" fill="#F2FCF3" stroke="#208A3C" clip-path="url(#runCutout)"/>
+<g stroke="#6C707E" stroke-linejoin="round">
+<rect x="8.5" y="9.5" width="7" height="3" rx=".5"/><rect x="8.5" y="12.5" width="7" height="3" rx=".5"/>
+</g>
+<path d="M10 11h2v1h-2zM10 14h2v1h-2z" fill="#6C707E"/>
+<rect x="13" y="11" width="1" height="1" fill="#208A3C"/>
 </svg>

@@ -1,7 +1,12 @@
 # Icons
 
-JetBrains' New UI (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0.
+Most icons use JetBrains' New UI (`expui`) icon set, taken from intellij-community and licensed under Apache 2.0.
 See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
+
+`runServer.svg` and `runServer_dark.svg` combine the unchanged JetBrains `run/run` triangle with a custom
+8 × 7 px server badge and one green LED pixel on the upper row. The triangle is cut out at the badge's
+rounded outer edge without an extra gap or halo.
+They retain the upstream Apache 2.0 notice and light/dark palette.
 
 Each icon ships as a light/dark pair, `<name>.svg` and `<name>_dark.svg`. That is FlatLaf's
 convention: a single `FlatSVGIcon` resolves the `_dark` sibling on its own when the active look and
@@ -42,7 +47,6 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | breakpointValid | `breakpoints/breakpointValid` | | breakpointInvalid | `breakpoints/breakpointInvalid` |
 | breakpointMethod | `breakpoints/breakpointMethod` | | breakpointMethodValid | `breakpoints/breakpointMethodValid` |
 | questionBadge | `breakpoints/questionBadge` | | detach | `CidrDebuggerIcons/icons/expui/detach` |
-| runServer | `actions/deploy` | | | |
 | | | | arrow_down | `general/chevronDown` |
 | previousOccurrence | `general/chevronUp` | | nextOccurrence | `general/chevronDown` |
 | jumpToSource | [`general/edit`](https://github.com/JetBrains/intellij-community/blob/master/platform/icons/src/expui/general/edit.svg) | | | |

@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.*;
@@ -8,8 +12,40 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class BaseListPopupTest {
+
+    @Test
+    void shortCompletionListsReserveHorizontalScrollbarHeight() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (var theme : CompanionTheme.available()) {
+                ThemeManager.installTheme(theme);
+                var popup = new CodeCompletionPopup(null);
+                try {
+                    var item = new CompletionItem(null);
+                    item.setKind(CompletionItemKind.METHOD);
+                    item.setLabel("methodWithALongSignature(" + "Argument argument, ".repeat(20) + ")");
+                    var scroll = (JScrollPane) popup.getContentPane().getComponent(0);
+                    var list = (JList<?>) scroll.getViewport().getView();
+                    for (int count : new int[]{1, 2}) {
+                        popup.setItems(java.util.Collections.nCopies(count, item));
+                        assertTrue(scroll.getHorizontalScrollBar().isVisible());
+                        assertTrue(scroll.getViewport().getHeight() >= list.getCellBounds(0, count - 1).height,
+                                theme.id() + ": the horizontal scrollbar must not consume a completion row's height");
+                        assertFalse(scroll.getVerticalScrollBar().isVisible());
+                    }
+                    item.setLabel("shortMethod()");
+                    popup.setItems(java.util.List.of(item));
+                    assertFalse(scroll.getHorizontalScrollBar().isVisible());
+                    assertTrue(scroll.getViewport().getHeight() >= list.getCellBounds(0, 0).height);
+                } finally {
+                    popup.dispose();
+                }
+            }
+        });
+    }
 
     @Test
     void acceptingASelectionInvokesOnlyTheCurrentEditorHandler() throws Exception {
@@ -46,10 +82,5 @@ class BaseListPopupTest {
         }
     }
 
-    private static final class TestItem implements BaseListPopup.ListItem {
-        @Override
-        public int getLabelLength() {
-            return 4;
-        }
-    }
+    private static final class TestItem { }
 }
