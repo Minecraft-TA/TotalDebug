@@ -43,7 +43,12 @@ final class CompletionRanking {
     }
 
     private static int typePreference(CompletionItem item) {
-        if (item.proposal == null || item.proposal.getKind() != CompletionProposal.TYPE_REF) return 0;
+        if (item.proposal == null) return 0;
+        if (item.proposal.getKind() == CompletionProposal.CONSTRUCTOR_INVOCATION) {
+            // java.lang needs no import. Constructor search does not award the type proposal's library bonus.
+            return CompletionLabels.text(item.proposal.getDeclarationSignature()).replace('/', '.').startsWith("Ljava.lang.") ? 0 : 1;
+        }
+        if (item.proposal.getKind() != CompletionProposal.TYPE_REF) return 0;
         return preferredType(item) ? 0 : 1;
     }
 

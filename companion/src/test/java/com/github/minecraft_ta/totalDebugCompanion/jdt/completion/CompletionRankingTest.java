@@ -56,6 +56,25 @@ class CompletionRankingTest {
         assertEquals(member, CompletionRanking.order(List.of(member, template), "so").getFirst());
     }
 
+    @Test void implicitJavaLangConstructorsBeatUnimportedCollisionsButNotContextRelevance() {
+        var standard = constructor("java.lang.String", 100);
+        var internal = constructor("com.sun.org.apache.xpath.internal.operations.String", 100);
+        assertEquals(standard, CompletionRanking.order(List.of(internal, standard), "Str").getFirst());
+        internal.setRelevance(103); // Explicit imports and expected type remain stronger signals.
+        assertEquals(internal, CompletionRanking.order(List.of(standard, internal), "Str").getFirst());
+    }
+
+    private static CompletionItem constructor(String type, int score) {
+        var proposal = CompletionProposal.create(CompletionProposal.CONSTRUCTOR_INVOCATION, 0);
+        proposal.setName(type.substring(type.lastIndexOf('.') + 1).toCharArray());
+        proposal.setDeclarationSignature(("L" + type + ";").toCharArray());
+        proposal.setSignature("()V".toCharArray());
+        proposal.setRelevance(score);
+        var item = new CompletionItem(null, proposal);
+        item.setKind(CompletionItemKind.CONSTRUCTOR);
+        return item;
+    }
+
     private static CompletionItem type(String type, int score) {
         var proposal = CompletionProposal.create(CompletionProposal.TYPE_REF, 0);
         proposal.setSignature(("L" + type + ";").toCharArray());

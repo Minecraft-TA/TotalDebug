@@ -31,3 +31,13 @@ Baseline: `2c2ab1b9`, preserved from the working state accepted by the user. The
 ## Validation and landing
 
 Run targeted owning-module tests during changes, then full Companion/evaluation/mod tests and CI's clean-dependency checks. Replay the recorded ATM10 Sky scenarios against the stored index and inspect offscreen paints. Audit the final diff on standards and behavior axes. Commit refactor/fixes separately from the preserved baseline. Open the PR against `1.21.1`, wait for CI and automatic review, resolve findings and repeat for each new head. Merge only after the final head is clean and audited. Do not install builds into the user's running applications.
+
+## Implemented and verified
+
+- Extracted the completion owner and replaced private request-state test setup with real admission and controlled execution. Completion and formatting share atomic snippet-aware edits; disposal restores bindings.
+- Fixed duplicate constructor publication, pending Escape, external popup dismissal, environment-history reuse, nongeneric diamonds and implicit `java.lang` constructor ties. The latter was found by replaying `new String` against the full pack rather than a small fixture.
+- Removed shared mutable snippet matchers. Fixed offscreen focus-test isolation without altering production theme behavior.
+- Published JIndex 2.1.0 through its separately audited PR and successful release workflow. Its UTF-16 parameter metadata survives legal surrogate code units and snapshot reload. The same ATM10 Sky corpus measures a 5.08% snapshot increase; see [storage measurement](benchmarks/parameter-names-atm10sky.md).
+- The published-dependency `:check :localBundle` passed, including normal tests, packaging and build-logic checks. Focused tests passed after the constructor-ranking follow-up.
+- Replayed EventBus dots/partial names, chained Enter, `.var` nested imports, GasData warning continuity, missing EventListener, constructors and ItemStack against the released-format pack index. Both themes passed offscreen assertions. A 50-edit burst submitted one parse in each theme.
+- Independent standards and behavior reviews passed after correcting the external-dismissal finding. GitHub CI and automatic review remain required before merging the final head.
