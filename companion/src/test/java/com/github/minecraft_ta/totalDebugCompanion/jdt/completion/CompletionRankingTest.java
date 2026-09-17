@@ -60,6 +60,10 @@ class CompletionRankingTest {
         var standard = constructor("java.lang.String", 100);
         var internal = constructor("com.sun.org.apache.xpath.internal.operations.String", 100);
         assertEquals(standard, CompletionRanking.order(List.of(internal, standard), "Str").getFirst());
+        var subpackage = constructor("java.lang.ref.WeakReference", 100);
+        var other = constructor("a.mod.WeakReference", 100);
+        assertEquals(other, CompletionRanking.order(List.of(subpackage, other), "WeakRef").getFirst(),
+                "Subpackages of java.lang still need an import");
         internal.setRelevance(103); // Explicit imports and expected type remain stronger signals.
         assertEquals(internal, CompletionRanking.order(List.of(standard, internal), "Str").getFirst());
     }
