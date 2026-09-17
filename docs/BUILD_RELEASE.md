@@ -33,7 +33,7 @@ Dependency versions live in `gradle/libs.versions.toml`; settings own plugin res
 
 Builds use published SCNet and JIndex by default. When developing those libraries, publish them from their own checkouts, then use `-PtotaldebugUseMavenLocal=true`. That opt-in resolves the `com.github.tth05` group exclusively from Maven Local; a missing local artifact fails. Internal protocol/storage/evaluation artifacts are never selected from Maven Local and require no publication. Existing library publications remain available for older application releases.
 
-The current checkout requires SCNet 2.1.0 for explicit endpoint message registration. Until that version is published, build and publish the SCNet checkout to Maven Local and enable `totaldebugUseMavenLocal`. JIndex must also be present locally when that option is enabled.
+The checkout uses published SCNet 2.1.0 for explicit endpoint message registration and JIndex 2.1.0 for original parameter metadata. CI disables Maven Local so a local unpublished API cannot mask a missing release.
 
 ## Local installation
 
