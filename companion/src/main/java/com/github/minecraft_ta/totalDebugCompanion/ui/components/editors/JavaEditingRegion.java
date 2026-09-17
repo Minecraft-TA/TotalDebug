@@ -8,13 +8,13 @@ import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.Statement;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
-import org.fife.ui.rsyntaxtextarea.Token;
-import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.fife.ui.rsyntaxtextarea.parser.ParserNotice;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import static com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.JavaEditorTokens.isCode;
+import static com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.JavaEditorTokens.isName;
 
 /** Presentation-only edit state. Analysis remains complete, regardless of how long an edit takes. */
 final class JavaEditingRegion {
@@ -23,22 +23,22 @@ final class JavaEditingRegion {
     private Span editedName;
     private boolean includeCaretEnd;
     private int anchor;
-    private int probe;
-    private List<Span> untouched = List.of();
+    private int editProbeOffset;
+    private List<Span> retainedStatements = List.of();
 
     void edited(RSyntaxDocument document, String text, int offset, int removed, int added) {
         String inserted = text.substring(offset, offset + added);
-        boolean survivingPrefix = untouched.stream().anyMatch(span -> span.start() < offset && span.end() == offset + removed);
-        untouched = untouched.stream().map(span -> span.edited(offset, removed, added)).filter(Objects::nonNull).toList();
+        boolean survivingPrefix = retainedStatements.stream().anyMatch(span -> span.start() < offset && span.end() == offset + removed);
+        retainedStatements = retainedStatements.stream().map(span -> span.edited(offset, removed, added)).filter(Objects::nonNull).toList();
         if (removed == 0 && inserted.isBlank() && construct == null) return;
         anchor = offset + added;
         editedName = qualifiedNameAt(document, anchor);
-        boolean nextStatement = added == 0 && untouched.stream().anyMatch(span -> span.start() == anchor);
+        boolean nextStatement = added == 0 && retainedStatements.stream().anyMatch(span -> span.start() == anchor);
         if (nextStatement && !survivingPrefix) {
             finish();
             return;
         }
-        probe = Math.max(0, Math.min(text.length() - 1, removed > 0 && added == 0 && !nextStatement ? anchor : anchor - 1));
+        editProbeOffset = Math.max(0, Math.min(text.length() - 1, removed > 0 && added == 0 && !nextStatement ? anchor : anchor - 1));
         var unit = editingUnitAt(document, text);
         // Only newly inserted delimiters commit an edit. Pre-existing (); do not finish a name.
         char last = inserted.isEmpty() ? '\0' : inserted.charAt(inserted.length() - 1);
@@ -57,7 +57,7 @@ final class JavaEditingRegion {
     void completionAccepted(RSyntaxDocument document, String text, int caret) {
         anchor = caret;
         editedName = qualifiedNameAt(document, caret);
-        probe = Math.max(0, caret - 1);
+        editProbeOffset = Math.max(0, caret - 1);
         var unit = editingUnitAt(document, text);
         if (unit.terminated() && !insideArguments(document, unit.span().start(), caret)) finish();
         else {
@@ -68,11 +68,11 @@ final class JavaEditingRegion {
     }
 
     private Unit editingUnitAt(RSyntaxDocument document, String text) {
-        var unit = unitAt(document, text, probe);
+        var unit = unitAt(document, text, editProbeOffset);
         var candidate = unit.span();
         // Recovery may join the following statement to a trailing dot. Its established boundary still belongs to it.
         int end = candidate.end();
-        for (var span : untouched) if (span.start() > probe) end = Math.min(end, span.start());
+        for (var span : retainedStatements) if (span.start() > editProbeOffset) end = Math.min(end, span.start());
         return new Unit(new Span(candidate.start(), end), unit.terminated() && end == candidate.end());
     }
 
@@ -82,6 +82,8 @@ final class JavaEditingRegion {
         finish();
         return true;
     }
+
+    void clearAnalysisHistory() { retainedStatements = List.of(); }
 
     void finish() { construct = null; caretScope = null; editedName = null; }
 
@@ -95,9 +97,9 @@ final class JavaEditingRegion {
 
     /** Prefer real statement bounds when recovery retained them; never broaden a lexical boundary. */
     void analyzed(JavaAnalysis analysis) {
-        if (analysis.recovery().isEmpty()) untouched = analysis.statements();
+        if (analysis.recovery().isEmpty()) retainedStatements = analysis.statements();
         if (construct == null || analysis.contents().isEmpty()) return;
-        int generated = analysis.sourceMap().toGeneratedOffset(Math.min(probe, analysis.contents().length() - 1));
+        int generated = analysis.sourceMap().toGeneratedOffset(Math.min(editProbeOffset, analysis.contents().length() - 1));
         if (generated < 0) return;
         for (ASTNode node = NodeFinder.perform(analysis.unit(), generated, 0); node != null; node = node.getParent()) {
             if (!(node instanceof Statement) || node instanceof Block) continue;
@@ -114,13 +116,13 @@ final class JavaEditingRegion {
     List<JavaAnalysis.Problem> reconcile(JavaAnalysis analysis, List<JavaAnalysis.Problem> previous) {
         if (construct == null || analysis.recovery().isEmpty()) return analysis.problems();
         var result = new ArrayList<JavaAnalysis.Problem>();
-        analysis.problems().stream().filter(problem -> !inUntouchedStatement(problem)).forEach(result::add);
-        previous.stream().filter(this::inUntouchedStatement).forEach(result::add);
+        analysis.problems().stream().filter(problem -> !inRetainedStatement(problem)).forEach(result::add);
+        previous.stream().filter(this::inRetainedStatement).forEach(result::add);
         return result;
     }
 
-    private boolean inUntouchedStatement(JavaAnalysis.Problem problem) {
-        return untouched.stream().anyMatch(span -> problem.span().start() >= span.start() && problem.span().end() <= span.end()
+    private boolean inRetainedStatement(JavaAnalysis.Problem problem) {
+        return retainedStatements.stream().anyMatch(span -> problem.span().start() >= span.start() && problem.span().end() <= span.end()
                 && (span.end() <= construct.start() || span.start() >= construct.end()));
     }
 
@@ -131,8 +133,7 @@ final class JavaEditingRegion {
             if (!isCode(token)) continue;
             String word = token.getLexeme();
             boolean dot = word.equals(".");
-            boolean name = Character.isJavaIdentifierStart(word.charAt(0))
-                    && word.chars().allMatch(c -> Character.isJavaIdentifierPart(c) || c == '.');
+            boolean name = isName(word);
             if (!dot && (!name || !afterDot)) {
                 if (start >= 0 && start <= caret && caret <= end) return new Span(start, end);
                 start = name ? token.getOffset() : -1;
@@ -213,12 +214,4 @@ final class JavaEditingRegion {
         return false;
     }
 
-    private static boolean isCode(Token token) {
-        if (!token.isPaintable() || token.isComment() || token.isWhitespace()) return false;
-        return switch (token.getType()) {
-            case TokenTypes.LITERAL_STRING_DOUBLE_QUOTE, TokenTypes.LITERAL_CHAR, TokenTypes.LITERAL_BACKQUOTE,
-                    TokenTypes.ERROR_STRING_DOUBLE, TokenTypes.ERROR_CHAR -> false;
-            default -> true;
-        };
-    }
 }

@@ -29,7 +29,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     private CompletionEdits proposalProvider;
 
     private volatile boolean cancelled;
-    private long startTime;
+    private long startTime = System.nanoTime();
 
     public CustomCompletionRequestor(
             ICompilationUnit unit,

@@ -60,10 +60,14 @@ public class BaseListPopup<ITEM> extends BasePopup {
             return;
 
         super.show(invoker, x, y, alignment);
-        removeKeyListener();
         this.boundXPos = x;
+        bindInvoker((JTextComponent) invoker);
+    }
+
+    protected final void bindInvoker(JTextComponent invoker) {
+        removeKeyListener();
         this.invoker = invoker;
-        this.invoker.addKeyListener(this.listener);
+        invoker.addKeyListener(this.listener);
     }
 
     @Override

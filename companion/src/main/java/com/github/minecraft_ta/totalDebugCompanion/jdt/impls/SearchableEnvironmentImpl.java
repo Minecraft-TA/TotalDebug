@@ -98,8 +98,6 @@ class SearchableEnvironmentImpl extends SearchableEnvironment {
             }
         } catch (JavaModelException e) {
             throw new RuntimeException(e);
-        } finally {
-            monitor.done();
         }
     }
 }

@@ -87,6 +87,27 @@ public class JavaEditorAnalysisTest {
         }
     }
 
+    @Test void environmentReplacementCannotReconcileFreshErrorsAgainstDiscardedHistory() throws Exception {
+        try (var fixture = new Fixture("String text = \"x\"; text.length();\nint n = missing;")) {
+            fixture.finish();
+            onEdt(() -> {
+                int start = fixture.area.getText().indexOf("length();");
+                fixture.area.replaceRange("", start, start + "length();".length());
+                fixture.area.setCaretPosition(start);
+                return null;
+            });
+            fixture.finish();
+            assertEquals(1, errors(fixture));
+            onEdt(() -> { CompanionClassIndex.set(index); fixture.cache.refreshEnvironment(); return null; });
+            fixture.finish();
+            assertTrue(onEdt(() -> fixture.owner.currentSnapshot().problems().stream().anyMatch(problem -> problem.message().contains("missing"))));
+            assertTrue(onEdt(() -> fixture.area.getParserNotices().stream().anyMatch(problem -> problem.getMessage().contains("missing"))),
+                    "Fresh neighboring errors must survive an environment refresh during editing");
+            assertTrue(onEdt(() -> fixture.area.getParserNotices().stream().noneMatch(problem -> problem.getOffset() < fixture.area.getText().indexOf("int n"))),
+                    "The active trailing-dot expression remains deferred");
+        }
+    }
+
     @Test void unresolvedGenericTypeRemainsVisibleWhileEditingItsInitializer() throws Exception {
         String source = IMPORTS + "class Bag<T> {}\nBag<MissingType> value = null;";
         try (var fixture = new Fixture(source)) {

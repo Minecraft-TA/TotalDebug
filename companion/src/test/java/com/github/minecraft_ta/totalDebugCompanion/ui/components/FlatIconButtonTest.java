@@ -5,6 +5,9 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
 import javax.swing.*;
+import java.awt.DefaultKeyboardFocusManager;
+import java.awt.KeyboardFocusManager;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,26 +20,35 @@ class FlatIconButtonTest {
     @Test
     void bothThemesPaintDistinctKeyboardFocusAndSelectedStates() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            for (var theme : CompanionTheme.available()) {
-                ThemeManager.installTheme(theme);
-                FlatIconButton button = new FlatIconButton(Icons.MATCH_CASE, true);
-                int[] normal = pixels(button);
-                button.putClientProperty("JComponent.focusOwner", (Predicate<JComponent>) component -> true);
-                assertFalse(Arrays.equals(normal, pixels(button)), theme.id() + " keyboard focus must be visible");
-                button.putClientProperty("JComponent.focusOwner", null);
-                button.setSelected(true);
-                assertFalse(Arrays.equals(normal, pixels(button)), theme.id() + " selection must be visible without hover");
-                var toggle = new JToggleButton(Icons.MUTE_BREAKPOINTS);
-                FlatIconButton.configure(toggle);
-                int[] unselected = pixels(toggle);
-                toggle.setSelected(true);
-                assertFalse(Arrays.equals(unselected, pixels(toggle)), theme.id() + " native toggle selection must be visible");
-                var field = new JTextField("query", 10);
-                int[] unfocused = pixels(field);
-                field.putClientProperty("JComponent.focusOwner", (Predicate<JComponent>) component -> true);
-                assertFalse(Arrays.equals(unfocused, pixels(field)), theme.id() + " text-field focus must be visible");
-                assertTrue(UIManager.getColor("Component.focusColor").getAlpha() > 0);
-                assertTrue(UIManager.getColor("Slider.focusedColor").getAlpha() > 0);
+            var previous = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+            // Offscreen components have no ancestor window; unrelated UI tests may leave another window active.
+            KeyboardFocusManager.setCurrentKeyboardFocusManager(new DefaultKeyboardFocusManager() {
+                @Override public Window getActiveWindow() { return null; }
+            });
+            try {
+                for (var theme : CompanionTheme.available()) {
+                    ThemeManager.installTheme(theme);
+                    FlatIconButton button = new FlatIconButton(Icons.MATCH_CASE, true);
+                    int[] normal = pixels(button);
+                    button.putClientProperty("JComponent.focusOwner", (Predicate<JComponent>) component -> true);
+                    assertFalse(Arrays.equals(normal, pixels(button)), theme.id() + " keyboard focus must be visible");
+                    button.putClientProperty("JComponent.focusOwner", null);
+                    button.setSelected(true);
+                    assertFalse(Arrays.equals(normal, pixels(button)), theme.id() + " selection must be visible without hover");
+                    var toggle = new JToggleButton(Icons.MUTE_BREAKPOINTS);
+                    FlatIconButton.configure(toggle);
+                    int[] unselected = pixels(toggle);
+                    toggle.setSelected(true);
+                    assertFalse(Arrays.equals(unselected, pixels(toggle)), theme.id() + " native toggle selection must be visible");
+                    var field = new JTextField("query", 10);
+                    int[] unfocused = pixels(field);
+                    field.putClientProperty("JComponent.focusOwner", (Predicate<JComponent>) component -> true);
+                    assertFalse(Arrays.equals(unfocused, pixels(field)), theme.id() + " text-field focus must be visible");
+                    assertTrue(UIManager.getColor("Component.focusColor").getAlpha() > 0);
+                    assertTrue(UIManager.getColor("Slider.focusedColor").getAlpha() > 0);
+                }
+            } finally {
+                KeyboardFocusManager.setCurrentKeyboardFocusManager(previous);
             }
         });
     }

@@ -175,11 +175,15 @@ final class CompletionEdits {
         return imports.addImport(type);
     }
 
-    private String constructorTypeArguments(CompletionProposal type, CompletionProposal constructor) {
+    private String constructorTypeArguments(CompletionProposal type, CompletionProposal constructor) throws CoreException {
         if (nextTokenChar(type.getReplaceEnd()) == '<') return "";
-        if (constructor instanceof InternalCompletionProposal internal
-                && internal.getBinding() instanceof MethodBinding method
-                && method.original().declaringClass.typeVariables().length == 0) return "";
+        if (constructor instanceof InternalCompletionProposal internal && internal.getBinding() instanceof MethodBinding method) {
+            if (method.original().declaringClass.typeVariables().length == 0) return "";
+        } else {
+            // Search-based constructor proposals have no binding. JDT's diamond check alone also accepts nongeneric types.
+            var declaration = unit.getJavaProject().findType(qualifiedType(type.getSignature()));
+            if (declaration != null && declaration.getTypeParameters().length == 0) return "";
+        }
         if (constructor.canUseDiamond(context)) return "<>";
         char[][] arguments = Signature.getTypeArguments(type.getSignature());
         if (arguments.length == 0) return "";

@@ -4,8 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.SignatureHelp;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -28,12 +29,10 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvi
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 
-import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
 import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
-import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import java.awt.*;
@@ -48,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.Timer;
@@ -119,17 +119,12 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final JScrollPane resultScrollPane = new JScrollPane(this.resultTree);
     private final JTabbedPane runOutputTabs = new JTabbedPane();
 
-    private final SnippetCompletionAdapter snippetCompletionAdapter = new SnippetCompletionAdapter(this.editorPane);
-    private CustomCompletionRequestor completionRequestor;
-    private String completionToAccept;
-    private boolean applyingCompletion;
+    private final ScriptCompletionController completion;
     private long signatureRequest;
     private boolean signatureHelpActive;
     private final Timer signatureTimer = new Timer(120, event -> requestSignatureHelp());
     private boolean disposed;
     private final Runnable unsubscribeResults;
-    private boolean didTypeBeforeCaretMove;
-    private int lastCaretPos;
     private JavaSnippetSource.GeneratedSource lastGeneratedSource;
 
     public ScriptPanel(EditorContext context, ScriptView scriptView) {
@@ -164,7 +159,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
         setupLogPanel();
         setupSaveBehavior();
-        setupAutocompletion();
+        this.completion = new ScriptCompletionController(editorPane, scriptView.getScriptName(), codeCompletionPopup,
+                ForkJoinPool.commonPool(), analysis::completionAccepted);
+        setupSignatureHelp();
         setupFormatting();
         var format = new JButton(this.editorPane.getActionMap().get("formatFile"));
         format.setHideActionText(true);
@@ -400,13 +397,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         });
     }
 
-    private void setupAutocompletion() {
-        editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
-            if (applyingCompletion || event.getType() == DocumentEvent.EventType.CHANGE || completionRequestor == null) return;
-            completionRequestor.setCanceled(true);
-            // Forward Delete may change source without moving the caret.
-            if (!didTypeBeforeCaretMove) hideCompletionPopup();
-        });
+    private void setupSignatureHelp() {
         signatureTimer.setRepeats(false);
         editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl P"), "signatureHelp");
         editorPane.getActionMap().put("signatureHelp", new AbstractAction() {
@@ -426,63 +417,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 }
             }
         });
-        this.editorPane.getCaret().addChangeListener(e -> {
-            var caretPos = this.editorPane.getCaretPosition();
-            if (caretPos == this.lastCaretPos)
-                return;
-            this.lastCaretPos = caretPos;
-
-            if (!applyingCompletion) {
-                if (this.completionRequestor != null)
-                    this.completionRequestor.setCanceled(true);
-                if (!this.didTypeBeforeCaretMove)
-                    hideCompletionPopup();
-                this.didTypeBeforeCaretMove = false;
-            }
+        editorPane.addCaretListener(event -> {
             if (signatureHelpActive) {
                 signatureRequest++;
                 signatureTimer.restart();
-            }
-        });
-
-        this.editorPane.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl SPACE"), "autoComplete");
-        this.editorPane.getActionMap().put("autoComplete", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                requestCompletionProposals();
-            }
-        });
-
-        //Document synchronization
-        ((RSyntaxDocument) this.editorPane.getDocument()).setDocumentFilter(new DocumentFilter() {
-
-            @Override
-            public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
-                if (text == null || text.isEmpty()) {
-                    super.replace(fb, offset, length, text, attrs);
-                    return;
-                }
-
-                didTypeBeforeCaretMove = true;
-                super.replace(fb, offset, length, text, attrs);
-
-                if (applyingCompletion) return;
-                //Trigger auto-completion
-                var c = text.charAt(text.length() - 1);
-                if ((!Character.isLetterOrDigit(c) && c != '.') || text.contains("\n") || text.length() > 1) {
-                    hideCompletionPopup();
-                    return;
-                }
-                requestCompletionProposals();
-            }
-        });
-
-        this.editorPane.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent event) {
-                if (completionRequestor != null)
-                    completionRequestor.setCanceled(true);
-                hideCompletionPopup();
             }
         });
     }
@@ -506,15 +444,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 }
                 List<ReplaceEdit> replacements = replacementEdits(edit);
 
-                editorPane.beginAtomicEdit();
-                for (int i = replacements.size() - 1; i >= 0; i--) {
-                    ReplaceEdit replacement = replacements.get(i);
-                    applyTextEdit(new CustomTextEdit(
-                            new Range(bodyOffset + replacement.getOffset(), replacement.getLength()),
-                            replacement.getText()
-                    ));
-                }
-                editorPane.endAtomicEdit();
+                completion.applyEdits(replacements.reversed().stream().map(replacement -> new CustomTextEdit(
+                        new Range(bodyOffset + replacement.getOffset(), replacement.getLength()), replacement.getText())).toList());
                 bottomInformationBar.setDefaultInfoText(
                         "Successfully applied %d edit(s).".formatted(replacements.size())
                 );
@@ -566,160 +497,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 }));
     }
 
-    private void requestCompletionProposals() {
-        completionToAccept = null;
-        boolean refresh = codeCompletionPopup.isVisible();
-        if (this.completionRequestor != null)
-            this.completionRequestor.setCanceled(true);
-
-        int editorOffset = this.editorPane.getCaretPosition();
-        JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.body(
-                this.scriptView.getScriptName(),
-                UIUtils.getText(this.editorPane)
-        );
-        int completionOffset = generated.sourceMap().toGeneratedOffset(editorOffset);
-        if (completionOffset < 0) {
-            hideCompletionPopup();
-            return;
-        }
-        var unit = new CompilationUnitImpl(this.scriptView.getScriptName(), generated.source());
-        var newRequestor = new CustomCompletionRequestor(
-                unit,
-                completionOffset,
-                (requestor, items) -> acceptCompletionList(requestor, items, generated, refresh)
-        );
-        this.completionRequestor = newRequestor;
-
-        CompletableFuture.runAsync(() -> {
-            try {
-                unit.codeComplete(completionOffset, newRequestor, newRequestor);
-            } catch (Exception failure) {
-                completionFailed(newRequestor, failure);
-            }
-        });
-    }
-
-    private void completionFailed(CustomCompletionRequestor requestor, Exception failure) {
-        if (!(failure instanceof OperationCanceledException) && !(failure.getCause() instanceof OperationCanceledException)
-                && !requestor.isCanceled()) {
-            LOGGER.log(System.Logger.Level.WARNING, "Unable to complete script " + scriptView.getScriptName(), failure);
-        }
-        SwingUtilities.invokeLater(() -> {
-            if (requestor != completionRequestor || disposed) return;
-            requestor.setCanceled(true);
-            completionRequestor = null;
-            hideCompletionPopup();
-        });
-    }
-
-    private void doAutoCompletion(CompletionItem item) {
-        if (item.getRequestor() != completionRequestor) {
-            // Keep Enter/Tab intent while a newer request replaces the visible list. Never apply old source ranges.
-            if (completionRequestor != null && !completionRequestor.isCanceled() && codeCompletionPopup.isVisible())
-                completionToAccept = item.getIdentity();
-            else hideCompletionPopup();
-            return;
-        }
-        if (item.getRequestor().isCanceled()) {
-            hideCompletionPopup();
-            return;
-        }
-
-        applyingCompletion = true;
-        this.editorPane.beginAtomicEdit();
-        try {
-            var snippetEdits = item.getTextEdits().stream().filter(CustomTextEdit::isSnippet).toArray(CustomTextEdit[]::new);
-            if (snippetEdits.length != 0) this.snippetCompletionAdapter.insert(snippetEdits);
-            item.getTextEdits().stream().filter(e -> !e.isSnippet()).forEach(this::applyTextEdit);
-        } finally {
-            this.editorPane.endAtomicEdit();
-            applyingCompletion = false;
-            didTypeBeforeCaretMove = false;
-            item.getRequestor().setCanceled(true);
-            completionRequestor = null;
-            hideCompletionPopup();
-        }
-        analysis.completionAccepted();
-    }
-
-    private void acceptCompletionList(
-            CustomCompletionRequestor requestor,
-            List<CompletionItem> completions,
-            JavaSnippetSource.GeneratedSource generated,
-            boolean refresh
-    ) {
-        SwingUtilities.invokeLater(() -> {
-            if (requestor != this.completionRequestor || requestor.isCanceled())
-                return;
-
-            if (disposed || !this.editorPane.isFocusOwner() || refresh && !codeCompletionPopup.isVisible()) {
-                requestor.setCanceled(true);
-                hideCompletionPopup();
-                return;
-            }
-
-            completions.removeIf(item -> !mapCompletionEdits(item, generated));
-            if (completions.isEmpty()) {
-                hideCompletionPopup();
-                return;
-            }
-
-            if (completionToAccept != null) {
-                var chosen = completions.stream().filter(item -> item.getIdentity().equals(completionToAccept))
-                        .findFirst().orElse(completions.getFirst());
-                completionToAccept = null;
-                doAutoCompletion(chosen);
-                return;
-            }
-            try {
-                codeCompletionPopup.setKeyEnterListener(this::doAutoCompletion);
-                var token = requestor.getContext().getToken();
-                codeCompletionPopup.setToken(token == null ? "" : new String(token));
-                codeCompletionPopup.setItems(completions);
-                codeCompletionPopup.show(this.editorPane);
-            } catch (RuntimeException failure) {
-                completionFailed(requestor, failure);
-            }
-        });
-    }
-
-    private static boolean mapCompletionEdits(
-            CompletionItem item,
-            JavaSnippetSource.GeneratedSource generated
-    ) {
-        item.getTextEdits().removeIf(edit -> {
-            Range range = edit.getRange();
-            int generatedStart = range.getOffset();
-            int start = generated.sourceMap().toEditorOffset(generatedStart);
-            int end = generated.sourceMap().toEditorOffset(range.getEndOffset());
-            if (start < 0 || end < start) {
-                return true;
-            }
-            if (range.getLength() == 0) {
-                edit.setNewText(generated.sourceMap().mapInsertionText(generatedStart, edit.getNewText()));
-            }
-            range.setOffset(start);
-            range.setLength(end - start);
-            return false;
-        });
-        return !item.getTextEdits().isEmpty();
-    }
-
-    private void hideCompletionPopup() {
-        completionToAccept = null;
-        if (codeCompletionPopup.isInvokedBy(this.editorPane))
-            codeCompletionPopup.setVisible(false);
-    }
-
     @Override
     public void dispose() {
         if (this.disposed) return;
         this.disposed = true;
         this.unsubscribeResults.run();
         this.saveTimer.stop();
-        if (this.completionRequestor != null)
-            this.completionRequestor.setCanceled(true);
-        this.codeCompletionPopup.dispose();
+        this.completion.close();
         hideSignatureHelp();
         this.signatureHelpPopup.dispose();
         super.dispose();
@@ -746,20 +530,6 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             JOptionPane.showMessageDialog(this, "Unable to save " + this.scriptView.getPath()
                     + "\n" + exception.getMessage(), "Script save failed", JOptionPane.ERROR_MESSAGE);
             return false;
-        }
-    }
-
-    private void applyTextEdit(CustomTextEdit edit) {
-        var range = edit.getRange();
-
-        this.snippetCompletionAdapter.beginIgnoredDocumentChange();
-        try {
-            ((RSyntaxDocument) this.editorPane.getDocument()).replace(range.getOffset(), range.getLength(), edit.getNewText(), null);
-        } catch (BadLocationException e) {
-            LOGGER.log(System.Logger.Level.WARNING,
-                    "Unable to apply completion edit to script " + this.scriptView.getScriptName(), e);
-        } finally {
-            this.snippetCompletionAdapter.endIgnoredDocumentChange();
         }
     }
 

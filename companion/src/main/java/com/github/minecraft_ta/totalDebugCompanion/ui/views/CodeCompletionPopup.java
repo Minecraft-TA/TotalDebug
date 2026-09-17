@@ -14,6 +14,7 @@ import javax.swing.*;
 
 public class CodeCompletionPopup extends BaseListPopup<CompletionItem> {
     private String token = "";
+    private Runnable dismissListener;
 
     public CodeCompletionPopup(Window owner) {
         super(owner);
@@ -21,6 +22,13 @@ public class CodeCompletionPopup extends BaseListPopup<CompletionItem> {
         var list = new JList<CompletionItem>(new DefaultListModel<>());
         list.setCellRenderer(new Renderer());
         setList(list);
+    }
+
+    public void setDismissListener(Runnable listener) { dismissListener = listener; }
+
+    @Override public void setVisible(boolean visible) {
+        super.setVisible(visible);
+        if (!visible && dismissListener != null) dismissListener.run();
     }
 
     public void setToken(String token) { this.token = token; }

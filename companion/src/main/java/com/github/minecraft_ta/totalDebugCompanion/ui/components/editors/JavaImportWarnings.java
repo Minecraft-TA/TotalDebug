@@ -5,12 +5,12 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis.Problem;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis.Span;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
-import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import static com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.JavaEditorTokens.*;
 
 /** Last checked import warnings, relocated by declaration identity while JDT's import pass is unavailable. */
 final class JavaImportWarnings {
@@ -81,15 +81,13 @@ final class JavaImportWarnings {
         var uses = new ArrayList<Use>();
         boolean qualified = false;
         for (var token : document) {
-            if (token.getOffset() < bodyStart || !token.isPaintable() || token.isComment() || token.isWhitespace()) continue;
-            int type = token.getType();
-            if (type == TokenTypes.LITERAL_STRING_DOUBLE_QUOTE || type == TokenTypes.LITERAL_CHAR
-                    || type == TokenTypes.LITERAL_BACKQUOTE || type == TokenTypes.ERROR_STRING_DOUBLE || type == TokenTypes.ERROR_CHAR) {
+            if (token.getOffset() < bodyStart || isTrivia(token)) continue;
+            if (isLiteral(token)) {
                 qualified = false;
                 continue;
             }
             String word = token.getLexeme();
-            if (!qualified && identifier(word)) {
+            if (!qualified && isName(word)) {
                 String first = word.contains(".") ? word.substring(0, word.indexOf('.')) : word;
                 var span = new Span(token.getOffset(), token.getOffset() + first.length());
                 uses.add(new Use(first, span, span));
@@ -99,12 +97,4 @@ final class JavaImportWarnings {
         return new Source(imports, uses);
     }
 
-    private static boolean identifier(String word) {
-        if (word.isEmpty() || !Character.isJavaIdentifierStart(word.charAt(0))) return false;
-        for (int i = 1; i < word.length(); i++) {
-            char character = word.charAt(i);
-            if (!Character.isJavaIdentifierPart(character) && character != '.') return false;
-        }
-        return true;
-    }
 }

@@ -20,6 +20,7 @@ import java.awt.event.KeyEvent;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +43,10 @@ class CompletionWorkflowTest {
         CompanionClassIndex.set(ClassIndex.fromBytes(classes));
     }
     @AfterAll static void close() { CompanionClassIndex.get().close(); CompanionClassIndex.clear(); }
+
+    @Test void constructorPrefixesPublishOneFinalResult() throws Exception {
+        assertTrue(complete("new Str|").stream().anyMatch(item -> item.getKind() == CompletionItemKind.CONSTRUCTOR));
+    }
 
     @Test void exactRecoveryLookupDoesNotDisablePartialTypeCompletion() throws Exception {
         assertTrue(complete("Str| value = null;").stream().anyMatch(item -> item.getName().equals("String")));
@@ -144,8 +149,10 @@ class CompletionWorkflowTest {
         var unit = new CompilationUnitImpl("Proof", source.source());
         int offset = source.sourceMap().toGeneratedOffset(caret);
         var result = new CompletableFuture<List<CompletionItem>>();
-        var requestor = new CustomCompletionRequestor(unit, offset, (ignored, items) -> result.complete(items));
+        var callbacks = new AtomicInteger();
+        var requestor = new CustomCompletionRequestor(unit, offset, (ignored, items) -> { callbacks.incrementAndGet(); result.complete(items); });
         unit.codeComplete(offset, requestor, requestor);
+        assertEquals(1, callbacks.get(), "Only the outer completion request publishes results");
         return result.join();
     }
 

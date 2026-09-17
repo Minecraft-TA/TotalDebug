@@ -39,8 +39,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
     private long revision;
     private Object environment = CompanionClassIndex.identity();
     private boolean editTurn;
-    private boolean running;
-    private boolean requested;
+    private Request inFlight;
     private boolean closed;
 
     record Request(long revision, Object environment, String text) { }
@@ -106,7 +105,6 @@ final class JavaEditorAnalysis implements AutoCloseable {
         displayed = retained;
         if (initialized) editing.edited((RSyntaxDocument) editor.getDocument(), text, offset, removed, added);
         paintProblems();
-        requested = false;
         schedule();
     }
 
@@ -136,10 +134,9 @@ final class JavaEditorAnalysis implements AutoCloseable {
     void requestNow() {
         if (closed || !registration.isOpen()) return;
         if (currentSnapshot() != null) return;
-        if (running) { requested = true; return; }
+        if (inFlight != null) return;
         var request = new Request(revision, CompanionClassIndex.identity(), editor.getText());
-        running = true;
-        requested = false;
+        inFlight = request;
         try {
             executor.execute(() -> {
                 JavaAnalysis result = null;
@@ -156,7 +153,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
     }
 
     private void completed(Request request, JavaAnalysis result, Throwable failure) {
-        running = false;
+        inFlight = null;
         if (closed || !registration.isOpen()) return;
         if (request.revision() == revision && request.environment() == CompanionClassIndex.identity()) {
             if (failure != null) {
@@ -171,7 +168,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
                 registration.publish(result);
             }
         }
-        if (requested) requestNow();
+        if (request.revision() != revision || request.environment() != CompanionClassIndex.identity()) requestNow();
     }
 
     private void paintProblems() {
@@ -198,6 +195,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
         registration.publish(null);
         displayed = List.of();
         importWarnings.clear();
+        editing.clearAnalysisHistory();
         tokens.setSemanticTokenTypes(Map.of(), editor);
         paintProblems();
         requestNow();

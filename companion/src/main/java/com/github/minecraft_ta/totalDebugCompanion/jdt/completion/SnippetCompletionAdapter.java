@@ -9,14 +9,13 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.*;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class SnippetCompletionAdapter {
+public class SnippetCompletionAdapter implements AutoCloseable {
 
     private static final String SNIPPET_NEXT_ACTION_KEY = "SnippetCompletionAdapter.snippetNextAction";
-    private static final Matcher SNIPPET_MATCHER = Pattern.compile("\\$\\{(\\d+)(:([\\p{javaJavaIdentifierPart}]+))?}").matcher("");
+    private static final Pattern SNIPPET_PATTERN = Pattern.compile("\\$\\{(\\d+)(:([\\p{javaJavaIdentifierPart}]+))?}");
     private static final Highlighter.HighlightPainter EMPTY_HIGHLIGHT_PAINTER = new DefaultHighlighter.DefaultHighlightPainter(null) {
         @Override
         public void paint(Graphics g, int offs0, int offs1, Shape bounds, JTextComponent c) {
@@ -58,8 +57,7 @@ public class SnippetCompletionAdapter {
         var totalOffset = 0;
         for (CustomTextEdit textEdit : textEdits) {
             var snippetText = textEdit.getNewText();
-            SNIPPET_MATCHER.reset(snippetText);
-            var results = SNIPPET_MATCHER.results().collect(Collectors.toCollection(ArrayList::new));
+            var results = SNIPPET_PATTERN.matcher(snippetText).results().collect(Collectors.toCollection(ArrayList::new));
             if (results.isEmpty())
                 throw new IllegalArgumentException("Snippet text must contain at least one placeholder");
 
@@ -114,8 +112,7 @@ public class SnippetCompletionAdapter {
     }
 
     public static boolean isSnippet(String text) {
-        SNIPPET_MATCHER.reset(text);
-        return SNIPPET_MATCHER.find();
+        return SNIPPET_PATTERN.matcher(text).find();
     }
 
     private void moveToNextParam() {
@@ -152,6 +149,8 @@ public class SnippetCompletionAdapter {
 
         this.textComponent.getDocument().addDocumentListener(this.listener);
     }
+
+    @Override public void close() { deactivate(); }
 
     private void deactivate() {
         if (this.oldTabKey == null)
@@ -232,13 +231,14 @@ public class SnippetCompletionAdapter {
         }
 
         private void handleDocumentChange(int pos) {
+            if (this.ignoreDocumentChanges) return;
             var p = getPlaceholderAt(pos);
 
             //Update linked placeholders
             if (!this.updatingClonedHighlights && p != null)
                 possiblyUpdateLinkedPlaceholders(p);
 
-            if (!this.ignoreDocumentChanges && (p == null || p.n == 0))
+            if (p == null || p.n == 0)
                 deactivate();
         }
 

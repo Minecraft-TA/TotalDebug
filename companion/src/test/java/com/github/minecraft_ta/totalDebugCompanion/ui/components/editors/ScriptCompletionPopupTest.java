@@ -1,26 +1,25 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
-import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
-import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomCompletionRequestor;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysisFixtures;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
 import com.github.tth05.jindex.ClassIndex;
+import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.fife.ui.rsyntaxtextarea.parser.ParserNotice;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import javax.swing.JList;
+import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
@@ -28,279 +27,298 @@ import java.awt.Component;
 import java.awt.DefaultKeyboardFocusManager;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.ActionEvent;
+import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.lang.reflect.Field;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
-
+import java.util.concurrent.RejectedExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Runs real popup key handlers and JDT results; only native visibility/focus and worker delivery are controlled. */
+/** Real controller, JDT and key handlers; only worker delivery and native window/focus are controlled. */
 public class ScriptCompletionPopupTest {
     public static class Values { public Map<String, List<Path>> entries; }
-    @TempDir Path directory;
-    private CompanionApplication app;
+    private final ArrayDeque<Runnable> completionWork = new ArrayDeque<>(), analysisWork = new ArrayDeque<>();
+    private final ASTCache cache = new ASTCache();
     private ClassIndex index;
-    private ScriptPanel panel;
+    private RSyntaxTextArea editor;
+    private JavaEditorAnalysis analysis;
+    private ScriptCompletionController completion;
     private TestPopup popup;
     private KeyboardFocusManager previousFocus;
+    private boolean fail, reject;
+    private Runnable duringCompute;
 
     @BeforeEach void open() throws Exception {
-        GlobalConfig.getInstance().loadFrom(directory);
-        var configure = CompanionApp.class.getDeclaredMethod("configureLookAndFeel");
-        configure.setAccessible(true);
-        configure.invoke(null);
-        index = JavaAnalysisFixtures.index(ScriptCompletionPopupTest.class, Values.class, Map.class, List.class, Path.class);
-        app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token");
-        app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+        index = JavaAnalysisFixtures.index(ScriptCompletionPopupTest.class, Values.class, ArrayList.class, Map.class, List.class, Path.class, Optional.class, ConcurrentHashMap.class);
+        CompanionClassIndex.set(index);
         edt(() -> {
-            var window = app.createWindow();
-            CompanionClassIndex.set(index);
-            panel = (ScriptPanel) new ScriptView(window.editorContext(), "PopupProof").getComponent();
-            ((CodeCompletionPopup) field(panel, "codeCompletionPopup").get(panel)).dispose();
+            editor = new RSyntaxTextArea();
+            editor.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
+            ((RSyntaxDocument) editor.getDocument()).setSyntaxStyle(new CustomJavaTokenMaker());
+            editor.setText("String text = \"x\"; text.l");
+            editor.setCaretPosition(editor.getDocument().getLength());
+            analysis = new JavaEditorAnalysis(editor, cache, "Proof", analysisWork::add, true, request ->
+                    JavaAnalysis.parse("Proof", request.text(), JavaSnippetSource.body("Proof", request.text()).editorSource(), request.revision(), request.environment()));
             popup = new TestPopup();
-            field(panel, "codeCompletionPopup").set(panel, popup);
             previousFocus = KeyboardFocusManager.getCurrentKeyboardFocusManager();
             KeyboardFocusManager.setCurrentKeyboardFocusManager(new DefaultKeyboardFocusManager() {
-                @Override public Component getFocusOwner() { return panel.editorPane; }
+                @Override public Component getFocusOwner() { return editor; }
             });
-            panel.editorPane.setText("String text = \"x\"; text.l");
-            panel.editorPane.setCaretPosition(panel.editorPane.getDocument().getLength());
+            completion = new ScriptCompletionController(editor, "Proof", popup, task -> {
+                if (reject) throw new RejectedExecutionException("test rejection");
+                completionWork.add(task);
+            }, analysis::completionAccepted, request -> {
+                if (duringCompute != null) { var action = duringCompute; duringCompute = null; action.run(); }
+                if (fail) throw new IllegalStateException("test computation failure");
+                return request.compute();
+            });
             return null;
         });
     }
 
     @AfterEach void close() throws Exception {
-        edt(() -> { panel.dispose(); KeyboardFocusManager.setCurrentKeyboardFocusManager(previousFocus); return null; });
-        app.close();
-        CompanionClassIndex.clear();
-        index.close();
+        edt(() -> { completion.close(); analysis.close(); KeyboardFocusManager.setCurrentKeyboardFocusManager(previousFocus); return null; });
+        CompanionClassIndex.clear(); index.close();
     }
 
-    @Test void postfixVarAcceptedWithEnterImportsNestedTypesAndKeepsTheNameSelected() throws Exception {
-        edt(() -> {
-            panel.editorPane.setText("import " + Values.class.getCanonicalName() + ";\n\n((Values) null).entries.var");
-            panel.editorPane.setCaretPosition(panel.editorPane.getDocument().getLength());
-            return null;
-        });
-        complete(request(false));
-        select("var");
-        press(KeyEvent.VK_ENTER);
-        edt(() -> {
-            String text = panel.editorPane.getText();
-            assertTrue(text.contains("import java.util.Map;"), text);
-            assertTrue(text.contains("import java.util.List;"), text);
-            assertTrue(text.contains("import java.nio.file.Path;"), text);
-            assertTrue(text.contains("Map<String,List<Path>> name = ((Values) null).entries;"), text);
-            assertEquals("name", panel.editorPane.getSelectedText());
-            return null;
-        });
-        analyzed();
-        assertTrue(edt(() -> panel.editorPane.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
+    @Test void completionImportRewriteKeepsWarningsThroughAcceptanceUndoAndRedo() throws Exception {
+        String source = "import java.util.List;\nimport java.util.Map;\nimport java.util.concurrent.ConcurrentHashMap;\n\nString text = \"stable\";\ntext.length();\n";
+        setText(source); analyzed();
+        assertEquals(3, unused());
+        setText(source + "Optio"); analyzed(); request(); complete(); select("Optional"); press(KeyEvent.VK_ENTER);
+        assertEquals(3, unused(), "Import rewrite must preserve warnings before analysis");
+        analyzed(); assertEquals(3, unused());
+        edt(() -> { editor.undoLastAction(); return null; });
+        assertEquals(3, unused()); analyzed(); assertEquals(3, unused());
+        edt(() -> { editor.redoLastAction(); return null; });
+        assertEquals(3, unused()); analyzed(); assertEquals(3, unused());
+        edt(() -> { editor.append(".EMPTY;"); return null; });
+        analyzed(); assertEquals(3, unused());
+        setText(source); analyzed();
+        edt(() -> { int semicolon = editor.getText().indexOf("ConcurrentHashMap;") + "ConcurrentHashMap".length(); editor.replaceRange("", semicolon, semicolon + 1); return null; });
+        assertEquals(2, unused()); analyzed(); assertEquals(2, unused());
     }
 
-    @Test void enterWhileReplacementIsPendingAcceptsFreshRangesExactlyOnce() throws Exception {
-        var old = request(false);
-        complete(old);
-        select("length");
-        edt(() -> {
-            field(panel, "didTypeBeforeCaretMove").setBoolean(panel, true);
-            panel.editorPane.append("e");
-            panel.editorPane.setCaretPosition(panel.editorPane.getDocument().getLength());
-            return null;
-        });
-        var latest = request(true);
-        String pending = edt(() -> panel.editorPane.getText());
-        press(KeyEvent.VK_ENTER);
-        assertEquals(pending, edt(() -> panel.editorPane.getText()), "Never insert an older proposal's ranges");
-        complete(latest);
-        assertTrue(edt(() -> panel.editorPane.getText().endsWith("text.length()")));
-        assertFalse(edt(popup::isVisible));
-    }
-
-    @Test void latestFailureDismissesStaleItemsAndReleasesEnterThenNextRequestWorks() throws Exception {
-        complete(request(false));
-        var failed = request(true);
-        failRequest(failed);
-        assertFalse(edt(popup::isVisible));
-        String before = edt(() -> panel.editorPane.getText());
-        press(KeyEvent.VK_ENTER);
-        assertEquals(before + "\n", edt(() -> panel.editorPane.getText()));
-        edt(() -> { panel.editorPane.setText(before); panel.editorPane.setCaretPosition(before.length()); return null; });
-        complete(request(false));
-        select("length");
-        press(KeyEvent.VK_ENTER);
-        assertTrue(edt(() -> panel.editorPane.getText().endsWith("text.length()")));
-    }
-
-    @Test void obsoleteFailureCannotDismissNewResults() throws Exception {
-        var old = request(false);
-        var fresh = request(false);
-        complete(fresh);
-        failRequest(old);
-        assertTrue(edt(popup::isVisible));
-        select("length");
-        press(KeyEvent.VK_TAB);
-        assertTrue(edt(() -> panel.editorPane.getText().endsWith("text.length()")));
-    }
-
-    @Test void escapeDiscardsQueuedAcceptanceAndPreventsLateResultsReopeningPopup() throws Exception {
-        complete(request(false));
-        var pending = request(true);
-        press(KeyEvent.VK_ENTER);
-        String before = edt(() -> panel.editorPane.getText());
-        press(KeyEvent.VK_ESCAPE);
-        complete(pending);
-        assertFalse(edt(popup::isVisible));
-        assertEquals(before, edt(() -> panel.editorPane.getText()));
-    }
-
-    @Test void deletionWithoutCaretMovementInvalidatesVisibleSourceRanges() throws Exception {
-        edt(() -> {
-            panel.editorPane.append(";");
-            panel.editorPane.setCaretPosition(panel.editorPane.getDocument().getLength() - 1);
-            return null;
-        });
-        complete(request(false));
-        int caret = edt(() -> panel.editorPane.getCaretPosition());
-        edt(() -> { panel.editorPane.getDocument().remove(caret, 1); return null; });
-        assertEquals(caret, edt(() -> panel.editorPane.getCaretPosition()));
-        assertFalse(edt(popup::isVisible));
-    }
-
-    @Test void acceptingVoidCallWithEnterDoesNotFlashThePreviousDotError() throws Exception {
-        edt(() -> { panel.editorPane.setText("String text = \"x\"; text.length();"); return null; });
-        analyzed();
-        edt(() -> {
-            int start = panel.editorPane.getText().indexOf("length");
-            panel.editorPane.replaceRange("", start, panel.editorPane.getDocument().getLength());
-            panel.editorPane.setCaretPosition(start);
-            return null;
-        });
-        analyzed();
-        complete(request(false));
-        select("notify");
-        press(KeyEvent.VK_ENTER);
-        edt(() -> {
-            assertTrue(panel.editorPane.getText().endsWith("text.notify();"));
-            assertEquals(panel.editorPane.getDocument().getLength(), panel.editorPane.getCaretPosition());
-            assertTrue(panel.editorPane.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR));
-            return null;
-        });
-        analyzed();
-        assertTrue(edt(() -> panel.editorPane.getParserNotices().isEmpty()));
-    }
-
-    private record Request(CompilationUnitImpl unit, int offset, CustomCompletionRequestor requestor) { }
-
-    private Request request(boolean refresh) throws Exception {
+    private long unused() throws Exception {
         return edt(() -> {
-            var generated = JavaSnippetSource.body("PopupProof", panel.editorPane.getText());
-            var unit = new CompilationUnitImpl("PopupProof", generated.source());
-            int offset = generated.sourceMap().toGeneratedOffset(panel.editorPane.getCaretPosition());
-            var requestor = new CustomCompletionRequestor(unit, offset, (request, items) -> {
-                try {
-                    var accept = ScriptPanel.class.getDeclaredMethod("acceptCompletionList", CustomCompletionRequestor.class,
-                            List.class, JavaSnippetSource.GeneratedSource.class, boolean.class);
-                    accept.setAccessible(true);
-                    accept.invoke(panel, request, items, generated, refresh);
-                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-            });
-            requestor.beginTask("controlled delivery", 1);
-            field(panel, "completionRequestor").set(panel, requestor);
-            field(panel, "completionToAccept").set(panel, null);
-            return new Request(unit, offset, requestor);
+            int offset = editor.getText().indexOf("length()");
+            var token = editor.getTokenListForLine(editor.getLineOfOffset(offset));
+            while (token != null && !token.containsPosition(offset)) token = token.getNextToken();
+            assertNotNull(token);
+            assertEquals(TokenTypes.FUNCTION, token.getType());
+            return editor.getParserNotices().stream().filter(notice -> notice.getMessage().contains("never used")).count();
         });
     }
 
-    private void complete(Request request) throws Exception {
-        request.unit().codeComplete(request.offset(), request.requestor(), request.requestor());
-        edt(() -> null);
+    @Test void enterWhileRefreshIsPendingAcceptsFreshRangesExactlyOnce() throws Exception {
+        request(); complete(); select("length");
+        edt(() -> { editor.replaceSelection("e"); return null; });
+        String pending = edt(editor::getText);
+        press(KeyEvent.VK_ENTER);
+        assertEquals(pending, edt(editor::getText));
+        complete();
+        assertTrue(edt(() -> editor.getText().endsWith("text.length()")));
+        assertFalse(edt(popup::isVisible));
+        edt(() -> { editor.undoLastAction(); return null; });
+        assertEquals(pending, edt(editor::getText));
     }
 
-    private void failRequest(Request request) throws Exception {
-        var fail = ScriptPanel.class.getDeclaredMethod("completionFailed", CustomCompletionRequestor.class, Exception.class);
-        fail.setAccessible(true);
-        fail.invoke(panel, request.requestor(), new IllegalStateException("test completion failure"));
-        edt(() -> null);
+    @Test void initialEscapeCancelsWorkAndANewRequestCanStillOpen() throws Exception {
+        request(); press(KeyEvent.VK_ESCAPE); complete();
+        assertFalse(edt(popup::isVisible));
+        request(); complete(); assertTrue(edt(popup::isVisible));
     }
 
+    @Test void escapeDiscardsQueuedAcceptanceAndLateRefresh() throws Exception {
+        request(); complete(); request();
+        press(KeyEvent.VK_ENTER);
+        String before = edt(editor::getText);
+        press(KeyEvent.VK_ESCAPE); complete();
+        assertFalse(edt(popup::isVisible)); assertEquals(before, edt(editor::getText));
+    }
+
+    @Test void typingAfterQueuedEnterInvalidatesThatIntent() throws Exception {
+        request(); complete(); select("length"); request(); press(KeyEvent.VK_ENTER);
+        edt(() -> { editor.replaceSelection("e"); return null; });
+        complete();
+        assertTrue(edt(popup::isVisible));
+        assertTrue(edt(() -> editor.getText().endsWith("text.le")));
+        select("length"); press(KeyEvent.VK_TAB);
+        assertTrue(edt(() -> editor.getText().endsWith("text.length()")));
+    }
+
+    @Test void latestFailureAndExecutorRejectionReleaseEnterAndAllowRetry() throws Exception {
+        for (boolean rejected : List.of(false, true)) {
+            setText("String text = \"x\"; text.l");
+            request(); complete();
+            fail = !rejected; reject = rejected;
+            request(); complete();
+            assertFalse(edt(popup::isVisible));
+            String before = edt(editor::getText);
+            press(KeyEvent.VK_ENTER);
+            assertEquals(before + "\n", edt(editor::getText));
+            fail = reject = false;
+            setText(before); request(); complete(); select("length"); press(KeyEvent.VK_ENTER);
+            assertTrue(edt(() -> editor.getText().endsWith("text.length()")));
+        }
+    }
+
+    @Test void staleSuccessCannotReplaceANewerRequest() throws Exception {
+        request();
+        duringCompute = () -> {
+            try { setText("String text = \"x\"; text.isEm"); request(); }
+            catch (Exception error) { throw new AssertionError(error); }
+        };
+        complete();
+        select("isEmpty"); press(KeyEvent.VK_ENTER);
+        assertTrue(edt(() -> editor.getText().endsWith("text.isEmpty()")));
+    }
+
+    @Test void caretFocusEnvironmentAndDisposalInvalidatePendingWork() throws Exception {
+        for (int change = 0; change < 4; change++) {
+            request();
+            int selected = change;
+            edt(() -> {
+                switch (selected) {
+                    case 0 -> editor.setCaretPosition(0);
+                    case 1 -> { for (var listener : editor.getFocusListeners()) listener.focusLost(new FocusEvent(editor, FocusEvent.FOCUS_LOST)); }
+                    case 2 -> CompanionClassIndex.set(index);
+                    case 3 -> completion.close();
+                    default -> throw new AssertionError();
+                }
+                return null;
+            });
+            complete(); assertFalse(edt(popup::isVisible));
+            edt(() -> { editor.setCaretPosition(editor.getDocument().getLength()); return null; });
+        }
+    }
+
+    @Test void externalPopupDismissalCancelsRefreshAndQueuedAcceptance() throws Exception {
+        for (boolean accept : List.of(false, true)) {
+            setText("String text = \"x\"; text.l"); request(); complete(); select("length");
+            edt(() -> { editor.replaceSelection("e"); return null; });
+            if (accept) press(KeyEvent.VK_ENTER);
+            String pending = edt(editor::getText);
+            edt(() -> { popup.setVisible(false); return null; });
+            complete();
+            assertFalse(edt(popup::isVisible));
+            assertEquals(pending, edt(editor::getText));
+        }
+    }
+
+    @Test void deletionWithoutCaretMovementInvalidatesVisibleRanges() throws Exception {
+        setText("String text = \"x\"; text.l;");
+        edt(() -> { editor.setCaretPosition(editor.getDocument().getLength() - 1); return null; });
+        request(); complete();
+        int caret = edt(editor::getCaretPosition);
+        edt(() -> { editor.getDocument().remove(caret, 1); return null; });
+        assertEquals(caret, edt(editor::getCaretPosition)); assertFalse(edt(popup::isVisible));
+    }
+
+    @Test void constructorRefreshPublishesTheFinalListOnce() throws Exception {
+        setText("new S"); request(); complete();
+        edt(() -> { editor.replaceSelection("t"); return null; }); complete();
+        assertTrue(edt(popup::isVisible)); select("String"); press(KeyEvent.VK_ENTER);
+        String completed = edt(editor::getText);
+        assertTrue(completed.startsWith("new String("), completed);
+    }
+
+    @Test void genericConstructorKeepsDiamondAndImportsItsType() throws Exception {
+        setText("new ArrayL"); request(); complete(); select("ArrayList"); press(KeyEvent.VK_ENTER);
+        String completed = edt(editor::getText);
+        assertTrue(completed.contains("import java.util.ArrayList;"), completed);
+        assertTrue(completed.contains("new ArrayList<>("), completed);
+    }
+
+    @Test void postfixVarImportsNestedTypesAndKeepsTheNameSelected() throws Exception {
+        setText("import " + Values.class.getCanonicalName() + ";\n\n((Values) null).entries.var");
+        request(); complete(); select("var"); press(KeyEvent.VK_ENTER);
+        edt(() -> {
+            String text = editor.getText();
+            for (String imported : List.of("java.util.Map", "java.util.List", "java.nio.file.Path")) assertTrue(text.contains("import " + imported + ";"), text);
+            assertTrue(text.contains("Map<String,List<Path>> name = ((Values) null).entries;"), text);
+            assertEquals("name", editor.getSelectedText()); return null;
+        });
+        analyzed(); assertTrue(edt(() -> editor.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
+    }
+
+    @Test void formattingPreservesArgumentNavigationAndDisposalRestoresBindings() throws Exception {
+        setText("String text=\"x\"; text.subst"); request(); complete(); select("substring"); press(KeyEvent.VK_ENTER);
+        String argument = edt(editor::getSelectedText);
+        assertNotNull(argument);
+        edt(() -> {
+            int equals = editor.getText().indexOf('=');
+            completion.applyEdits(List.of(new CustomTextEdit(new Range(equals, 1), " = ")));
+            return null;
+        });
+        assertEquals(argument, edt(editor::getSelectedText));
+        String beforeTab = edt(editor::getText);
+        press(KeyEvent.VK_TAB);
+        assertEquals(beforeTab, edt(editor::getText), "Tab navigates the preserved snippet instead of inserting whitespace");
+        setText("String text=\"x\"; text.subst"); request(); complete(); select("substring"); press(KeyEvent.VK_ENTER);
+        assertNotNull(edt(editor::getSelectedText));
+        edt(() -> {
+            completion.close();
+            assertNotEquals("SnippetCompletionAdapter.snippetNextAction", editor.getInputMap().get(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0)));
+            assertNotEquals("SnippetCompletionAdapter.snippetNextAction", editor.getInputMap().get(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)));
+            return null;
+        });
+    }
+
+    @Test void acceptingVoidCallDoesNotFlashThePreviousDotError() throws Exception {
+        setText("String text = \"x\"; text.length();"); analyzed();
+        edt(() -> { int start = editor.getText().indexOf("length"); editor.replaceRange("", start, editor.getDocument().getLength()); editor.setCaretPosition(start); return null; });
+        analyzed(); request(); complete(); select("notify"); press(KeyEvent.VK_ENTER);
+        edt(() -> {
+            assertTrue(editor.getText().endsWith("text.notify();"));
+            assertEquals(editor.getDocument().getLength(), editor.getCaretPosition());
+            assertTrue(editor.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)); return null;
+        });
+        analyzed(); assertTrue(edt(() -> editor.getParserNotices().isEmpty()));
+    }
+
+    private void setText(String text) throws Exception { edt(() -> { editor.setText(text); editor.setCaretPosition(text.length()); return null; }); }
+    private void request() throws Exception { edt(() -> { editor.getActionMap().get("autoComplete").actionPerformed(new ActionEvent(editor, 0, "completion")); return null; }); }
+    private void complete() throws Exception { edt(() -> null); while (!completionWork.isEmpty()) { completionWork.remove().run(); edt(() -> null); } }
+    private void analyzed() throws Exception {
+        edt(() -> { analysis.requestNow(); return null; });
+        while (!analysisWork.isEmpty()) { analysisWork.remove().run(); edt(() -> null); }
+    }
     private void select(String name) throws Exception {
         edt(() -> {
-            var list = (JList<?>) field(popup, "list").get(popup);
-            for (int i = 0; i < list.getModel().getSize(); i++) {
-                if (((CompletionItem) list.getModel().getElementAt(i)).getName().equals(name)) {
-                    list.setSelectedIndex(i);
-                    return null;
-                }
-            }
+            var list = popup.items();
+            for (int i = 0; i < list.getModel().getSize(); i++) if (((CompletionItem) list.getModel().getElementAt(i)).getName().equals(name)) { list.setSelectedIndex(i); return null; }
             throw new AssertionError("Missing completion " + name);
         });
     }
-
     private void press(int key) throws Exception {
         edt(() -> {
-            var event = new KeyEvent(panel.editorPane, KeyEvent.KEY_PRESSED, 0, 0, key, KeyEvent.CHAR_UNDEFINED);
-            for (var listener : panel.editorPane.getKeyListeners()) listener.keyPressed(event);
+            var event = new KeyEvent(editor, KeyEvent.KEY_PRESSED, 0, 0, key, KeyEvent.CHAR_UNDEFINED);
+            for (var listener : editor.getKeyListeners()) listener.keyPressed(event);
             if (!event.isConsumed()) {
-                var binding = panel.editorPane.getInputMap().get(KeyStroke.getKeyStroke(key, 0));
-                var action = panel.editorPane.getActionMap().get(binding);
-                if (action != null) action.actionPerformed(new ActionEvent(panel.editorPane, ActionEvent.ACTION_PERFORMED, "test key"));
+                var binding = editor.getInputMap().get(KeyStroke.getKeyStroke(key, 0));
+                var action = binding == null ? null : editor.getActionMap().get(binding);
+                if (action != null) action.actionPerformed(new ActionEvent(editor, 0, "key"));
             }
             return null;
         });
     }
-
-    private void analyzed() throws Exception {
-        var ready = new CountDownLatch(1);
-        Runnable remove = edt(() -> {
-            String text = panel.editorPane.getText();
-            var unsubscribe = panel.astCache().addChangeListener(panel.astKey(), result -> {
-                if (result != null && result.contents().equals(text)) ready.countDown();
-            });
-            var snapshot = panel.analysis.currentSnapshot();
-            if (snapshot != null && snapshot.contents().equals(text)) ready.countDown();
-            panel.analysis.requestNow();
-            return unsubscribe;
-        });
-        assertTrue(ready.await(10, TimeUnit.SECONDS));
-        edt(() -> { remove.run(); return null; });
-    }
-
-    private static final class TestPopup extends CodeCompletionPopup {
+    static final class TestPopup extends CodeCompletionPopup {
         private boolean shown;
         TestPopup() { super(null); }
+        JList<?> items() { return (JList<?>) ((JScrollPane) getContentPane().getComponent(0)).getViewport().getView(); }
         @Override public boolean isVisible() { return shown; }
         @Override public void setVisible(boolean visible) { shown = visible; if (!visible) super.setVisible(false); }
-        @Override public void show(JTextComponent editor) {
-            try {
-                var listener = (KeyListener) field(this, "listener").get(this);
-                editor.removeKeyListener(listener);
-                field(this, "invoker").set(this, editor);
-                editor.addKeyListener(listener);
-                shown = true;
-            } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-        }
+        @Override public void show(JTextComponent editor) { bindInvoker(editor); shown = true; }
     }
-
-    private static Field field(Object object, String name) throws NoSuchFieldException {
-        for (Class<?> type = object.getClass(); type != null; type = type.getSuperclass()) {
-            try { var field = type.getDeclaredField(name); field.setAccessible(true); return field; }
-            catch (NoSuchFieldException ignored) { }
-        }
-        throw new NoSuchFieldException(name);
-    }
-
     private static <T> T edt(Callable<T> action) throws Exception {
-        var task = new FutureTask<>(action);
-        SwingUtilities.invokeAndWait(task);
-        return task.get();
+        var task = new FutureTask<>(action); SwingUtilities.invokeAndWait(task); return task.get();
     }
 }
