@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyDirection;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyPage;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyQuery;
@@ -46,6 +47,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 
 /** Async implementation and base-declaration chooser shared by code vision, gutter markers and Ctrl+T/U. */
 public final class ImplementationChooserPopup extends BasePopup {
@@ -78,8 +81,24 @@ public final class ImplementationChooserPopup extends BasePopup {
             if (!isVisible() || event.isConsumed()) {
                 return;
             }
+            if (event.getKeyCode() == KeyEvent.VK_CONTEXT_MENU
+                    || event.getKeyCode() == KeyEvent.VK_F10 && event.isShiftDown()) {
+                ContextMenus.showKeyboardMenu(list);
+                event.consume();
+                return;
+            }
+            if (event.getKeyCode() == KeyEvent.VK_C && event.isControlDown()
+                    && (invoker.getSelectedText() == null || invoker.getSelectedText().isEmpty())) {
+                ContextMenus.copy(createResultMenu(list.getSelectedIndex()));
+                event.consume();
+                return;
+            }
             switch (event.getKeyCode()) {
                 case KeyEvent.VK_ENTER -> openSelected();
+                case KeyEvent.VK_F4 -> {
+                    if (event.getModifiersEx() != 0) return;
+                    openSelected();
+                }
                 case KeyEvent.VK_UP -> moveSelection(-1);
                 case KeyEvent.VK_DOWN -> moveSelection(1);
                 case KeyEvent.VK_ESCAPE -> setVisible(false);
@@ -230,10 +249,14 @@ public final class ImplementationChooserPopup extends BasePopup {
         this.list.setCellRenderer(new ResultRenderer());
         this.list.setFixedCellHeight(28);
         this.list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+        ContextMenus.installList(this.list, this::createResultMenu);
         this.list.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                int row = list.locationToIndex(event.getPoint());
+                if (row >= 0 && list.getCellBounds(row, row).contains(event.getPoint())
+                        && SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                    list.setSelectedIndex(row);
                     openSelected();
                 }
             }
@@ -322,6 +345,21 @@ public final class ImplementationChooserPopup extends BasePopup {
         }
         openResult(selected);
         setVisible(false);
+    }
+
+    JPopupMenu createResultMenu(int row) {
+        var menu = new JPopupMenu();
+        if (row < 0 || row >= this.listModel.size()) return menu;
+        HierarchyResult result = this.listModel.get(row);
+        var open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
+        open.addActionListener(event -> {
+            openResult(result);
+            setVisible(false);
+        });
+        menu.add(open);
+        menu.addSeparator();
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", result.symbol().displayName())));
+        return menu;
     }
 
     private void openResult(HierarchyResult result) {

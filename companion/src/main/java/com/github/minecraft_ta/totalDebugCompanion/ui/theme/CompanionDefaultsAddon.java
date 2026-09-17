@@ -4,10 +4,8 @@ import com.formdev.flatlaf.FlatDefaultsAddon;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 
-import javax.swing.BorderFactory;
 import javax.swing.LookAndFeel;
 import javax.swing.UIDefaults;
-import javax.swing.plaf.BorderUIResource;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.FontUIResource;
 import java.awt.Color;
@@ -28,33 +26,28 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
 
     @Override
     public void afterDefaultsLoading(LookAndFeel lookAndFeel, UIDefaults defaults) {
-        ColorUIResource transparent = new ColorUIResource(new Color(0, 0, 0, 0));
-
         defaults.put("SplitPaneDivider.style", "plain");
-        // The focus ring is suppressed app wide; focus is conveyed by the selection colour instead.
-        defaults.put("Component.focusColor", transparent);
-        defaults.put("Slider.focusedColor", transparent);
+        defaults.put("ToolBar.focusableButtons", true);
+        defaults.put("ToolBar.arrowKeysOnlyNavigation", false);
+        // Derived colors inherit Islands' transparent button background; selected tools need an opaque fill.
+        Color toolbarSelection = defaults.getColor("Button.toolbar.selectedBackground");
+        if (toolbarSelection != null) {
+            toolbarSelection = new ColorUIResource(toolbarSelection.getRGB());
+            defaults.put("Button.toolbar.selectedBackground", toolbarSelection);
+            defaults.put("ToggleButton.toolbar.selectedBackground", toolbarSelection);
+        }
 
         defaults.put("Tree.rowHeight", UiMetrics.TREE_ROW_HEIGHT);
         defaults.put("TabbedPane.tabInsets", new Insets(0, 10, 0, 10));
         defaults.put("TabbedPane.tabHeight", UiMetrics.TAB_HEIGHT);
         defaults.put("TabbedPane.tabSelectionHeight", 2);
-        defaults.put("TabbedPane.contentSeparatorHeight", 1);
+        defaults.put("TabbedPane.contentSeparatorHeight", UiMetrics.TAB_SEPARATOR_HEIGHT);
 
         Color scrollBarBackground = defaults.getColor("Panel.background");
         defaults.put("ScrollBar.background", scrollBarBackground);
         defaults.put("ScrollBar.track", scrollBarBackground);
 
         applySelectionControlColors(defaults);
-
-        defaults.put(
-                "Table.focusSelectedCellHighlightBorder",
-                new BorderUIResource(BorderFactory.createEmptyBorder(0, 5, 0, 0))
-        );
-        defaults.put(
-                "Table.focusCellHighlightBorder",
-                new BorderUIResource(BorderFactory.createEmptyBorder(0, 3, 0, 0))
-        );
 
         defaults.put("TitlePane.unifiedBackground", false);
 

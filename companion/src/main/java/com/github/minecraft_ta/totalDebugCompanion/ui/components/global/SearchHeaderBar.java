@@ -70,7 +70,7 @@ public class SearchHeaderBar extends JPanel {
     private JButton createToggleableFlatButton(String tooltip, FlatSVGIcon icon, Consumer<Boolean> toggleListener) {
         var button = new FlatIconButton(icon, true);
         button.setToolTipText(tooltip);
-        button.addToggleListener(toggleListener);
+        button.addActionListener(event -> toggleListener.accept(button.isSelected()));
         return button;
     }
 

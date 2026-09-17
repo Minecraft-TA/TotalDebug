@@ -8,6 +8,7 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyBoundsAdapter;
 import java.awt.event.HierarchyEvent;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 
 public class BasePopup extends JWindow {
 
@@ -15,6 +16,7 @@ public class BasePopup extends JWindow {
     private final FocusAdapter focusListener = new FocusAdapter() {
         @Override
         public void focusLost(FocusEvent event) {
+            if (ContextMenus.isOpenFor(BasePopup.this)) return;
             setVisible(false);
         }
     };

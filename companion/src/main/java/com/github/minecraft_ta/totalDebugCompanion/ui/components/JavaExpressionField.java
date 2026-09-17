@@ -29,7 +29,6 @@ import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -251,17 +250,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         }
     }
 
-    private CustomJavaTokenMaker tokenMaker() {
-        try {
-            RSyntaxDocument document = (RSyntaxDocument) getDocument();
-            Field field = RSyntaxDocument.class.getDeclaredField("tokenMaker");
-            field.setAccessible(true);
-            Object tokenMaker = field.get(document);
-            return tokenMaker instanceof CustomJavaTokenMaker custom ? custom : null;
-        } catch (ReflectiveOperationException exception) {
-            throw new IllegalStateException("Unable to access the Java expression token maker", exception);
-        }
-    }
+    private CustomJavaTokenMaker tokenMaker() { return CustomJavaTokenMaker.forEditor(this); }
 
     @FunctionalInterface
     public interface SemanticTokenProvider {

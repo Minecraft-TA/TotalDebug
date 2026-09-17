@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
@@ -40,7 +41,6 @@ import javax.swing.tree.TreePath;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
-import java.awt.Rectangle;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
@@ -51,6 +51,7 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
+import javax.swing.AbstractAction;
 
 public final class UsagesViewPanel extends JPanel {
     private static final String RESULTS_CARD = "results";
@@ -230,22 +231,6 @@ public final class UsagesViewPanel extends JPanel {
 
         this.resultsTree.addMouseListener(new MouseAdapter() {
             @Override
-            public void mousePressed(MouseEvent event) { showPopup(event); }
-
-            @Override
-            public void mouseReleased(MouseEvent event) { showPopup(event); }
-
-            private void showPopup(MouseEvent event) {
-                if (!event.isPopupTrigger()) return;
-                TreePath path = resultsTree.getPathForLocation(event.getX(), event.getY());
-                if (path == null) return;
-                resultsTree.setSelectionPath(path);
-                resultsTree.requestFocusInWindow();
-                createContextMenu(path).show(resultsTree, event.getX(), event.getY());
-                event.consume();
-            }
-
-            @Override
             public void mouseClicked(MouseEvent event) {
                 if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2
                         && resultsTree.getPathForLocation(event.getX(), event.getY()) != null) {
@@ -255,7 +240,7 @@ public final class UsagesViewPanel extends JPanel {
         });
         this.resultsTree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openUsage");
-        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction("Open source") {
+        this.resultsTree.getActionMap().put("openUsage", new AbstractAction("Open source", Icons.JUMP_TO_SOURCE) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 openSelectedUsage();
@@ -271,21 +256,7 @@ public final class UsagesViewPanel extends JPanel {
                 return path == null ? null : new StringSelection(copyText(path));
             }
         });
-        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke("ctrl C"), "copyUsages");
-        this.resultsTree.getActionMap().put("copyUsages", TransferHandler.getCopyAction());
-        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke("shift F10"), "usageMenu");
-        this.resultsTree.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_CONTEXT_MENU, 0), "usageMenu");
-        this.resultsTree.getActionMap().put("usageMenu", new javax.swing.AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                TreePath path = resultsTree.getSelectionPath();
-                if (path == null) return;
-                resultsTree.scrollPathToVisible(path);
-                Rectangle bounds = resultsTree.getPathBounds(path);
-                JPopupMenu menu = createContextMenu(path);
-                if (bounds != null && menu != null) menu.show(resultsTree, bounds.x, bounds.y + bounds.height);
-            }
-        });
+        ContextMenus.installTree(this.resultsTree, this::createContextMenu);
     }
 
     JPopupMenu createContextMenu(TreePath path) {
@@ -298,11 +269,8 @@ public final class UsagesViewPanel extends JPanel {
             menu.add(this.resultsTree.getActionMap().get("openUsage"));
             menu.addSeparator();
         }
-        JMenuItem copy = menu.add(value instanceof UsageNode ? "Copy reference" : "Copy results");
-        copy.setIcon(Icons.COPY);
-        copy.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
-        copy.addActionListener(event -> TransferHandler.getCopyAction().actionPerformed(
-                new ActionEvent(this.resultsTree, ActionEvent.ACTION_PERFORMED, "copyUsages")));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction(
+                value instanceof UsageNode ? "Copy reference" : "Copy results", copyText(path))));
         if (value instanceof GroupNode) {
             menu.addSeparator();
             menu.add("Expand branch").addActionListener(event -> setBranchExpanded(path, true));

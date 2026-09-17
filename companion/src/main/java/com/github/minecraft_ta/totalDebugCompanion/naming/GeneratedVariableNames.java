@@ -1,4 +1,4 @@
-package com.github.minecraft_ta.totalDebugCompanion.decompiler.naming;
+package com.github.minecraft_ta.totalDebugCompanion.naming;
 
 import java.util.regex.Pattern;
 

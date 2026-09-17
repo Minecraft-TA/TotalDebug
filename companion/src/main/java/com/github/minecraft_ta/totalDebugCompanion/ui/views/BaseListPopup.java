@@ -1,8 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
-import javax.swing.*;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.JTextComponent;
+import com.formdev.flatlaf.util.UIScale;
+
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -10,8 +9,11 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.function.Consumer;
+import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
 
-public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopup {
+public class BaseListPopup<ITEM> extends BasePopup {
 
     private Consumer<ITEM> enterKeyListener;
     private final Listener listener = new Listener();
@@ -25,7 +27,11 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
     private Component invoker;
     private static final int MAXIMUM_LIST_WIDTH = 600;
     private static final int MINIMUM_LIST_WIDTH = 200;
+    private static final int MAXIMUM_LIST_HEIGHT = 200;
     private int boundXPos = -1;
+
+    protected Object selectionKey(ITEM item) { return item; }
+    protected boolean acceptsTab() { return false; }
 
     public BaseListPopup(Window owner) {
         super(owner);
@@ -54,10 +60,14 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
             return;
 
         super.show(invoker, x, y, alignment);
-        removeKeyListener();
         this.boundXPos = x;
+        bindInvoker((JTextComponent) invoker);
+    }
+
+    protected final void bindInvoker(JTextComponent invoker) {
+        removeKeyListener();
         this.invoker = invoker;
-        this.invoker.addKeyListener(this.listener);
+        invoker.addKeyListener(this.listener);
     }
 
     @Override
@@ -105,20 +115,29 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
 
     public void setItems(List<? extends ITEM> items) {
         var prevWidth = getWidth();
+        Object selection = isVisible() && list.getSelectedValue() != null ? selectionKey(list.getSelectedValue()) : null;
 
         var model = ((DefaultListModel<ITEM>) this.list.getModel());
         model.removeAllElements();
         model.addAll(items);
         this.list.setSelectedIndex(0);
+        if (selection != null) {
+            for (int i = 0; i < items.size(); i++) {
+                if (selection.equals(selectionKey(items.get(i)))) { this.list.setSelectedIndex(i); break; }
+            }
+        }
         this.scrollPane.getVerticalScrollBar().setValue(0);
 
-        var longestItemLength = this.list.getFontMetrics(this.list.getFont()).stringWidth(
-                "9".repeat(items.stream().mapToInt(ListItem::getLabelLength).max().orElse(0))
-        );
-        var preferredSize = new Dimension(Math.min(MAXIMUM_LIST_WIDTH, longestItemLength) + 35, Math.min(MINIMUM_LIST_WIDTH, this.list.getPreferredSize().height));
+        Dimension listSize = this.list.getPreferredSize();
+        int viewportWidth = Math.clamp(listSize.width, UIScale.scale(MINIMUM_LIST_WIDTH), UIScale.scale(MAXIMUM_LIST_WIDTH));
+        int viewportHeight = Math.min(UIScale.scale(MAXIMUM_LIST_HEIGHT), listSize.height);
+        var preferredSize = new Dimension(viewportWidth, viewportHeight);
+        if (listSize.width > viewportWidth) preferredSize.height += this.scrollPane.getHorizontalScrollBar().getPreferredSize().height;
+        if (listSize.height > viewportHeight) preferredSize.width += this.scrollPane.getVerticalScrollBar().getPreferredSize().width;
         this.scrollPane.setPreferredSize(preferredSize);
-        setMinimumSize(new Dimension(MINIMUM_LIST_WIDTH, 20));
+        setMinimumSize(UIScale.scale(new Dimension(MINIMUM_LIST_WIDTH, 20)));
         pack();
+        if (list.getSelectedIndex() >= 0) list.ensureIndexIsVisible(list.getSelectedIndex());
 
         if (this.boundXPos != -1) {
             setLocation(getX() - (getWidth() - prevWidth) / 2, getY());
@@ -146,16 +165,11 @@ public class BaseListPopup<ITEM extends BaseListPopup.ListItem> extends BasePopu
         this.enterKeyListener.accept(val);
     }
 
-    public interface ListItem {
-
-        int getLabelLength();
-    }
-
     private class Listener extends KeyAdapter {
 
         @Override
         public void keyPressed(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+            if (e.getKeyCode() == KeyEvent.VK_ENTER || (acceptsTab() && e.getKeyCode() == KeyEvent.VK_TAB && e.getModifiersEx() == 0)) {
                 runEnterKeyListener();
                 e.consume();
             } else if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {

@@ -235,6 +235,13 @@ public final class UiDevHarness {
         List<byte[]> classes = new java.util.ArrayList<>(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
+                classBytes(Boolean.class),
+                classBytes(Integer.class),
+                classBytes(Number.class),
+                classBytes(Throwable.class),
+                classBytes(Error.class),
+                classBytes(Exception.class),
+                classBytes(RuntimeException.class),
                 classBytes(List.class),
                 classBytes(FunctionalInterface.class)
         ));

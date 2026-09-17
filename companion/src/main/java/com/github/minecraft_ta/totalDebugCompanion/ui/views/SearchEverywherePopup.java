@@ -5,7 +5,10 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.awt.Window;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -84,7 +87,7 @@ public class SearchEverywherePopup extends JFrame {
     private final JLabel messageLabel = new JLabel("Type to search the runtime index", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
     private final JLabel resultCount = new JLabel(" ");
-    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Tab Category    Enter Open    Esc Close");
+    private final JLabel shortcutsLabel = new JLabel("↑↓ Navigate    Tab Category    Ctrl+Tab Controls    Enter Open    Esc Close");
     private final FlatIconTextField searchTextField = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JButton moduleFilterButton = new JButton(Icons.FILTER);
     private final Map<Category, JToggleButton> categoryButtons = new LinkedHashMap<>();
@@ -129,6 +132,7 @@ public class SearchEverywherePopup extends JFrame {
                 this::setSelectedModules
         );
         configureResultList();
+        ContextMenus.installList(this.resultList, this::createResultMenu);
         configureSearchField();
         configureFilterButton();
 
@@ -151,6 +155,12 @@ public class SearchEverywherePopup extends JFrame {
                 KeyStroke.getKeyStroke("ENTER"),
                 JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+        getRootPane().registerKeyboardAction(event -> openSelectedResult(), KeyStroke.getKeyStroke("F4"),
+                JComponent.WHEN_IN_FOCUSED_WINDOW);
+        for (String shortcut : new String[]{"shift F10", "CONTEXT_MENU"}) {
+            getRootPane().registerKeyboardAction(event -> ContextMenus.showKeyboardMenu(this.resultList), KeyStroke.getKeyStroke(shortcut),
+                    JComponent.WHEN_IN_FOCUSED_WINDOW);
+        }
 
         indexLoader.addStatusListener(this.indexStatusListener);
 
@@ -160,7 +170,7 @@ public class SearchEverywherePopup extends JFrame {
         addWindowFocusListener(new WindowAdapter() {
             @Override
             public void windowLostFocus(WindowEvent event) {
-                if (!moduleFilterPopup.isVisible()) {
+                if (!moduleFilterPopup.isVisible() && !ContextMenus.isOpenFor(SearchEverywherePopup.this)) {
                     setVisible(false);
                 }
             }
@@ -311,6 +321,10 @@ public class SearchEverywherePopup extends JFrame {
         );
         component.getActionMap().put(NEXT_CATEGORY_ACTION, this.nextCategoryAction);
         component.getActionMap().put(PREVIOUS_CATEGORY_ACTION, this.previousCategoryAction);
+        component.registerKeyboardAction(event -> component.transferFocus(), KeyStroke.getKeyStroke("ctrl TAB"),
+                JComponent.WHEN_FOCUSED);
+        component.registerKeyboardAction(event -> component.transferFocusBackward(), KeyStroke.getKeyStroke("ctrl shift TAB"),
+                JComponent.WHEN_FOCUSED);
     }
 
     private void queueDocumentRefresh() {
@@ -325,11 +339,11 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void configureFilterButton() {
-        this.moduleFilterButton.putClientProperty("JButton.buttonType", "toolBarButton");
-        this.moduleFilterButton.setFocusable(false);
+        this.moduleFilterButton.setName("searchEverywhere.moduleFilter");
+        FlatIconButton.configure(this.moduleFilterButton);
         this.moduleFilterButton.setHorizontalTextPosition(SwingConstants.LEFT);
         this.moduleFilterButton.setIconTextGap(6);
-        this.moduleFilterButton.setToolTipText("Filter search results by module");
+        this.moduleFilterButton.setToolTipText("Filter search results by module (Alt+M)");
         this.moduleFilterButton.addActionListener(event -> {
             RuntimeBinding installed = runtime.get();
             if (installed == null) return;
@@ -342,6 +356,8 @@ public class SearchEverywherePopup extends JFrame {
             );
             SwingUtilities.invokeLater(this.moduleFilterPopup::focusSearch);
         });
+        getRootPane().registerKeyboardAction(event -> this.moduleFilterButton.doClick(),
+                KeyStroke.getKeyStroke("alt M"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         updateFilterButton();
     }
 
@@ -419,6 +435,7 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private void updateFilterButton() {
+        this.moduleFilterButton.setEnabled(!this.modules.isEmpty());
         int selected = this.selectedModuleIds.size();
         if (this.modules.isEmpty() || selected == this.modules.size()) {
             this.moduleFilterButton.setText("All modules");
@@ -556,6 +573,10 @@ public class SearchEverywherePopup extends JFrame {
         if (selected == null) {
             return;
         }
+        openResult(selected);
+    }
+
+    private void openResult(Result selected) {
         setVisible(false);
         switch (selected) {
             case ClassResult type -> navigator.accept(
@@ -574,6 +595,30 @@ public class SearchEverywherePopup extends JFrame {
                     new NavigationTarget.LiteralUsages(text.value())
             );
         }
+    }
+
+    JPopupMenu createResultMenu(int row) {
+        var menu = new JPopupMenu();
+        if (this.searchPending || row < 0 || row >= this.resultModel.size()) return menu;
+        Result result = this.resultModel.get(row);
+        var open = new JMenuItem(result instanceof TextResult ? "Find usages" : "Open source",
+                result instanceof TextResult ? Icons.SEARCH_ICON : Icons.JUMP_TO_SOURCE);
+        open.addActionListener(event -> openResult(result));
+        menu.add(open);
+        menu.addSeparator();
+        var copy = ContextMenus.copyAction(result instanceof TextResult ? "Copy value" : "Copy reference", resultReference(result));
+        menu.add(ContextMenus.defaultCopy(copy));
+        return menu;
+    }
+
+    static String resultReference(Result result) {
+        return switch (result) {
+            case ClassResult type -> type.binaryName();
+            case SymbolResult symbol -> symbol.kind() == SymbolKind.FIELD
+                    ? new CodeSymbol.FieldSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName()
+                    : new CodeSymbol.MethodSymbol(symbol.ownerBinaryName(), symbol.name(), symbol.descriptor()).displayName();
+            case TextResult text -> text.value();
+        };
     }
 
     private ModuleSummary moduleSummary(Result result) {

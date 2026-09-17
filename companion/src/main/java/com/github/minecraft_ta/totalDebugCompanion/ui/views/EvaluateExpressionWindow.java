@@ -49,6 +49,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 
 /** Global, history-backed Java expression evaluator for a running Minecraft session. */
 public final class EvaluateExpressionWindow extends JDialog {
@@ -94,6 +95,8 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, Runnable refreshSources) {
         super(owner, "Evaluate Expression", false);
+        ContextMenus.installOutput(this.output, "Copy output");
+        ContextMenus.installOutput(this.problems, "Copy all");
         this.editorContext = editorContext;
         this.refreshSources = refreshSources;
         this.executions = executions;
@@ -288,7 +291,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                         }
                         if (!isVisible()) return;
                         this.results.addTab("Result", new com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel(
-                                controller, pauseId, value));
+                                controller, pauseId, requested, value));
                         this.status.setText("Evaluation completed in " + frame.name());
                     }));
                 }));

@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.SymbolInsight;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclaration;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.insight.SourceDeclarationAnalyzer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 
@@ -39,11 +38,8 @@ final class CodeVisionController implements AutoCloseable {
         this.layerUI = Objects.requireNonNull(layerUI, "layerUI");
         this.layer = Objects.requireNonNull(layer, "layer");
         this.gutterMarkers = Objects.requireNonNull(gutterMarkers, "gutterMarkers");
-        this.unsubscribeAst = cache.addChangeListener(this.editorIdentifier, (unit, version) -> {
-            String source = cache.getContents(this.editorIdentifier);
-            if (source != null) {
-                analyze(SourceDeclarationAnalyzer.analyze(unit, source));
-            }
+        this.unsubscribeAst = cache.addChangeListener(this.editorIdentifier, snapshot -> {
+            analyze(snapshot == null ? List.of() : snapshot.declarations());
         });
     }
 
@@ -55,6 +51,12 @@ final class CodeVisionController implements AutoCloseable {
             this.activeAnalysis.cancel();
         }
         long currentGeneration = ++this.generation;
+        if (declarations.isEmpty()) {
+            this.activeAnalysis = null;
+            this.layerUI.setEntries(List.of(), this.layer);
+            this.gutterMarkers.setEntries(List.of());
+            return;
+        }
         LinkedHashSet<CodeSymbol> symbols = new LinkedHashSet<>();
         declarations.forEach(declaration -> symbols.add(declaration.symbol()));
         this.activeAnalysis = this.service.summarize(symbols, new CodeInsightService.Listener<>() {

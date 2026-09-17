@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import javax.swing.SwingUtilities;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -19,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,6 +36,7 @@ class RuntimeInstallationTest {
             var profile = new CompanionProfile("test", Files.createDirectories(root.resolve("data")),
                     Files.createDirectories(root.resolve("game")));
             app.openProject(profile).get(10, TimeUnit.SECONDS);
+            awaitInitialRestore(app);
             var created = new CompletableFuture<MainWindow>();
             SwingUtilities.invokeAndWait(() -> {
                 MainWindow window = app.createWindow();
@@ -68,6 +71,7 @@ class RuntimeInstallationTest {
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
             app.openProject(new CompanionProfile("test", Files.createDirectories(directory.resolve("data")),
                     Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            awaitInitialRestore(app);
             try (var accepted = snapshot(directory, "accepted")) {
                 app.installRuntimeSnapshot(accepted,
                         RuntimeSnapshotBytecodeSource.fromIndexedSources(accepted.sources(), accepted.index()));
@@ -92,6 +96,25 @@ class RuntimeInstallationTest {
                 });
                 app.close();
             }
+        }
+    }
+
+    private static void awaitInitialRestore(CompanionApplication app) throws Exception {
+        // Manual fixtures bypass the loader. Its initial empty-directory scan must finish before we install one,
+        // otherwise a late EMPTY notification legitimately clears the fixture and invalidates its queued UI refresh.
+        var field = CompanionApplication.class.getDeclaredField("runtimeIndexService");
+        field.setAccessible(true);
+        var service = (RuntimeIndexService) field.get(app);
+        var finished = new CompletableFuture<RuntimeIndexService.Status>();
+        Consumer<RuntimeIndexService.Status> listener = status -> {
+            if (!status.active() && status.phase() != RuntimeIndexService.Phase.WAITING) finished.complete(status);
+        };
+        service.addStatusListener(listener);
+        try {
+            var status = finished.get(10, TimeUnit.SECONDS);
+            assertEquals(RuntimeIndexService.Phase.EMPTY, status.phase(), status.detail());
+        } finally {
+            service.removeStatusListener(listener);
         }
     }
 

@@ -81,11 +81,6 @@ public final class ThemeColors {
         return first(new Color(0x393B40), "Button.toolbar.hoverBackground", "MenuItem.selectionBackground");
     }
 
-    /** Background for a flat toolbar button in the toggled-on state. */
-    public static Color toggledBackground() {
-        return first(new Color(0x43454A), "Button.toolbar.selectedBackground", "Button.toolbar.hoverBackground");
-    }
-
     private static Color first(Color fallback, String... keys) {
         for (String key : keys) {
             Color color = UIManager.getColor(key);

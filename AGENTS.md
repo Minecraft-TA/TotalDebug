@@ -2,6 +2,8 @@
 
 Use Java 21 and the checked-in Gradle wrapper.
 
+Use imports for Java type references. Do not write fully qualified type names inline unless an unavoidable simple-name collision requires it. Apply this to production code and tests.
+
 The mod and Companion share this Gradle build. Changes to protocol, storage or evaluation require checking both application consumers. SCNet and JIndex remain external libraries. For artifact packaging, release preparation or deployment, read [docs/BUILD_RELEASE.md](docs/BUILD_RELEASE.md).
 
 Use the owning module's test task for feedback. Root check includes packaging and build-logic functional tests; deployment and installation are explicit tasks that affect external directories.

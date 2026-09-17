@@ -82,6 +82,7 @@ final class EditorTabHeader extends JPanel {
                 if (index < 0) {
                     return;
                 }
+                if (EditorTabHeader.this.tabs.handlePopup(event, index)) return;
                 if (SwingUtilities.isMiddleMouseButton(event)) {
                     EditorTabHeader.this.tabs.removeTabAt(index);
                     event.consume();
@@ -89,6 +90,12 @@ final class EditorTabHeader extends JPanel {
                         && !SwingUtilities.isDescendingFrom(event.getComponent(), closeButton)) {
                     EditorTabHeader.this.tabs.setSelectedIndex(index);
                 }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                int index = EditorTabHeader.this.tabs.indexOfTabComponent(EditorTabHeader.this);
+                EditorTabHeader.this.tabs.handlePopup(event, index);
             }
         };
         installHoverTracking(this, hover);

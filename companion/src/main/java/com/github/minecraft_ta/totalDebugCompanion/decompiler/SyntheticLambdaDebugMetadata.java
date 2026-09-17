@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.decompiler;
 
-import com.github.minecraft_ta.totalDebugCompanion.decompiler.naming.GeneratedVariableNames;
+import com.github.minecraft_ta.totalDebugCompanion.naming.GeneratedVariableNames;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;

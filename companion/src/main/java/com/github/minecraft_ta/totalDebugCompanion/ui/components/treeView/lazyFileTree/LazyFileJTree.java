@@ -96,13 +96,6 @@ public class LazyFileJTree extends JTree {
                 if (treeItem.isDirectory())
                     return;
 
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    if (!getSelectionModel().isPathSelected(pathForRow))
-                        setSelectionPath(pathForRow);
-                    showPopupMenu(node, treeItem, e.getX(), e.getY());
-                    return;
-                }
-
                 if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2)
                     return;
 
@@ -144,10 +137,6 @@ public class LazyFileJTree extends JTree {
         }
     }
 
-    protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
-
-    }
-
     public void addMouseDoubleClickListener(BiConsumer<LazyTreeNode, TreeItem> listener) {
         this.mouseDoubleClickListeners.add(listener);
     }
@@ -187,24 +176,36 @@ public class LazyFileJTree extends JTree {
             return existing;
         }
 
+        int revision = node.revision();
+        DirectoryTreeItem source = (DirectoryTreeItem) node.getUserObject();
         CompletableFuture<Void> load = CompletableFuture.supplyAsync(() ->
-                ((DirectoryTreeItem) node.getUserObject()).loadChildren().stream()
+                source.loadChildren().stream()
                 .sorted(LazyFileJTree::compareTreeItems)
                 .toList()
-        ).thenAcceptAsync(items -> {
-            if (isAttached(node)) {
-                var selection = getSelectionRows();
-                node.replaceChildren(items);
-                getModel().nodeStructureChanged(node);
-                setSelectionRows(selection);
+        ).thenComposeAsync(items -> {
+            this.activeLoads.remove(node);
+            if (!isAttached(node)) {
+                items.forEach(TreeItem::dispose);
+                return CompletableFuture.completedFuture(null);
             }
+            if (source != node.getUserObject() || revision != node.revision()) {
+                items.forEach(TreeItem::dispose);
+                return loadItemsForNode(node);
+            }
+            // Filesystem notifications concern this directory; its loaded subfolders can stay cached.
+            updateChildren(node, items, node.refreshDescendants() || !(source instanceof FileSystemDirectoryItem));
+            return CompletableFuture.completedFuture(null);
         }, SwingUtilities::invokeLater);
         this.activeLoads.put(node, load);
         load.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
             this.activeLoads.remove(node, load);
             if (failure != null) {
                 failure.printStackTrace(System.err);
-                if (isAttached(node)) {
+                if (isAttached(node) && (source != node.getUserObject() || revision != node.revision())) {
+                    loadItemsForNode(node);
+                    return;
+                }
+                if (isAttached(node) && source == node.getUserObject() && revision == node.revision()) {
                     Throwable cause = failure;
                     while (cause.getCause() != null) cause = cause.getCause();
                     var error = new TreeItem(Objects.requireNonNullElse(cause.getMessage(), cause.toString()));
@@ -217,8 +218,8 @@ public class LazyFileJTree extends JTree {
         return load;
     }
 
-    /** Reveals a directory path below one named container beneath a top-level root. */
-    public CompletableFuture<Boolean> revealDirectoryPath(
+    /** Reveals an item below one named container beneath a top-level root. */
+    public CompletableFuture<Boolean> revealItemPath(
             String topLevelRoot,
             String containerName,
             List<String> directorySegments
@@ -234,7 +235,7 @@ public class LazyFileJTree extends JTree {
         }
 
         CompletableFuture<Boolean> result = new CompletableFuture<>();
-        SwingUtilities.invokeLater(() -> revealDirectoryPathOnEventThread(topLevelRoot, container, segments)
+        SwingUtilities.invokeLater(() -> revealItemPathOnEventThread(topLevelRoot, container, segments)
                 .whenComplete((revealed, failure) -> {
                     if (failure != null) {
                         result.completeExceptionally(failure);
@@ -245,8 +246,8 @@ public class LazyFileJTree extends JTree {
         return result;
     }
 
-    /** Reveals a directory path relative to a top-level directory root. */
-    public CompletableFuture<Boolean> revealDirectoryPath(String topLevelRoot, List<String> directorySegments) {
+    /** Reveals an item relative to a top-level directory root. */
+    public CompletableFuture<Boolean> revealItemPath(String topLevelRoot, List<String> directorySegments) {
         Objects.requireNonNull(topLevelRoot, "topLevelRoot");
         List<String> segments = List.copyOf(Objects.requireNonNull(directorySegments, "directorySegments"));
         if (segments.stream().anyMatch(String::isBlank)) {
@@ -258,13 +259,13 @@ public class LazyFileJTree extends JTree {
             LazyTreeNode root = findTopLevelNode(topLevelRoot);
             CompletableFuture<TreePath> path = root == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(root, segments, 0);
+                    : findItemPath(root, segments, 0);
             path.whenComplete((revealedPath, failure) -> completeReveal(result, revealedPath, failure));
         });
         return result;
     }
 
-    private CompletableFuture<Boolean> revealDirectoryPathOnEventThread(
+    private CompletableFuture<Boolean> revealItemPathOnEventThread(
             String topLevelRoot,
             String containerName,
             List<String> segments
@@ -281,7 +282,7 @@ public class LazyFileJTree extends JTree {
                     .orElse(null);
             return container == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(container, segments, 0);
+                    : findItemPath(container, segments, 0);
         }).thenApply(this::revealPath);
     }
 
@@ -308,7 +309,7 @@ public class LazyFileJTree extends JTree {
         return true;
     }
 
-    private CompletableFuture<TreePath> findDirectoryPath(
+    private CompletableFuture<TreePath> findItemPath(
             LazyTreeNode parent,
             List<String> segments,
             int segmentIndex
@@ -319,13 +320,13 @@ public class LazyFileJTree extends JTree {
         return loadItemsForNode(parent).thenCompose(ignored -> {
             String segment = segments.get(segmentIndex);
             LazyTreeNode child = children(parent).stream()
-                    .filter(node -> node.getUserObject().isDirectory())
+                    .filter(node -> node.getUserObject().isDirectory() || segmentIndex == segments.size() - 1)
                     .filter(node -> node.getUserObject().getName().equals(segment))
                     .findFirst()
                     .orElse(null);
             return child == null
                     ? CompletableFuture.completedFuture(null)
-                    : findDirectoryPath(child, segments, segmentIndex + 1);
+                    : findItemPath(child, segments, segmentIndex + 1);
         });
     }
 
@@ -339,7 +340,7 @@ public class LazyFileJTree extends JTree {
         return children;
     }
 
-    private boolean isAttached(LazyTreeNode node) {
+    private boolean isAttached(TreeNode node) {
         TreeNode current = node;
         while (current.getParent() != null) {
             current = current.getParent();
@@ -369,6 +370,97 @@ public class LazyFileJTree extends JTree {
         getModel().nodeStructureChanged(hiddenRoot);
     }
 
+    /** Refresh the current project's roots without replacing surviving tree paths. */
+    public void refreshRootNodes(DirectoryTreeItem... roots) {
+        updateChildren((LazyTreeNode) getModel().getRoot(), List.of(roots), true);
+    }
+
+    private record ItemKey(Class<?> type, String name) {
+        ItemKey(TreeItem item) { this(item.getClass(), item.getName()); }
+    }
+
+    private void updateChildren(LazyTreeNode parent, List<? extends TreeItem> items, boolean refreshDirectories) {
+        // An unloaded node has only its placeholder, so there is no child state to preserve.
+        if (parent.getChildCount() == 1 && !(parent.getChildAt(0) instanceof LazyTreeNode)) {
+            var path = new TreePath(parent.getPath());
+            boolean expanded = isExpanded(path);
+            parent.replaceChildren(items);
+            getModel().nodeStructureChanged(parent);
+            if (expanded) expandPath(path);
+            return;
+        }
+        var expanded = getExpandedDescendants(new TreePath(parent.getPath()));
+        var expandedPaths = expanded == null ? List.<TreePath>of() : Collections.list(expanded);
+        var selection = getSelectionPaths();
+        Map<ItemKey, LazyTreeNode> existing = new HashMap<>();
+        children(parent).forEach(child -> existing.put(new ItemKey(child.getUserObject()), child));
+        List<LazyTreeNode> updated = new ArrayList<>();
+        List<LazyTreeNode> refresh = new ArrayList<>();
+        Set<LazyTreeNode> changed = new HashSet<>();
+        for (TreeItem item : items) {
+            LazyTreeNode child = existing.remove(new ItemKey(item));
+            if (child == null) {
+                child = new LazyTreeNode(item);
+            } else {
+                TreeItem previous = child.getUserObject();
+                if (!previous.getPresentation().equals(item.getPresentation())
+                        || previous.getIcon() != item.getIcon()
+                        || !Objects.equals(previous.getTooltip(), item.getTooltip())) changed.add(child);
+                if (previous != item) previous.dispose();
+                child.setUserObject(item);
+                if (refreshDirectories && item.isDirectory()
+                        && (child.areChildrenLoaded() || this.activeLoads.containsKey(child))) {
+                    child.markChildrenStale(true);
+                    refresh.add(child);
+                }
+            }
+            updated.add(child);
+        }
+        var retained = new HashSet<>(updated);
+        List<Integer> removedIndices = new ArrayList<>();
+        List<TreeNode> removed = new ArrayList<>();
+        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+            var child = parent.getChildAt(i);
+            if (retained.contains(child)) continue;
+            if (child instanceof LazyTreeNode node) node.getUserObject().dispose();
+            removedIndices.add(i);
+            removed.add(child);
+            parent.remove(i);
+        }
+        if (!removed.isEmpty()) {
+            Collections.reverse(removedIndices);
+            Collections.reverse(removed);
+            getModel().nodesWereRemoved(parent, removedIndices.stream().mapToInt(Integer::intValue).toArray(), removed.toArray());
+        }
+        parent.markChildrenLoaded();
+        List<Integer> insertedIndices = new ArrayList<>();
+        List<Integer> changedIndices = new ArrayList<>();
+        for (int i = 0; i < updated.size(); i++) {
+            LazyTreeNode child = updated.get(i);
+            if (child.getParent() == null) {
+                parent.insert(child, i);
+                insertedIndices.add(i);
+            } else if (parent.getChildAt(i) != child) {
+                // Publish pending insertions before moving an existing row, so event indices stay valid.
+                getModel().nodesWereInserted(parent, insertedIndices.stream().mapToInt(Integer::intValue).toArray());
+                insertedIndices.clear();
+                getModel().removeNodeFromParent(child);
+                getModel().insertNodeInto(child, parent, i);
+            } else if (changed.contains(child)) {
+                changedIndices.add(i);
+            }
+        }
+        getModel().nodesWereInserted(parent, insertedIndices.stream().mapToInt(Integer::intValue).toArray());
+        getModel().nodesChanged(parent, changedIndices.stream().mapToInt(Integer::intValue).toArray());
+        expandedPaths.stream().filter(path -> isAttached((TreeNode) path.getLastPathComponent()))
+                .forEach(this::expandPath);
+        if (selection != null) {
+            setSelectionPaths(Arrays.stream(selection)
+                    .filter(path -> isAttached((TreeNode) path.getLastPathComponent())).toArray(TreePath[]::new));
+        }
+        refresh.forEach(this::loadItemsForNode);
+    }
+
     static int compareTreeItems(TreeItem first, TreeItem second) {
         int directoryOrder = Boolean.compare(second.isDirectory(), first.isDirectory());
         if (directoryOrder != 0) {
@@ -387,8 +479,6 @@ public class LazyFileJTree extends JTree {
         if (paths == null || paths.length == 0)
             return;
 
-        var rows = getSelectionRows();
-
         var toReload = new HashSet<LazyTreeNode>();
         Arrays.stream(paths)
                 .map(TreePath::getLastPathComponent)
@@ -404,10 +494,6 @@ public class LazyFileJTree extends JTree {
             loadItemsForNode(lazyTreeNode);
         }
 
-        if (rows == null || rows.length == 0)
-            return;
-
-        SwingUtilities.invokeLater(() -> setSelectionRow(Math.max(0, rows[0] - 1)));
     }
 
     private LazyTreeNode findTopLevelNodeForItem(TreeItem item) {

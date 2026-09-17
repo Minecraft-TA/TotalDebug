@@ -154,6 +154,14 @@ class SearchEverywherePopupProcessTest {
             if (query.getFocusTraversalKeysEnabled()) {
                 throw new IllegalStateException("Search query still uses Tab for focus traversal");
             }
+            AbstractButton filter = requireNamedComponent(popup, "searchEverywhere.moduleFilter", AbstractButton.class);
+            assertTrue(filter.isFocusable());
+            assertTrue(!filter.isRequestFocusEnabled());
+            assertTrue(filter.getToolTipText().contains("Alt+M"));
+            assertTrue(popup.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .get(KeyStroke.getKeyStroke("alt M")) != null);
+            assertTrue(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl TAB")) != null);
+            assertTrue(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl shift TAB")) != null);
 
             assertSelected(popup, "all");
             invokeBinding(query, KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));

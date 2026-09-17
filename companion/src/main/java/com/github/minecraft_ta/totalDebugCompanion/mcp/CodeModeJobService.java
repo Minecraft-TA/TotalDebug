@@ -74,7 +74,7 @@ public final class CodeModeJobService implements AutoCloseable {
                                 source,
                                 side == ExecutionSide.SERVER,
                                 environment.toWireValue(),
-                                failureHandler
+                                failure -> failureHandler.accept(failure.result())
                         );
                         if (!sent) {
                             throw new IllegalStateException("Minecraft disconnected while the code job was submitted");

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.Attributes;
@@ -299,8 +300,22 @@ class LocalIndexTest {
             service.addStatusListener(status -> {
                 if (status.phase() == RuntimeIndexService.Phase.FAILED) ready.completeExceptionally(status.failure());
             });
-            service.restore(InstancePaths.forGame(game).home(), game);
-            return ready.get(20, TimeUnit.SECONDS);
+            var paths = InstancePaths.forGame(game);
+            boolean cached = Files.isRegularFile(paths.index());
+            service.restore(paths.home(), game);
+            try {
+                // This test measures archive reads, not the speed of indexing the whole JDK on a shared runner.
+                return ready.get(60, TimeUnit.SECONDS);
+            } catch (TimeoutException failure) {
+                var detail = new StringBuilder("Timed out opening ").append(cached ? "cached" : "new")
+                        .append(" index: ").append(service.status());
+                Thread.getAllStackTraces().forEach((thread, stack) -> {
+                    if (!thread.getName().equals("Companion runtime index")) return;
+                    detail.append("\n").append(thread.getName()).append(" ").append(thread.getState());
+                    for (var frame : stack) detail.append("\n  at ").append(frame);
+                });
+                throw new AssertionError(detail.toString(), failure);
+            }
         }
     }
 

@@ -8,6 +8,56 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JavaSnippetSourceTest {
     @Test
+    void multilineIncompleteImportDoesNotHideTheNextImport() {
+        String text = "import java.\nutil.List\nimport java.util.Map;\nreturn 1;";
+        var imports = JavaImports.read(text);
+        assertEquals(2, imports.size());
+        assertEquals("java.util.List", imports.get(0).name());
+        assertFalse(imports.get(0).complete());
+        assertEquals("java.util.Map", imports.get(1).name());
+        assertTrue(imports.get(1).complete());
+        var generated = JavaSnippetSource.body("Proof", text);
+        assertTrue(generated.source().indexOf("import java.util.Map;") < generated.source().indexOf("public Object run()"));
+    }
+
+    @Test
+    void brokenImportDoesNotConsumeCallsArraysOrGenericDeclarations() {
+        for (String body : new String[]{"String.valueOf(1);", "String[] values = null;", "List<String> values = null;"}) {
+            String text = "import java.util.\n" + body;
+            var generated = JavaSnippetSource.body("Proof", text);
+            assertTrue(generated.source().indexOf(body) > generated.source().indexOf("public Object run()"), generated.source());
+            assertEquals(text.indexOf(body), generated.sourceMap().toEditorOffset(generated.source().indexOf(body)));
+        }
+    }
+
+    @Test void incompleteImportStaysInTheHeaderWithoutConsumingTheFollowingStatement() {
+        for (String declaration : new String[]{"import java.util.List", "import java.util.", "import static java.lang.Math.PI", "import"}) {
+            String editor = declaration + "\nString text = \"stable\";\nreturn text;";
+            var generated = JavaSnippetSource.body("Proof", editor);
+            assertTrue(generated.source().indexOf(declaration) < generated.source().indexOf("class Proof"));
+            assertTrue(generated.source().indexOf("String text") > generated.source().indexOf("public Object run()"));
+            assertEquals(editor.indexOf("String text"), generated.sourceMap().toEditorOffset(generated.source().indexOf("String text")));
+        }
+    }
+
+    @Test void multilineAndCommentedImportsStillRoundTripAndPreserveTheirErrors() {
+        String editor = "import java.\nutil./* name */List;\nimport static java.lang.Math.*;\nimport java.util.Map\nreturn 1;";
+        var generated = JavaSnippetSource.body("Proof", editor);
+        assertTrue(generated.source().contains("import java.\nutil./* name */List;"));
+        assertTrue(generated.source().contains("import java.util.Map\n"), "Do not silently insert a missing semicolon");
+        assertTrue(generated.source().indexOf("import java.util.Map") < generated.source().indexOf("class Proof"));
+        assertTrue(generated.source().indexOf("return 1;") > generated.source().indexOf("public Object run()"));
+    }
+    @Test void diagnosticsDoNotMistakeGeneratedImportInsertionPointsForUserCode() {
+        var generated = JavaSnippetSource.body("Proof", "return 1;");
+        int wrapperImport = generated.source().indexOf("import ");
+        assertEquals(0, generated.sourceMap().toEditorOffset(wrapperImport), "Completion may insert user imports here");
+        assertEquals(-1, generated.sourceMap().toEditorDiagnosticOffset(wrapperImport, false));
+        assertEquals(-1, generated.sourceMap().toEditorDiagnosticOffset(wrapperImport, true));
+        assertEquals("return 1;".length(), generated.sourceMap().toEditorDiagnosticOffset(generated.source().length(), true));
+        assertEquals(-1, generated.sourceMap().toEditorDiagnosticOffset(generated.source().length(), false));
+    }
+    @Test
     void detectsExpressionsIndependentlyOfEditorLineCount() {
         assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("getServer()"));
         assertEquals(JavaSnippetSource.Mode.EXPRESSION, JavaSnippetSource.detectMode("/* receiver */ getServer() // result"));

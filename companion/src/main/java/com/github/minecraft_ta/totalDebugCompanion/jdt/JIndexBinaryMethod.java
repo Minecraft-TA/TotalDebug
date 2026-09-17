@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IBinaryMethodStub;
 import com.github.tth05.jindex.IndexedMethod;
 import org.eclipse.jdt.internal.compiler.classfmt.JavaBinaryNames;
+import java.util.Arrays;
 
 public class JIndexBinaryMethod implements IBinaryMethodStub {
 
@@ -15,6 +16,14 @@ public class JIndexBinaryMethod implements IBinaryMethodStub {
     @Override
     public char[] getSelector() {
         return this.indexedMethod.getName().toCharArray();
+    }
+
+    @Override
+    public char[][] getArgumentNames() {
+        return Arrays.stream(CompanionClassIndex.parameterNames(
+                this.indexedMethod.getDeclaringClass().getNameWithPackage(),
+                this.indexedMethod.getName(), this.indexedMethod.getDescriptorString()))
+                .map(String::toCharArray).toArray(char[][]::new);
     }
 
     @Override

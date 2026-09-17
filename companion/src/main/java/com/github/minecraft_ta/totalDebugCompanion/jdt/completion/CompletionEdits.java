@@ -1,17 +1,27 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jdt.core.CompletionContext;
 import org.eclipse.jdt.core.CompletionProposal;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.Signature;
+import org.eclipse.jdt.core.ToolFactory;
+import org.eclipse.jdt.core.compiler.IScanner;
+import org.eclipse.jdt.core.compiler.InvalidInputException;
+import org.eclipse.jdt.core.dom.*;
 import org.eclipse.jdt.core.dom.rewrite.ImportRewrite;
+import org.eclipse.jdt.core.dom.rewrite.ImportRewrite.ImportRewriteContext;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
+import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.Document;
 import org.eclipse.text.edits.TextEdit;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.StringJoiner;
 
 import static com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionLabels.text;
@@ -21,6 +31,8 @@ final class CompletionEdits {
     private final ICompilationUnit unit;
     private final CompletionContext context;
     private final String source;
+    private Set<String> declaredTypeNames;
+    private IScanner scanner;
 
     CompletionEdits(ICompilationUnit unit, CompletionContext context) {
         this.unit = unit;
@@ -64,7 +76,15 @@ final class CompletionEdits {
                     }
                 }
             }
-            item.addTextEdit(new CustomTextEdit(range, prefix + replacement(proposal, imports)));
+            String replacement = prefix + replacement(proposal, imports);
+            if (item.receiverCast() != null) {
+                var cast = item.receiverCast();
+                String type = imports.addImportFromSignature(cast.signature(), AST.newAST(AST.JLS21, false), castImportContext(imports)).toString();
+                replacement = "((" + type + ") " + source.substring(cast.range().getOffset(), cast.range().getEndOffset())
+                        + ")." + replacement;
+                range = new Range(cast.range().getOffset(), range.getEndOffset() - cast.range().getOffset());
+            }
+            item.addTextEdit(new CustomTextEdit(range, replacement));
             if (!isImport(proposal)) additional.addAll(importEdits(imports));
             additional.forEach(item::addTextEdit);
         } catch (CoreException | BadLocationException e) {
@@ -72,18 +92,53 @@ final class CompletionEdits {
         }
     }
 
-    List<CustomTextEdit> addImports(String... names) {
+    String importType(String signature, CompletionItem item) {
         try {
             ImportRewrite imports = imports();
-            for (String name : names) imports.addImport(name);
-            return importEdits(imports);
+            String type = imports.addImportFromSignature(Signature.removeCapture(signature), AST.newAST(AST.JLS21, false),
+                    castImportContext(imports)).toString();
+            importEdits(imports).forEach(item::addTextEdit);
+            return type;
         } catch (CoreException | BadLocationException e) {
             throw new IllegalStateException("Cannot prepare completion imports", e);
         }
     }
 
+    private ImportRewriteContext castImportContext(ImportRewrite imports) {
+        if (declaredTypeNames == null) {
+            declaredTypeNames = new HashSet<>();
+            var parser = JdtConfiguration.createParser();
+            parser.setSource(source.toCharArray());
+            parser.setStatementsRecovery(true);
+            parser.createAST(null).accept(new ASTVisitor() {
+                @Override public void preVisit(ASTNode node) {
+                    SimpleName name;
+                    if (node instanceof AbstractTypeDeclaration declaration) name = declaration.getName();
+                    else if (node instanceof TypeParameter parameter) name = parameter.getName();
+                    else return;
+                    ASTNode scope = node.getParent();
+                    if (scope instanceof TypeDeclarationStatement) {
+                        if (node.getStartPosition() > context.getOffset()) return;
+                        scope = scope.getParent();
+                    }
+                    if (scope != null && scope.getStartPosition() <= context.getOffset()
+                            && context.getOffset() <= scope.getStartPosition() + scope.getLength()) {
+                        declaredTypeNames.add(name.getIdentifier());
+                    }
+                }
+            });
+        }
+        return new ImportRewriteContext() {
+            @Override public int findInContext(String qualifier, String name, int kind) {
+                if (kind == KIND_TYPE && declaredTypeNames.contains(name)) return RES_NAME_CONFLICT;
+                return imports.getDefaultImportRewriteContext().findInContext(qualifier, name, kind);
+            }
+        };
+    }
+
     private String replacement(CompletionProposal proposal, ImportRewrite imports) {
         String completion = text(proposal.getCompletion());
+        if (proposal.getKind() == CompletionProposal.FIELD_REF_WITH_CASTED_RECEIVER) return text(proposal.getName());
         if (proposal.getKind() == CompletionProposal.TYPE_REF) return typeReplacement(proposal, imports);
         if (proposal.getKind() == CompletionProposal.LAMBDA_EXPRESSION) {
             String token = text(context.getToken());
@@ -93,19 +148,17 @@ final class CompletionEdits {
                 || !completion.endsWith(")")) return completion;
 
         String name = proposal.isConstructor() ? "" : text(proposal.getName());
-        if (proposal.getKind() == CompletionProposal.METHOD_REF_WITH_CASTED_RECEIVER) {
-            name = completion.substring(0, completion.lastIndexOf('.') + 1) + name;
-        }
-        String result = name + "(" + arguments(proposal) + ")${0}";
+        if (nextTokenChar(replacementEnd(proposal)) == '(') return name;
+        String result = name + "(" + arguments(proposal) + ")";
         if (!proposal.isConstructor() && "V".equals(text(Signature.getReturnType(proposal.getSignature())))
-                && nextNonWhitespace(proposal.getReplaceEnd()) != ';') result += ";";
-        return result;
+                && nextTokenChar(replacementEnd(proposal)) != ';') result += ";";
+        return result + "${0}";
     }
 
     private static String arguments(CompletionProposal proposal) {
-        int count = Signature.getParameterCount(Signature.removeCapture(proposal.getSignature()));
+        char[][] names = proposal.findParameterNames(null);
         StringJoiner arguments = new StringJoiner(", ");
-        for (int i = 0; i < count; i++) arguments.add("${" + (i + 1) + ":arg" + i + "}");
+        for (int i = 0; i < names.length; i++) arguments.add("${" + (i + 1) + ":" + new String(names[i]) + "}");
         return arguments.toString();
     }
 
@@ -122,8 +175,15 @@ final class CompletionEdits {
         return imports.addImport(type);
     }
 
-    private String constructorTypeArguments(CompletionProposal type, CompletionProposal constructor) {
-        if (nextNonWhitespace(type.getReplaceEnd()) == '<') return "";
+    private String constructorTypeArguments(CompletionProposal type, CompletionProposal constructor) throws CoreException {
+        if (nextTokenChar(type.getReplaceEnd()) == '<') return "";
+        if (constructor instanceof InternalCompletionProposal internal && internal.getBinding() instanceof MethodBinding method) {
+            if (method.original().declaringClass.typeVariables().length == 0) return "";
+        } else {
+            // Search-based constructor proposals have no binding. JDT's diamond check alone also accepts nongeneric types.
+            var declaration = unit.getJavaProject().findType(qualifiedType(type.getSignature()));
+            if (declaration != null && declaration.getTypeParameters().length == 0) return "";
+        }
         if (constructor.canUseDiamond(context)) return "<>";
         char[][] arguments = Signature.getTypeArguments(type.getSignature());
         if (arguments.length == 0) return "";
@@ -132,10 +192,18 @@ final class CompletionEdits {
         return names.toString();
     }
 
-    private char nextNonWhitespace(int offset) {
-        for (int i = Math.max(0, offset); i < source.length(); i++) {
-            if (!Character.isWhitespace(source.charAt(i))) return source.charAt(i);
+    private char nextTokenChar(int offset) {
+        if (offset >= source.length()) return '\0';
+        if (scanner == null) {
+            scanner = ToolFactory.createScanner(false, false, false, JdtConfiguration.JAVA_VERSION);
+            scanner.setSource(source.toCharArray());
         }
+        scanner.resetTo(Math.max(0, offset), source.length() - 1);
+        try {
+            scanner.getNextToken();
+            int start = scanner.getCurrentTokenStartPosition();
+            if (start < source.length()) return source.charAt(start);
+        } catch (InvalidInputException ignored) { }
         return '\0';
     }
 
@@ -168,7 +236,22 @@ final class CompletionEdits {
         return completion.endsWith(";") || completion.endsWith(".");
     }
 
-    private static Range range(CompletionProposal proposal) {
-        return new Range(proposal.getReplaceStart(), proposal.getReplaceEnd() - proposal.getReplaceStart());
+    private int replacementEnd(CompletionProposal proposal) {
+        int caret = context.getOffset();
+        if (caret < proposal.getReplaceStart() || caret > proposal.getReplaceEnd()) return proposal.getReplaceEnd();
+        switch (proposal.getKind()) {
+            case CompletionProposal.METHOD_REF, CompletionProposal.METHOD_REF_WITH_CASTED_RECEIVER,
+                    CompletionProposal.METHOD_NAME_REFERENCE, CompletionProposal.CONSTRUCTOR_INVOCATION,
+                    CompletionProposal.TYPE_REF -> {
+                // JDT may offer to replace the whole recovered call. Preserve its existing arguments and terminator.
+                while (caret < source.length() && Character.isJavaIdentifierPart(source.charAt(caret))) caret++;
+                return caret;
+            }
+            default -> { return proposal.getReplaceEnd(); }
+        }
+    }
+
+    private Range range(CompletionProposal proposal) {
+        return new Range(proposal.getReplaceStart(), replacementEnd(proposal) - proposal.getReplaceStart());
     }
 }

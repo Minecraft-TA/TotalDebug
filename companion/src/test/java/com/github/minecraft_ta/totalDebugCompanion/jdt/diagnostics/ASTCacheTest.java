@@ -1,49 +1,59 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
-import com.github.tth05.jindex.ClassIndex;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ASTCacheTest {
-    private static ClassIndex index;
-    @BeforeAll static void bindIndex() throws Exception {
-        try (var bytes = Object.class.getResourceAsStream("Object.class")) {
-            index = ClassIndex.fromBytes(List.of(bytes.readAllBytes()));
-        }
-        CompanionClassIndex.set(index);
-    }
-    @AfterAll static void closeIndex() { CompanionClassIndex.clear(); index.close(); }
-
-    @Test void identicalEditorKeysHaveIndependentModelsAndListeners() throws Exception {
+    @Test void independentRegistriesDeliverTheWholeAcceptedResultAndRevocation() {
         var first = new ASTCache();
         var second = new ASTCache();
-        var secondUpdates = new AtomicInteger();
-        second.addChangeListener("same.java", (unit, version) -> secondUpdates.incrementAndGet());
-        first.update("same.java", "Sample", "class Sample { int first; }").get(3, TimeUnit.SECONDS);
-        second.update("same.java", "Sample", "class Sample { int second; }").get(3, TimeUnit.SECONDS);
-        assertNotSame(first.getFromCache("same.java"), second.getFromCache("same.java"));
-        assertTrue(first.getContents("same.java").contains("first"));
-        assertTrue(second.getContents("same.java").contains("second"));
-        first.clear();
-        assertNull(first.getFromCache("same.java"));
-        assertNotNull(second.getFromCache("same.java"));
-        second.update("same.java", "Sample", "class Sample { int retained; }").get(3, TimeUnit.SECONDS);
-        assertEquals(2, secondUpdates.get());
-        second.clear();
+        var received = new ArrayList<JavaAnalysis>();
+        second.addChangeListener("same", received::add);
+        var a = first.register("same", () -> {});
+        var b = second.register("same", () -> {});
+        a.publish(result("first", 1));
+        var expected = result("second", 2);
+        b.publish(expected);
+        assertSame(expected, received.getFirst());
+        assertEquals("first", first.getSnapshot("same").contents());
+        assertEquals(2, received.getFirst().revision());
+        b.publish(null);
+        assertNull(second.getSnapshot("same"));
+        assertNull(received.getLast());
+        assertNotNull(first.getSnapshot("same"));
     }
 
-    @Test void pendingPublicationCannotRestoreAClearedEntry() throws Exception {
+    @Test void clearedOrClosedOwnerCannotPublishIntoAReusedKey() {
         var cache = new ASTCache();
-        var pending = cache.update("closed.java", "Sample", "class Sample { int field; }");
+        var old = cache.register("same", () -> {});
         cache.clear();
-        pending.get(3, TimeUnit.SECONDS);
-        assertNull(cache.getFromCache("closed.java"));
-        assertNull(cache.getContents("closed.java"));
+        var current = cache.register("same", () -> {});
+        var expected = result("new", 0);
+        current.publish(expected);
+        old.publish(result("old", 100));
+        old.close();
+        assertSame(expected, cache.getSnapshot("same"));
+        current.close();
+        assertNull(cache.getSnapshot("same"));
+        current.publish(expected);
+        assertNull(cache.getSnapshot("same"));
+    }
+
+    @Test void environmentRefreshNotifiesOwnersWithoutInventingAnAnalysis() {
+        var cache = new ASTCache();
+        int[] refreshes = {0};
+        cache.register("same", () -> refreshes[0]++);
+        cache.refreshEnvironment();
+        assertEquals(1, refreshes[0]);
+        assertNull(cache.getSnapshot("same"));
+    }
+
+    private static JavaAnalysis result(String text, long revision) {
+        return new JavaAnalysis(revision, CompanionClassIndex.identity(), null, text, JavaSourceMap.IDENTITY,
+                Map.of(), List.of(), List.of(), true, List.of(), List.of());
     }
 }

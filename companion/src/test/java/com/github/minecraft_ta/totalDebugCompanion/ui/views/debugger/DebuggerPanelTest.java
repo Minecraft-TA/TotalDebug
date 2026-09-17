@@ -27,6 +27,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import java.awt.event.ActionEvent;
+import javax.swing.JToggleButton;
+import javax.swing.KeyStroke;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -34,6 +37,39 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DebuggerPanelTest {
+    @Test
+    void toolbarButtonsRemainKeyboardReachableAndMuteWorksWithSpace() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var controller = new DebuggerSessionController(ignored -> null);
+            var actions = new DebuggerActions(controller);
+            var panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activate) -> {});
+            try {
+                for (String tooltip : List.of("Attach debugger", "Continue (F9)", "Step Over (F8)",
+                        "Step Into (F7)", "Step Out (Shift+F8)", "Detach debugger", "View breakpoints", "Add Watch (Shift+Enter)")) {
+                    JButton button = findButtonByTooltip(panel, tooltip);
+                    assertNotNull(button, tooltip);
+                    assertTrue(button.isFocusable(), tooltip);
+                    assertTrue(button.isFocusPainted(), tooltip);
+                    assertFalse(button.isRequestFocusEnabled(), tooltip);
+                }
+                var mute = find(panel, JToggleButton.class);
+                assertNotNull(mute);
+                assertTrue(mute.isFocusable());
+                assertFalse(mute.isRequestFocusEnabled());
+                for (String stroke : new String[]{"pressed SPACE", "released SPACE"}) {
+                    Object key = mute.getInputMap().get(KeyStroke.getKeyStroke(stroke));
+                    mute.getActionMap().get(key).actionPerformed(new ActionEvent(mute, 0, stroke));
+                }
+                assertTrue(mute.isSelected());
+                assertTrue(controller.breakpointsMuted());
+            } finally {
+                panel.dispose();
+                actions.close();
+                controller.close();
+            }
+        });
+    }
+
     @Test
     void exposesExplicitEvaluateAndAddWatchActions() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
@@ -279,11 +315,12 @@ class DebuggerPanelTest {
             JPopupMenu menu = inspector.createContextMenu(variables.getPathForRow(0));
             assertEquals(
                     List.of(
-                            "Jump to Source",
-                            "Jump to Type Source",
-                            "Set Value…",
-                            "Copy Value",
-                            "Copy Expression"
+                            "Open source",
+                            "Open type source",
+                            "Set value…",
+                            "Copy value",
+                            "Copy expression",
+                            "Copy type"
                     ),
                     menuItems(menu)
             );

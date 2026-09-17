@@ -3,9 +3,11 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.tth05.jindex.ClassIndex;
+
 import org.eclipse.jdt.core.CompletionContext;
 import org.eclipse.jdt.core.CompletionProposal;
 import org.eclipse.jdt.core.Flags;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -34,16 +36,25 @@ class CompletionPresentationTest {
         CompanionClassIndex.clear();
     }
 
+    @Test void recoveredMembersIdentifyTheTypeTheyWillImport() {
+        var method = proposal(CompletionProposal.METHOD_REF, "clear", "clear()", "()V", "clear");
+        var required = CompletionProposal.create(CompletionProposal.TYPE_REF, 0);
+        required.setSignature("Lnet.neoforged.bus.api.EventListener;".toCharArray());
+        method.setRequiredProposals(new CompletionProposal[]{required});
+        assertEquals("clear() (import net.neoforged.bus.api.EventListener) : void", label(method));
+    }
+
     @Test
     void labelsGenericVarargsAndInsertsArgumentStops() {
         String source = "class Proof { void run() { collect } }";
         CompletionProposal proposal = proposal(CompletionProposal.METHOD_REF, "collect", "collect()",
                 "(Ljava.util.List<+Ljava.lang.Number;>;[Ljava.lang.String;)V", source);
         proposal.setFlags(Flags.AccVarargs);
-        assertEquals("collect(List<? extends Number> arg0, String... arg1) : void",
-                CompletionLabels.label(proposal, new CompletionContext()));
+        CompletionParameterNames.prepare(proposal, new CompletionContext());
+        assertEquals("collect(List<? extends Number> list, String... astring) : void",
+                label(proposal));
         CompletionItem item = convert(source, proposal);
-        assertEquals("collect(${1:arg0}, ${2:arg1})${0};", item.getTextEdits().getFirst().getNewText());
+        assertEquals("collect(${1:list}, ${2:astring});${0}", item.getTextEdits().getFirst().getNewText());
         assertTrue(item.getTextEdits().getFirst().isSnippet());
     }
 
@@ -60,7 +71,7 @@ class CompletionPresentationTest {
     void createsLambdaArgumentStops() {
         String source = "class Proof { void run() { lambda } }";
         CompletionProposal lambda = proposal(CompletionProposal.LAMBDA_EXPRESSION, "lambda", "", "(II)I", source);
-        assertEquals("(${1:arg0}, ${2:arg1}) -> ${0}", convert(source, lambda).getTextEdits().getFirst().getNewText());
+        assertEquals("(${1:i}, ${2:j}) -> ${0}", convert(source, lambda).getTextEdits().getFirst().getNewText());
     }
 
     @Test
@@ -98,7 +109,7 @@ class CompletionPresentationTest {
     void constructorCompletionUsesTheRequiredTypeRangeAndDiamond() {
         String source = "class Proof { void run() { new Box } }";
         int start = source.indexOf("Box");
-        CompletionProposal constructor = new org.eclipse.jdt.internal.codeassist.InternalCompletionProposal(
+        CompletionProposal constructor = new InternalCompletionProposal(
                 CompletionProposal.CONSTRUCTOR_INVOCATION, start + 3) {
             @Override public boolean isConstructor() { return true; }
             @Override public boolean canUseDiamond(CompletionContext context) { return true; }
@@ -113,7 +124,7 @@ class CompletionPresentationTest {
         CompletionItem item = convert(source, constructor);
         String result = apply(source, item);
         assertTrue(result.contains("import org.example.Box;"), result);
-        assertTrue(result.contains("new Box<>(${1:arg0})${0}"), result);
+        assertTrue(result.contains("new Box<>(${1:object})${0}"), result);
         assertEquals(start, item.getTextEdits().getFirst().getRange().getOffset());
     }
 
@@ -137,7 +148,14 @@ class CompletionPresentationTest {
         return proposal;
     }
 
+    private static String label(CompletionProposal proposal) {
+        var item = new CompletionItem(null);
+        CompletionLabels.populate(proposal, item, new CompletionContext());
+        return item.getLabel();
+    }
+
     private static CompletionItem convert(String source, CompletionProposal proposal) {
+        CompletionParameterNames.prepare(proposal, new CompletionContext());
         CompletionItem item = new CompletionItem(null);
         new CompletionEdits(new CompilationUnitImpl("Proof", source), new CompletionContext()).populate(proposal, item);
         return item;

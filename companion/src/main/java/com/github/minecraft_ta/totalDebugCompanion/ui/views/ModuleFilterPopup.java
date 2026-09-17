@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
@@ -106,8 +107,7 @@ final class ModuleFilterPopup extends JPopupMenu {
 
     private JButton actionButton(String text, Runnable action) {
         JButton button = new JButton(text);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setFocusable(false);
+        FlatIconButton.configure(button);
         button.addActionListener(event -> action.run());
         return button;
     }

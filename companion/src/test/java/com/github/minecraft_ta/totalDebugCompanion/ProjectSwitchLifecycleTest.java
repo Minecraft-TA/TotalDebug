@@ -233,7 +233,7 @@ class ProjectSwitchLifecycleTest {
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
             var tree = new FileTreeView(app::currentScope, ignored -> { }) {
-                @Override public CompletableFuture<Boolean> revealLocalDirectory(Path path) {
+                @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
                     var delayed = pending.getAndSet(null);
                     if (delayed != null) lookupStarted.get().complete(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;

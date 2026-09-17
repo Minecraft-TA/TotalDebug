@@ -6,4 +6,5 @@ public interface ShadowedTokenTypes {
 
     int TYPE = TokenTypes.MARKUP_ENTITY_REFERENCE;
     int FIELD = TokenTypes.VARIABLE;
+    int CONSTANT = TokenTypes.MARKUP_PROCESSING_INSTRUCTION;
 }

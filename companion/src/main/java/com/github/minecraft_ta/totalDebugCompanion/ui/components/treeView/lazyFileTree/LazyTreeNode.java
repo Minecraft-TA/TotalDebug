@@ -1,10 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
 import javax.swing.tree.DefaultMutableTreeNode;
+import java.util.List;
 
 public class LazyTreeNode extends DefaultMutableTreeNode {
 
     private boolean childrenLoaded;
+    private int revision;
+    private boolean refreshDescendants;
 
     LazyTreeNode(TreeItem treeItem) {
         super(treeItem);
@@ -19,13 +22,28 @@ public class LazyTreeNode extends DefaultMutableTreeNode {
     }
 
     void markChildrenStale() {
-        this.childrenLoaded = false;
+        markChildrenStale(false);
     }
 
-    void replaceChildren(java.util.List<TreeItem> items) {
+    void markChildrenStale(boolean refreshDescendants) {
+        this.childrenLoaded = false;
+        this.refreshDescendants |= refreshDescendants;
+        this.revision++;
+    }
+
+    int revision() { return this.revision; }
+
+    boolean refreshDescendants() { return this.refreshDescendants; }
+
+    void markChildrenLoaded() {
+        this.childrenLoaded = true;
+        this.refreshDescendants = false;
+    }
+
+    void replaceChildren(List<? extends TreeItem> items) {
         removeAllChildren();
         items.forEach(item -> add(new LazyTreeNode(item)));
-        this.childrenLoaded = true;
+        markChildrenLoaded();
     }
 
     @Override

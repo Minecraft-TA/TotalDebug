@@ -10,11 +10,13 @@ import java.awt.Color;
  * Default}) using attribute names that mean nothing to RSyntaxTextArea. Rather than ship a general
  * IntelliJ colour-scheme parser to recover roughly twenty values, the values are lifted here once.
  *
- * <p>Sources: {@code themes/islands/IslandSchemeDark.xml} and {@code themes/expUI/expUI_lightScheme.xml}
- * from {@code intellij.platform.ide.impl.jar} (Apache-2.0).
+ * <p>Editor syntax values follow the user's Rider Islands reference (RiderIslandsDark / RiderLight).
+ * The OLED variant has identical syntax attributes. Only colour values are transcribed; no Rider
+ * scheme or plugin assets are distributed. Window/editor chrome remains the bundled Islands theme.
  *
  * @param background        editor and gutter background ({@code TEXT} background)
  * @param foreground        default text ({@code TEXT} foreground)
+ * @param identifier        identifiers and punctuation ({@code DEFAULT_IDENTIFIER})
  * @param keyword           {@code DEFAULT_KEYWORD}
  * @param string            {@code DEFAULT_STRING}
  * @param number            {@code DEFAULT_NUMBER}
@@ -37,6 +39,7 @@ import java.awt.Color;
 public record EditorPalette(
         Color background,
         Color foreground,
+        Color identifier,
         Color keyword,
         Color string,
         Color number,
@@ -60,17 +63,18 @@ public record EditorPalette(
     public static EditorPalette islandsDark() {
         return new EditorPalette(
                 hex("191A1C"),  // background
-                hex("BCBEC4"),  // foreground
-                hex("CF8E6D"),  // keyword
-                hex("6AAB73"),  // string
-                hex("2AACB8"),  // number
-                hex("7A7E85"),  // comment
-                hex("5F826B"),  // docComment
-                hex("56A8F5"),  // methodDeclaration
-                hex("57AAF7"),  // instanceMethod
-                hex("C77DBB"),  // field
-                hex("B3AE60"),  // annotation
-                hex("BCBEC4"),  // classReference
+                hex("D0D0D0"),  // foreground
+                hex("BDBDBD"),  // identifier
+                hex("6C95EB"),  // keyword
+                hex("C9A26D"),  // string
+                hex("ED94C0"),  // number
+                hex("85C46C"),  // comment
+                hex("85C46C"),  // docComment
+                hex("39CC9B"),  // methodDeclaration
+                hex("39CC9B"),  // instanceMethod
+                hex("66C3CC"),  // field
+                hex("C191FF"),  // annotation
+                hex("C191FF"),  // classReference
                 hex("CED0D6"),  // caret
                 hex("1F2024"),  // currentLine
                 hex("4A2425"),  // breakpointLine
@@ -85,17 +89,18 @@ public record EditorPalette(
     public static EditorPalette islandsLight() {
         return new EditorPalette(
                 hex("FFFFFF"),  // background
-                hex("080808"),  // foreground
-                hex("0033B3"),  // keyword
-                hex("067D17"),  // string
-                hex("1750EB"),  // number
-                hex("8C8C8C"),  // comment
-                hex("8C8C8C"),  // docComment
-                hex("00627A"),  // methodDeclaration
-                hex("00627A"),  // instanceMethod
-                hex("871094"),  // field
-                hex("9E880D"),  // annotation
-                hex("080808"),  // classReference
+                hex("202020"),  // foreground
+                hex("383838"),  // identifier
+                hex("0F54D6"),  // keyword
+                hex("8C6C41"),  // string
+                hex("AB2F6B"),  // number
+                hex("248700"),  // comment
+                hex("248700"),  // docComment
+                hex("00855F"),  // methodDeclaration
+                hex("00855F"),  // instanceMethod
+                hex("0093A1"),  // field
+                hex("6B2FBA"),  // annotation
+                hex("6B2FBA"),  // classReference
                 hex("000000"),  // caret
                 hex("F5F8FE"),  // currentLine
                 hex("FFE5E5"),  // breakpointLine

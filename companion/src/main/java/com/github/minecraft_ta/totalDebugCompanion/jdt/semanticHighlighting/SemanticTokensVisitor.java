@@ -31,7 +31,12 @@ public class SemanticTokensVisitor extends ASTVisitor {
         return switch (binding.getKind()) {
             case IBinding.TYPE -> ShadowedTokenTypes.TYPE;
             case IBinding.METHOD -> TokenTypes.FUNCTION;
-            case IBinding.VARIABLE -> ((IVariableBinding) binding).isField() ? TokenTypes.VARIABLE : -1;
+            case IBinding.VARIABLE -> {
+                var variable = (IVariableBinding) binding;
+                if (!variable.isField()) yield -1;
+                yield Modifier.isStatic(variable.getModifiers()) && Modifier.isFinal(variable.getModifiers())
+                        ? ShadowedTokenTypes.CONSTANT : ShadowedTokenTypes.FIELD;
+            }
             default -> -1;
         };
     }

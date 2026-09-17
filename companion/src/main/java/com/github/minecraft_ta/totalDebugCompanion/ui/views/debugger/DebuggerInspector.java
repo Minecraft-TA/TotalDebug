@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -32,14 +34,9 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.BorderLayout;
-import java.awt.Insets;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -218,7 +215,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
             }
         });
         installExpansion();
-        installContextMenu();
+        ContextMenus.installTree(this.tree, this::createContextMenu);
 
         JPanel input = new JPanel(new BorderLayout(6, 0));
         input.setBorder(BorderFactory.createCompoundBorder(
@@ -338,7 +335,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         DebugEngine.Variable parent = parentVariable(selected);
 
         if (variable != null && currentFrame != null && supportsDeclarationNavigation(variable)) {
-            menu.add(menuItem("Jump to Source", Icons.JAVA_VARIABLE,
+            menu.add(menuItem("Open source", Icons.JUMP_TO_SOURCE,
                     () -> navigateToDeclaration(currentFrame, variable, parent)));
         }
         if (value != null && currentFrame != null) {
@@ -346,7 +343,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
                     ? DebuggerVariableNavigation.typeTarget(value.type())
                     : DebuggerVariableNavigation.typeTarget(currentFrame, variable);
             typeTarget.ifPresent(target -> menu.add(menuItem(
-                    "Jump to Type Source",
+                    "Open type source",
                     Icons.JAVA_CLASS,
                     () -> this.navigation.accept(target)
             )));
@@ -356,28 +353,18 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         }
 
         if (variable != null && isAssignable(variable)) {
-            menu.add(menuItem("Set Value…", Icons.VALUE, () -> setValue(variable)));
+            menu.add(menuItem("Set value…", Icons.VALUE, () -> setValue(variable)));
         }
-        if (value != null) {
-            menu.add(menuItem("Copy Value", Icons.COPY, () -> copy(value.value())));
-            if (!value.evaluateName().isBlank()) {
-                menu.add(menuItem("Copy Expression", Icons.COPY, () -> copy(value.evaluateName())));
-            }
-        } else {
-            String expression = expressionOf(selectedValue);
-            if (!expression.isBlank()) {
-                menu.add(menuItem("Copy Expression", Icons.COPY, () -> copy(expression)));
-            }
-        }
+        for (var item : DebuggerValueTree.copyMenu(path).getComponents()) menu.add(item);
 
         String selectedExpression = expressionOf(selectedValue);
         if (!selectedExpression.isBlank()) {
             menu.addSeparator();
             if (isWatch(selectedValue)) {
-                menu.add(menuItem("Remove Watch", Icons.DELETE,
+                menu.add(menuItem("Remove watch", Icons.DELETE,
                         () -> removeExpression(selectedExpression, true)));
             } else {
-                menu.add(menuItem("Add to Watches", Icons.ADD_TO_WATCH,
+                menu.add(menuItem("Add to watches", Icons.ADD_TO_WATCH,
                         () -> addWatch(selectedExpression)));
             }
         }
@@ -817,35 +804,6 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
                 }));
     }
 
-    private void installContextMenu() {
-        this.tree.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent event) {
-                showPopup(event);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent event) {
-                showPopup(event);
-            }
-
-            private void showPopup(MouseEvent event) {
-                if (!event.isPopupTrigger()) {
-                    return;
-                }
-                TreePath path = tree.getPathForLocation(event.getX(), event.getY());
-                if (path == null) {
-                    return;
-                }
-                tree.setSelectionPath(path);
-                JPopupMenu menu = createContextMenu(path);
-                if (menu.getComponentCount() > 0) {
-                    menu.show(tree, event.getX(), event.getY());
-                }
-            }
-        });
-    }
-
     private boolean isStale(DebugEngine.StackFrame requestedFrame, long requestedRevision) {
         return requestedRevision != this.revision || !Objects.equals(requestedFrame, this.frame);
     }
@@ -893,10 +851,8 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
 
     private static JButton createAddWatchButton() {
         JButton button = new JButton(Icons.ADD_TO_WATCH);
-        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        FlatIconButton.configure(button);
         button.setToolTipText("Add Watch (Shift+Enter)");
-        button.setFocusable(false);
-        button.setMargin(new Insets(4, 6, 4, 6));
         return button;
     }
 
@@ -906,9 +862,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         return item;
     }
 
-    private static void copy(String text) {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-    }
+
 
     private static DebugEngine.Variable parentVariable(DefaultMutableTreeNode node) {
         if (!(node.getParent() instanceof DefaultMutableTreeNode parent)) {

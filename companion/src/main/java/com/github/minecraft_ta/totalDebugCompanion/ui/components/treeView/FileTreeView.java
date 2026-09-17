@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
@@ -26,28 +27,18 @@ public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
 
     private final Supplier<ProjectScope> project;
+    private ProjectScope displayedProject;
 
     public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
         this.project = project;
         java.util.Objects.requireNonNull(navigator, "navigator");
 
-        this.tree = new LazyFileJTree() {
-            @Override
-            protected void showPopupMenu(LazyTreeNode node, TreeItem treeItem, int x, int y) {
-                if (!(treeItem instanceof FileSystemFileItem))
-                    return;
+        this.tree = new LazyFileJTree();
+        ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
+                ? node.getUserObject() : null, navigator));
 
-                var popupMenu = new JPopupMenu();
-                var deleteItem = popupMenu.add("Delete");
-                deleteItem.setIcon(Icons.DELETE);
-                deleteItem.addActionListener(event -> deleteSelectedItems());
-
-                popupMenu.show(this, x, y);
-            }
-        };
-
-        this.tree.addMouseDoubleClickListener((node, item) -> openItem(node, item, navigator));
+        this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "openSelectedFile");
         this.tree.getActionMap().put("openSelectedFile", new AbstractAction() {
@@ -57,7 +48,7 @@ public class FileTreeView extends JScrollPane {
                         || !(tree.getSelectionPath().getLastPathComponent() instanceof LazyTreeNode node)) {
                     return;
                 }
-                openItem(node, node.getUserObject(), navigator);
+                openItem(node.getUserObject(), navigator);
             }
         });
 
@@ -87,7 +78,6 @@ public class FileTreeView extends JScrollPane {
     }
 
     private void openItem(
-            LazyTreeNode node,
             TreeItem item,
             Consumer<NavigationTarget> navigator
     ) {
@@ -119,6 +109,50 @@ public class FileTreeView extends JScrollPane {
         }
     }
 
+    JPopupMenu createContextMenu(TreeItem item, Consumer<NavigationTarget> navigator) {
+        JPopupMenu menu = new JPopupMenu();
+        if (item == null) return menu;
+        String reference = reference(item);
+        String location = location(item);
+        if (!item.isDirectory()) {
+            JMenuItem open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
+            open.addActionListener(event -> openItem(item, navigator));
+            menu.add(open);
+        }
+        if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
+        if (location != null && !location.isBlank()) {
+            Action copyPath = ContextMenus.copyAction("Copy path", location);
+            if (reference == null) ContextMenus.defaultCopy(copyPath);
+            menu.add(copyPath);
+        }
+        if (item instanceof FileSystemFileItem) {
+            JMenuItem delete = new JMenuItem("Delete file", Icons.DELETE);
+            delete.addActionListener(event -> this.tree.deleteSelectedItems());
+            menu.add(delete);
+        }
+        return menu;
+    }
+
+    private static String reference(TreeItem item) {
+        if (item instanceof DecompiledSourcesTreeItem.SourceItem source) return source.binaryName();
+        if (item instanceof RuntimeSourceTreeItem.RuntimeFileEntry file) return file.binaryName();
+        if (item instanceof ZipFileRootItem.Entry entry && entry.getEntryPath().endsWith(".class")) {
+            return entry.getEntryPath().substring(0, entry.getEntryPath().length() - 6).replace('/', '.');
+        }
+        return null;
+    }
+
+    private static String location(TreeItem item) {
+        if (item instanceof FileSystemFileItem file) return file.getPath().toAbsolutePath().normalize().toString();
+        if (item instanceof ZipFileRootItem.Entry entry) {
+            return entry.getArchivePath().toAbsolutePath().normalize() + "!/" + entry.getEntryPath();
+        }
+        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem
+                || item instanceof RuntimeSourceTreeItem || item instanceof RuntimeSourceTreeItem.RuntimeDirectoryEntry
+                || item instanceof RuntimeSourceTreeItem.RuntimeFileEntry) return item.getTooltip();
+        return null;
+    }
+
     private RuntimeSourceCatalog sourceCatalog() {
         var scope = project.get();
         return scope == null ? RuntimeSourceCatalog.empty() : scope.sources();
@@ -128,6 +162,7 @@ public class FileTreeView extends JScrollPane {
         var scope = project.get();
         if (scope == null) {
             this.tree.setRootNodes();
+            this.displayedProject = null;
             return;
         }
         var binding = scope.runtime();
@@ -156,7 +191,23 @@ public class FileTreeView extends JScrollPane {
             runtime.setIcon(Icons.LIBRARY);
             rootItems.add(runtime);
         }
-        this.tree.setRootNodes(rootItems.toArray(DirectoryTreeItem[]::new));
+        var roots = rootItems.toArray(DirectoryTreeItem[]::new);
+        if (this.displayedProject == scope) this.tree.refreshRootNodes(roots);
+        else this.tree.setRootNodes(roots);
+        this.displayedProject = scope;
+    }
+
+    public void refreshScripts() {
+        var root = (LazyTreeNode) this.tree.getModel().getRoot();
+        for (int i = 0; i < root.getChildCount(); i++) {
+            var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
+            if (item instanceof FileSystemDirectoryItem && item.getName().equals("scripts")) {
+                this.tree.loadItemsForTopLevelItem(item);
+                return;
+            }
+        }
+        // The first script can create a directory that did not exist when the project opened.
+        reloadProfile();
     }
 
     static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {
@@ -182,13 +233,13 @@ public class FileTreeView extends JScrollPane {
         return List.copyOf(modules);
     }
 
-    public CompletableFuture<Boolean> revealPackage(
-            String packageName,
+    public CompletableFuture<Boolean> revealRuntimePath(
             String ownerClassName,
+            String entryPath,
             RuntimeSnapshotBytecodeSource.Source source
     ) {
-        if (packageName == null || packageName.isBlank()) {
-            throw new IllegalArgumentException("A package name must not be blank");
+        if (entryPath == null || entryPath.isBlank()) {
+            throw new IllegalArgumentException("A runtime path must not be blank");
         }
         RuntimeSourceCatalog catalog = sourceCatalog();
         List<String> path = new ArrayList<>();
@@ -204,11 +255,11 @@ public class FileTreeView extends JScrollPane {
             }
             path.add(module);
         }
-        path.addAll(List.of(packageName.split("\\.")));
+        path.addAll(List.of(entryPath.split("/")));
         return revealRuntimeDirectory(source.module(), path);
     }
 
-    public CompletableFuture<Boolean> revealLocalDirectory(Path directory) {
+    public CompletableFuture<Boolean> revealLocalPath(Path directory) {
         Path target = directory.toAbsolutePath().normalize();
         for (Path root : List.of(
                 project.get().paths().scripts()
@@ -220,12 +271,12 @@ public class FileTreeView extends JScrollPane {
             for (Path segment : root.relativize(target)) {
                 relative.add(segment.toString());
             }
-            return this.tree.revealDirectoryPath(root.getFileName().toString(), relative);
+            return this.tree.revealItemPath(root.getFileName().toString(), relative);
         }
         return CompletableFuture.completedFuture(false);
     }
 
-    public CompletableFuture<Boolean> revealArchiveDirectory(Path archive, String entryName) {
+    public CompletableFuture<Boolean> revealArchivePath(Path archive, String entryName) {
         Path normalizedArchive = archive.toAbsolutePath().normalize();
         RuntimeSourceCatalog catalog = sourceCatalog();
         for (var module : catalog.modules()) {
@@ -251,7 +302,7 @@ public class FileTreeView extends JScrollPane {
             RuntimeInventory.RuntimeModule module,
             List<String> directorySegments
     ) {
-        return this.tree.revealDirectoryPath("runtime", runtimeDirectoryPath(module, directorySegments));
+        return this.tree.revealItemPath("runtime", runtimeDirectoryPath(module, directorySegments));
     }
 
     static List<String> runtimeDirectoryPath(

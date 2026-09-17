@@ -1,21 +1,21 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.completion;
 
-import org.eclipse.core.runtime.Assert;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
+
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.*;
-import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.internal.codeassist.InternalCompletionContext;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
 import org.eclipse.jdt.internal.codeassist.complete.CompletionOnMemberAccess;
-import org.eclipse.jdt.internal.compiler.lookup.ParameterizedTypeBinding;
-import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
+import org.eclipse.jdt.internal.compiler.lookup.FieldBinding;
+import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
+import org.eclipse.jdt.internal.compiler.lookup.CaptureBinding;
+import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 public class CustomCompletionRequestor extends CompletionRequestor implements IProgressMonitor {
 
@@ -29,7 +29,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     private CompletionEdits proposalProvider;
 
     private volatile boolean cancelled;
-    private long startTime;
+    private long startTime = System.nanoTime();
 
     public CustomCompletionRequestor(
             ICompilationUnit unit,
@@ -57,40 +57,38 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     }
 
     private List<CompletionItem> convertProposals() {
-        var items = proposals.stream()
-                .sorted(new CompletionProposalComparator())
-                .limit(50)
-                .map(this::toCompletionItem)
-                .filter(Objects::nonNull)
-                .sorted(new CompletionItemComparator())
-                .collect(Collectors.toList());
-
-        prependLiveTemplates(items);
-        items.addAll(SnippetCompletionProposalProvider.getSnippets(this.unit, this));
-        return items;
+        List<CompletionItem> candidates = new ArrayList<>();
+        for (var proposal : proposals) {
+            if (!CompletionLabels.supports(proposal, context)) continue;
+            candidates.add(item(proposal));
+        }
+        candidates.addAll(SubtypeCompletion.find(unit, this, candidates));
+        addLiveTemplates(candidates);
+        candidates.addAll(SnippetCompletionProposalProvider.getSnippets(this.unit, this));
+        List<CompletionItem> result = new ArrayList<>();
+        for (var item : CompletionRanking.order(candidates, CompletionLabels.text(context.getToken()))) {
+            if (isCanceled()) break;
+            if (item.proposal != null) {
+                CompletionParameterNames.prepare(item.proposal, context);
+                CompletionLabels.populate(item.proposal, item, context);
+                this.proposalProvider.populate(item.proposal, item);
+                if (item.getTextEdits().isEmpty()) continue;
+            }
+            result.add(item);
+            if (result.size() == 50) break;
+        }
+        // Downstream expression completion must preserve this order too.
+        for (int i = 0; i < result.size(); i++) result.get(i).setRelevance(result.size() - i);
+        return result;
     }
 
-    private CompletionItem toCompletionItem(CompletionProposal proposal) {
-        final CompletionItem item = new CompletionItem(this);
-        item.setRelevance(mapRelevance(proposal));
+    CompletionItem item(CompletionProposal proposal) {
+        var item = new CompletionItem(this, proposal);
         item.setKind(mapKind(proposal));
-
-        String label = CompletionLabels.label(proposal, this.context);
-        if (label == null) return null;
-        item.setLabel(label);
-        this.proposalProvider.populate(proposal, item);
-
-        if (item.getTextEdits().stream().allMatch(edit -> edit.getNewText().isEmpty()))
-            return null;
-
-        //Fix first completion
-        var mainEditRange = item.getTextEdits().getFirst().getRange();
-        if (mainEditRange.getEndOffset() > this.offset && !item.getTextEdits().getFirst().getNewText().endsWith(";"))
-            mainEditRange.setLength(mainEditRange.getLength() - (mainEditRange.getEndOffset() - this.offset));
         return item;
     }
 
-    private void prependLiveTemplates(List<CompletionItem> items) {
+    private void addLiveTemplates(List<CompletionItem> items) {
         var node = ((InternalCompletionContext) context).getCompletionNode();
         if (!(node instanceof CompletionOnMemberAccess memberAccess))
             return;
@@ -101,11 +99,11 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
 
         if ("var".startsWith(memberName)) {
             var variableType = memberAccess.receiver.resolvedType;
-            if (variableType.id == TypeIds.T_void)
+            if (variableType == null || !variableType.isValidBinding() || variableType.id == TypeIds.T_void)
                 return;
 
             var item = new CompletionItem(this);
-            item.setLabel("var");
+            item.setPresentation("var", "", "");
             item.setRelevance(0);
             item.setKind(CompletionItemKind.KEYWORD);
             var start = memberAccess.receiver.sourceStart;
@@ -115,7 +113,9 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 var postStatementTerminationChar = getStatementTerminationChar(this.unit.getBuffer(), this.offset, true);
                 var terminator = postStatementTerminationChar != ';' ? ";" : "";
 
-                var declarationText = new String(variableType.shortReadableName()) + " ${1:name} = " + expressionText + terminator;
+                var declarationType = variableType instanceof CaptureBinding capture ? capture.upperBound() : variableType;
+                String type = proposalProvider.importType(new String(CompletionTypes.uncapture(declarationType).genericTypeSignature()).replace('/', '.'), item);
+                var declarationText = type + " ${1:name} = " + expressionText + terminator;
                 Range declarationReplacementRange;
                 if ((postStatementTerminationChar != '\n' && postStatementTerminationChar != ';') || (preStatementTerminationChar != '\n' && preStatementTerminationChar != ';')) {
                     declarationReplacementRange = new Range(getLineStartOffsetWithoutWhitespace(this.unit.getBuffer(), this.offset), 0);
@@ -130,37 +130,12 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 }
 
                 item.addTextEdit(new CustomTextEdit(declarationReplacementRange, declarationText));
-                addAllImportsForType(variableType, item);
 
-                items.addFirst(item);
-            } catch (Throwable ignored) {}
+                items.add(item);
+            } catch (JavaModelException failure) {
+                throw new IllegalStateException("Cannot read the completion source", failure);
+            }
         }
-    }
-
-    private void addAllImportsForType(TypeBinding variableType, CompletionItem item) {
-        List<String> names = new ArrayList<>(2);
-        names.add(new String(variableType.readableName()));
-        if (variableType instanceof ParameterizedTypeBinding parameterizedTypeBinding) {
-            for (TypeBinding argument : parameterizedTypeBinding.typeArguments())
-                names.add(new String(argument.readableName()));
-        }
-
-        this.proposalProvider.addImports(names.toArray(new String[0])).forEach(item::addTextEdit);
-    }
-
-    public int mapRelevance(CompletionProposal proposal) {
-        int baseRelevance = proposal.getRelevance();
-        return switch (proposal.getKind()) {
-            case CompletionProposal.LABEL_REF -> baseRelevance + 1;
-            case CompletionProposal.KEYWORD -> baseRelevance + 2;
-            case CompletionProposal.TYPE_REF, CompletionProposal.ANONYMOUS_CLASS_DECLARATION, CompletionProposal.ANONYMOUS_CLASS_CONSTRUCTOR_INVOCATION ->
-                    baseRelevance + 3;
-            case CompletionProposal.METHOD_REF, CompletionProposal.CONSTRUCTOR_INVOCATION, CompletionProposal.METHOD_NAME_REFERENCE, CompletionProposal.METHOD_DECLARATION, CompletionProposal.ANNOTATION_ATTRIBUTE_REF, CompletionProposal.POTENTIAL_METHOD_DECLARATION ->
-                    baseRelevance + 4;
-            case CompletionProposal.FIELD_REF -> baseRelevance + 5;
-            case CompletionProposal.LOCAL_VARIABLE_REF, CompletionProposal.VARIABLE_DECLARATION -> baseRelevance + 6;
-            default -> baseRelevance;
-        };
     }
 
     private CompletionItemKind mapKind(CompletionProposal proposal) {
@@ -231,95 +206,35 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     }
 
     protected boolean isFiltered(CompletionProposal proposal) {
-        if (isIgnored(proposal.getKind())) {
-            return true;
-        }
-        if ((proposal.getKind() == CompletionProposal.TYPE_REF
-                || proposal.getKind() == CompletionProposal.ANONYMOUS_CLASS_DECLARATION)
-                && Flags.isPrivate(proposal.getFlags())) {
-            return true;
-        }
-        // Only filter types and constructors from completion.
-        switch (proposal.getKind()) {
-            case CompletionProposal.CONSTRUCTOR_INVOCATION:
-            case CompletionProposal.ANONYMOUS_CLASS_CONSTRUCTOR_INVOCATION:
-            case CompletionProposal.JAVADOC_TYPE_REF:
-            case CompletionProposal.PACKAGE_REF:
-            case CompletionProposal.TYPE_REF:
-                return isTypeFiltered(proposal);
-            case CompletionProposal.METHOD_REF:
-                // Methods from already imported types and packages can still be proposed.
-                // Whether the expected type is resolved or not can be told from the required proposal.
-                // When the type is missing, an additional proposal could be found.
-                if (proposal.getRequiredProposals() != null) {
-                    return isTypeFiltered(proposal);
-                }
-        }
-        return false;
-    }
-
-    private static final char[][] TYPE_FILTERS = Arrays.stream(new String[]{
-            "com.sun",
-            "sun.",
-            "scala",
-            "org.omg",
-            "org.jcp",
-            "org.omg",
-            "org.jline",
-            "oshi",
-            "javassist.",
-            "com.ibm",
-            "com.jcraft",
-            "akka"
-    }).map(String::toCharArray).toArray(char[][]::new);
-
-    protected boolean isTypeFiltered(CompletionProposal proposal) {
-        char[] declaringType = getDeclaringType(proposal);
-        if (declaringType == null)
-            return false;
-
-        for (char[] filter : TYPE_FILTERS) {
-            if (CharOperation.fragmentEquals(filter, declaringType, 0, false))
+        if (isIgnored(proposal.getKind())) return true;
+        if (proposal instanceof InternalCompletionProposal internal) {
+            var binding = internal.getBinding();
+            if (proposal.getKind() == CompletionProposal.TYPE_REF && !Flags.isPublic(proposal.getFlags())
+                    && (!(binding instanceof ReferenceBinding type) || type.isBinaryBinding())) return true;
+            String program = JavaSnippetSource.PROGRAM_TYPE.replace('.', '/');
+            if (binding instanceof MethodBinding method) {
+                String owner = new String(method.declaringClass.constantPoolName());
+                if (owner.equals(program)) return !Flags.isPublic(proposal.getFlags()) || "run".equals(new String(method.selector));
+                var parent = method.declaringClass.superclass();
+                if (parent != null && program.equals(new String(parent.constantPoolName()))
+                        && "run".equals(new String(method.selector)) && method.parameters.length == 0) return true;
+            } else if (binding instanceof FieldBinding field
+                    && field.declaringClass != null
+                    && program.equals(new String(field.declaringClass.constantPoolName()))) {
                 return true;
+            } else if (binding instanceof ReferenceBinding type) {
+                if (program.equals(new String(type.constantPoolName()))) return true;
+                var parent = type.superclass();
+                if (!type.isBinaryBinding() && parent != null && program.equals(new String(parent.constantPoolName()))) return true;
+                // The linker relaxes member access, not access to the declaring classes.
+                if (type.isBinaryBinding() && type.fPackage.compoundName.length != 0) {
+                    for (var enclosing = type; enclosing != null; enclosing = enclosing.enclosingType()) {
+                        if (!enclosing.isPublic()) return true;
+                    }
+                }
+            }
         }
-
-        return false;
-    }
-
-    /**
-     * copied from
-     * org.eclipse.jdt.ui.text.java.CompletionProposalCollector.getDeclaringType(CompletionProposal)
-     */
-    protected final char[] getDeclaringType(CompletionProposal proposal) {
-        var ar = switch (proposal.getKind()) {
-            case CompletionProposal.METHOD_DECLARATION, CompletionProposal.METHOD_NAME_REFERENCE,
-                    CompletionProposal.JAVADOC_METHOD_REF, CompletionProposal.METHOD_REF,
-                    CompletionProposal.CONSTRUCTOR_INVOCATION, CompletionProposal.ANONYMOUS_CLASS_CONSTRUCTOR_INVOCATION,
-                    CompletionProposal.METHOD_REF_WITH_CASTED_RECEIVER, CompletionProposal.ANNOTATION_ATTRIBUTE_REF,
-                    CompletionProposal.POTENTIAL_METHOD_DECLARATION, CompletionProposal.ANONYMOUS_CLASS_DECLARATION,
-                    CompletionProposal.FIELD_REF, CompletionProposal.FIELD_REF_WITH_CASTED_RECEIVER,
-                    CompletionProposal.JAVADOC_FIELD_REF, CompletionProposal.JAVADOC_VALUE_REF -> {
-                char[] declaration = proposal.getDeclarationSignature();
-                // special methods may not have a declaring type: methods defined on arrays etc.
-                // Currently known: class literals don't have a declaring type - use Object
-                if (declaration == null)
-                    yield "java.lang.Object".toCharArray();
-                yield declaration;
-            }
-            case CompletionProposal.PACKAGE_REF -> proposal.getDeclarationSignature();
-            case CompletionProposal.JAVADOC_TYPE_REF, CompletionProposal.TYPE_REF -> proposal.getSignature();
-            case CompletionProposal.LOCAL_VARIABLE_REF, CompletionProposal.VARIABLE_DECLARATION, CompletionProposal.KEYWORD,
-                    CompletionProposal.LABEL_REF, CompletionProposal.JAVADOC_BLOCK_TAG, CompletionProposal.JAVADOC_INLINE_TAG,
-                    CompletionProposal.JAVADOC_PARAM_REF -> null;
-            default -> {
-                Assert.isTrue(false);
-                yield null;
-            }
-        };
-
-        if (ar == null)
-            return null;
-        return ar[ar.length - 1] == ';' ? CharOperation.subarray(ar, 1, ar.length - 1) : ar;
+        return proposal.getKind() == CompletionProposal.TYPE_REF && Flags.isPrivate(proposal.getFlags());
     }
 
     public CompletionContext getContext() {
@@ -336,7 +251,8 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         if (this.cancelled)
             return;
 
-        this.completionCallback.accept(this, convertProposals());
+        var items = convertProposals();
+        if (!isCanceled()) this.completionCallback.accept(this, items);
     }
 
     @Override

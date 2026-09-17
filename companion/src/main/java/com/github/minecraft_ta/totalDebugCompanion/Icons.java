@@ -18,6 +18,11 @@ public class Icons {
     }
 
     public static final FlatSVGIcon JAVA_METHOD = new FlatSVGIcon("icons/method.svg");
+    public static final FlatSVGIcon FINAL_MARK = new FlatSVGIcon("icons/finalMark.svg");
+    public static final FlatSVGIcon STATIC_MARK = new FlatSVGIcon("icons/staticMark.svg");
+    public static final FlatSVGIcon ACCESS_PRIVATE = new FlatSVGIcon("icons/accessPrivate.svg");
+    public static final FlatSVGIcon ACCESS_PROTECTED = new FlatSVGIcon("icons/accessProtected.svg");
+    public static final FlatSVGIcon ACCESS_LOCAL = new FlatSVGIcon("icons/accessLocal.svg");
     public static final FlatSVGIcon JAVA_CLASS = new FlatSVGIcon("icons/class.svg");
     public static final FlatSVGIcon JAVA_CONSTANT = new FlatSVGIcon("icons/constant.svg");
     public static final FlatSVGIcon JAVA_PROPERTY = new FlatSVGIcon("icons/property.svg");
@@ -105,6 +110,12 @@ public class Icons {
     public static final FlatSVGIcon NEXT_OCCURRENCE = new FlatSVGIcon("icons/nextOccurrence.svg");
 
     public static final FlatSVGIcon COPY = new FlatSVGIcon("icons/copy.svg");
+    public static final FlatSVGIcon JUMP_TO_SOURCE = new FlatSVGIcon("icons/jumpToSource.svg");
+    public static final FlatSVGIcon ZOOM_IN = new FlatSVGIcon("icons/zoomIn.svg");
+    public static final FlatSVGIcon ZOOM_OUT = new FlatSVGIcon("icons/zoomOut.svg");
+    public static final FlatSVGIcon FIT_CONTENT = new FlatSVGIcon("icons/fitContent.svg");
+    public static final FlatSVGIcon ACTUAL_ZOOM = new FlatSVGIcon("icons/actualZoom.svg");
+    public static final FlatSVGIcon REFORMAT_CODE = new FlatSVGIcon("icons/reformatCode.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 
     public static final FlatSVGIcon PRIMITIVE = new FlatSVGIcon("icons/primitive.svg");

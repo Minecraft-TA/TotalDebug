@@ -26,7 +26,7 @@ class ScriptExecutionServiceTest {
             var scripts = new ScriptExecutionService(session, compiler, () -> true);
             var result = new AtomicReference<ExecutionResult>();
             assertFalse(scripts.isReady());
-            assertTrue(scripts.run(project, 1, "source", false, ScriptExecutionEnvironment.THREAD, result::set),
+            assertTrue(scripts.run(project, 1, "source", false, ScriptExecutionEnvironment.THREAD, failure -> result.set(failure.result())),
                     "False is reserved for disconnected or inactive projects");
             assertNotNull(result.get());
             assertEquals(ExecutionStatus.COMPILATION_FAILED, result.get().status());

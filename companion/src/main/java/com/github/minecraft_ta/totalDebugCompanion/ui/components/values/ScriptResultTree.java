@@ -4,6 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresenta
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import javax.swing.JPopupMenu;
+import javax.swing.tree.TreePath;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
@@ -48,6 +51,18 @@ public final class ScriptResultTree extends JTree {
         SpeedSearch.install(this, path -> searchText(
                 ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject()
         ));
+        ContextMenus.installTree(this, this::createContextMenu);
+    }
+
+    JPopupMenu createContextMenu(TreePath path) {
+        JPopupMenu menu = new JPopupMenu();
+        if (path == null || !(path.getLastPathComponent() instanceof SnapshotNode node)) return menu;
+        ExecutionValue snapshot = node.row.snapshot();
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", new ExecutionValuePresentation(snapshot).displayValue(Integer.MAX_VALUE))));
+        if (!snapshot.type().text().isBlank() && !snapshot.type().truncated()) {
+            menu.add(ContextMenus.copyAction("Copy type", snapshot.type().text()));
+        }
+        return menu;
     }
 
     public void showResult(ExecutionValue snapshot) {

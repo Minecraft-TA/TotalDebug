@@ -4,16 +4,13 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaLinkGenerator;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
-import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
 
-import javax.swing.event.DocumentEvent;
 import javax.swing.event.CaretListener;
 import java.util.Objects;
 import java.util.function.IntConsumer;
@@ -25,16 +22,16 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     protected final EditorContext context;
     protected final String identifier;
     private boolean astDisposed;
-    private final Runnable unsubscribeSemantic;
+    protected final JavaEditorAnalysis analysis;
 
     public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
-        this(context, identifier, className, JavaEditorSource::identity);
+        this(context, identifier, className, JavaEditorSource::identity, false);
     }
 
     protected AbstractCodeViewPanel(
             EditorContext context, String identifier,
             String className,
-            Function<String, JavaEditorSource> sourceFactory
+            Function<String, JavaEditorSource> sourceFactory, boolean diagnostics
     ) {
         super();
         this.context = context;
@@ -42,29 +39,17 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         this.identifier = identifier;
 
         this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
-        this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
-            if (astDisposed || event.getType() == DocumentEvent.EventType.CHANGE) {
-                return;
-            }
-            String editorText = UIUtils.getText(this.editorPane);
-            context.astCache().update(identifier, className, editorText, sourceFactory.apply(editorText));
-        });
-
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
-        try {
-            var document = this.editorPane.getDocument();
-            var field = document.getClass().getDeclaredField("tokenMaker");
-            field.setAccessible(true);
-            this.unsubscribeSemantic = ((CustomJavaTokenMaker) field.get(document)).setASTKey(context.astCache(), identifier, this.editorPane);
-        } catch (Throwable throwable) {
-            throw new RuntimeException(throwable);
-        }
+        this.analysis = new JavaEditorAnalysis(editorPane, context.astCache(), identifier, className,
+                sourceFactory, context.analysisExecutor(), diagnostics);
     }
 
     @Override
     protected void applyAdditionalSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
         CodeUtils.initJavaSemanticColors(scheme, palette);
     }
+
+    @Override public JavaAnalysis currentSnapshot() { return analysis.currentSnapshot(); }
 
     @Override public ASTCache astCache() { return context.astCache(); }
 
@@ -90,8 +75,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     public void dispose() {
         if (!this.astDisposed) {
             this.astDisposed = true;
-            this.unsubscribeSemantic.run();
-            context.astCache().removeFromCache(this.identifier);
+            this.analysis.close();
         }
         super.dispose();
     }

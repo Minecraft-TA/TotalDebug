@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class CustomJavaLinkGeneratorTest {
+
+    @Test void capturedPackageLinkCannotExecuteAfterRevocationOrReplacement() {
+        String source = "import java.util.List; class Sample {}";
+        var cache = new ASTCache();
+        var owner = cache.register("Sample.java", () -> {});
+        var first = new JavaAnalysis(1, CompanionClassIndex.identity(), null, source, JavaSourceMap.IDENTITY,
+                Map.of(), List.of(), List.of(), true, List.of(), List.of());
+        owner.publish(first);
+        var revealed = new AtomicReference<String>();
+        var generator = new CustomJavaLinkGenerator(cache, offset -> packageFragment("java.util"), offset -> "java.util.List",
+                (name, type) -> revealed.set(name), Path.of("Sample.java"));
+        var link = generator.isLinkAtOffset(new RSyntaxTextArea(source), source.indexOf("util"));
+        assertNotNull(link);
+        owner.publish(null);
+        link.execute();
+        assertNull(revealed.get());
+        owner.publish(new JavaAnalysis(2, first.environment(), null, source, JavaSourceMap.IDENTITY,
+                Map.of(), List.of(), List.of(), true, List.of(), List.of()));
+        link.execute();
+        assertNull(revealed.get());
+    }
 
     @Test
     void packageImportSegmentRevealsTheSelectedPackage() {

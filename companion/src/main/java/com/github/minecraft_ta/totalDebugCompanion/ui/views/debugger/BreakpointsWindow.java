@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.formdev.flatlaf.util.UIScale;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -15,7 +19,14 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
+import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.JComponent;
+import javax.swing.JPopupMenu;
+import javax.swing.JToolBar;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -34,26 +45,30 @@ import javax.swing.KeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.swing.Box;
+import javax.swing.JComboBox;
 
 /** Modeless editor for every breakpoint in the active runtime. */
 public final class BreakpointsWindow extends JDialog {
-    private static final Dimension DEFAULT_SIZE = new Dimension(940, 680);
+    private static final Dimension DEFAULT_SIZE = new Dimension(900, 540);
 
     private final ASTCache cache;
     private final DebuggerSessionController controller;
@@ -67,11 +82,18 @@ public final class BreakpointsWindow extends JDialog {
     private final JavaExpressionField condition = new JavaExpressionField();
     private final ExpressionCompletionSupport conditionCompletion = new ExpressionCompletionSupport(this.condition);
     private final JTextField hitCount = new JTextField();
-    private final javax.swing.JComboBox<String> actionKind = new javax.swing.JComboBox<>(new String[]{"None", "Java", "Saved script"});
+    private final JComboBox<String> actionKind = new JComboBox<>(new String[]{"Nothing", "Inline Java", "Saved script"});
     private final JavaExpressionField actionSource = new JavaExpressionField();
-    private final JCheckBox continueOnSuccess = new JCheckBox("Continue after a successful scalar result");
-    private final JButton navigate = new JButton("Navigate");
-    private final JButton remove = new JButton("Remove");
+    private final JCheckBox continueOnSuccess = new JCheckBox("Resume after successful action");
+    private final JPanel completionField = new JPanel(new BorderLayout(0, 4));
+    private final JLabel hitCountError = new JLabel();
+    private final JLabel actionError = new JLabel();
+    private final JLabel sourceLabel = new JLabel("Java:");
+    private final JPanel sourceField = fieldWithError(this.actionSource.component(), this.actionError);
+    private final Action navigate = ContextMenus.action("Open source", Icons.JUMP_TO_SOURCE, "ENTER", this::navigateSelected);
+    private final Action remove = ContextMenus.action("Remove", Icons.DELETE, "DELETE", this::removeSelected);
+    private final Action toggle = ContextMenus.action("Disable", Icons.BREAKPOINT_DISABLED, "SPACE", this::toggleSelected);
+    private final Action copy = ContextMenus.action("Copy location", Icons.COPY, "ctrl C", this::copyLocation);
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void breakpointsChanged(
@@ -87,6 +109,7 @@ public final class BreakpointsWindow extends JDialog {
         }
     };
     private boolean loading;
+    private boolean dirty;
     private BreakpointKey editingBreakpoint;
 
     public BreakpointsWindow(
@@ -102,13 +125,31 @@ public final class BreakpointsWindow extends JDialog {
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(UiMetrics.TREE_ROW_HEIGHT);
         this.list.setCellRenderer(new BreakpointRenderer());
-        SpeedSearch.install(this.list, entry -> entry.binaryName() + ' '
+        for (Action action : List.of(this.navigate, this.remove, this.toggle, this.copy)) ContextMenus.bindAction(this.list, action);
+        ContextMenus.installList(this.list, row -> createContextMenu());
+        SpeedSearch search = SpeedSearch.install(this.list, entry -> entry.binaryName() + ' '
                 + simpleName(entry.binaryName()) + ' ' + entry.breakpoint().line() + ' '
                 + entry.breakpoint().request().condition());
+        this.list.getInputMap().put(KeyStroke.getKeyStroke("SPACE"), "toggleBreakpoint");
+        this.list.getActionMap().put("toggleBreakpoint", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) {
+                // A space typed into an active search must not toggle its current match.
+                if (!search.isActive()) toggle.actionPerformed(event);
+            }
+        });
         this.list.addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting() && !this.loading) {
-                saveEditingBreakpoint();
-                showSelection();
+                if (saveEditingBreakpoint()) {
+                    showSelection();
+                } else {
+                    this.loading = true;
+                    try {
+                        selectEditingBreakpoint();
+                    } finally {
+                        this.loading = false;
+                    }
+                    focusInvalidField();
+                }
             }
         });
         this.list.addMouseListener(new MouseAdapter() {
@@ -119,6 +160,7 @@ public final class BreakpointsWindow extends JDialog {
                     return;
                 }
                 list.setSelectedIndex(index);
+                if (list.getSelectedIndex() != index) return;
                 if (SwingUtilities.isLeftMouseButton(event) && event.getX() < 28) {
                     toggleSelected();
                 } else if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
@@ -126,18 +168,11 @@ public final class BreakpointsWindow extends JDialog {
                 }
             }
         });
-        this.list.getInputMap(javax.swing.JComponent.WHEN_FOCUSED)
-                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "navigateBreakpoint");
-        this.list.getActionMap().put("navigateBreakpoint", new javax.swing.AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
-                navigateSelected();
-            }
-        });
 
         this.title.setFont(this.title.getFont().deriveFont(Font.BOLD));
         this.condition.setPlaceholder("Optional Java condition");
-        this.hitCount.putClientProperty("JTextField.placeholderText", "Optional positive integer");
+        this.hitCount.putClientProperty("JTextField.placeholderText", "Every hit");
+        this.hitCount.setToolTipText("Leave empty for every hit. Enter 3 to trigger on the third hit.");
         this.enabled.addActionListener(event -> {
             if (!this.loading) {
                 setSelectedEnabled(this.enabled.isSelected());
@@ -155,25 +190,61 @@ public final class BreakpointsWindow extends JDialog {
         this.hitCount.addFocusListener(saveOnBlur);
         this.actionSource.addFocusListener(saveOnBlur);
         this.actionSource.addActionListener(event -> saveEditingBreakpoint());
+        DocumentChangeListener edited = event -> {
+            if (!this.loading) this.dirty = true;
+        };
+        this.condition.getDocument().addDocumentListener(edited);
+        this.hitCount.getDocument().addDocumentListener(edited);
+        this.actionSource.getDocument().addDocumentListener(edited);
         this.actionKind.addActionListener(event -> {
-            this.actionSource.setMultiline(this.actionKind.getSelectedIndex() == 1);
-            this.actionSource.setPlaceholder(this.actionKind.getSelectedIndex() == 2 ? "Script path relative to scripts directory" : "Java expression or statements");
+            updateActionFields();
+            if (!this.loading) {
+                this.dirty = true;
+                if (this.actionKind.getSelectedIndex() == 0 || !this.actionSource.getText().isBlank()) {
+                    saveEditingBreakpoint();
+                }
+            }
         });
-        this.continueOnSuccess.addActionListener(event -> saveEditingBreakpoint());
-        this.navigate.addActionListener(event -> navigateSelected());
-        this.remove.addActionListener(event -> removeSelected());
+        this.continueOnSuccess.addActionListener(event -> {
+            if (!this.loading) {
+                this.dirty = true;
+                saveEditingBreakpoint();
+            }
+        });
 
         buildDetails();
         JScrollPane breakpointList = new JScrollPane(this.list);
-        breakpointList.setBorder(DynamicMatteBorder.separatorRule(0, 0, 0, 1));
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, breakpointList, this.details);
+        breakpointList.setBorder(BorderFactory.createEmptyBorder());
+        JToolBar toolbar = new JToolBar();
+        toolbar.setFloatable(false);
+        toolbar.setBorder(DynamicMatteBorder.separatorRule(0, 0, 1, 0));
+        for (Action action : List.of(this.navigate, this.remove)) {
+            JButton button = toolbar.add(action);
+            button.setHideActionText(true);
+            FlatIconButton.configure(button);
+            button.getAccessibleContext().setAccessibleName((String) action.getValue(Action.NAME));
+        }
+        JPanel listPanel = new JPanel(new BorderLayout());
+        listPanel.add(toolbar, BorderLayout.NORTH);
+        listPanel.add(breakpointList, BorderLayout.CENTER);
+        listPanel.setBorder(DynamicMatteBorder.separatorRule(0, 0, 0, 1));
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listPanel, this.details);
         split.setBorder(BorderFactory.createEmptyBorder());
         split.setDividerSize(1);
         split.setResizeWeight(0.34);
         setContentPane(split);
-        setDefaultCloseOperation(HIDE_ON_CLOSE);
-        setMinimumSize(new Dimension(680, 400));
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent event) { closeWindow(); }
+        });
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeBreakpoints");
+        getRootPane().getActionMap().put("closeBreakpoints", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { closeWindow(); }
+        });
+        setMinimumSize(new Dimension(800, 500));
         setSize(DEFAULT_SIZE);
+        split.setDividerLocation(UIScale.scale(300));
         setLocationRelativeTo(owner);
 
         this.controller.addListener(this.listener);
@@ -189,8 +260,57 @@ public final class BreakpointsWindow extends JDialog {
         }
     }
 
+    JPopupMenu createContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(this.navigate);
+        menu.add(this.toggle);
+        menu.add(ContextMenus.defaultCopy(this.copy));
+        menu.addSeparator();
+        menu.add(this.remove);
+        return menu;
+    }
+
+    private void copyLocation() {
+        var entry = this.list.getSelectedValue();
+        if (entry != null) {
+            ContextMenus.copyText(entry.binaryName() + ":" + entry.breakpoint().line());
+        }
+    }
+
+    private void closeWindow() {
+        if (saveEditingBreakpoint()) setVisible(false);
+        else focusInvalidField();
+    }
+
+    private void focusInvalidField() {
+        if (this.hitCountError.isVisible()) this.hitCount.requestFocusInWindow();
+        else if (this.actionError.isVisible()) this.actionSource.requestFocusInWindow();
+    }
+
+    private static JPanel fieldWithError(JComponent field, JLabel error) {
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
+        panel.setOpaque(false);
+        error.setForeground(ThemeColors.error());
+        error.setVisible(false);
+        panel.add(field, BorderLayout.CENTER);
+        panel.add(error, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private void updateActionFields() {
+        int kind = this.actionKind.getSelectedIndex();
+        this.actionSource.setMultiline(kind == 1);
+        this.actionSource.setPlaceholder(kind == 2 ? "Script path relative to scripts directory" : "Java expression or statements");
+        this.sourceLabel.setText(kind == 2 ? "Script:" : "Java:");
+        this.sourceLabel.setVisible(kind != 0);
+        this.sourceField.setVisible(kind != 0);
+        this.completionField.setVisible(kind != 0);
+        this.details.revalidate();
+        this.details.repaint();
+    }
+
     private void buildDetails() {
-        this.details.setBorder(BorderFactory.createEmptyBorder(18, 18, 12, 18));
+        this.details.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.gridx = 0;
         constraints.gridwidth = 2;
@@ -207,36 +327,35 @@ public final class BreakpointsWindow extends JDialog {
         constraints.insets = new Insets(0, 4, 18, 0);
         this.details.add(this.state, constraints);
 
-        addField(3, "Condition:", this.condition.component());
-        addField(4, "Hit count:", this.hitCount);
-        addField(5, "Action:", this.actionKind);
-        addField(6, "Source or script:", this.actionSource.component());
-        addField(7, "On success:", this.continueOnSuccess);
+        addField(3, new JLabel("Condition:"), this.condition.component());
+        addField(4, new JLabel("Trigger on hit:"), fieldWithError(this.hitCount, this.hitCountError));
+        addField(5, new JLabel("Run on hit:"), this.actionKind);
+        addField(6, this.sourceLabel, this.sourceField);
+        this.completionField.setOpaque(false);
+        this.completionField.add(this.continueOnSuccess, BorderLayout.NORTH);
+        JLabel completionHint = new JLabel("Errors and object/array results keep execution paused.");
+        completionHint.setForeground(ThemeColors.secondaryText());
+        this.completionField.add(completionHint, BorderLayout.CENTER);
+        this.continueOnSuccess.setToolTipText("Numbers, text, booleans, characters, null and no return value allow execution to resume.");
+        addField(7, new JLabel(), this.completionField);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.TRAILING, 8, 0));
-        buttons.setOpaque(false);
-        buttons.add(this.navigate);
-        buttons.add(this.remove);
-        JButton done = new JButton("Done");
-        done.addActionListener(event -> {
-            if (saveEditingBreakpoint()) setVisible(false);
-        });
-        buttons.add(done);
         constraints.gridy = 8;
         constraints.weighty = 1;
-        constraints.anchor = GridBagConstraints.SOUTH;
-        constraints.insets = new Insets(20, 0, 0, 0);
-        this.details.add(buttons, constraints);
+        constraints.insets = new Insets(0, 0, 0, 0);
+        this.details.add(Box.createVerticalGlue(), constraints);
         showSelection();
     }
 
-    private void addField(int row, String label, Component field) {
+    private void addField(int row, JLabel label, Component field) {
+        GridBagLayout layout = (GridBagLayout) this.details.getLayout();
+        if (layout.columnWidths == null) layout.columnWidths = new int[2];
+        layout.columnWidths[0] = Math.max(layout.columnWidths[0], label.getPreferredSize().width + 12);
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
         labelConstraints.anchor = GridBagConstraints.NORTHWEST;
         labelConstraints.insets = new Insets(4, 0, 12, 12);
-        this.details.add(new JLabel(label), labelConstraints);
+        this.details.add(label, labelConstraints);
 
         GridBagConstraints fieldConstraints = new GridBagConstraints();
         fieldConstraints.gridx = 1;
@@ -248,22 +367,13 @@ public final class BreakpointsWindow extends JDialog {
     }
 
     private void reload() {
-        DebuggerSessionController.BreakpointEntry selected = this.list.getSelectedValue();
-        URI sourceUri = selected == null ? null : selected.sourceUri();
-        int line = selected == null ? -1 : selected.breakpoint().line();
         this.loading = true;
         try {
             this.model.clear();
             for (DebuggerSessionController.BreakpointEntry entry : this.controller.breakpointEntries()) {
                 this.model.addElement(entry);
             }
-            for (int index = 0; index < this.model.size(); index++) {
-                DebuggerSessionController.BreakpointEntry entry = this.model.get(index);
-                if (entry.sourceUri().equals(sourceUri) && entry.breakpoint().line() == line) {
-                    this.list.setSelectedIndex(index);
-                    break;
-                }
-            }
+            selectEditingBreakpoint();
             if (this.list.getSelectedIndex() < 0 && !this.model.isEmpty()) {
                 this.list.setSelectedIndex(0);
             }
@@ -271,6 +381,17 @@ public final class BreakpointsWindow extends JDialog {
             this.loading = false;
         }
         showSelection();
+    }
+
+    private void selectEditingBreakpoint() {
+        if (this.editingBreakpoint == null) return;
+        for (int index = 0; index < this.model.size(); index++) {
+            var entry = this.model.get(index);
+            if (this.editingBreakpoint.equals(new BreakpointKey(entry.sourceUri(), entry.breakpoint().line()))) {
+                this.list.setSelectedIndex(index);
+                return;
+            }
+        }
     }
 
     private void showSelection() {
@@ -286,6 +407,18 @@ public final class BreakpointsWindow extends JDialog {
             this.continueOnSuccess.setEnabled(present);
             this.navigate.setEnabled(present);
             this.remove.setEnabled(present);
+            this.toggle.setEnabled(present);
+            this.copy.setEnabled(present);
+            if (present) {
+                this.enabled.setSelected(entry.breakpoint().state() != DebuggerSessionController.BreakpointState.DISABLED);
+                this.toggle.putValue(Action.NAME, this.enabled.isSelected() ? "Disable" : "Enable");
+                this.toggle.putValue(Action.SMALL_ICON, this.enabled.isSelected() ? Icons.BREAKPOINT_DISABLED : Icons.BREAKPOINT);
+                this.state.setText(stateText(entry.breakpoint()));
+                if (this.dirty && Objects.equals(this.editingBreakpoint,
+                        new BreakpointKey(entry.sourceUri(), entry.breakpoint().line()))) return;
+            }
+            this.dirty = false;
+            clearValidation();
             if (!present) {
                 this.editingBreakpoint = null;
                 this.title.setText("No breakpoints");
@@ -339,6 +472,8 @@ public final class BreakpointsWindow extends JDialog {
         if (this.loading) {
             return false;
         }
+        if (!this.dirty) return true;
+        clearValidation();
         BreakpointKey key = this.editingBreakpoint;
         if (key == null) {
             return true;
@@ -351,25 +486,36 @@ public final class BreakpointsWindow extends JDialog {
         if (!hitCondition.isEmpty()) {
             try {
                 if (Integer.parseInt(hitCondition) < 1) {
-                    this.state.setText("Hit count must be a positive integer");
-                    return false;
+                    return invalid(this.hitCountError, "Hit number must be a positive integer");
                 }
             } catch (NumberFormatException ignored) {
-                this.state.setText("Hit count must be a positive integer");
-                return false;
+                return invalid(this.hitCountError, "Hit number must be a positive integer");
             }
         }
         int actionKind = this.actionKind.getSelectedIndex();
         String source = this.actionSource.getText().trim();
         if (actionKind != 0 && source.isBlank()) {
-            this.state.setText("Enter action source or a saved script path");
-            return false;
+            return invalid(this.actionError, actionKind == 1 ? "Enter Java action source" : "Enter a saved script path");
         }
         DebugEngine.BreakpointAction action = actionKind == 0 ? null : new DebugEngine.BreakpointAction(
                 actionKind == 1 ? source : null, actionKind == 2 ? source : null, this.continueOnSuccess.isSelected());
+        this.dirty = false;
         this.controller.configureBreakpoint(key.sourceUri(),
                 breakpoint.request().withConditions(this.condition.getText(), hitCondition).withAction(action));
         return true;
+    }
+
+    private void clearValidation() {
+        this.hitCountError.setVisible(false);
+        this.actionError.setVisible(false);
+        this.details.revalidate();
+    }
+
+    private boolean invalid(JLabel label, String message) {
+        label.setText(message);
+        label.setVisible(true);
+        this.details.revalidate();
+        return false;
     }
 
     private void navigateSelected() {
@@ -420,10 +566,9 @@ public final class BreakpointsWindow extends JDialog {
             String key = entry.sourceUri().getScheme().equalsIgnoreCase("file")
                     ? Path.of(entry.sourceUri()).toString()
                     : entry.sourceUri().toString();
-            var unit = cache.getFromCache(key);
-            if (unit == null) {
-                unit = JavaAst.parse(entry.binaryName(), source.contents());
-            }
+            var snapshot = cache.getSnapshot(key);
+            var unit = snapshot != null && snapshot.contents().equals(source.contents())
+                    ? snapshot.unit() : JavaAst.parse(entry.binaryName(), source.contents());
             int contextOffset = sourceOffset(source.contents(), entry.breakpoint().line());
             return ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret);
         });

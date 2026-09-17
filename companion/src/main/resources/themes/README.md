@@ -44,8 +44,13 @@ themes/expUI/expUI_light_with_light_header.theme.json
 Extract them flat, naming each file after its path with `/` replaced by `_` (for example
 `themes_islands_ManyIslandsDark.theme.json`), which is the layout the generator expects.
 
-Editor (syntax) colours are **not** in these files. They come from
-`themes/islands/IslandSchemeDark.xml` and `themes/expUI/expUI_lightScheme.xml`, and are transcribed
-by hand into `EditorPalette` - see the javadoc there.
+Editor (syntax) colours are **not** in these UI theme files. The editor follows the user's
+**Rider Islands Dark** reference and the corresponding **Rider Light** syntax colours. The
+Rider Islands OLED variant has the same syntax attributes; its background differs.
 
-Do not vendor anything from `plugins/rider-theme-pack/`; that jar is proprietary Rider content.
+`EditorPalette` records the observed colour values. `CodeUtils` maps them to lexer/semantic
+styles, including plain keywords, italic comments and bold constants. `SemanticTokensVisitor`
+distinguishes static-final fields from ordinary fields so their font styles can differ. UI chrome
+continues to come from the flattened Islands JSON resources above.
+
+Do not vendor Rider theme XML files or plugin assets. No Rider plugin or scheme files are shipped.

@@ -232,7 +232,7 @@ class OfflineProjectIntegrationTest {
     private static void expandMods(MainWindow view) throws Exception {
         var tree = new AtomicReference<LazyFileJTree>();
         SwingUtilities.invokeAndWait(() -> tree.set(find(view, LazyFileJTree.class)));
-        assertTrue(tree.get().revealDirectoryPath("runtime", "demo.jar [demo.jar]", List.of("demo")).get(5, TimeUnit.SECONDS));
+        assertTrue(tree.get().revealItemPath("runtime", "demo.jar [demo.jar]", List.of("demo")).get(5, TimeUnit.SECONDS));
     }
 
     private static void captureThemes(Window view, String name) throws Exception {

@@ -67,15 +67,18 @@ public final class BreakpointGutterMarkers {
     private final boolean restoreNativeMouseMotionListener;
     private List<DebuggerSessionController.Breakpoint> breakpoints = List.of();
     private boolean muted;
+    private int hoveredLine = -1;
 
     private final MouseAdapter lineNumberClicks = new MouseAdapter() {
         @Override
-        public void mouseClicked(MouseEvent event) {
-            if (!SwingUtilities.isLeftMouseButton(event) || event.getClickCount() != 1) {
+        public void mousePressed(MouseEvent event) {
+            showConfigurationIfRequested(event);
+            if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) {
                 return;
             }
             int displayedLine = displayedLineAt(event.getY());
             if (displayedLine > 0) {
+                hoveredLine = displayedLine;
                 if (event.isAltDown()) {
                     if (breakpointAt(displayedLine) != null) {
                         handler.toggleEnabled(displayedLine);
@@ -87,8 +90,14 @@ public final class BreakpointGutterMarkers {
         }
 
         @Override
-        public void mousePressed(MouseEvent event) {
-            showConfigurationIfRequested(event);
+        public void mouseEntered(MouseEvent event) {
+            updateHover(event);
+        }
+
+        @Override
+        public void mouseExited(MouseEvent event) {
+            hoveredLine = -1;
+            updateTooltip();
         }
 
         @Override
@@ -99,9 +108,7 @@ public final class BreakpointGutterMarkers {
     private final MouseMotionAdapter tooltipUpdater = new MouseMotionAdapter() {
         @Override
         public void mouseMoved(MouseEvent event) {
-            int displayedLine = displayedLineAt(event.getY());
-            DebuggerSessionController.Breakpoint breakpoint = breakpointAt(displayedLine);
-            lineNumbers.setToolTipText(breakpoint == null ? null : tooltipFor(breakpoint, muted));
+            updateHover(event);
         }
     };
 
@@ -129,7 +136,18 @@ public final class BreakpointGutterMarkers {
     void setBreakpoints(List<DebuggerSessionController.Breakpoint> breakpoints, boolean muted) {
         this.breakpoints = List.copyOf(Objects.requireNonNull(breakpoints, "breakpoints"));
         this.muted = muted;
+        updateTooltip();
         this.paintLayer.repaint();
+    }
+
+    private void updateHover(MouseEvent event) {
+        this.hoveredLine = displayedLineAt(event.getY());
+        updateTooltip();
+    }
+
+    private void updateTooltip() {
+        DebuggerSessionController.Breakpoint breakpoint = breakpointAt(this.hoveredLine);
+        this.lineNumbers.setToolTipText(breakpoint == null ? null : tooltipFor(breakpoint, this.muted));
     }
 
     void dispose() {
@@ -142,6 +160,7 @@ public final class BreakpointGutterMarkers {
             this.lineNumbers.addMouseMotionListener(this.lineNumbers);
         }
         this.lineNumbers.setToolTipText(null);
+        this.hoveredLine = -1;
         this.breakpoints = List.of();
         this.paintLayer.repaint();
     }

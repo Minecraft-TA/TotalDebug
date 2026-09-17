@@ -55,7 +55,7 @@ public final class SnippetExecutionService implements AutoCloseable {
                 source.source(),
                 side == Side.SERVER,
                 environment,
-                result -> acceptResult(new ExecutionResultMessage(id, result))
+                failure -> acceptResult(new ExecutionResultMessage(id, failure.result()))
         );
         if (!sent) {
             this.runs.remove(id, completion);

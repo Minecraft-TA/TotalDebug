@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService.ReadySnapshot;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
+import com.github.minecraft_ta.totaldebug.evaluation.InMemoryCompilationException;
+import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -15,6 +17,7 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -30,6 +33,9 @@ import java.util.regex.Pattern;
 /** Compiles off the UI thread; Minecraft remains responsible for loading and running the result. */
 public final class ScriptCompilationService implements AutoCloseable {
     public record CompilationResult(ScriptBytecode bytecode, String inventoryId) {}
+    public record Failure(ExecutionResult result, List<CompilationDiagnostic> diagnostics) {
+        public Failure { diagnostics = List.copyOf(diagnostics); }
+    }
 
     private static final Pattern SCRIPT_CLASS = Pattern.compile(
             "\\bpublic\\s+(?:final\\s+)?class\\s+([\\p{javaJavaIdentifierStart}][\\p{javaJavaIdentifierPart}]*)"
@@ -249,7 +255,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
-                       Consumer<ExecutionResult> failureHandler) {
+                       Consumer<Failure> failureHandler) {
         ReadySnapshot selected = this.snapshot;
         if (this.closed || selected == null) {
             failureHandler.accept(failure("The runtime class index is not ready for compilation"));
@@ -293,7 +299,8 @@ public final class ScriptCompilationService implements AutoCloseable {
                 this.pending.remove(id, task);
             }
         } catch (Exception exception) {
-            if (this.pending.remove(id, task)) task.failureHandler.accept(failure(exception.getMessage()));
+            if (this.pending.remove(id, task)) task.failureHandler.accept(new Failure(failure(exception.getMessage()).result(),
+                    exception instanceof InMemoryCompilationException compilation ? compilation.diagnostics() : List.of()));
         }
     }
 
@@ -325,7 +332,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             if (!this.pending.remove(id, task)) return false;
             if (task.future != null) task.future.cancel(true);
         }
-        task.failureHandler.accept(ExecutionResult.failed("", null, "Script run cancelled before execution"));
+        task.failureHandler.accept(new Failure(ExecutionResult.failed("", null, "Script run cancelled before execution"), List.of()));
         return true;
     }
 
@@ -349,16 +356,16 @@ public final class ScriptCompilationService implements AutoCloseable {
         bind(null);
     }
 
-    private static ExecutionResult failure(String message) {
-        return ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
-                message == null ? "Script compilation failed" : message);
+    private static Failure failure(String message) {
+        return new Failure(ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
+                message == null ? "Script compilation failed" : message), List.of());
     }
 
     private static final class Pending {
-        private final Consumer<ExecutionResult> failureHandler;
+        private final Consumer<Failure> failureHandler;
         private Future<?> future;
 
-        private Pending(Consumer<ExecutionResult> failureHandler) {
+        private Pending(Consumer<Failure> failureHandler) {
             this.failureHandler = failureHandler;
         }
     }
