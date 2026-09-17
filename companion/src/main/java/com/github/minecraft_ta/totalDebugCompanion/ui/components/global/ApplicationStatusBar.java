@@ -164,7 +164,7 @@ public final class ApplicationStatusBar extends JPanel {
         UIUtils.onEdt(this.memberDebounce::restart);
     }
 
-    private void refreshMember() {
+    void refreshMember() {
         JavaEditorContext context = this.selectedJavaContext;
         NavigationTarget target = this.selectedTarget;
         JavaBreadcrumbResolver.Member member = null;
@@ -172,6 +172,13 @@ public final class ApplicationStatusBar extends JPanel {
             var snapshot = context.currentSnapshot();
             if (snapshot != null) {
                 member = JavaBreadcrumbResolver.resolve(snapshot.unit(), snapshot.sourceMap().toGeneratedOffset(context.caretOffset()), target);
+                if (member != null) {
+                    int offset = snapshot.sourceMap().toEditorOffset(member.offset());
+                    // Generated wrapper members are not editor destinations; real members use editor offsets.
+                    member = offset < 0 ? null : new JavaBreadcrumbResolver.Member(member.label(),
+                            member.target() instanceof NavigationTarget.LocalFile file
+                                    ? new NavigationTarget.LocalFile(file.path(), offset) : member.target(), offset);
+                }
             }
         }
         if (!Objects.equals(this.selectedMember, member)) {
