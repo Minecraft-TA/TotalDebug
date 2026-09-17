@@ -564,10 +564,9 @@ public final class BreakpointsWindow extends JDialog {
             String key = entry.sourceUri().getScheme().equalsIgnoreCase("file")
                     ? Path.of(entry.sourceUri()).toString()
                     : entry.sourceUri().toString();
-            var unit = cache.getFromCache(key);
-            if (unit == null) {
-                unit = JavaAst.parse(entry.binaryName(), source.contents());
-            }
+            var snapshot = cache.getSnapshot(key);
+            var unit = snapshot != null && snapshot.contents().equals(source.contents())
+                    ? snapshot.unit() : JavaAst.parse(entry.binaryName(), source.contents());
             int contextOffset = sourceOffset(source.contents(), entry.breakpoint().line());
             return ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret);
         });

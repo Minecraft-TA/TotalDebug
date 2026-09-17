@@ -9,9 +9,8 @@ import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
 import org.eclipse.jdt.internal.codeassist.complete.CompletionOnMemberAccess;
 import org.eclipse.jdt.internal.compiler.lookup.FieldBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
-import org.eclipse.jdt.internal.compiler.lookup.ParameterizedTypeBinding;
+import org.eclipse.jdt.internal.compiler.lookup.CaptureBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
-import org.eclipse.jdt.internal.compiler.lookup.TypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
 import java.util.ArrayList;
@@ -114,7 +113,9 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 var postStatementTerminationChar = getStatementTerminationChar(this.unit.getBuffer(), this.offset, true);
                 var terminator = postStatementTerminationChar != ';' ? ";" : "";
 
-                var declarationText = new String(variableType.shortReadableName()) + " ${1:name} = " + expressionText + terminator;
+                var declarationType = variableType instanceof CaptureBinding capture ? capture.upperBound() : variableType;
+                String type = proposalProvider.importType(new String(CompletionTypes.uncapture(declarationType).genericTypeSignature()).replace('/', '.'), item);
+                var declarationText = type + " ${1:name} = " + expressionText + terminator;
                 Range declarationReplacementRange;
                 if ((postStatementTerminationChar != '\n' && postStatementTerminationChar != ';') || (preStatementTerminationChar != '\n' && preStatementTerminationChar != ';')) {
                     declarationReplacementRange = new Range(getLineStartOffsetWithoutWhitespace(this.unit.getBuffer(), this.offset), 0);
@@ -129,24 +130,12 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
                 }
 
                 item.addTextEdit(new CustomTextEdit(declarationReplacementRange, declarationText));
-                addAllImportsForType(variableType, item);
 
                 items.add(item);
             } catch (JavaModelException failure) {
                 throw new IllegalStateException("Cannot read the completion source", failure);
             }
         }
-    }
-
-    private void addAllImportsForType(TypeBinding variableType, CompletionItem item) {
-        List<String> names = new ArrayList<>(2);
-        names.add(new String(variableType.readableName()));
-        if (variableType instanceof ParameterizedTypeBinding parameterizedTypeBinding) {
-            for (TypeBinding argument : parameterizedTypeBinding.typeArguments())
-                names.add(new String(argument.readableName()));
-        }
-
-        this.proposalProvider.addImports(names.toArray(new String[0])).forEach(item::addTextEdit);
     }
 
     private CompletionItemKind mapKind(CompletionProposal proposal) {

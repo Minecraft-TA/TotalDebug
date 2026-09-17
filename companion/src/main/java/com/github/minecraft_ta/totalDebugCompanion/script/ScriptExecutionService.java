@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.InactiveProjectException;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import java.util.function.Consumer;
@@ -25,7 +24,7 @@ public final class ScriptExecutionService {
     public boolean isReady() { return isConnected() && compiler.hasRuntime(); }
 
     public boolean run(ProjectScope project, int id, String source, boolean serverSide,
-                       ScriptExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
+                       ScriptExecutionEnvironment environment, Consumer<ScriptCompilationService.Failure> failureHandler) {
         if (project == null || !project.isActive() || !isConnected()) return false;
         try {
             return project.admit(() -> {

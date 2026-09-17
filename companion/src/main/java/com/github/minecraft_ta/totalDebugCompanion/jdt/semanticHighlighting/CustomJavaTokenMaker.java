@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting;
 
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 import org.eclipse.jdt.core.compiler.CharOperation;
 import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
@@ -17,6 +16,7 @@ import javax.swing.text.TextAction;
 import java.awt.event.ActionEvent;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.IntPredicate;
 
 public class CustomJavaTokenMaker extends JavaTokenMaker {
 
@@ -26,38 +26,36 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
     private RSyntaxDocument document;
     private Map<Integer, SemanticToken> overwrittenTokenTypes;
 
-    public Runnable setASTKey(ASTCache cache, String identifier, RSyntaxTextArea textArea) {
+    public static CustomJavaTokenMaker forEditor(RSyntaxTextArea textArea) {
+        try {
+            var field = RSyntaxDocument.class.getDeclaredField("tokenMaker");
+            field.setAccessible(true);
+            return (CustomJavaTokenMaker) field.get(textArea.getDocument());
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot access the Java token maker", failure);
+        }
+    }
+
+    /** Full editors forward edits from their analysis owner; expression fields track their own document. */
+    public void managedByEditor(RSyntaxTextArea textArea) {
         trackDocument(textArea);
-        return cache.addChangeListener(identifier, (ast, version) -> {
-            var snapshot = cache.getSnapshot(identifier);
-            if (snapshot == null || snapshot.unit() != ast) {
-                return;
-            }
-
-            var tokenTypes = new HashMap<Integer, Integer>();
-            ast.accept(new SemanticTokensVisitor(tokenTypes));
-
-            var editorTokenTypes = new HashMap<Integer, Integer>();
-            tokenTypes.forEach((generatedOffset, tokenType) -> {
-                int editorOffset = snapshot.sourceMap().toEditorOffset(generatedOffset);
-                if (editorOffset >= 0) {
-                    editorTokenTypes.put(editorOffset, tokenType);
-                }
-            });
-            SwingUtilities.invokeLater(() -> {
-                if (cache.getFromCache(identifier) == ast && snapshot.contents().equals(textArea.getText())) {
-                    setSemanticTokenTypes(editorTokenTypes, textArea);
-                }
-            });
-        });
+        document.removeDocumentListener(documentListener);
     }
 
     public void setSemanticTokenTypes(Map<Integer, Integer> tokenTypes, RSyntaxTextArea textArea) {
+        setSemanticTokenTypes(tokenTypes, textArea, ignored -> false);
+    }
+
+    public void setSemanticTokenTypes(Map<Integer, Integer> tokenTypes, RSyntaxTextArea textArea, IntPredicate retain) {
         trackDocument(textArea);
         var tokens = new HashMap<Integer, SemanticToken>();
         // Use the lexer's spans; it combines some qualified names, such as Thread.State.
         for (Token token : this.document) {
             Integer type = tokenTypes.get(token.getOffset());
+            if (type == null && overwrittenTokenTypes != null && retain.test(token.getOffset())) {
+                var previous = overwrittenTokenTypes.get(token.getOffset());
+                if (previous != null && previous.text().equals(token.getLexeme())) type = previous.type();
+            }
             if (type != null && token.isPaintable()) {
                 tokens.put(token.getOffset(), new SemanticToken(token.getLexeme(), type));
             }
@@ -82,7 +80,7 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
         }
     }
 
-    private void documentChanged(DocumentEvent event) {
+    public void documentChanged(DocumentEvent event) {
         if (event.getType() == DocumentEvent.EventType.CHANGE || this.overwrittenTokenTypes == null) {
             return;
         }
@@ -167,7 +165,7 @@ public class CustomJavaTokenMaker extends JavaTokenMaker {
                     var lineText = document.getText(start, len);
                     var tabCount = getTabCount(lineText);
                     var builder = new StringBuilder("\n");
-                    builder.append("\t".repeat(tabCount + (document.getText(caretPos - 1, 1).equals("{") ? 1 : 0)));
+                    builder.append("\t".repeat(tabCount + (caretPos > 0 && document.getText(caretPos - 1, 1).equals("{") ? 1 : 0)));
 
                     caretPos += builder.length();
                     if (getOpenBraceCount(document) > 0)

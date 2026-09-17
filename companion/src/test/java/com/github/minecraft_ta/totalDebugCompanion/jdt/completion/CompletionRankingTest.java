@@ -9,6 +9,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CompletionRankingTest {
+    @Test void loaderTypesUseTheSameCollisionPreferenceWithoutOverridingExplicitImports() {
+        for (String loader : List.of("net.neoforged.bus.api.EventListener", "net.minecraftforge.eventbus.api.EventListener")) {
+            var event = type(loader, 49);
+            var java = type("java.util.EventListener", 51);
+            assertEquals(event, CompletionRanking.order(List.of(java, event), "EventListe").getFirst());
+            java.setRelevance(54);
+            assertEquals(java, CompletionRanking.order(List.of(event, java), "EventListe").getFirst());
+        }
+    }
+
     @Test void minecraftBreaksTypeTiesButDoesNotOverrideSemanticRelevance() {
         var minecraft = type("net.minecraft.world.item.ItemStack", 100);
         var mod = type("a.random.mod.ItemStack", 100);

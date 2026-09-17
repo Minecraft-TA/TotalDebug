@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JDTHacks;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.*;
-import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
@@ -21,6 +20,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.SignatureHelpPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
+import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -50,6 +51,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.Timer;
+import javax.swing.event.DocumentEvent;
 import javax.swing.border.CompoundBorder;
 import javax.swing.text.*;
 
@@ -112,12 +114,15 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final JScrollPane logPanelScrollPane = new JScrollPane(logPanelTextPane);
     private final JTextPane errorTextPane = new JTextPane();
     private final JScrollPane errorScrollPane = new JScrollPane(this.errorTextPane);
+    private final ScriptProblemsPanel problemsPanel = new ScriptProblemsPanel(this.editorPane);
     private final ScriptResultTree resultTree = new ScriptResultTree();
     private final JScrollPane resultScrollPane = new JScrollPane(this.resultTree);
     private final JTabbedPane runOutputTabs = new JTabbedPane();
 
     private final SnippetCompletionAdapter snippetCompletionAdapter = new SnippetCompletionAdapter(this.editorPane);
     private CustomCompletionRequestor completionRequestor;
+    private String completionToAccept;
+    private boolean applyingCompletion;
     private long signatureRequest;
     private boolean signatureHelpActive;
     private final Timer signatureTimer = new Timer(120, event -> requestSignatureHelp());
@@ -131,7 +136,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         super(
                 context, scriptView.getPath().toString(),
                 scriptView.getScriptName(),
-                text -> JavaSnippetSource.body(scriptView.getScriptName(), text).editorSource()
+                text -> JavaSnippetSource.body(scriptView.getScriptName(), text).editorSource(), true
         );
         this.scriptView = scriptView;
         this.codeCompletionPopup = new CodeCompletionPopup(context.owner());
@@ -151,8 +156,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         headerBar.add(executionEnvironmentComboBox);
         setHeaderComponent(headerBar);
 
-        this.editorPane.setParserDelay(400);
-        this.editorPane.addParser(new CustomJavaParser(context.astCache(), scriptView.getPath().toString()));
+        this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
+            if (!disposed && event.getType() != DocumentEvent.EventType.CHANGE) problemsPanel.refreshSourceState();
+        });
         this.editorPane.setText(scriptView.getSourceText());
         this.editorPane.getActionMap().put(DefaultEditorKit.deletePrevCharAction, new CustomDeletePrevCharAction());
 
@@ -174,19 +180,24 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void acceptResult(ExecutionResultMessage m) {
+        acceptResult(m, null, List.of());
+    }
+
+    private void acceptResult(ExecutionResultMessage m, JavaSnippetSource.GeneratedSource submitted,
+                              List<CompilationDiagnostic> diagnostics) {
         SwingUtilities.invokeLater(() -> {
             if (this.disposed || m.scriptId() != this.scriptId)
                 return;
 
             ExecutionStatus status = m.result().status();
             if (status == ExecutionStatus.RUN_COMPLETED) {
-                showRunResult(m);
+                showRunResult(m, submitted, diagnostics);
                 this.bottomInformationBar.setSuccessInfoText("Run completed!");
             } else if (status == ExecutionStatus.COMPILATION_FAILED) {
-                showRunResult(m);
+                showRunResult(m, submitted, diagnostics);
                 this.bottomInformationBar.setFailureInfoText("Compilation failed!");
             } else if (status == ExecutionStatus.RUN_EXCEPTION) {
-                showRunResult(m);
+                showRunResult(m, submitted, diagnostics);
                 this.bottomInformationBar.setFailureInfoText("Run failed!");
             } else if (status == ExecutionStatus.CANCELLATION_PENDING) {
                 this.bottomInformationBar.setProcessInfoText(m.result().error().text());
@@ -200,6 +211,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void runScript(boolean server) {
+        analysis.finishEditing();
         if (!context.scripts().isConnected()) {
             this.bottomInformationBar.setFailureInfoText("Not connected to game client!");
             return;
@@ -227,7 +239,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 this.lastGeneratedSource.source(),
                 server,
                 (ScriptExecutionEnvironment) this.executionEnvironmentComboBox.getSelectedItem(),
-                result -> acceptResult(new ExecutionResultMessage(this.scriptId, result))
+                failure -> acceptResult(new ExecutionResultMessage(this.scriptId, failure.result()), generated, failure.diagnostics())
         )) {
             setRunButtonsState(true);
             this.bottomInformationBar.setFailureInfoText(
@@ -271,7 +283,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         add(centerSplitPane, BorderLayout.CENTER);
     }
 
-    private void showRunResult(ExecutionResultMessage message) {
+    private void showRunResult(ExecutionResultMessage message, JavaSnippetSource.GeneratedSource submitted,
+                               List<CompilationDiagnostic> diagnostics) {
         this.runOutputTabs.removeAll();
         StringBuilder problems = new StringBuilder();
         ExecutionResult result = message.result();
@@ -283,7 +296,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             this.logPanelTextPane.setText(ExecutionTextDisplay.format(result.logs()));
             this.runOutputTabs.addTab("Output", Icons.TEXT_FILE, this.logPanelScrollPane);
         }
-        if (!result.error().text().isEmpty()) {
+        if (!diagnostics.isEmpty() && submitted != null) {
+            this.problemsPanel.showProblems(submitted, diagnostics);
+            this.runOutputTabs.addTab("Problems", Icons.ERROR, this.problemsPanel);
+        } else if (!result.error().text().isEmpty()) {
             if (!problems.isEmpty()) {
                 problems.append(System.lineSeparator());
             }
@@ -304,6 +320,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void clearRunOutput() {
+        this.problemsPanel.clear();
         this.resultTree.clearResult();
         this.logPanelTextPane.setText("");
         this.errorTextPane.setText("");
@@ -384,6 +401,12 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void setupAutocompletion() {
+        editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
+            if (applyingCompletion || event.getType() == DocumentEvent.EventType.CHANGE || completionRequestor == null) return;
+            completionRequestor.setCanceled(true);
+            // Forward Delete may change source without moving the caret.
+            if (!didTypeBeforeCaretMove) hideCompletionPopup();
+        });
         signatureTimer.setRepeats(false);
         editorPane.getInputMap().put(KeyStroke.getKeyStroke("ctrl P"), "signatureHelp");
         editorPane.getActionMap().put("signatureHelp", new AbstractAction() {
@@ -409,13 +432,13 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 return;
             this.lastCaretPos = caretPos;
 
-            if (this.completionRequestor != null)
-                this.completionRequestor.setCanceled(true);
-
-            if (!this.didTypeBeforeCaretMove)
-                hideCompletionPopup();
-
-            this.didTypeBeforeCaretMove = false;
+            if (!applyingCompletion) {
+                if (this.completionRequestor != null)
+                    this.completionRequestor.setCanceled(true);
+                if (!this.didTypeBeforeCaretMove)
+                    hideCompletionPopup();
+                this.didTypeBeforeCaretMove = false;
+            }
             if (signatureHelpActive) {
                 signatureRequest++;
                 signatureTimer.restart();
@@ -443,6 +466,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 didTypeBeforeCaretMove = true;
                 super.replace(fb, offset, length, text, attrs);
 
+                if (applyingCompletion) return;
                 //Trigger auto-completion
                 var c = text.charAt(text.length() - 1);
                 if ((!Character.isLetterOrDigit(c) && c != '.') || text.contains("\n") || text.length() > 1) {
@@ -543,6 +567,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void requestCompletionProposals() {
+        completionToAccept = null;
+        boolean refresh = codeCompletionPopup.isVisible();
         if (this.completionRequestor != null)
             this.completionRequestor.setCanceled(true);
 
@@ -560,51 +586,73 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         var newRequestor = new CustomCompletionRequestor(
                 unit,
                 completionOffset,
-                (requestor, items) -> acceptCompletionList(requestor, items, generated)
+                (requestor, items) -> acceptCompletionList(requestor, items, generated, refresh)
         );
         this.completionRequestor = newRequestor;
 
         CompletableFuture.runAsync(() -> {
             try {
                 unit.codeComplete(completionOffset, newRequestor, newRequestor);
-            } catch (OperationCanceledException ignored) {} catch (RuntimeException e) {
-                if (e.getCause() instanceof OperationCanceledException)
-                    return;
-
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Unable to complete script " + this.scriptView.getScriptName(), e);
-            } catch (Throwable e) {
-                LOGGER.log(System.Logger.Level.WARNING,
-                        "Unable to complete script " + this.scriptView.getScriptName(), e);
+            } catch (Exception failure) {
+                completionFailed(newRequestor, failure);
             }
         });
     }
 
+    private void completionFailed(CustomCompletionRequestor requestor, Exception failure) {
+        if (!(failure instanceof OperationCanceledException) && !(failure.getCause() instanceof OperationCanceledException)
+                && !requestor.isCanceled()) {
+            LOGGER.log(System.Logger.Level.WARNING, "Unable to complete script " + scriptView.getScriptName(), failure);
+        }
+        SwingUtilities.invokeLater(() -> {
+            if (requestor != completionRequestor || disposed) return;
+            requestor.setCanceled(true);
+            completionRequestor = null;
+            hideCompletionPopup();
+        });
+    }
+
     private void doAutoCompletion(CompletionItem item) {
-        //The item is outdated
-        if (item.getRequestor() != this.completionRequestor || item.getRequestor().isCanceled())
+        if (item.getRequestor() != completionRequestor) {
+            // Keep Enter/Tab intent while a newer request replaces the visible list. Never apply old source ranges.
+            if (completionRequestor != null && !completionRequestor.isCanceled() && codeCompletionPopup.isVisible())
+                completionToAccept = item.getIdentity();
+            else hideCompletionPopup();
             return;
+        }
+        if (item.getRequestor().isCanceled()) {
+            hideCompletionPopup();
+            return;
+        }
 
+        applyingCompletion = true;
         this.editorPane.beginAtomicEdit();
-        var snippetEdits = item.getTextEdits().stream().filter(CustomTextEdit::isSnippet).toArray(CustomTextEdit[]::new);
-        if (snippetEdits.length != 0)
-            this.snippetCompletionAdapter.insert(snippetEdits);
-        item.getTextEdits().stream().filter(e -> !e.isSnippet()).forEach(this::applyTextEdit);
-        this.editorPane.endAtomicEdit();
-
-        hideCompletionPopup();
+        try {
+            var snippetEdits = item.getTextEdits().stream().filter(CustomTextEdit::isSnippet).toArray(CustomTextEdit[]::new);
+            if (snippetEdits.length != 0) this.snippetCompletionAdapter.insert(snippetEdits);
+            item.getTextEdits().stream().filter(e -> !e.isSnippet()).forEach(this::applyTextEdit);
+        } finally {
+            this.editorPane.endAtomicEdit();
+            applyingCompletion = false;
+            didTypeBeforeCaretMove = false;
+            item.getRequestor().setCanceled(true);
+            completionRequestor = null;
+            hideCompletionPopup();
+        }
+        analysis.completionAccepted();
     }
 
     private void acceptCompletionList(
             CustomCompletionRequestor requestor,
             List<CompletionItem> completions,
-            JavaSnippetSource.GeneratedSource generated
+            JavaSnippetSource.GeneratedSource generated,
+            boolean refresh
     ) {
         SwingUtilities.invokeLater(() -> {
             if (requestor != this.completionRequestor || requestor.isCanceled())
                 return;
 
-            if (!this.editorPane.isFocusOwner()) {
+            if (disposed || !this.editorPane.isFocusOwner() || refresh && !codeCompletionPopup.isVisible()) {
                 requestor.setCanceled(true);
                 hideCompletionPopup();
                 return;
@@ -616,14 +664,21 @@ public class ScriptPanel extends AbstractCodeViewPanel {
                 return;
             }
 
+            if (completionToAccept != null) {
+                var chosen = completions.stream().filter(item -> item.getIdentity().equals(completionToAccept))
+                        .findFirst().orElse(completions.getFirst());
+                completionToAccept = null;
+                doAutoCompletion(chosen);
+                return;
+            }
             try {
                 codeCompletionPopup.setKeyEnterListener(this::doAutoCompletion);
                 var token = requestor.getContext().getToken();
                 codeCompletionPopup.setToken(token == null ? "" : new String(token));
                 codeCompletionPopup.setItems(completions);
                 codeCompletionPopup.show(this.editorPane);
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
+            } catch (RuntimeException failure) {
+                completionFailed(requestor, failure);
             }
         });
     }
@@ -651,6 +706,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void hideCompletionPopup() {
+        completionToAccept = null;
         if (codeCompletionPopup.isInvokedBy(this.editorPane))
             codeCompletionPopup.setVisible(false);
     }

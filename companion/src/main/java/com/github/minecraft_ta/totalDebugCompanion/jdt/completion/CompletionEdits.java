@@ -92,11 +92,13 @@ final class CompletionEdits {
         }
     }
 
-    List<CustomTextEdit> addImports(String... names) {
+    String importType(String signature, CompletionItem item) {
         try {
             ImportRewrite imports = imports();
-            for (String name : names) imports.addImport(name);
-            return importEdits(imports);
+            String type = imports.addImportFromSignature(Signature.removeCapture(signature), AST.newAST(AST.JLS21, false),
+                    castImportContext(imports)).toString();
+            importEdits(imports).forEach(item::addTextEdit);
+            return type;
         } catch (CoreException | BadLocationException e) {
             throw new IllegalStateException("Cannot prepare completion imports", e);
         }
@@ -147,10 +149,10 @@ final class CompletionEdits {
 
         String name = proposal.isConstructor() ? "" : text(proposal.getName());
         if (nextTokenChar(replacementEnd(proposal)) == '(') return name;
-        String result = name + "(" + arguments(proposal) + ")${0}";
+        String result = name + "(" + arguments(proposal) + ")";
         if (!proposal.isConstructor() && "V".equals(text(Signature.getReturnType(proposal.getSignature())))
                 && nextTokenChar(replacementEnd(proposal)) != ';') result += ";";
-        return result;
+        return result + "${0}";
     }
 
     private static String arguments(CompletionProposal proposal) {

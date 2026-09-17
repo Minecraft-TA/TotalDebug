@@ -96,17 +96,20 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     private class LinkResult implements LinkGeneratorResult {
 
         private final IJavaElement el;
+        private final JavaAnalysis snapshot;
         private final int navigationOffset;
         private final int sourceOffset;
 
         public LinkResult(IJavaElement el, int navigationOffset, int sourceOffset) {
             this.el = el;
+            this.snapshot = cache.getSnapshot(sourcePath.toString());
             this.navigationOffset = navigationOffset;
             this.sourceOffset = sourceOffset;
         }
 
         @Override
         public HyperlinkEvent execute() {
+            if (cache.getSnapshot(sourcePath.toString()) != snapshot) return null;
             try {
                 if (el instanceof LocalVariable || el instanceof SourceMethod || el instanceof SourceField || el instanceof SourceType) {
                     var sourceRange = switch (el) {
@@ -122,7 +125,8 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                     }
 
-                    int editorOffset = cache.toEditorOffset(sourcePath.toString(), sourceRange.getOffset());
+                    int editorOffset = snapshot == null ? sourceRange.getOffset()
+                            : snapshot.sourceMap().toEditorOffset(sourceRange.getOffset());
                     if (editorOffset < 0) {
                         return null;
                     }

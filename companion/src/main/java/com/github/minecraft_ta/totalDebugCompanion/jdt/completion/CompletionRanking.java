@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 /** Semantic relevance first; application preferences only break comparable matches. */
 final class CompletionRanking {
     static List<CompletionItem> order(List<CompletionItem> candidates, String token) {
-        Set<String> minecraftNames = candidates.stream().filter(CompletionRanking::minecraftType)
+        Set<String> preferredNames = candidates.stream().filter(CompletionRanking::preferredType)
                 .map(CompletionItem::getName).collect(Collectors.toSet());
         int bestRelevance = candidates.stream().filter(item -> item.proposal != null)
                 .mapToInt(CompletionItem::getRelevance).max().orElse(0);
@@ -22,7 +22,7 @@ final class CompletionRanking {
             if (item.proposal == null) item.setRelevance(item.getName().equals(token) ? bestRelevance + 1 : 0);
         }
         var unique = new LinkedHashMap<String, CompletionItem>();
-        candidates.stream().sorted(Comparator.comparingInt((CompletionItem item) -> relevance(item, minecraftNames)).reversed()
+        candidates.stream().sorted(Comparator.comparingInt((CompletionItem item) -> relevance(item, preferredNames)).reversed()
                         .thenComparingInt(item -> match(item.getName(), token))
                         .thenComparingInt(item -> item.receiverCast() == null ? 0 : 1)
                         .thenComparingInt(CompletionRanking::typePreference)
@@ -44,19 +44,21 @@ final class CompletionRanking {
 
     private static int typePreference(CompletionItem item) {
         if (item.proposal == null || item.proposal.getKind() != CompletionProposal.TYPE_REF) return 0;
-        return minecraftType(item) ? 0 : 1;
+        return preferredType(item) ? 0 : 1;
     }
 
-    private static boolean minecraftType(CompletionItem item) {
-        return item.proposal != null && item.proposal.getKind() == CompletionProposal.TYPE_REF
-                && CompletionLabels.text(item.proposal.getSignature()).replace('/', '.').startsWith("Lnet.minecraft.");
+    private static boolean preferredType(CompletionItem item) {
+        if (item.proposal == null || item.proposal.getKind() != CompletionProposal.TYPE_REF) return false;
+        String signature = CompletionLabels.text(item.proposal.getSignature()).replace('/', '.');
+        return signature.startsWith("Lnet.minecraft.") || signature.startsWith("Lnet.neoforged.")
+                || signature.startsWith("Lnet.minecraftforge.");
     }
 
-    private static int relevance(CompletionItem item, Set<String> minecraftNames) {
-        // JDT's generic Java-library preference should not choose logging.Level over Minecraft's Level.
+    private static int relevance(CompletionItem item, Set<String> preferredNames) {
+        // A generic Java-library bonus must not hide an equally named Minecraft or loader type.
         // Import, expected-type and name-match scores remain intact; unrelated Java types are unaffected.
         boolean collision = item.proposal != null && item.proposal.getKind() == CompletionProposal.TYPE_REF
-                && minecraftNames.contains(item.getName())
+                && preferredNames.contains(item.getName())
                 && CompletionLabels.text(item.proposal.getSignature()).replace('/', '.').startsWith("Ljava.");
         return item.getRelevance() - (collision ? RelevanceConstants.R_JAVA_LIBRARY : 0);
     }

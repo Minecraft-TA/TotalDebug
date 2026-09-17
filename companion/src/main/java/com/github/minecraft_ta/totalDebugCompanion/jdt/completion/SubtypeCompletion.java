@@ -106,7 +106,7 @@ final class SubtypeCompletion {
         return switch (node) {
             case CompletionOnMemberAccess member -> member.receiver;
             case MessageSend message -> message.receiver;
-            default -> null;
+            case null, default -> null;
         };
     }
 
@@ -180,7 +180,7 @@ final class SubtypeCompletion {
                 || !(receiverExpression(context.getCompletionNode()) instanceof CastExpression cast)
                 || !(cast.resolvedType instanceof ReferenceBinding raw) || !raw.isValidBinding()
                 || cast.expression.resolvedType == null) return null;
-        TypeBinding source = uncapture(cast.expression.resolvedType);
+        TypeBinding source = CompletionTypes.uncapture(cast.expression.resolvedType);
         ReferenceBinding target = raw;
         if (raw instanceof ParameterizedTypeBinding parameterized && raw.isRawType()) {
             ReferenceBinding generic = parameterized.genericType();
@@ -212,15 +212,6 @@ final class SubtypeCompletion {
         } else if (template.isArrayType() && actual.isArrayType() && template.dimensions() == actual.dimensions()) {
             infer(template.leafComponentType(), actual.leafComponentType(), inferred);
         }
-    }
-
-    private static TypeBinding uncapture(TypeBinding type) {
-        if (type instanceof CaptureBinding capture) return capture.wildcard;
-        if (type instanceof ParameterizedTypeBinding parameterized && parameterized.arguments != null) {
-            return parameterized.environment.createParameterizedType(parameterized.genericType(),
-                    Arrays.stream(parameterized.arguments).map(SubtypeCompletion::uncapture).toArray(TypeBinding[]::new), parameterized.enclosingType());
-        }
-        return type;
     }
 
     private static final class Lookup extends CompletionRequestor {

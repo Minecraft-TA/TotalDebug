@@ -13,6 +13,10 @@ import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
@@ -21,6 +25,15 @@ import java.util.function.Function;
 public class EditorTabs extends JTabbedPane {
 
     private final ASTCache astCache = new ASTCache();
+
+    private final ExecutorService analysisExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(128), runnable -> {
+                var thread = new Thread(runnable, "Java editor analysis");
+                thread.setDaemon(true);
+                return thread;
+            });
+
+    public ExecutorService analysisExecutor() { return analysisExecutor; }
 
     public ASTCache astCache() { return astCache; }
 

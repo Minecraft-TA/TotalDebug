@@ -38,12 +38,13 @@ public final class JavaSymbolResolver {
     }
 
     public static IJavaElement selectElement(ASTCache cache, String editorIdentifier, int offset) throws JavaModelException {
-        CompilationUnit unit = cache.getFromCache(editorIdentifier);
-        if (unit == null) {
+        var snapshot = cache.getSnapshot(editorIdentifier);
+        if (snapshot == null) {
             return null;
         }
 
-        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
+        CompilationUnit unit = snapshot.unit();
+        int generatedOffset = snapshot.sourceMap().toGeneratedOffset(offset);
         if (generatedOffset < 0) {
             return null;
         }
@@ -59,11 +60,12 @@ public final class JavaSymbolResolver {
     }
 
     public static Resolution resolve(ASTCache cache, String editorIdentifier, int offset) throws JavaModelException {
-        CompilationUnit unit = cache.getFromCache(editorIdentifier);
-        if (unit == null) {
+        var snapshot = cache.getSnapshot(editorIdentifier);
+        if (snapshot == null) {
             return Resolution.unavailable("Java model is still loading");
         }
-        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
+        CompilationUnit unit = snapshot.unit();
+        int generatedOffset = snapshot.sourceMap().toGeneratedOffset(offset);
         return generatedOffset < 0
                 ? Resolution.unavailable("The selected text is not part of the generated Java source")
                 : resolve(unit, generatedOffset);
@@ -71,12 +73,13 @@ public final class JavaSymbolResolver {
 
     /** Resolves the concrete class that owns a qualified package segment at an editor offset. */
     public static String navigationOwnerClass(ASTCache cache, String editorIdentifier, int offset) {
-        CompilationUnit unit = cache.getFromCache(editorIdentifier);
-        if (unit == null) {
+        var snapshot = cache.getSnapshot(editorIdentifier);
+        if (snapshot == null) {
             return null;
         }
 
-        int generatedOffset = cache.toGeneratedOffset(editorIdentifier, offset);
+        CompilationUnit unit = snapshot.unit();
+        int generatedOffset = snapshot.sourceMap().toGeneratedOffset(offset);
         if (generatedOffset < 0) {
             return null;
         }

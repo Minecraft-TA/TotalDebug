@@ -8,6 +8,8 @@ enum UiRenderScenario {
     NEW_SCRIPT("new-script", "Compact script creation popup with a selected Script type"),
     NEW_SCRIPT_INVALID("new-script-invalid", "Script creation with an invalid name"),
     SCRIPT_TOOLBAR("script-toolbar", "Script toolbar with the Format action"),
+    SCRIPT_PROBLEMS("script-problems", "Compiler problems with source navigation"),
+    SCRIPT_PROBLEMS_OUTDATED("script-problems-outdated", "Previous compiler problems after editing the source"),
     COMPLETION_SINGLE("completion-single", "One completion with separate parameter and return-type columns"),
     COMPLETION_SHORTLIST("completion-shortlist", "Two compact completion rows"),
     COMPLETION_MODIFIERS("completion-modifiers", "Completion fields, visibility and modifier badges"),

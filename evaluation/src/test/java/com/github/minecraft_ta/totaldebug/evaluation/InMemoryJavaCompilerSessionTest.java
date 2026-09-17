@@ -24,10 +24,16 @@ class InMemoryJavaCompilerSessionTest {
             InMemoryCompilationException firstError = assertThrows(InMemoryCompilationException.class,
                     () -> compiler.compile("public class Broken { MissingFirst value; }", "Broken", ""));
             assertTrue(firstError.getMessage().contains("MissingFirst"));
+            var diagnostic = firstError.diagnostics().getFirst();
+            assertEquals("MissingFirst", "public class Broken { MissingFirst value; }".substring(diagnostic.start(), diagnostic.end()));
+            assertEquals(1, diagnostic.line());
+            assertTrue(diagnostic.column() > 1);
+            assertFalse(diagnostic.code().isBlank());
             InMemoryCompilationException secondError = assertThrows(InMemoryCompilationException.class,
                     () -> compiler.compile("public class Broken { MissingSecond value; }", "Broken", ""));
             assertTrue(secondError.getMessage().contains("MissingSecond"));
             assertFalse(secondError.getMessage().contains("MissingFirst"));
+            assertTrue(secondError.diagnostics().stream().noneMatch(problem -> problem.message().contains("MissingFirst")));
             Map<String, byte[]> output = compiler.compile("public class First {}", "First", "");
             assertEquals(Set.of("First"), output.keySet());
         }

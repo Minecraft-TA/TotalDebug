@@ -6,12 +6,17 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl
 import com.github.tth05.jindex.ClassIndex;
 
 import org.eclipse.jdt.core.Flags;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionContext;
+import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.StringTokenizer;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import javax.swing.SwingUtilities;
@@ -39,6 +44,11 @@ public class SubtypeCompletionTest {
     public static class Holder {
         public static Bus BUS;
         public static Bus next() { return null; }
+        public static Enumeration<List<String>> enumeration() { return null; }
+    }
+    public static final class ObjectEnumeration implements Enumeration<Object> {
+        public boolean hasMoreElements() { return false; }
+        public Object nextElement() { return null; }
     }
     public interface Channel<T> { T value(); }
     public static class GenericChannel<T> implements Channel<T> {
@@ -61,7 +71,7 @@ public class SubtypeCompletionTest {
     @BeforeAll static void index() throws Exception {
         var bytes = new ArrayList<byte[]>();
         var types = new ArrayList<>(List.of(SubtypeCompletionTest.class, Object.class, String.class, Integer.class,
-                Number.class, Comparable.class));
+                Number.class, Comparable.class, Enumeration.class, Iterator.class, List.class, StringTokenizer.class));
         types.addAll(List.of(SubtypeCompletionTest.class.getDeclaredClasses()));
         for (var type : types) {
             try (var stream = type.getResourceAsStream("/" + type.getName().replace('.', '/') + ".class")) {
@@ -71,6 +81,24 @@ public class SubtypeCompletionTest {
         CompanionClassIndex.set(ClassIndex.fromBytes(bytes));
     }
     @AfterAll static void close() { CompanionClassIndex.get().close(); CompanionClassIndex.clear(); }
+
+    @Test void missingRecoveredCompletionNodeDoesNotAbortTheRequest() {
+        var unit = new CompilationUnitImpl("Proof", "class Proof {}");
+        var request = new CustomCompletionRequestor(unit, 0, (ignored, items) -> { });
+        request.beginTask("test", 1);
+        request.acceptContext(new InternalCompletionContext() {
+            @Override public char[] getToken() { return "as".toCharArray(); }
+            @Override public ASTNode getCompletionNode() { return null; }
+        });
+        assertTrue(SubtypeCompletion.find(unit, request, List.of()).isEmpty());
+    }
+
+    @Test void incompatibleGenericSubtypeCannotDiscardDirectChainedMethodCompletions() throws Exception {
+        for (String expression : List.of("Holder.enumeration().as|", "Holder.enumeration().as|;", "Holder.enumeration().as|Iterator()")) {
+            var items = complete(expression);
+            assertTrue(items.stream().anyMatch(item -> item.getName().equals("asIterator") && item.getCastType().isEmpty()), expression);
+        }
+    }
 
     @Test void qualifiedInterfaceReceiverOffersDistinctImplementationsAndImportsTheChosenCast() throws Exception {
         String script = "Holder.BUS.liste|;";

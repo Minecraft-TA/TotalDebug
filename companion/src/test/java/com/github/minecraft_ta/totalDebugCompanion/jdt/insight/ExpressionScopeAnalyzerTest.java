@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionPr
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaAst;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.AfterAll;
@@ -154,16 +156,10 @@ class ExpressionScopeAnalyzerTest {
     @Test
     void ignoresUnrelatedOpenTypesWithTheSameSimpleName() throws Exception {
         String key = "unrelated-external-completion-type";
-        var parsed = new java.util.concurrent.CompletableFuture<Void>();
-        Runnable removeListener = cache.addChangeListener(key, (unit, version) -> parsed.complete(null));
-        try {
-            cache.update(key, "ExternalCompletionType", """
-                    package unrelated;
-                    class ExternalCompletionType {
-                        int unrelatedField;
-                    }
-                    """);
-            parsed.get(2, java.util.concurrent.TimeUnit.SECONDS);
+        try (var registration = cache.register(key, () -> {})) {
+            String unrelated = "package unrelated; class ExternalCompletionType { int unrelatedField; }";
+            registration.publish(JavaAnalysis.parse("ExternalCompletionType", unrelated, JavaEditorSource.identity(unrelated),
+                    0, CompanionClassIndex.identity()));
             String source = """
                     import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.ExternalCompletionType;
                     class Sample {
@@ -179,9 +175,6 @@ class ExpressionScopeAnalyzerTest {
 
             assertTrue(completions.containsAll(List.of("externalMethod()", "externalStatic()")), completions.toString());
             assertFalse(completions.contains("unrelatedField"), completions.toString());
-        } finally {
-            removeListener.run();
-            cache.removeFromCache(key);
         }
     }
 

@@ -11,6 +11,7 @@ import org.eclipse.jdt.internal.compiler.lookup.SourceTypeBinding;
 
 import java.util.Arrays;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 
 /** Display text for the proposal kinds supported by the editor popup. */
 final class CompletionLabels {
@@ -70,6 +71,15 @@ final class CompletionLabels {
                 }
             }
             case CompletionProposal.LOCAL_VARIABLE_REF, CompletionProposal.VARIABLE_DECLARATION -> resultType = type(proposal.getSignature());
+        }
+        // Missing receiver/generic types can produce identical members with different required imports.
+        if ((proposal.getKind() == CompletionProposal.METHOD_REF || proposal.getKind() == CompletionProposal.FIELD_REF)
+                && proposal.getRequiredProposals() != null) {
+            String imports = Arrays.stream(proposal.getRequiredProposals())
+                    .filter(required -> required.getKind() == CompletionProposal.TYPE_REF)
+                    .map(required -> Signature.toString(text(Signature.getTypeErasure(required.getSignature()))).replace('$', '.'))
+                    .distinct().collect(Collectors.joining(", "));
+            if (!imports.isEmpty()) detail += " (import " + imports + ")";
         }
         item.setPresentation(name, detail, resultType);
     }

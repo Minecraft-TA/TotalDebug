@@ -115,14 +115,15 @@ public class NameLookupImpl extends NameLookup {
             classes = CompanionClassIndex.get().findClasses(
                     name,
                     SearchOptions.with(
-                            SearchOptions.SearchMode.CONTAINS,
-                            SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY,
+                            partialMatch ? SearchOptions.SearchMode.CONTAINS : SearchOptions.SearchMode.PREFIX,
+                            partialMatch ? SearchOptions.MatchMode.MATCH_CASE_FIRST_CHAR_ONLY : SearchOptions.MatchMode.MATCH_CASE,
                             5000
                     )
             ).results();
         }
 
         for (IndexedClass foundClass : classes) {
+            if (!partialMatch && name != null && !name.isBlank() && !foundClass.getName().equals(name)) continue;
             if (!considerSecondaryTypes && foundClass.getInnerClassType() != null)
                 continue;
 

@@ -149,7 +149,7 @@ public final class ApplicationStatusBar extends JPanel {
             this.removeCaretListener = context.addCaretOffsetListener(ignored -> requestMemberRefresh());
             this.removeAstListener = context.astCache().addChangeListener(
                     context.astKey(),
-                    (unit, version) -> requestMemberRefresh()
+                    snapshot -> requestMemberRefresh()
             );
             requestMemberRefresh();
         }
@@ -169,9 +169,9 @@ public final class ApplicationStatusBar extends JPanel {
         NavigationTarget target = this.selectedTarget;
         JavaBreadcrumbResolver.Member member = null;
         if (context != null && target != null) {
-            var unit = context.astCache().getFromCache(context.astKey());
-            if (unit != null) {
-                member = JavaBreadcrumbResolver.resolve(unit, context.caretOffset(), target);
+            var snapshot = context.currentSnapshot();
+            if (snapshot != null) {
+                member = JavaBreadcrumbResolver.resolve(snapshot.unit(), snapshot.sourceMap().toGeneratedOffset(context.caretOffset()), target);
             }
         }
         if (!Objects.equals(this.selectedMember, member)) {

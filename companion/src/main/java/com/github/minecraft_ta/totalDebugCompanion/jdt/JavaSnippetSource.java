@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaSourceMap;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaImports.Import;
 
 import javax.lang.model.SourceVersion;
 import java.nio.charset.StandardCharsets;
@@ -65,11 +66,11 @@ public final class JavaSnippetSource {
         requireClassName(className);
         Objects.requireNonNull(editorText, "editorText");
         Objects.requireNonNull(mode, "mode");
-        List<ImportSegment> imports = imports(editorText);
+        List<Import> imports = JavaImports.read(editorText);
         String maskedBody = maskImports(editorText, imports);
         StringBuilder generated = new StringBuilder(editorText.length() + 320);
         List<MappingSegment> mappings = new ArrayList<>();
-        for (ImportSegment segment : imports) {
+        for (Import segment : imports) {
             int generatedStart = generated.length();
             generated.append(editorText, segment.editorStart(), segment.editorEnd());
             mappings.add(new MappingSegment(
@@ -120,114 +121,18 @@ public final class JavaSnippetSource {
     public record FragmentParts(String imports, String body) { }
 
     public static FragmentParts splitImports(String text) {
-        List<ImportSegment> segments = imports(text);
+        List<Import> segments = JavaImports.read(text);
         StringBuilder declarations = new StringBuilder();
-        for (ImportSegment segment : segments) declarations.append(text, segment.editorStart(), segment.editorEnd()).append('\n');
+        for (Import segment : segments) declarations.append(text, segment.editorStart(), segment.editorEnd()).append('\n');
         return new FragmentParts(declarations.toString(), maskImports(text, segments));
     }
 
-    private static List<ImportSegment> imports(String editorText) {
-        List<ImportSegment> result = new ArrayList<>();
-        int offset = 0;
-        while (offset < editorText.length()) {
-            offset = skipTrivia(editorText, offset);
-            if (!keywordAt(editorText, offset, "import")) {
-                break;
-            }
-            int end = importEnd(editorText, offset + "import".length());
-            if (end < 0) {
-                break;
-            }
-            int segmentEnd = includeLineTerminator(editorText, end);
-            result.add(new ImportSegment(offset, segmentEnd));
-            offset = segmentEnd;
-        }
-        return result;
-    }
-
-    private static int skipTrivia(String text, int offset) {
-        int current = offset;
-        while (current < text.length()) {
-            char character = text.charAt(current);
-            if (Character.isWhitespace(character)) {
-                current++;
-                continue;
-            }
-            if (character != '/' || current + 1 >= text.length()) {
-                break;
-            }
-            char next = text.charAt(current + 1);
-            if (next == '/') {
-                int lineEnd = text.indexOf('\n', current + 2);
-                current = lineEnd < 0 ? text.length() : lineEnd + 1;
-                continue;
-            }
-            if (next == '*') {
-                int commentEnd = text.indexOf("*/", current + 2);
-                current = commentEnd < 0 ? text.length() : commentEnd + 2;
-                continue;
-            }
-            break;
-        }
-        return current;
-    }
-
-    private static boolean keywordAt(String text, int offset, String keyword) {
-        if (offset < 0 || !text.startsWith(keyword, offset)) {
-            return false;
-        }
-        int end = offset + keyword.length();
-        return (offset == 0 || !Character.isJavaIdentifierPart(text.charAt(offset - 1)))
-                && (end == text.length() || !Character.isJavaIdentifierPart(text.charAt(end)));
-    }
-
-    private static int importEnd(String text, int offset) {
-        int current = offset;
-        boolean sawName = false;
-        while (current < text.length()) {
-            char character = text.charAt(current);
-            if (character == ';') {
-                return sawName ? current + 1 : -1;
-            }
-            if (character == '/' && current + 1 < text.length()) {
-                char next = text.charAt(current + 1);
-                if (next == '/') {
-                    return -1;
-                }
-                if (next == '*') {
-                    int commentEnd = text.indexOf("*/", current + 2);
-                    if (commentEnd < 0) {
-                        return -1;
-                    }
-                    current = commentEnd + 2;
-                    continue;
-                }
-            }
-            if (!Character.isWhitespace(character)) {
-                sawName = true;
-            }
-            current++;
-        }
-        return -1;
-    }
-
-    private static int includeLineTerminator(String text, int offset) {
-        int current = offset;
-        while (current < text.length() && (text.charAt(current) == ' ' || text.charAt(current) == '\t')) {
-            current++;
-        }
-        if (current < text.length() && text.charAt(current) == '\r') {
-            current++;
-        }
-        return current < text.length() && text.charAt(current) == '\n' ? current + 1 : offset;
-    }
-
-    private static String maskImports(String editorText, List<ImportSegment> imports) {
+    private static String maskImports(String editorText, List<Import> imports) {
         if (imports.isEmpty()) {
             return editorText;
         }
         char[] masked = editorText.toCharArray();
-        for (ImportSegment segment : imports) {
+        for (Import segment : imports) {
             for (int index = segment.editorStart(); index < segment.editorEnd(); index++) {
                 if (masked[index] != '\r' && masked[index] != '\n') {
                     masked[index] = ' ';
@@ -347,8 +252,7 @@ public final class JavaSnippetSource {
         }
     }
 
-    private record ImportSegment(int editorStart, int editorEnd) {
-    }
+
 
     private record MappingSegment(int editorStart, int generatedStart, int length) {
         boolean containsEditor(int offset) {
@@ -424,6 +328,17 @@ public final class JavaSnippetSource {
                 return this.editorLength;
             }
             return -1;
+        }
+
+        @Override
+        public int toEditorDiagnosticOffset(int generatedOffset, boolean syntax) {
+            // Completion's synthetic import-insertion positions are not locations in user code.
+            for (MappingSegment segment : this.segments) {
+                if (segment.containsGenerated(generatedOffset)) return segment.editorStart() + generatedOffset - segment.generatedStart();
+            }
+            MappingSegment body = this.segments.getLast();
+            return syntax && generatedOffset >= body.generatedStart() + body.length()
+                    && generatedOffset <= this.generatedLength ? this.editorLength : -1;
         }
 
         public String mapInsertionText(int generatedOffset, String generatedText) {

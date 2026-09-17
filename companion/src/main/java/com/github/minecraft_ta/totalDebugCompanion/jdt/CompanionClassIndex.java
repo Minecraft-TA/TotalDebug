@@ -20,6 +20,9 @@ public final class CompanionClassIndex {
         return runtime != null;
     }
 
+    /** Identity of the installed analysis environment, independent of document revisions. */
+    public static Object identity() { return runtime; }
+
     public static ClassIndex get() {
         return current().index();
     }

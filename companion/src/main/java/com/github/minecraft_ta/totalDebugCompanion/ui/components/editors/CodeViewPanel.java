@@ -246,7 +246,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.removeDebuggerPresentationListener = () -> {
             };
         } else {
-            this.removeInlineAstListener = context.astCache().addChangeListener(this.identifier, (unit, version) ->
+            this.removeInlineAstListener = context.astCache().addChangeListener(this.identifier, snapshot ->
                     SwingUtilities.invokeLater(this::updateInlineValueHints)
             );
             this.removeDebuggerPresentationListener = DebuggerEditorPresentation.addListener(snapshot ->
@@ -298,9 +298,10 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             this.codeVisionLayerUI.setInlineValues(Map.of(), this.codeVisionLayer);
             return;
         }
+        var source = currentSnapshot();
         this.codeVisionLayerUI.setInlineValues(DebuggerInlineValueHints.create(
-                context.astCache().getFromCache(this.identifier),
-                context.astCache().getContents(this.identifier),
+                source == null ? null : source.unit(),
+                source == null ? null : source.contents(),
                 snapshot
         ), this.codeVisionLayer);
     }
@@ -512,11 +513,12 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     }
 
     private ExpressionCompletionSupport.CompletionProvider completionProviderAtLine(int displayedLine) {
-        String source = context.astCache().getContents(this.identifier);
-        var unit = context.astCache().getFromCache(this.identifier);
-        if (source == null || unit == null) {
+        var snapshot = currentSnapshot();
+        if (snapshot == null) {
             return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
         }
+        String source = snapshot.contents();
+        var unit = snapshot.unit();
         int lineStart;
         int lineEnd;
         try {

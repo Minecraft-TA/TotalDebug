@@ -36,6 +36,14 @@ class CompletionPresentationTest {
         CompanionClassIndex.clear();
     }
 
+    @Test void recoveredMembersIdentifyTheTypeTheyWillImport() {
+        var method = proposal(CompletionProposal.METHOD_REF, "clear", "clear()", "()V", "clear");
+        var required = CompletionProposal.create(CompletionProposal.TYPE_REF, 0);
+        required.setSignature("Lnet.neoforged.bus.api.EventListener;".toCharArray());
+        method.setRequiredProposals(new CompletionProposal[]{required});
+        assertEquals("clear() (import net.neoforged.bus.api.EventListener) : void", label(method));
+    }
+
     @Test
     void labelsGenericVarargsAndInsertsArgumentStops() {
         String source = "class Proof { void run() { collect } }";
@@ -46,7 +54,7 @@ class CompletionPresentationTest {
         assertEquals("collect(List<? extends Number> list, String... astring) : void",
                 label(proposal));
         CompletionItem item = convert(source, proposal);
-        assertEquals("collect(${1:list}, ${2:astring})${0};", item.getTextEdits().getFirst().getNewText());
+        assertEquals("collect(${1:list}, ${2:astring});${0}", item.getTextEdits().getFirst().getNewText());
         assertTrue(item.getTextEdits().getFirst().isSnippet());
     }
 

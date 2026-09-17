@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
+import java.awt.Font;
 
 public class CodeUtils {
 
@@ -19,7 +20,8 @@ public class CodeUtils {
      *
      * <p>Most tokens are produced by {@code CustomJavaTokenMaker} from resolved JDT bindings rather
      * than by RSyntaxTextArea's own Java lexer, which is why the semantic types
-     * ({@link ShadowedTokenTypes#TYPE}, {@link ShadowedTokenTypes#FIELD}) matter as much as the
+     * ({@link ShadowedTokenTypes#TYPE}, {@link ShadowedTokenTypes#FIELD},
+     * {@link ShadowedTokenTypes#CONSTANT}) matter as much as the
      * lexical ones.
      */
     public static void initJavaColors(SyntaxScheme scheme, EditorPalette palette) {
@@ -28,6 +30,14 @@ public class CodeUtils {
     }
 
     public static void initSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
+        Font base = scheme.getStyle(TokenTypes.RESERVED_WORD).font;
+        if (base == null) base = RSyntaxTextArea.getDefaultFont();
+        Font plain = base.deriveFont(Font.PLAIN);
+        for (var style : scheme.getStyles()) if (style != null) style.font = plain;
+        for (int token : new int[]{TokenTypes.COMMENT_EOL, TokenTypes.COMMENT_MULTILINE,
+                TokenTypes.COMMENT_DOCUMENTATION, TokenTypes.COMMENT_KEYWORD, TokenTypes.COMMENT_MARKUP}) {
+            scheme.getStyle(token).font = base.deriveFont(Font.ITALIC);
+        }
         scheme.getStyle(TokenTypes.RESERVED_WORD).foreground = palette.keyword();
         scheme.getStyle(TokenTypes.RESERVED_WORD_2).foreground = palette.keyword();
         scheme.getStyle(TokenTypes.DATA_TYPE).foreground = palette.keyword();
@@ -53,9 +63,9 @@ public class CodeUtils {
         scheme.getStyle(TokenTypes.COMMENT_KEYWORD).foreground = palette.docComment();
         scheme.getStyle(TokenTypes.MARKUP_COMMENT).foreground = palette.comment();
 
-        scheme.getStyle(TokenTypes.SEPARATOR).foreground = palette.foreground();
-        scheme.getStyle(TokenTypes.OPERATOR).foreground = palette.foreground();
-        scheme.getStyle(TokenTypes.IDENTIFIER).foreground = palette.foreground();
+        scheme.getStyle(TokenTypes.SEPARATOR).foreground = palette.identifier();
+        scheme.getStyle(TokenTypes.OPERATOR).foreground = palette.identifier();
+        scheme.getStyle(TokenTypes.IDENTIFIER).foreground = palette.identifier();
 
         scheme.getStyle(TokenTypes.ANNOTATION).foreground = palette.annotation();
         scheme.getStyle(TokenTypes.FUNCTION).foreground = palette.instanceMethod();
@@ -74,6 +84,10 @@ public class CodeUtils {
     public static void initJavaSemanticColors(SyntaxScheme scheme, EditorPalette palette) {
         scheme.getStyle(ShadowedTokenTypes.TYPE).foreground = palette.classReference();
         scheme.getStyle(ShadowedTokenTypes.FIELD).foreground = palette.field();
+        var constant = scheme.getStyle(ShadowedTokenTypes.CONSTANT);
+        constant.foreground = palette.field();
+        Font base = scheme.getStyle(TokenTypes.RESERVED_WORD).font;
+        constant.font = (base == null ? RSyntaxTextArea.getDefaultFont() : base).deriveFont(Font.BOLD);
     }
 
     public static void initSyntaxScheme(RSyntaxTextArea component) {

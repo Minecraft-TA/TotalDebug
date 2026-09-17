@@ -15,8 +15,12 @@ import org.eclipse.core.runtime.content.IContentTypeManager;
 import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.internal.codeassist.CompletionEngine;
 import org.eclipse.jdt.internal.compiler.env.AccessRestriction;
+import org.eclipse.jdt.internal.compiler.lookup.CompilationUnitScope;
 import org.eclipse.jdt.internal.core.*;
 import org.eclipse.jdt.internal.core.search.indexing.IndexManager;
 import org.eclipse.jdt.internal.core.util.Util;
@@ -64,6 +68,22 @@ public class JDTHacks {
 
     public static PackageFragmentRoot getSyntheticPackageFragmentRoot() {
         return PACKAGE_FRAGMENT_ROOT;
+    }
+
+    /** Reuses ECJ's resolved import-use flags when privileged access was the only reason it skipped this check. */
+    public static void checkUnusedImports(CompilationUnit unit) {
+        try {
+            var resolverField = AST.class.getDeclaredField("resolver");
+            resolverField.setAccessible(true);
+            Object resolver = resolverField.get(unit.getAST());
+            var scopeField = resolver.getClass().getDeclaredField("scope");
+            scopeField.setAccessible(true);
+            var scope = (CompilationUnitScope) scopeField.get(resolver);
+            scope.referenceContext.checkUnusedImports();
+            invokeMethod(unit, "setProblems", new Class<?>[]{IProblem[].class}, (Object) scope.referenceContext.compilationResult.getProblems());
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot access JDT's resolved imports for script diagnostics", failure);
+        }
     }
 
     public static NameLookup.Answer createNameLookupAnswer(IType type, AccessRestriction res, IClasspathEntry entry) {

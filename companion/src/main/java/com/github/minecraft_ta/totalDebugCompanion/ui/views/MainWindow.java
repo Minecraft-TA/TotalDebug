@@ -193,6 +193,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             editorTabs.closeMatching(editor -> true);
             statusBar.dispose();
             editorTabs.astCache().clear();
+            editorTabs.analysisExecutor().shutdownNow();
         }
         super.dispose();
     }
@@ -202,13 +203,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         setEnabled(!switching);
         this.projectSelector.refresh();
     }
-    @Override public void runtimeChanged() { navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
+    @Override public void runtimeChanged() { editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
-        return new EditorContext(editorTabs.astCache(), this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
+        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
     }
 
     private void updateWindowIcon(CompanionTheme theme) {

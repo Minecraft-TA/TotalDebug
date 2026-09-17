@@ -39,27 +39,27 @@ class CompletionParameterNamesTest {
     @Test void usesRealNamesWithGenericSubstitutionAndWideSlots() throws Exception {
         assertCompletion("fixture.conver|", "convert(String inputValue) : String", "convert(${1:inputValue})${0}");
         assertCompletion("fixture.wid|", "wide(long ticks, double ratio, String label) : void",
-                "wide(${1:ticks}, ${2:ratio}, ${3:label})${0};");
-        assertCompletion("fixture.vararg|", "varargs(String... entries) : void", "varargs(${1:entries})${0};");
+                "wide(${1:ticks}, ${2:ratio}, ${3:label});${0}");
+        assertCompletion("fixture.vararg|", "varargs(String... entries) : void", "varargs(${1:entries});${0}");
     }
 
     @Test void sharesFallbackAndParchmentNamesBetweenLabelAndInsertion() throws Exception {
         assertCompletion("fixture.generate|", "generated(String s1, int i, String s) : void",
-                "generated(${1:s1}, ${2:i}, ${3:s})${0};");
+                "generated(${1:s1}, ${2:i}, ${3:s});${0}");
         assertCompletion("block.performBoneme|", "performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, BlockState state) : void",
-                "performBonemeal(${1:level}, ${2:random}, ${3:pos}, ${4:state})${0};");
+                "performBonemeal(${1:level}, ${2:random}, ${3:pos}, ${4:state});${0}");
     }
 
     @Test void keepsSourceNamesEvenWhenTheyLookGenerated() throws Exception {
         assertCompletion("sourceMet|", "sourceMethod(int arg0, String userText) : void",
-                "sourceMethod(${1:arg0}, ${2:userText})${0};");
+                "sourceMethod(${1:arg0}, ${2:userText});${0}");
     }
 
     @Test void insertsUnicodeAndDollarNamesAsEditableArguments() throws Exception {
-        assertCompletion("fixture.unico|", "unicode(String 名前, int $count) : void", "unicode(${1:名前}, ${2:$count})${0};");
+        assertCompletion("fixture.unico|", "unicode(String 名前, int $count) : void", "unicode(${1:名前}, ${2:$count});${0}");
         SwingUtilities.invokeAndWait(() -> {
             var text = new JTextArea();
-            new SnippetCompletionAdapter(text).insert(new CustomTextEdit(new Range(0, 0), "unicode(${1:名前}, ${2:$count})${0};"));
+            new SnippetCompletionAdapter(text).insert(new CustomTextEdit(new Range(0, 0), "unicode(${1:名前}, ${2:$count});${0}"));
             assertEquals("unicode(名前, $count);", text.getText());
             assertEquals("名前", text.getSelectedText());
         });

@@ -26,7 +26,7 @@ class CodeVisionDisposalTest {
         field.setAccessible(true);
         var listeners = (Map<?, ?>) field.get(cache);
         String key = "code-vision-disposal-test";
-        Runnable unsubscribeOther = cache.addChangeListener(key, (unit, version) -> {});
+        Runnable unsubscribeOther = cache.addChangeListener(key, snapshot -> {});
         try (var service = new CodeInsightService(() -> { throw new AssertionError("No analysis expected"); }, RuntimeSourceCatalog.empty())) {
             SwingUtilities.invokeAndWait(() -> {
                 var editor = new RSyntaxTextArea();
@@ -48,6 +48,6 @@ class CodeVisionDisposalTest {
                 controller.close();
                 assertEquals(1, ((Collection<?>) listeners.get(key)).size());
             });
-        } finally { unsubscribeOther.run(); cache.removeFromCache(key); }
+        } finally { unsubscribeOther.run(); cache.clear(); }
     }
 }

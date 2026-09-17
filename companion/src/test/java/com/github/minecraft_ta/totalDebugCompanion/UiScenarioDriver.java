@@ -16,6 +16,13 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextFie
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.DebuggerEditorPresentation;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ImageViewPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptProblemsPanel;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
+import com.github.minecraft_ta.totaldebug.evaluation.CompilationDiagnostic;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
@@ -81,6 +88,7 @@ import javax.swing.KeyStroke;
 import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.tools.Diagnostic;
 import javax.swing.tree.TreePath;
 
 /** Applies one named UI state, waits until it is stable, and optionally captures it. */
@@ -219,6 +227,31 @@ final class UiScenarioDriver {
             case SCRIPT_TOOLBAR -> context.once("script-toolbar", () ->
                     mainWindow.getEditorTabs().openEditorTab(new ScriptView(
                             mainWindow.editorContext(), "MyScript")));
+            case SCRIPT_PROBLEMS, SCRIPT_PROBLEMS_OUTDATED -> context.once("script-problems", () -> {
+                var view = new ScriptView(mainWindow.editorContext(), "ProblemExample");
+                mainWindow.getEditorTabs().openEditorTab(view);
+                var panel = (ScriptPanel) view.getComponent();
+                var editor = findComponent(panel, RSyntaxTextArea.class);
+                String text = "int count = \"three\";\nint total = missingValue;\n";
+                editor.setText(text);
+                var generated = JavaSnippetSource.body("ProblemExample", text);
+                int first = generated.source().indexOf("\"three\""), second = generated.source().indexOf("missingValue");
+                var diagnostics = List.of(
+                        new CompilationDiagnostic(Diagnostic.Kind.ERROR, "compiler.err.prob.found.req",
+                                "Incompatible types: String cannot be converted to int", first, first + 7, 1, 1),
+                        new CompilationDiagnostic(Diagnostic.Kind.ERROR, "compiler.err.cant.resolve",
+                                "Cannot find symbol: missingValue", second, second + 12, 1, 1));
+                try {
+                    var id = ScriptPanel.class.getDeclaredField("scriptId"); id.setAccessible(true);
+                    var accept = ScriptPanel.class.getDeclaredMethod("acceptResult", ExecutionResultMessage.class,
+                            JavaSnippetSource.GeneratedSource.class, List.class);
+                    accept.setAccessible(true);
+                    accept.invoke(panel, new ExecutionResultMessage(id.getInt(panel),
+                            ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, "Compilation failed")), generated, diagnostics);
+                    if (scenario == UiRenderScenario.SCRIPT_PROBLEMS_OUTDATED) SwingUtilities.invokeLater(() ->
+                            editor.setText(text.replace("\"three\"", "3")));
+                } catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
+            });
             case IMAGE_TOOLBAR -> {
                 var panel = findComponent(mainWindow, ImageViewPanel.class);
                 if (panel == null) break;
@@ -519,6 +552,7 @@ final class UiScenarioDriver {
                             && window.isShowing());
             case SCRIPT_TOOLBAR -> mainWindow.getEditorTabs().getSelectedEditor()
                     instanceof ScriptView;
+            case SCRIPT_PROBLEMS, SCRIPT_PROBLEMS_OUTDATED -> findComponent(mainWindow, ScriptProblemsPanel.class) != null;
             case IMAGE_TOOLBAR -> context.completedActions.contains("image-toolbar");
             case EDITOR_FIND_TOOLBAR -> context.completedActions.contains("editor-find-toolbar");
             case DEBUGGER_TOOLBAR -> context.completedActions.contains("debugger-toolbar");
@@ -708,7 +742,7 @@ final class UiScenarioDriver {
         selectCodeEditor(context);
         var selected = mainWindow.getEditorTabs().getSelectedEditor();
         if (!(selected instanceof CodeView codeView)
-                || mainWindow.getEditorTabs().astCache().getFromCache(codeView.getPath().toString()) == null) {
+                || mainWindow.getEditorTabs().astCache().getSnapshot(codeView.getPath().toString()) == null) {
             return;
         }
         RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
@@ -764,7 +798,7 @@ final class UiScenarioDriver {
             return;
         }
         if (!(mainWindow.getEditorTabs().getSelectedEditor() instanceof CodeView codeView)
-                || mainWindow.getEditorTabs().astCache().getFromCache(codeView.getPath().toString()) == null) {
+                || mainWindow.getEditorTabs().astCache().getSnapshot(codeView.getPath().toString()) == null) {
             return;
         }
         context.once("open-chooser", () -> {

@@ -19,4 +19,7 @@ public interface JavaSourceMap {
 
     /** Returns {@code -1} when the generated offset belongs to hidden wrapper code. */
     int toEditorOffset(int generatedOffset);
+
+    /** Maps a diagnostic location; syntax errors in generated closing code can belong to the end of user input. */
+    default int toEditorDiagnosticOffset(int generatedOffset, boolean syntax) { return toEditorOffset(generatedOffset); }
 }

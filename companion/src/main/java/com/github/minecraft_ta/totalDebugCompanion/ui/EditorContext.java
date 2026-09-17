@@ -10,9 +10,10 @@ import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightSer
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import java.awt.Window;
 import java.util.function.BiConsumer;
+import java.util.concurrent.Executor;
 
 /** The collaborators shared by Java editors in one project. */
-public record EditorContext(ASTCache astCache, Window owner, ProjectScope project, CodeInsightService insights,
+public record EditorContext(ASTCache astCache, Executor analysisExecutor, Window owner, ProjectScope project, CodeInsightService insights,
                             DebuggerSessionController debugger, NavigationService navigation,
                             ScriptExecutionService scripts, CompanionSession session,
                             BiConsumer<DebugEngine.StackFrame, DebugEngine.Variable> inspectVariable) { }

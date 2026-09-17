@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totaldebug.evaluation;
 
-import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileManager;
@@ -22,7 +21,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /** Compiles independent source units while retaining archive readers until closed or the classpath changes. */
 public final class InMemoryJavaCompiler implements Closeable {
@@ -103,7 +101,8 @@ public final class InMemoryJavaCompiler implements Closeable {
                 this.sources = List.copyOf(stamps);
             }
             if (!Boolean.TRUE.equals(task.call())) {
-                throw new InMemoryCompilationException(formatDiagnostics(diagnostics));
+                if (diagnostics.getDiagnostics().isEmpty()) throw new InMemoryCompilationException("Java compilation failed without diagnostics");
+                throw new InMemoryCompilationException(diagnostics.getDiagnostics().stream().map(CompilationDiagnostic::from).toList());
             }
             Map<String, byte[]> bytecode = ScriptBytecodeTransformer.transform(
                     fileManager.bytecode(),
@@ -161,17 +160,4 @@ public final class InMemoryJavaCompiler implements Closeable {
         }
     }
 
-    private static String formatDiagnostics(DiagnosticCollector<JavaFileObject> diagnostics) {
-        String message = diagnostics.getDiagnostics().stream()
-                .map(diagnostic -> formatDiagnostic(diagnostic, Locale.ROOT))
-                .collect(Collectors.joining(System.lineSeparator()));
-        return message.isBlank() ? "Java compilation failed without diagnostics" : message;
-    }
-
-    private static String formatDiagnostic(Diagnostic<? extends JavaFileObject> diagnostic, Locale locale) {
-        String location = diagnostic.getLineNumber() == Diagnostic.NOPOS
-                ? ""
-                : "line " + diagnostic.getLineNumber() + ": ";
-        return location + diagnostic.getMessage(locale);
-    }
 }

@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.tth05.jindex.ClassIndex;
@@ -11,8 +13,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,10 +61,7 @@ final class JavaSymbolResolverTest {
 
     @AfterAll
     static void closeClassIndex() {
-        cache.removeFromCache("symbols");
-        cache.removeFromCache("constructor");
-        cache.removeFromCache("local");
-        cache.removeFromCache("navigation");
+        cache.clear();
         CompanionClassIndex.get().close();
         CompanionClassIndex.clear();
     }
@@ -138,10 +135,7 @@ final class JavaSymbolResolverTest {
     }
 
     private static String prepareAst(String key) throws InterruptedException {
-        CountDownLatch parsed = new CountDownLatch(1);
-        cache.addChangeListener(key, (unit, version) -> parsed.countDown());
-        cache.update(key, "Target", SOURCE);
-        assertTrue(parsed.await(5, TimeUnit.SECONDS), "Timed out waiting for the Java model");
+        cache.register(key, () -> {}).publish(JavaAnalysis.parse("Target", SOURCE, JavaEditorSource.identity(SOURCE), 0, CompanionClassIndex.identity()));
         return key;
     }
 
