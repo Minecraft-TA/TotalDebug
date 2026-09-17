@@ -49,6 +49,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 
 /** Global, history-backed Java expression evaluator for a running Minecraft session. */
 public final class EvaluateExpressionWindow extends JDialog {
@@ -94,8 +95,8 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, Runnable refreshSources) {
         super(owner, "Evaluate Expression", false);
-        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(this.output, "Copy output");
-        com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus.installOutput(this.problems, "Copy all");
+        ContextMenus.installOutput(this.output, "Copy output");
+        ContextMenus.installOutput(this.problems, "Copy all");
         this.editorContext = editorContext;
         this.refreshSources = refreshSources;
         this.executions = executions;

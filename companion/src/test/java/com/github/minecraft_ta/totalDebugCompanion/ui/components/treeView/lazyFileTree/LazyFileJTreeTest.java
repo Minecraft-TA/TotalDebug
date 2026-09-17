@@ -11,28 +11,41 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.stream.IntStream;
+import javax.swing.event.TreeModelEvent;
+import javax.swing.event.TreeModelListener;
+import javax.swing.tree.TreePath;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class LazyFileJTreeTest {
 
     @Test
     void unchangedLargeDirectoriesDoNotEmitRowUpdates() throws Exception {
-        var eventCounts = new java.util.ArrayList<Integer>();
+        var eventCounts = new ArrayList<Integer>();
         for (int size : new int[]{1000, 5000, 10000}) {
-            var items = new java.util.ArrayList<>(java.util.stream.IntStream.range(0, size)
+            var items = new ArrayList<>(IntStream.range(0, size)
                     .mapToObj(index -> new TreeItem("file" + index)).toList());
             LazyFileJTree tree = new LazyFileJTree();
             DirectoryTreeItem root = directory("scripts", items);
             SwingUtilities.invokeAndWait(() -> { tree.setRowHeight(24); tree.setRootNodes(root); });
             assertTrue(tree.revealItemPath("scripts", List.of("file0")).get(10, TimeUnit.SECONDS));
-            var events = new java.util.concurrent.atomic.AtomicInteger();
-            SwingUtilities.invokeAndWait(() -> tree.getModel().addTreeModelListener(new javax.swing.event.TreeModelListener() {
-                @Override public void treeNodesChanged(javax.swing.event.TreeModelEvent e) { events.incrementAndGet(); }
-                @Override public void treeNodesInserted(javax.swing.event.TreeModelEvent e) { events.incrementAndGet(); }
-                @Override public void treeNodesRemoved(javax.swing.event.TreeModelEvent e) { events.incrementAndGet(); }
-                @Override public void treeStructureChanged(javax.swing.event.TreeModelEvent e) { events.incrementAndGet(); }
+            var events = new AtomicInteger();
+            SwingUtilities.invokeAndWait(() -> tree.getModel().addTreeModelListener(new TreeModelListener() {
+                @Override public void treeNodesChanged(TreeModelEvent e) { events.incrementAndGet(); }
+                @Override public void treeNodesInserted(TreeModelEvent e) { events.incrementAndGet(); }
+                @Override public void treeNodesRemoved(TreeModelEvent e) { events.incrementAndGet(); }
+                @Override public void treeStructureChanged(TreeModelEvent e) { events.incrementAndGet(); }
             }));
             long started = System.nanoTime();
             tree.loadItemsForTopLevelItem(root);
@@ -63,7 +76,7 @@ class LazyFileJTreeTest {
     @Test
     void directoryRefreshKeepsExpandedChildrenAndSelection() throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
-        var contents = new java.util.concurrent.atomic.AtomicReference<List<TreeItem>>(List.of(
+        var contents = new AtomicReference<List<TreeItem>>(List.of(
                 directory("nested", List.of(new TreeItem("selected.tdscript")))));
         DirectoryTreeItem scripts = new DirectoryTreeItem("scripts") {
             @Override public List<TreeItem> loadChildren() { return contents.get(); }
@@ -84,7 +97,7 @@ class LazyFileJTreeTest {
     @Test
     void refreshPreservesASelectedPlaceholderInAnotherLoadingFolder() throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
-        var release = new java.util.concurrent.CountDownLatch(1);
+        var release = new CountDownLatch(1);
         DirectoryTreeItem slow = new DirectoryTreeItem("slow") {
             @Override public List<TreeItem> loadChildren() {
                 try { release.await(3, TimeUnit.SECONDS); }
@@ -92,13 +105,13 @@ class LazyFileJTreeTest {
                 return List.of(new TreeItem("loaded"));
             }
         };
-        var items = new java.util.ArrayList<TreeItem>(List.of(new TreeItem("original")));
+        var items = new ArrayList<TreeItem>(List.of(new TreeItem("original")));
         DirectoryTreeItem other = directory("other", items);
         SwingUtilities.invokeAndWait(() -> tree.setRootNodes(slow, other));
         assertTrue(tree.revealItemPath("other", List.of("original")).get(3, TimeUnit.SECONDS));
         var root = (LazyTreeNode) tree.getModel().getRoot();
         var slowNode = (LazyTreeNode) root.getChildAt(0);
-        var placeholder = new javax.swing.tree.TreePath(slowNode.getPath()).pathByAddingChild(slowNode.getChildAt(0));
+        var placeholder = new TreePath(slowNode.getPath()).pathByAddingChild(slowNode.getChildAt(0));
         try {
             SwingUtilities.invokeAndWait(() -> {
                 tree.expandPath(placeholder.getParentPath());
@@ -129,7 +142,7 @@ class LazyFileJTreeTest {
         SwingUtilities.invokeAndWait(() -> assertTrue(tree.isExpanded(folder)));
     }
 
-    private static void awaitOnEdt(java.util.function.BooleanSupplier condition) throws Exception {
+    private static void awaitOnEdt(BooleanSupplier condition) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         var ready = new AtomicBoolean();
         do {
@@ -137,16 +150,16 @@ class LazyFileJTreeTest {
             if (ready.get()) return;
             Thread.sleep(10);
         } while (System.nanoTime() < deadline);
-        org.junit.jupiter.api.Assertions.fail("Tree refresh did not finish");
+        fail("Tree refresh did not finish");
     }
 
     @Test
     void refreshRequestedDuringAnActiveLoadIsNotLost() throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
-        var contents = new java.util.concurrent.atomic.AtomicReference<List<TreeItem>>(List.of(new TreeItem("original")));
-        var entered = new java.util.concurrent.CountDownLatch(1);
-        var release = new java.util.concurrent.CountDownLatch(1);
-        var loads = new java.util.concurrent.atomic.AtomicInteger();
+        var contents = new AtomicReference<List<TreeItem>>(List.of(new TreeItem("original")));
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var loads = new AtomicInteger();
         DirectoryTreeItem scripts = new DirectoryTreeItem("scripts") {
             @Override public List<TreeItem> loadChildren() {
                 var snapshot = contents.get();
@@ -171,7 +184,7 @@ class LazyFileJTreeTest {
     @Test
     void deletingAFileKeepsExpandedSiblingFolders() throws Exception {
         LazyFileJTree tree = new LazyFileJTree();
-        var contents = new java.util.concurrent.atomic.AtomicReference<List<TreeItem>>();
+        var contents = new AtomicReference<List<TreeItem>>();
         DirectoryTreeItem nested = directory("nested", List.of(new TreeItem("kept")));
         TreeItem removed = new TreeItem("remove.tdscript") {
             @Override public void delete() { contents.set(List.of(nested)); }
@@ -202,7 +215,7 @@ class LazyFileJTreeTest {
                 .getUserObject().getName().equals("New.class"));
         SwingUtilities.invokeAndWait(() -> {
             assertTrue(tree.isExpanded(modulePath));
-            org.junit.jupiter.api.Assertions.assertNull(tree.getSelectionPath(), "Removed file stayed selected");
+            assertNull(tree.getSelectionPath(), "Removed file stayed selected");
         });
     }
 
@@ -213,8 +226,8 @@ class LazyFileJTreeTest {
         Path saved = directory.resolve("Saved.tdscript");
         Files.writeString(saved, "return 1;");
         LazyFileJTree tree = new LazyFileJTree();
-        var scans = new java.util.concurrent.atomic.AtomicInteger();
-        var nestedScans = new java.util.concurrent.atomic.AtomicInteger();
+        var scans = new AtomicInteger();
+        var nestedScans = new AtomicInteger();
         tree.setItemFactory(new FileTreeItemFactory() {
             @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
                 return new FileSystemDirectoryItem(tree, path, watch) {
@@ -235,7 +248,7 @@ class LazyFileJTreeTest {
             SwingUtilities.invokeAndWait(() -> tree.setRootNodes(root));
             assertTrue(tree.revealItemPath(root.getName(), List.of("nested", "Selected.tdscript")).get(3, TimeUnit.SECONDS));
             var selected = tree.getSelectionPath();
-            com.github.minecraft_ta.totaldebug.storage.AtomicFiles.writeString(saved, "return 2;");
+            AtomicFiles.writeString(saved, "return 2;");
             awaitOnEdt(() -> scans.get() > 1);
             assertTrue(tree.revealItemPath(root.getName(), List.of("nested", "Selected.tdscript")).get(3, TimeUnit.SECONDS));
             SwingUtilities.invokeAndWait(() -> {
@@ -335,7 +348,7 @@ class LazyFileJTreeTest {
             assertEquals("example.java", node.getUserObject().getName());
             assertTrue(tree.isVisible(tree.getSelectionPath()));
         });
-        org.junit.jupiter.api.Assertions.assertFalse(tree.revealItemPath(
+        assertFalse(tree.revealItemPath(
                 "scripts", List.of("nested", "example.java", "missing")).get(3, TimeUnit.SECONDS));
     }
 

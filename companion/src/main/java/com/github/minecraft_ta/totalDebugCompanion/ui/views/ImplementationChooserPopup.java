@@ -47,6 +47,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 
 /** Async implementation and base-declaration chooser shared by code vision, gutter markers and Ctrl+T/U. */
 public final class ImplementationChooserPopup extends BasePopup {
@@ -345,11 +347,11 @@ public final class ImplementationChooserPopup extends BasePopup {
         setVisible(false);
     }
 
-    javax.swing.JPopupMenu createResultMenu(int row) {
-        var menu = new javax.swing.JPopupMenu();
+    JPopupMenu createResultMenu(int row) {
+        var menu = new JPopupMenu();
         if (row < 0 || row >= this.listModel.size()) return menu;
         HierarchyResult result = this.listModel.get(row);
-        var open = new javax.swing.JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
+        var open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
         open.addActionListener(event -> {
             openResult(result);
             setVisible(false);

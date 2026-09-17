@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.stubs.IMethodStub;
 import org.eclipse.jdt.core.Signature;
 import org.eclipse.jdt.internal.compiler.classfmt.JavaBinaryNames;
+import java.util.Arrays;
 
 public class JIndexResolvedBinaryMethod implements IMethodStub {
 
@@ -23,7 +24,7 @@ public class JIndexResolvedBinaryMethod implements IMethodStub {
 
     @Override
     public String[] getParameterNames() {
-        return java.util.Arrays.stream(this.binaryMethod.getArgumentNames()).map(String::new).toArray(String[]::new);
+        return Arrays.stream(this.binaryMethod.getArgumentNames()).map(String::new).toArray(String[]::new);
     }
 
     @Override

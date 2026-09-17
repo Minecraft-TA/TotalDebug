@@ -17,6 +17,7 @@ import java.awt.event.MouseEvent;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
+import java.awt.Component;
 
 /** Shared Swing actions, clipboard commands, and popup behavior. */
 public final class ContextMenus {
@@ -116,7 +117,7 @@ public final class ContextMenus {
         owner.getActionMap().get("rowMenu").actionPerformed(new ActionEvent(owner, ActionEvent.ACTION_PERFORMED, "rowMenu"));
     }
 
-    public static boolean isOpenFor(java.awt.Component owner) {
+    public static boolean isOpenFor(Component owner) {
         var path = MenuSelectionManager.defaultManager().getSelectedPath();
         return path.length > 0 && path[0] instanceof JPopupMenu menu
                 && (menu.getInvoker() == owner || SwingUtilities.isDescendingFrom(menu.getInvoker(), owner));

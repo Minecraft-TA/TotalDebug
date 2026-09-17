@@ -597,11 +597,11 @@ public class SearchEverywherePopup extends JFrame {
         }
     }
 
-    javax.swing.JPopupMenu createResultMenu(int row) {
-        var menu = new javax.swing.JPopupMenu();
+    JPopupMenu createResultMenu(int row) {
+        var menu = new JPopupMenu();
         if (this.searchPending || row < 0 || row >= this.resultModel.size()) return menu;
         Result result = this.resultModel.get(row);
-        var open = new javax.swing.JMenuItem(result instanceof TextResult ? "Find usages" : "Open source",
+        var open = new JMenuItem(result instanceof TextResult ? "Find usages" : "Open source",
                 result instanceof TextResult ? Icons.SEARCH_ICON : Icons.JUMP_TO_SOURCE);
         open.addActionListener(event -> openResult(result));
         menu.add(open);

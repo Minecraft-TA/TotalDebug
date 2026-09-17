@@ -19,6 +19,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.formdev.flatlaf.util.UIScale;
+import java.awt.KeyboardFocusManager;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.nio.file.Path;
+import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -55,9 +61,9 @@ class EditorTabsTest {
                 tabs.dispatchEvent(mouseEvent(tabs, MouseEvent.MOUSE_PRESSED, bounds.x + 1, bounds.y + 1, MouseEvent.BUTTON3));
                 assertSame(active, tabs.getSelectedEditor());
                 for (KeyStroke key : new KeyStroke[]{KeyStroke.getKeyStroke("shift F10"), KeyStroke.getKeyStroke("CONTEXT_MENU")}) {
-                    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(tabs,
-                            new java.awt.event.KeyEvent(tabs, java.awt.event.KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
-                                    key.getModifiers(), key.getKeyCode(), java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                    KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(tabs,
+                            new KeyEvent(tabs, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
+                                    key.getModifiers(), key.getKeyCode(), KeyEvent.CHAR_UNDEFINED));
                     assertTrue(item(popup.get(), "Close").isEnabled());
                     assertSame(active, tabs.getSelectedEditor());
                     popup.getAndSet(null).setVisible(false);
@@ -119,10 +125,10 @@ class EditorTabsTest {
             EditorTabs tabs = new EditorTabs();
             AtomicReference<IEditorPanel> revealed = new AtomicReference<>();
             tabs.setRevealActionProvider(editor -> new AbstractAction("Reveal in tree") {
-                @Override public void actionPerformed(java.awt.event.ActionEvent event) { revealed.set(editor); }
+                @Override public void actionPerformed(ActionEvent event) { revealed.set(editor); }
             });
             TestEditor file = new TestEditor();
-            file.location = EditorLocation.forFile(java.nio.file.Path.of("script.java"), null);
+            file.location = EditorLocation.forFile(Path.of("script.java"), null);
             TestEditor active = new TestEditor();
             tabs.openEditorTab(file);
             tabs.openEditorTab(active);
@@ -131,7 +137,7 @@ class EditorTabsTest {
             item(menu, "Reveal in tree").doClick();
             assertSame(file, revealed.get());
             assertSame(active, tabs.getSelectedEditor());
-            assertFalse(java.util.Arrays.stream(tabs.createContextMenu(1).getComponents())
+            assertFalse(Arrays.stream(tabs.createContextMenu(1).getComponents())
                     .anyMatch(component -> component instanceof JMenuItem item && "Copy location".equals(item.getText())));
         });
     }
@@ -146,8 +152,8 @@ class EditorTabsTest {
                 tabs.setSize(500, 200);
                 tabs.doLayout();
                 int height = tabs.getBoundsAt(0).height;
-                assertEquals(com.formdev.flatlaf.util.UIScale.scale(UiMetrics.TAB_HEIGHT), height);
-                assertTrue(height < com.formdev.flatlaf.util.UIScale.scale(40));
+                assertEquals(UIScale.scale(UiMetrics.TAB_HEIGHT), height);
+                assertTrue(height < UIScale.scale(40));
                 assertTrue(height >= tabs.getTabComponentAt(0).getPreferredSize().height);
                 tabs.closeMatching(editor -> true);
             }
@@ -155,7 +161,7 @@ class EditorTabsTest {
     }
 
     private static JMenuItem item(JPopupMenu menu, String label) {
-        return java.util.Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance)
+        return Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance)
                 .map(JMenuItem.class::cast).filter(item -> label.equals(item.getText())).findFirst().orElseThrow();
     }
 

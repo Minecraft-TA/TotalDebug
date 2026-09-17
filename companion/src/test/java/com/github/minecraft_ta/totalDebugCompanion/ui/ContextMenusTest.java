@@ -7,6 +7,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.event.PopupMenuEvent;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContextMenusTest {
@@ -19,7 +20,7 @@ class ContextMenusTest {
             ContextMenus.installOutput(output, "Copy output");
             JPopupMenu menu = output.getComponentPopupMenu();
             for (var listener : menu.getPopupMenuListeners()) {
-                listener.popupMenuWillBecomeVisible(new javax.swing.event.PopupMenuEvent(menu));
+                listener.popupMenuWillBecomeVisible(new PopupMenuEvent(menu));
             }
             assertEquals("second", output.getSelectedText());
             assertEquals("second", ((JMenuItem) menu.getComponent(0)).getActionCommand());

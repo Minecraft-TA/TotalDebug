@@ -166,8 +166,8 @@ class UsagesViewPanelTest {
                 var copyAction = ((JMenuItem) menu.getComponent(2)).getAction();
                 assertNotNull(copyAction);
                 assertEquals("sample.Bravo#applySecond(java.lang.String[], sample.Foo)",
-                        copyAction.getValue(javax.swing.Action.ACTION_COMMAND_KEY));
-                assertEquals(KeyStroke.getKeyStroke("ctrl C"), copyAction.getValue(javax.swing.Action.ACCELERATOR_KEY));
+                        copyAction.getValue(Action.ACTION_COMMAND_KEY));
+                assertEquals(KeyStroke.getKeyStroke("ctrl C"), copyAction.getValue(Action.ACCELERATOR_KEY));
                 ((JMenuItem) menu.getComponent(0)).doClick();
                 assertEquals(List.of(new NavigationTarget.UsageSite(fixture.usages.get(1), fixture.symbol.referenceQuery())), fixture.opened);
                 assertEquals("sample.Bravo#applySecond(java.lang.String[], sample.Foo)", copy(fixture.tree));
@@ -190,7 +190,7 @@ class UsagesViewPanelTest {
                 assertEquals(List.of("Copy results", "Expand branch", "Collapse branch"), menuLabels(menu));
                 assertEquals("sample.Alpha#applyFirst()" + System.lineSeparator()
                                 + "sample.Bravo#applySecond(java.lang.String[], sample.Foo)",
-                        ((JMenuItem) menu.getComponent(0)).getAction().getValue(javax.swing.Action.ACTION_COMMAND_KEY));
+                        ((JMenuItem) menu.getComponent(0)).getAction().getValue(Action.ACTION_COMMAND_KEY));
                 ((JMenuItem) menu.getComponent(3)).doClick();
                 assertFalse(fixture.tree.isExpanded(module));
                 assertFalse(fixture.tree.isExpanded(first.getParentPath()));

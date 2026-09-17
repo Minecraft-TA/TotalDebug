@@ -51,6 +51,7 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
+import javax.swing.AbstractAction;
 
 public final class UsagesViewPanel extends JPanel {
     private static final String RESULTS_CARD = "results";
@@ -239,7 +240,7 @@ public final class UsagesViewPanel extends JPanel {
         });
         this.resultsTree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openUsage");
-        this.resultsTree.getActionMap().put("openUsage", new javax.swing.AbstractAction("Open source", Icons.JUMP_TO_SOURCE) {
+        this.resultsTree.getActionMap().put("openUsage", new AbstractAction("Open source", Icons.JUMP_TO_SOURCE) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 openSelectedUsage();

@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import javax.lang.model.SourceVersion;
 
 public final class JadLikeNameGenerator {
     private static final Map<String, String> BASE_NAMES = Map.ofEntries(
@@ -48,7 +49,7 @@ public final class JadLikeNameGenerator {
         do {
             candidate = suffix == 0 ? baseName : baseName + suffix;
             suffix++;
-        } while (javax.lang.model.SourceVersion.isKeyword(candidate, javax.lang.model.SourceVersion.RELEASE_21)
+        } while (SourceVersion.isKeyword(candidate, SourceVersion.RELEASE_21)
                 || !this.usedNames.add(candidate));
         this.counters.put(baseName, suffix);
         return candidate;

@@ -21,6 +21,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.awt.event.ActionEvent;
+import java.util.Objects;
 
 public class EditorTabs extends JTabbedPane {
 
@@ -60,7 +62,7 @@ public class EditorTabs extends JTabbedPane {
         getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), "tabMenu");
         getActionMap().put("tabMenu", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 int index = getSelectedIndex();
                 if (index < 0) return;
                 Rectangle bounds = getBoundsAt(index);
@@ -106,7 +108,7 @@ public class EditorTabs extends JTabbedPane {
     }
 
     public void setRevealActionProvider(Function<IEditorPanel, Action> provider) {
-        this.revealActionProvider = java.util.Objects.requireNonNull(provider, "provider");
+        this.revealActionProvider = Objects.requireNonNull(provider, "provider");
     }
 
     JPopupMenu createContextMenu(int index) {

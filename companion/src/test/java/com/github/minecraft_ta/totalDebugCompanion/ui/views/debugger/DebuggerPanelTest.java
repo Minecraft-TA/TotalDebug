@@ -27,6 +27,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import java.awt.event.ActionEvent;
+import javax.swing.JToggleButton;
+import javax.swing.KeyStroke;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -49,13 +52,13 @@ class DebuggerPanelTest {
                     assertTrue(button.isFocusPainted(), tooltip);
                     assertFalse(button.isRequestFocusEnabled(), tooltip);
                 }
-                var mute = find(panel, javax.swing.JToggleButton.class);
+                var mute = find(panel, JToggleButton.class);
                 assertNotNull(mute);
                 assertTrue(mute.isFocusable());
                 assertFalse(mute.isRequestFocusEnabled());
                 for (String stroke : new String[]{"pressed SPACE", "released SPACE"}) {
-                    Object key = mute.getInputMap().get(javax.swing.KeyStroke.getKeyStroke(stroke));
-                    mute.getActionMap().get(key).actionPerformed(new java.awt.event.ActionEvent(mute, 0, stroke));
+                    Object key = mute.getInputMap().get(KeyStroke.getKeyStroke(stroke));
+                    mute.getActionMap().get(key).actionPerformed(new ActionEvent(mute, 0, stroke));
                 }
                 assertTrue(mute.isSelected());
                 assertTrue(controller.breakpointsMuted());

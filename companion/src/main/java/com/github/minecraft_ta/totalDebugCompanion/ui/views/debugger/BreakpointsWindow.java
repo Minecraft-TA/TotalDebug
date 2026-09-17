@@ -63,6 +63,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.swing.Box;
+import javax.swing.JComboBox;
 
 /** Modeless editor for every breakpoint in the active runtime. */
 public final class BreakpointsWindow extends JDialog {
@@ -80,7 +82,7 @@ public final class BreakpointsWindow extends JDialog {
     private final JavaExpressionField condition = new JavaExpressionField();
     private final ExpressionCompletionSupport conditionCompletion = new ExpressionCompletionSupport(this.condition);
     private final JTextField hitCount = new JTextField();
-    private final javax.swing.JComboBox<String> actionKind = new javax.swing.JComboBox<>(new String[]{"Nothing", "Inline Java", "Saved script"});
+    private final JComboBox<String> actionKind = new JComboBox<>(new String[]{"Nothing", "Inline Java", "Saved script"});
     private final JavaExpressionField actionSource = new JavaExpressionField();
     private final JCheckBox continueOnSuccess = new JCheckBox("Resume after successful action");
     private final JPanel completionField = new JPanel(new BorderLayout(0, 4));
@@ -340,7 +342,7 @@ public final class BreakpointsWindow extends JDialog {
         constraints.gridy = 8;
         constraints.weighty = 1;
         constraints.insets = new Insets(0, 0, 0, 0);
-        this.details.add(javax.swing.Box.createVerticalGlue(), constraints);
+        this.details.add(Box.createVerticalGlue(), constraints);
         showSelection();
     }
 
