@@ -33,6 +33,7 @@ final class CompletionEdits {
     private final String source;
     private Set<String> declaredTypeNames;
     private IScanner scanner;
+    private CompilationUnit syntax;
 
     CompletionEdits(ICompilationUnit unit, CompletionContext context) {
         this.unit = unit;
@@ -107,10 +108,7 @@ final class CompletionEdits {
     private ImportRewriteContext castImportContext(ImportRewrite imports) {
         if (declaredTypeNames == null) {
             declaredTypeNames = new HashSet<>();
-            var parser = JdtConfiguration.createParser();
-            parser.setSource(source.toCharArray());
-            parser.setStatementsRecovery(true);
-            parser.createAST(null).accept(new ASTVisitor() {
+            syntax().accept(new ASTVisitor() {
                 @Override public void preVisit(ASTNode node) {
                     SimpleName name;
                     if (node instanceof AbstractTypeDeclaration declaration) name = declaration.getName();
@@ -134,6 +132,30 @@ final class CompletionEdits {
                 return imports.getDefaultImportRewriteContext().findInContext(qualifier, name, kind);
             }
         };
+    }
+
+    private CompilationUnit syntax() {
+        if (syntax == null) {
+            var parser = JdtConfiguration.createParser();
+            parser.setSource(source.toCharArray());
+            parser.setStatementsRecovery(true);
+            syntax = (CompilationUnit) parser.createAST(null);
+        }
+        return syntax;
+    }
+
+    int localDeclarationStart(int offset) {
+        for (ASTNode node = NodeFinder.perform(syntax(), offset, 0); node != null; node = node.getParent()) {
+            if (node instanceof LambdaExpression || node instanceof AnonymousClassDeclaration) return -1;
+            if (node instanceof VariableDeclarationFragment fragment && fragment.getParent() instanceof VariableDeclarationStatement declaration
+                    && declaration.fragments().indexOf(fragment) > 0) return -1;
+            if (node instanceof Statement statement) {
+                return statement.getParent() instanceof Block && (statement instanceof ExpressionStatement
+                        || statement instanceof VariableDeclarationStatement || statement instanceof ReturnStatement
+                        || statement instanceof ThrowStatement) ? statement.getStartPosition() : -1;
+            }
+        }
+        return -1;
     }
 
     private String replacement(CompletionProposal proposal, ImportRewrite imports) {

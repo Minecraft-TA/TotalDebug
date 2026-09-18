@@ -36,7 +36,7 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | enum | `nodes/enum` | | close | `general/closeSmall` |
 | interface | `nodes/interface` | | closeHovered | `general/closeSmallHovered` |
 | constructor | `nodes/constructor` | | delete | `general/delete` |
-| constant | `nodes/constant` | | | |
+| constant | `nodes/constant` | | template | `nodes/template` |
 | property | `nodes/property` | | copy | `general/copy` |
 | variable | `nodes/variable` | | information | `status/info` |
 | javaFile | `fileTypes/java` | | success | `status/success` |

@@ -18,6 +18,21 @@ Evaluate expressions or Java statement bodies, inspect their results, and save r
 
 In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the selected suggestion. Selection survives result updates. Ctrl+P shows call parameters and emphasizes the current argument; Escape closes the popup. Field and method icons show visibility, static and final modifiers. Private members remain available through the script linker.
 
+Postfix templates transform the expression before the dot:
+
+| Suffix | Available for | Expansion |
+| --- | --- | --- |
+| `.for` | Arrays and `Iterable` values | Enhanced loop with an inferred element type |
+| `.fori` / `.forr` | Arrays, lists and integral bounds | Forward / reverse indexed loop |
+| `.if` / `.else` | Boolean expressions | Positive / negated condition |
+| `.nn` / `.null` | Reference values | Non-null / null check |
+| `.not` | Boolean expressions | Negated expression |
+| `.logln` / `.sout` | Non-void values | Script logging call |
+| `.var` | Non-void values | Local variable with inferred type and imports |
+
+Accept with Enter or Tab, edit the selected variable name, then Tab into the body. Loop index references are linked, generated names avoid existing identifiers, and an expansion is one undoable edit. Statement templates are offered at statement boundaries inside blocks; `.not` also works within expressions. `.forr` visits array/list indices from the last to zero, or counts a numeric bound down to one. A computed forward-loop bound is evaluated once.
+
+
 After at least two characters of a member name, completion also offers matching instance members from indexed subtypes, labelled with the required cast. Accepting one inserts the cast and imports in the same undo step. These are possible types, not observations of the live object. Searches skip `Object`, inspect at most 256 subtypes with the receiver's package first, and resolve at most six matching cast targets. No game code runs during completion.
 
 Compiler errors appear as Problems rows with severity and script locations. Click a row or press Enter/F4 to select its source; the context menu also offers copying. Editing marks the previous compilation's problems outdated and disables navigation until the submitted text is restored or the script is compiled again. Live editor markers refresh separately against the current source. Analysis coalesces edits without an idle deadline. Errors in the construct being written stay hidden while it is unfinished, including when pausing or browsing completion. Completing the edited part, leaving it, or running the script releases its diagnostics; completed errors on the same line remain visible. Unaffected markers keep their positions, incomplete member expressions retain receiver colors where recovery permits, and source navigation uses only current analysis.

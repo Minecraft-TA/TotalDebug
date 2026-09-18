@@ -102,6 +102,7 @@ public class CodeCompletionPopup extends BaseListPopup<CompletionItem> {
             case METHOD -> Icons.JAVA_METHOD;
             case CONSTRUCTOR -> Icons.JAVA_CONSTRUCTOR;
             case VARIABLE -> Icons.JAVA_VARIABLE;
+            case SNIPPET -> Icons.TEMPLATE;
             case CLASS -> Icons.JAVA_CLASS;
             case INTERFACE -> Icons.JAVA_INTERFACE;
             case ENUM -> Icons.JAVA_ENUM;

@@ -155,8 +155,7 @@ final class ScriptCompletionController implements AutoCloseable {
                 return;
             }
             popup.setKeyEnterListener(this::accept);
-            var token = request.requestor.getContext().getToken();
-            popup.setToken(token == null ? "" : new String(token));
+            popup.setToken(request.requestor.getCompletionToken());
             popup.setItems(items);
             popup.show(editor);
         } catch (RuntimeException error) { failed(error); }

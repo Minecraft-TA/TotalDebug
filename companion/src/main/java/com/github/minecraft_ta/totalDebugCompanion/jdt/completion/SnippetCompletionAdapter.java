@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class SnippetCompletionAdapter implements AutoCloseable {
 
     private static final String SNIPPET_NEXT_ACTION_KEY = "SnippetCompletionAdapter.snippetNextAction";
-    private static final Pattern SNIPPET_PATTERN = Pattern.compile("\\$\\{(\\d+)(:([\\p{javaJavaIdentifierPart}]+))?}");
+    private static final Pattern SNIPPET_PATTERN = Pattern.compile("\\$\\{(?:(\\d+)(:([\\p{javaJavaIdentifierPart}]+))?|\\$)}");
     private static final Highlighter.HighlightPainter EMPTY_HIGHLIGHT_PAINTER = new DefaultHighlighter.DefaultHighlightPainter(null) {
         @Override
         public void paint(Graphics g, int offs0, int offs1, Shape bounds, JTextComponent c) {
@@ -69,10 +69,10 @@ public class SnippetCompletionAdapter implements AutoCloseable {
 
                 var newText = new StringBuilder(snippetText);
                 for (var match : results) {
-                    var replacement = match.group(3) == null ? "" : match.group(3);
+                    var replacement = match.group(1) == null ? "$" : match.group(3) == null ? "" : match.group(3);
                     newText.replace(match.start(), match.end(), replacement);
 
-                    highlightInfo.add(0, new ReplacementInfo(Integer.parseInt(match.group(1)), match.start(), match.end(), match.end() - match.start() - replacement.length(), replacement));
+                    highlightInfo.add(0, new ReplacementInfo(match.group(1) == null ? -1 : Integer.parseInt(match.group(1)), match.start(), match.end(), match.end() - match.start() - replacement.length(), replacement));
                 }
 
                 ((AbstractDocument) this.textComponent.getDocument()).replace(textEdit.getRange().getOffset() + totalOffset, textEdit.getRange().getLength(), newText.toString(), null);
@@ -80,14 +80,14 @@ public class SnippetCompletionAdapter implements AutoCloseable {
                 var offset = 0;
                 for (var match : highlightInfo) {
                     var pos = textEdit.getRange().getOffset() + totalOffset + match.start() - offset - 1;
-                    this.highlights.add(new HighlightInfo(
+                    if (match.n >= 0) this.highlights.add(new HighlightInfo(
                             match.n,
                             (Highlighter.Highlight) this.textComponent.getHighlighter().addHighlight(pos, pos + match.placeholder().length() + 1, match.n == 0 ? EMPTY_HIGHLIGHT_PAINTER : SNIPPET_HIGHLIGHT_PAINTER)
                     ));
                     offset += match.offset();
                 }
 
-                totalOffset += newText.length();
+                totalOffset += newText.length() - textEdit.getRange().getLength();
             } catch (BadLocationException e) {
                 e.printStackTrace();
             }
@@ -112,8 +112,11 @@ public class SnippetCompletionAdapter implements AutoCloseable {
     }
 
     public static boolean isSnippet(String text) {
-        return SNIPPET_PATTERN.matcher(text).find();
+        return SNIPPET_PATTERN.matcher(text).results().anyMatch(match -> match.group(1) != null);
     }
+
+    /** Preserve user source containing dollar signs or placeholder-looking string contents. */
+    public static String escapeLiteral(String text) { return text.replace("$", "${$}"); }
 
     private void moveToNextParam() {
         var p = getPlaceholderAt(this.textComponent.getCaretPosition());

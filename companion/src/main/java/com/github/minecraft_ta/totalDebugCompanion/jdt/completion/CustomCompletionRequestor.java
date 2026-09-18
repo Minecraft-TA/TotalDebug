@@ -4,14 +4,10 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.*;
-import org.eclipse.jdt.internal.codeassist.InternalCompletionContext;
 import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
-import org.eclipse.jdt.internal.codeassist.complete.CompletionOnMemberAccess;
 import org.eclipse.jdt.internal.compiler.lookup.FieldBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
-import org.eclipse.jdt.internal.compiler.lookup.CaptureBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
-import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +22,7 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
     private final ICompilationUnit unit;
 
     private CompletionContext context;
+    private String completionToken = "";
     private CompletionEdits proposalProvider;
 
     private volatile boolean cancelled;
@@ -63,10 +60,12 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
             candidates.add(item(proposal));
         }
         candidates.addAll(SubtypeCompletion.find(unit, this, candidates));
-        addLiveTemplates(candidates);
+        var postfix = PostfixCompletion.find(unit, this, proposalProvider);
+        completionToken = postfix.token();
+        candidates.addAll(postfix.items());
         candidates.addAll(SnippetCompletionProposalProvider.getSnippets(this.unit, this));
         List<CompletionItem> result = new ArrayList<>();
-        for (var item : CompletionRanking.order(candidates, CompletionLabels.text(context.getToken()))) {
+        for (var item : CompletionRanking.order(candidates, completionToken)) {
             if (isCanceled()) break;
             if (item.proposal != null) {
                 CompletionParameterNames.prepare(item.proposal, context);
@@ -86,56 +85,6 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         var item = new CompletionItem(this, proposal);
         item.setKind(mapKind(proposal));
         return item;
-    }
-
-    private void addLiveTemplates(List<CompletionItem> items) {
-        var node = ((InternalCompletionContext) context).getCompletionNode();
-        if (!(node instanceof CompletionOnMemberAccess memberAccess))
-            return;
-
-        var memberName = new String(memberAccess.token);
-        if (memberName.isBlank())
-            return;
-
-        if ("var".startsWith(memberName)) {
-            var variableType = memberAccess.receiver.resolvedType;
-            if (variableType == null || !variableType.isValidBinding() || variableType.id == TypeIds.T_void)
-                return;
-
-            var item = new CompletionItem(this);
-            item.setPresentation("var", "", "");
-            item.setRelevance(0);
-            item.setKind(CompletionItemKind.KEYWORD);
-            var start = memberAccess.receiver.sourceStart;
-            try {
-                var expressionText = this.unit.getBuffer().getText(start, memberAccess.receiver.sourceEnd - start + 1);
-                var preStatementTerminationChar = getStatementTerminationChar(this.unit.getBuffer(), memberAccess.receiver.sourceStart - 1, false);
-                var postStatementTerminationChar = getStatementTerminationChar(this.unit.getBuffer(), this.offset, true);
-                var terminator = postStatementTerminationChar != ';' ? ";" : "";
-
-                var declarationType = variableType instanceof CaptureBinding capture ? capture.upperBound() : variableType;
-                String type = proposalProvider.importType(new String(CompletionTypes.uncapture(declarationType).genericTypeSignature()).replace('/', '.'), item);
-                var declarationText = type + " ${1:name} = " + expressionText + terminator;
-                Range declarationReplacementRange;
-                if ((postStatementTerminationChar != '\n' && postStatementTerminationChar != ';') || (preStatementTerminationChar != '\n' && preStatementTerminationChar != ';')) {
-                    declarationReplacementRange = new Range(getLineStartOffsetWithoutWhitespace(this.unit.getBuffer(), this.offset), 0);
-                    declarationText += "\n" + SnippetCompletionProposalProvider.indentationAt(this.unit, this.offset);
-
-                    item.addTextEdit(new CustomTextEdit(
-                            new Range(start, node.sourceEnd - start + 1),
-                            "${1:name}"
-                    ));
-                } else {
-                    declarationReplacementRange = new Range(start, node.sourceEnd - start + 1);
-                }
-
-                item.addTextEdit(new CustomTextEdit(declarationReplacementRange, declarationText));
-
-                items.add(item);
-            } catch (JavaModelException failure) {
-                throw new IllegalStateException("Cannot read the completion source", failure);
-            }
-        }
     }
 
     private CompletionItemKind mapKind(CompletionProposal proposal) {
@@ -237,6 +186,8 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         return proposal.getKind() == CompletionProposal.TYPE_REF && Flags.isPrivate(proposal.getFlags());
     }
 
+    public String getCompletionToken() { return completionToken; }
+
     public CompletionContext getContext() {
         return this.context;
     }
@@ -290,34 +241,4 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
         return true;
     }
 
-    private static int getLineStartOffsetWithoutWhitespace(IBuffer buffer, int offset) {
-        var whitespace = 0;
-        while (offset >= 0) {
-            var c = buffer.getChar(offset);
-            if (c == '\n')
-                break;
-            else if (Character.isWhitespace(c))
-                whitespace++;
-            else
-                whitespace = 0;
-
-            offset--;
-        }
-
-        return offset + whitespace + 1;
-    }
-
-    private static char getStatementTerminationChar(IBuffer buffer, int start, boolean suffix) {
-        while (suffix ? (start < buffer.getLength()) : (start >= 0)) {
-            char c = buffer.getChar(start);
-            if (c == '\n' || c == ';')
-                return c;
-            else if (!Character.isWhitespace(c))
-                return c;
-
-            start += (suffix ? 1 : -1);
-        }
-
-        throw new IllegalStateException();
-    }
 }

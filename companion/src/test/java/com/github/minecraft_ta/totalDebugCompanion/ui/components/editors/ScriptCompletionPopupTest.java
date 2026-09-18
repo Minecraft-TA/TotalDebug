@@ -32,6 +32,10 @@ import java.awt.event.KeyEvent;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.SequencedCollection;
+import java.util.Set;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +60,7 @@ public class ScriptCompletionPopupTest {
     private Runnable duringCompute;
 
     @BeforeEach void open() throws Exception {
-        index = JavaAnalysisFixtures.index(ScriptCompletionPopupTest.class, Values.class, ArrayList.class, Map.class, List.class, Path.class, Optional.class, ConcurrentHashMap.class);
+        index = JavaAnalysisFixtures.index(ScriptCompletionPopupTest.class, Values.class, ArrayList.class, Iterable.class, Iterator.class, Collection.class, SequencedCollection.class, Set.class, Map.class, Map.Entry.class, List.class, Path.class, Optional.class, ConcurrentHashMap.class);
         CompanionClassIndex.set(index);
         edt(() -> {
             editor = new RSyntaxTextArea();
@@ -270,6 +274,50 @@ public class ScriptCompletionPopupTest {
             assertNotEquals("SnippetCompletionAdapter.snippetNextAction", editor.getInputMap().get(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)));
             return null;
         });
+    }
+
+    @Test void postfixLoopIsOneUndoableEditAndLinksTheIndexName() throws Exception {
+        String original = "int[] values = {1, 2}; values.fori";
+        setText(original); request(); complete(); select("fori"); press(KeyEvent.VK_ENTER);
+        String expanded = edt(editor::getText);
+        assertEquals("i", edt(editor::getSelectedText));
+        edt(() -> { editor.undoLastAction(); return null; });
+        assertEquals(original, edt(editor::getText));
+        request(); complete(); select("fori"); press(KeyEvent.VK_ENTER);
+        assertEquals(expanded, edt(editor::getText));
+        edt(() -> { editor.replaceSelection("index"); return null; });
+        edt(() -> null);
+        String renamed = edt(editor::getText);
+        assertTrue(renamed.contains("int index = 0; index < values.length; index++"), renamed);
+        press(KeyEvent.VK_TAB);
+        edt(() -> { editor.replaceSelection("logln(values[index]);"); return null; });
+        analyzed();
+        assertTrue(edt(() -> editor.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
+    }
+
+    @Test void postfixForeachImportsNestedGenericElementsAndKeepsTheNameSelected() throws Exception {
+        setText("import " + Values.class.getCanonicalName() + ";\n\n((Values) null).entries.entrySet().for");
+        request(); complete(); select("for"); press(KeyEvent.VK_ENTER);
+        assertEquals("entry", edt(editor::getSelectedText));
+        String text = edt(editor::getText);
+        for (String imported : List.of("java.util.Map.Entry", "java.util.List", "java.nio.file.Path"))
+            assertTrue(text.contains("import " + imported + ";"), text);
+        assertTrue(text.contains("for (Entry<String,List<Path>> entry :"), text);
+        press(KeyEvent.VK_TAB);
+        edt(() -> { editor.replaceSelection("logln(entry);"); return null; });
+        analyzed();
+        assertTrue(edt(() -> editor.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
+    }
+
+    @Test void literalPostfixUsesItsActualTokenAndDefersIncompleteBodyErrors() throws Exception {
+        setText("10.fori"); request(); complete();
+        assertEquals("fori", edt(() -> ((CompletionItem) popup.items().getModel().getElementAt(0)).getName()));
+        press(KeyEvent.VK_ENTER);
+        press(KeyEvent.VK_TAB);
+        edt(() -> { editor.replaceSelection("unfin"); return null; }); analyzed();
+        assertTrue(edt(() -> editor.getParserNotices().stream().noneMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
+        edt(() -> { editor.setCaretPosition(0); return null; });
+        assertTrue(edt(() -> editor.getParserNotices().stream().anyMatch(n -> n.getLevel() == ParserNotice.Level.ERROR)));
     }
 
     @Test void acceptingVoidCallDoesNotFlashThePreviousDotError() throws Exception {

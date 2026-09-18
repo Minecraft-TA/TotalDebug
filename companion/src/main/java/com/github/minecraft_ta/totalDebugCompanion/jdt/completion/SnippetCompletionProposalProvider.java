@@ -20,7 +20,7 @@ public class SnippetCompletionProposalProvider {
             var item = new CompletionItem(requestor);
 
             item.setPresentation(s.getKey(), "", "");
-            item.setKind(CompletionItemKind.KEYWORD);
+            item.setKind(CompletionItemKind.SNIPPET);
             item.addTextEdit(new CustomTextEdit(
                     new Range(context.getTokenStart(), token.length()),
                     s.getText().replace("\n", "\n" + indentationAt(unit, context.getTokenStart()))

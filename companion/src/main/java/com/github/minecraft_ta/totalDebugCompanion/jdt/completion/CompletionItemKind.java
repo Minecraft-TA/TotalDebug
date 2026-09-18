@@ -9,6 +9,7 @@ public enum CompletionItemKind {
     FIELD,
     VARIABLE,
     KEYWORD,
+    SNIPPET,
     METHOD,
     CONSTRUCTOR,
     LABEL,
