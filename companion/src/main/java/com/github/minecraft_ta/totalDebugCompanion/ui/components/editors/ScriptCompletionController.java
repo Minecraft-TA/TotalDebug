@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomCompleti
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.SnippetCompletionAdapter;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.StatementCompletion;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
@@ -50,13 +51,14 @@ final class ScriptCompletionController implements AutoCloseable {
     };
     private final KeyAdapter keyListener = new KeyAdapter() {
         @Override public void keyPressed(KeyEvent event) {
-            if (event.getKeyCode() == KeyEvent.VK_ESCAPE && (active != null || scheduled || popup.isVisible())) {
+            if (event.getKeyCode() == KeyEvent.VK_ESCAPE && (active != null || statementRequest != null || scheduled || popup.isVisible())) {
                 dismiss();
                 event.consume();
             }
         }
     };
     private Request active;
+    private StatementRequest statementRequest;
     private String queuedSelection;
     private boolean scheduled;
     private boolean documentEdit;
@@ -86,6 +88,10 @@ final class ScriptCompletionController implements AutoCloseable {
         editor.getActionMap().put("autoComplete", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent event) { request(); }
         });
+        editor.getInputMap().put(KeyStroke.getKeyStroke("ctrl shift ENTER"), "completeStatement");
+        editor.getActionMap().put("completeStatement", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { completeStatement(); }
+        });
     }
 
     private void edited(DocumentEvent event) {
@@ -114,6 +120,47 @@ final class ScriptCompletionController implements AutoCloseable {
         queuedSelection = null;
         startRequest();
     }
+
+    private void completeStatement() {
+        if (closed || !editor.isEditable() || !editor.isFocusOwner()) return;
+        dismiss();
+        snippets.close();
+        var request = new StatementRequest(editor.getText(), editor.getCaretPosition(),
+                editor.getTabsEmulated() ? " ".repeat(editor.getTabSize()) : "\t");
+        statementRequest = request;
+        try {
+            executor.execute(() -> {
+                StatementCompletion.Plan plan = null;
+                Exception failure = null;
+                try { plan = StatementCompletion.plan(request.text, request.caret, request.indent); }
+                catch (RuntimeException error) { failure = error; }
+                var result = plan;
+                var error = failure;
+                SwingUtilities.invokeLater(() -> statementCompleted(request, result, error));
+            });
+        } catch (RuntimeException failure) { statementCompleted(request, null, failure); }
+    }
+
+    private void statementCompleted(StatementRequest request, StatementCompletion.Plan plan, Exception failure) {
+        if (closed || statementRequest != request) return;
+        statementRequest = null;
+        if (!editor.isEditable() || !editor.isFocusOwner() || request.caret != editor.getCaretPosition()
+                || !request.text.equals(editor.getText())) return;
+        if (failure != null) {
+            LOGGER.log(System.Logger.Level.WARNING, "Unable to complete statement in script " + className, failure);
+            return;
+        }
+        if (plan.edits().isEmpty() && plan.caret() == request.caret) return;
+        var edits = new ArrayList<CustomTextEdit>();
+        for (int i = plan.edits().size() - 1; i >= 0; i--) {
+            var edit = plan.edits().get(i);
+            edits.add(new CustomTextEdit(new Range(edit.offset(), edit.length()), edit.text()));
+        }
+        applyEdits(edits, plan.caret());
+        accepted.run();
+    }
+
+    private record StatementRequest(String text, int caret, String indent) { }
 
     private void startRequest() {
         if (closed) return;
@@ -180,12 +227,17 @@ final class ScriptCompletionController implements AutoCloseable {
 
     /** Formatting uses the same snippet-aware atomic edit path as completion. */
     void applyEdits(List<CustomTextEdit> textEdits) {
+        applyEdits(textEdits, -1);
+    }
+
+    private void applyEdits(List<CustomTextEdit> textEdits, int caret) {
         applying = true;
         editor.beginAtomicEdit();
         try {
             var edits = textEdits.stream().filter(CustomTextEdit::isSnippet).toArray(CustomTextEdit[]::new);
             if (edits.length != 0) snippets.insert(edits);
             for (var edit : textEdits) if (!edit.isSnippet()) apply(edit);
+            if (caret >= 0) editor.setCaretPosition(caret);
         } finally {
             editor.endAtomicEdit();
             applying = false;
@@ -218,6 +270,7 @@ final class ScriptCompletionController implements AutoCloseable {
     }
 
     private void cancelRequest() {
+        statementRequest = null;
         if (active != null) active.requestor.setCanceled(true);
         active = null;
     }
@@ -242,6 +295,8 @@ final class ScriptCompletionController implements AutoCloseable {
         editor.removeFocusListener(focusListener);
         editor.removeKeyListener(keyListener);
         snippets.close();
+        editor.getInputMap().remove(KeyStroke.getKeyStroke("ctrl shift ENTER"));
+        editor.getActionMap().remove("completeStatement");
         popup.setDismissListener(null);
         popup.dispose();
     }

@@ -94,7 +94,7 @@ public class BaseListPopup<ITEM> extends BasePopup {
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     setVisible(false);
-                } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                } else if (e.getKeyCode() == KeyEvent.VK_ENTER && e.getModifiersEx() == 0) {
                     runEnterKeyListener();
                 }
             }
@@ -169,7 +169,7 @@ public class BaseListPopup<ITEM> extends BasePopup {
 
         @Override
         public void keyPressed(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_ENTER || (acceptsTab() && e.getKeyCode() == KeyEvent.VK_TAB && e.getModifiersEx() == 0)) {
+            if (e.getModifiersEx() == 0 && (e.getKeyCode() == KeyEvent.VK_ENTER || acceptsTab() && e.getKeyCode() == KeyEvent.VK_TAB)) {
                 runEnterKeyListener();
                 e.consume();
             } else if (e.getKeyCode() == KeyEvent.VK_UP || e.getKeyCode() == KeyEvent.VK_DOWN) {
