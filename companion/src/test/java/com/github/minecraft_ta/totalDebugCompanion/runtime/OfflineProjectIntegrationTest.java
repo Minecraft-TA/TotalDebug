@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import javax.swing.JButton;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
@@ -68,9 +69,9 @@ class OfflineProjectIntegrationTest {
                 var view = app.createWindow();
                 var bar = find(view, ApplicationStatusBar.class);
                 try {
-                    var retry = ApplicationStatusBar.class.getDeclaredField("retryIndex");
+                    var retry = ApplicationStatusBar.class.getDeclaredField("retry");
                     retry.setAccessible(true);
-                    ((Runnable) retry.get(bar)).run();
+                    ((JButton) retry.get(bar)).doClick();
                 } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
             });
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);

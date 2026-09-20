@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -23,7 +25,6 @@ import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
 import java.nio.file.Files;
@@ -150,11 +151,7 @@ public final class NavigationService {
     }
 
     private void reportNavigationFailure(String message) {
-        var editor = this.tabs.getSelectedEditor();
-        var informationBar = editor == null ? null : editor.getInformationBar();
-        if (informationBar != null) {
-            informationBar.setDefaultInfoText(message);
-        }
+        editors.get().notifications().publish(Severity.ERROR, message, "", Source.capture(project, "Navigation", null));
     }
 
     public Action backAction() {
@@ -619,12 +616,7 @@ public final class NavigationService {
         String message = "Unable to open " + label(target) + ": " + detail;
         SwingUtilities.invokeLater(() -> {
             if (!isCurrent(context)) return;
-            JOptionPane.showMessageDialog(
-                this.window,
-                message,
-                "Navigation failed",
-                JOptionPane.ERROR_MESSAGE
-            );
+            editors.get().notifications().publish(Severity.ERROR, "Navigation failed", message, Source.capture(context.project(), label(target), target));
         });
     }
 

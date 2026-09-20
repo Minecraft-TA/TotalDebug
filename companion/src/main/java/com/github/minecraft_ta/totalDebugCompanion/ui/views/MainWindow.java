@@ -1,5 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.StatusDetailsPanel;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectSelector;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -55,6 +61,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final NavigationService navigationService;
     private final JMenu scriptMenu = new JMenu("Script");
     private final ProjectSelector projectSelector;
+    private final StatusDetailsPanel debuggerDetails = new StatusDetailsPanel("");
+    private JPopupMenu debuggerPopup;
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
     private final ApplicationStatusBar statusBar;
     private final Action evaluateExpressionAction;
@@ -74,15 +82,19 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final Supplier<ProjectScope> project;
     private final DebuggerSessionController debugger;
     private final CodeInsightService insights;
+    private final NotificationCenter notifications;
+    private final EditorScriptRunService editorRuns;
     private final ScriptExecutionService scripts;
     private final CompanionSession session;
     private final RuntimeIndexService indexLoader;
     private final FrameNavigation frameNavigation;
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
-                      ScriptExecutionService scripts, CompanionSession session, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
+                      ScriptExecutionService scripts, CompanionSession session, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
                       ProjectControls projects) {
-        this.projectSelector = new ProjectSelector(projects);
+        this.notifications = notifications;
+        this.editorRuns = editorRuns;
+        this.projectSelector = new ProjectSelector(projects, notifications);
         this.project = project;
         this.debugger = debugger;
         this.insights = insights;
@@ -101,8 +113,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
                     if (failure == null || disposed) return;
                     Throwable cause = failure;
                     while (cause.getCause() != null) cause = cause.getCause();
-                    showError("Unable to retry indexing", cause.getMessage());
-                })));
+                    notifications.publish(Severity.ERROR, "Unable to retry indexing", cause.toString(), Source.application("Index"));
+                })), notifications, editorRuns, this::notificationUnavailable, source -> navigation().navigate(source.target()));
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -189,6 +201,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void dispose() {
         if (!disposed) {
             disposed = true;
+            if (debuggerPopup != null) debuggerPopup.setVisible(false);
             projectSelector.dispose();
             fileTreeView.dispose();
             debugger.removeListener(debuggerListener);
@@ -210,37 +223,42 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         setEnabled(!switching);
         this.projectSelector.refresh();
     }
-    @Override public void runtimeChanged() { editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
+    @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
     @Override public void navigate(NavigationTarget target, NavigationService.Activation activation) { navigation().navigate(target, activation); }
     @Override public void focus() { UIUtils.focusWindow(this); }
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
-        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, session, this::showDebuggerValue);
+        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, notifications, editorRuns, this::showDebuggerValue);
+    }
+
+    private String notificationUnavailable(Source source) {
+        if (source.target() == null) return "This notification has no source location";
+        ProjectScope scope = project.get();
+        if (scope == null || !scope.isActive() || !scope.profile().id().equals(source.projectId())) return "Open the originating project to navigate";
+        if (source.runtimeSignature() != null && !source.runtimeSignature().equals(scope.runtimeSignature())) return "The originating runtime is no longer loaded";
+        return null;
     }
 
     private void updateWindowIcon(CompanionTheme theme) {
+        SwingUtilities.updateComponentTreeUI(debuggerDetails);
+        if (debuggerPopup != null) SwingUtilities.updateComponentTreeUI(debuggerPopup);
         setIconImages(Icons.createWindowIconImages(theme));
     }
 
     private void configureDebuggerButton(DebuggerSessionController debugger) {
-        this.debuggerState.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
-        this.debuggerState.setContentAreaFilled(false);
-        this.debuggerState.setFocusable(false);
+        FlatIconButton.configure(this.debuggerState);
+        this.debuggerState.setMargin(new Insets(0, 8, 0, 8));
+
         this.debuggerState.addActionListener(event -> showDebuggerMenu(debugger));
     }
 
     private void showDebuggerMenu(DebuggerSessionController debugger) {
         DebuggerSessionController.Status status = debugger.status();
         JPopupMenu popup = new JPopupMenu();
-        JMenuItem heading = new JMenuItem(status.target() == null
-                ? "Minecraft debugger"
-                : status.target().displayName());
-        heading.setEnabled(false);
-        popup.add(heading);
-        JMenuItem detail = new JMenuItem(status.detail());
-        detail.setEnabled(false);
-        popup.add(detail);
+        debuggerPopup = popup;
+        popup.add(debuggerDetails);
+        updateDebuggerDetails(status);
         popup.addSeparator();
 
         popup.add(new AbstractAction("View Breakpoints", Icons.VIEW_BREAKPOINTS) {
@@ -255,26 +273,16 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         popup.add(mute);
         popup.addSeparator();
 
-        switch (status.phase()) {
-            case DETACHED, FAILED -> popup.add(this.debuggerActions.attach());
-            case RUNNING, ATTACHING, DETACHING -> popup.add(this.debuggerActions.detach());
-            case PAUSED -> {
-                popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
-                    @Override
-                    public void actionPerformed(ActionEvent event) {
-                        debuggerWindow(debugger).showWindow();
-                    }
-                });
-                popup.add(this.debuggerActions.resume());
-                popup.add(this.debuggerActions.stepOver());
-                popup.add(this.debuggerActions.stepInto());
-                popup.add(this.debuggerActions.stepOut());
-                popup.addSeparator();
-                popup.add(this.debuggerActions.detach());
-            }
-            case UNAVAILABLE -> {
-            }
-        }
+        popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
+            @Override public void actionPerformed(ActionEvent event) { debuggerWindow(debugger).showWindow(); }
+        });
+        popup.add(debuggerActions.attach());
+        popup.add(debuggerActions.detach());
+        popup.addSeparator();
+        popup.add(debuggerActions.resume());
+        popup.add(debuggerActions.stepOver());
+        popup.add(debuggerActions.stepInto());
+        popup.add(debuggerActions.stepOut());
         popup.show(
                 this.debuggerState,
                 Math.max(0, this.debuggerState.getWidth() - popup.getPreferredSize().width),
@@ -282,7 +290,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         );
     }
 
+    private void updateDebuggerDetails(DebuggerSessionController.Status status) {
+        debuggerDetails.setDetails((status.target() == null ? "" : status.target().displayName() + "\n")
+                + status.detail() + (status.failure() == null ? "" : "\n" + status.failure()));
+    }
+
     private void setDebuggerState(DebuggerSessionController.Status status) {
+        updateDebuggerDetails(status);
         String label = switch (status.phase()) {
             case UNAVAILABLE -> "Unavailable";
             case DETACHED -> "Detached";
@@ -298,7 +312,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     private DebuggerWindow debuggerWindow(DebuggerSessionController debugger) {
         if (this.debuggerWindow == null) {
-            this.debuggerWindow = new DebuggerWindow(
+            this.debuggerWindow = new DebuggerWindow(notifications,
                     project.get().state(),
                     this,
                     debugger,
@@ -440,6 +454,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     @Override public void refreshProfile() {
+        statusBar.refreshContext();
         this.projectSelector.refresh();
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());

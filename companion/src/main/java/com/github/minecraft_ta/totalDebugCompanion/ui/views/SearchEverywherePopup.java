@@ -82,7 +82,9 @@ public class SearchEverywherePopup extends JFrame {
     };
     private final AtomicLong searchGeneration = new AtomicLong();
     private final DefaultListModel<Result> resultModel = new DefaultListModel<>();
-    private final JList<Result> resultList = new JList<>(this.resultModel);
+    private final JList<Result> resultList = new JList<>(this.resultModel) {
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+    };
     private final JScrollPane resultScrollPane = new JScrollPane(this.resultList);
     private final JLabel messageLabel = new JLabel("Type to search the runtime index", SwingConstants.CENTER);
     private final JPanel resultCards = new JPanel(new CardLayout());
@@ -731,6 +733,9 @@ public class SearchEverywherePopup extends JFrame {
             module.configure(moduleSummary.text(), null, list.getFont(), selected, foreground);
             module.setToolTipText(moduleSummary.tooltip());
             module.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 8));
+            Dimension moduleSize = module.getPreferredSize();
+            moduleSize.width = Math.min(moduleSize.width, list.getWidth() / 3);
+            module.setPreferredSize(moduleSize);
 
             JPanel row = new JPanel(new BorderLayout());
             row.setOpaque(true);

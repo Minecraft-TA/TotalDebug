@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -74,8 +76,15 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private CodeInsightService.SearchHandle actionSearch;
     private final DebuggerLineHighlights debuggerLineHighlights;
 
+    private final Source notificationSource;
+
+    private void reportNotification(Severity severity, String message) {
+        context.notifications().publish(severity, message, "", notificationSource);
+    }
+
     public CodeViewPanel(EditorContext context, CodeView codeView) {
         super(context, codeView.getPath().toString(), codeView.getTitle());
+        notificationSource = Source.capture(context.project(), codeView.getTitle(), codeView.getNavigationTarget());
         this.editorPane.setEditable(false);
         this.editorPane.setBorder(new CompoundBorder(
                 this.editorPane.getBorder(),
@@ -421,7 +430,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             int displayedLine = this.editorPane.getLineOfOffset(this.editorPane.getCaretPosition()) + 1;
             toggleBreakpointAtLine(displayedLine);
         } catch (BadLocationException exception) {
-            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected source line");
+            reportNotification(Severity.ERROR, "Unable to resolve the selected source line");
         }
     }
 
@@ -437,7 +446,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     ? breakpointRequestAtLine(displayedLine)
                     : Optional.of(existing.request());
         } catch (RuntimeException exception) {
-            this.bottomInformationBar.setFailureInfoText(exception.getMessage());
+            reportNotification(Severity.ERROR, exception.getMessage());
             return;
         }
         if (request.isEmpty()) {
@@ -448,7 +457,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
                         String detail = failure.getMessage();
-                        this.bottomInformationBar.setFailureInfoText(
+                        reportNotification(Severity.ERROR,
                                 detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
                         );
                     }
@@ -462,7 +471,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
                         String detail = failure.getMessage();
-                        this.bottomInformationBar.setFailureInfoText(
+                        reportNotification(Severity.ERROR,
                                 detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
                         );
                     }
@@ -481,7 +490,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     ? breakpointRequestAtLine(displayedLine)
                     : Optional.of(managed.request());
         } catch (RuntimeException exception) {
-            this.bottomInformationBar.setFailureInfoText(exception.getMessage());
+            reportNotification(Severity.ERROR, exception.getMessage());
             return;
         }
         if (current.isEmpty()) {
@@ -547,7 +556,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                     if (failure != null) {
                         failure.printStackTrace(System.err);
                         String detail = failure.getMessage();
-                        this.bottomInformationBar.setFailureInfoText(
+                        reportNotification(Severity.ERROR,
                                 detail == null || detail.isBlank() ? "Unable to update breakpoint" : detail
                         );
                     }
@@ -595,7 +604,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void showImplementations(CodeSymbol symbol, int anchorOffset) {
         if (symbol instanceof CodeSymbol.FieldSymbol) {
-            this.bottomInformationBar.setDefaultInfoText("Fields do not have implementations");
+            reportNotification(Severity.INFORMATION, "Fields do not have implementations");
             return;
         }
         resolveHierarchyAction(symbol, HierarchyDirection.IMPLEMENTATIONS, anchorOffset);
@@ -603,7 +612,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
     private void showBaseMethods(CodeSymbol symbol, int anchorOffset) {
         if (!(symbol instanceof CodeSymbol.MethodSymbol method)) {
-            this.bottomInformationBar.setDefaultInfoText("Only methods have base declarations");
+            reportNotification(Severity.INFORMATION, "Only methods have base declarations");
             return;
         }
         resolveHierarchyAction(method, HierarchyDirection.BASE_METHODS, anchorOffset);
@@ -624,7 +633,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
                 var insight = result.get(symbol);
                 int count = insight == null ? 0 : insight.count(direction);
                 if (count == 0) {
-                    bottomInformationBar.setDefaultInfoText(direction == HierarchyDirection.BASE_METHODS
+                    reportNotification(Severity.INFORMATION, direction == HierarchyDirection.BASE_METHODS
                             ? "No base declarations found"
                             : "No implementations or overrides found");
                     return;
@@ -641,7 +650,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             public void onFailed(Throwable failure) {
                 actionSearch = null;
                 failure.printStackTrace(System.err);
-                bottomInformationBar.setFailureInfoText("Unable to inspect the selected hierarchy");
+                reportNotification(Severity.ERROR, "Unable to inspect the selected hierarchy");
             }
         });
     }
@@ -659,13 +668,13 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         try {
             var resolution = JavaSymbolResolver.resolve(context.astCache(), this.identifier, this.editorPane.getCaretPosition());
             if (!resolution.isResolved()) {
-                this.bottomInformationBar.setDefaultInfoText(resolution.unavailableReason());
+                reportNotification(Severity.INFORMATION, resolution.unavailableReason());
                 return;
             }
             consumer.accept(resolution.symbol());
         } catch (JavaModelException exception) {
             exception.printStackTrace(System.err);
-            this.bottomInformationBar.setFailureInfoText("Unable to resolve the selected symbol for " + action);
+            reportNotification(Severity.ERROR, "Unable to resolve the selected symbol for " + action);
         }
     }
 }

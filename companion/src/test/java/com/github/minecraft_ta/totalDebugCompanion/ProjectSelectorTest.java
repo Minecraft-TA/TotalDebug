@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
@@ -57,7 +58,7 @@ class ProjectSelectorTest {
                     }
                 };
                 var owner = new JFrame();
-                var selector = new ProjectSelector(controls);
+                var selector = new ProjectSelector(controls, new NotificationCenter());
                 var previousFactory = PopupFactory.getSharedInstance();
                 try {
                     PopupFactory.setSharedInstance(new OffscreenPopupFactory());

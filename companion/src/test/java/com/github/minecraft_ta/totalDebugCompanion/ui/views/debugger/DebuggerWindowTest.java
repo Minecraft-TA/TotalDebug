@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class DebuggerWindowTest {
         try {
             SwingUtilities.invokeAndWait(() -> {
                 JFrame sourceWindow = new JFrame("Source");
-                DebuggerWindow debuggerWindow = new DebuggerWindow(InstanceState.inMemory(),
+                DebuggerWindow debuggerWindow = new DebuggerWindow(new NotificationCenter(), InstanceState.inMemory(),
                         sourceWindow,
                         controller,
                         actions,

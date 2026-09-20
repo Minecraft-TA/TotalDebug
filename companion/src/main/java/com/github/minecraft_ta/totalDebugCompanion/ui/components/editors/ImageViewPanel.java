@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -25,7 +24,7 @@ public final class ImageViewPanel extends JPanel {
     private final int byteCount;
     private final ImageCanvas canvas;
     private final JScrollPane scrollPane;
-    private final BottomInformationBar informationBar;
+    private final Consumer<String> metadata;
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
     private final FlatIconButton zoomOut = new FlatIconButton(Icons.ZOOM_OUT, false);
     private final FlatIconButton zoomIn = new FlatIconButton(Icons.ZOOM_IN, false);
@@ -35,12 +34,12 @@ public final class ImageViewPanel extends JPanel {
     private boolean disposed;
 
     public ImageViewPanel(LoadedResource.Image content) {
-        this(content, new BottomInformationBar());
+        this(content, ignored -> {});
     }
 
-    ImageViewPanel(LoadedResource.Image content, BottomInformationBar informationBar) {
+    ImageViewPanel(LoadedResource.Image content, Consumer<String> metadata) {
         super(new BorderLayout());
-        this.informationBar = informationBar;
+        this.metadata = metadata;
         this.image = content.value();
         this.byteCount = content.byteCount();
         this.canvas = new ImageCanvas(this.image);
@@ -115,7 +114,7 @@ public final class ImageViewPanel extends JPanel {
     }
 
     private void updateStatus() {
-        this.informationBar.setMutedInfoText(
+        this.metadata.accept(
                 this.image.getWidth() + " x " + this.image.getHeight()
                         + "  |  PNG  |  " + formatBytes(this.byteCount)
                         + "  |  " + Math.round(this.canvas.scale() * 100) + "%"

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.presentation;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -23,6 +24,21 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PrimarySecondaryLabelTest {
+    @Test void narrowRowsShrinkTextWithoutClippingItsHeight() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var label = new PrimarySecondaryLabel();
+            label.configure(new PrimarySecondaryText("A very long result ".repeat(20), "String literal"),
+                    Icons.VALUE, UIManager.getFont("Label.font"), false, null);
+            label.setSize(220, 32);
+            label.doLayout();
+            for (var child : labels(label)) {
+                assertTrue(child.getWidth() < child.getPreferredSize().width);
+                assertTrue(child.getHeight() >= child.getPreferredSize().height);
+                assertTrue(child.getY() >= 0);
+                assertTrue(child.getY() + child.getHeight() <= label.getHeight());
+            }
+        });
+    }
     @Test
     void resolvesColorsAgainWheneverTheSameComponentIsPainted() throws Exception {
         PrimarySecondaryLabel label = new PrimarySecondaryLabel();

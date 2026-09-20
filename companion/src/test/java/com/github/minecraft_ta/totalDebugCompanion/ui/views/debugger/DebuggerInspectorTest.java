@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -47,7 +48,7 @@ class DebuggerInspectorTest {
             state.setDebuggerWatches(List.of("counter()"));
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
-                DebuggerInspector inspector = new DebuggerInspector(state,
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), state,
                         controller,
                         target -> {
                         },
@@ -93,7 +94,7 @@ class DebuggerInspectorTest {
             Runnable removeListener = DebuggerEditorPresentation.addListener(snapshot -> publications.incrementAndGet());
             publications.set(0);
             SwingUtilities.invokeAndWait(() -> {
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(),
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), InstanceState.inMemory(),
                         controller,
                         target -> {
                         },
@@ -170,7 +171,7 @@ class DebuggerInspectorTest {
                         );
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of());
@@ -246,7 +247,7 @@ class DebuggerInspectorTest {
                         return CompletableFuture.failedFuture(new AssertionError("Unexpected inspection"));
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of(variable("items", 50, 450)));
@@ -324,7 +325,7 @@ class DebuggerInspectorTest {
                         return CompletableFuture.failedFuture(new AssertionError("Unexpected inspection"));
                     }
                 };
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, target -> {
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), InstanceState.inMemory(), controller, target -> {
                 }, runtime);
                 inspector.beginFrame(FRAME);
                 inspector.showVariables(FRAME, List.of(new DebugEngine.Variable(
@@ -424,7 +425,7 @@ class DebuggerInspectorTest {
                     owners.incrementAndGet();
                     return CompletableFuture.completedFuture(owners::decrementAndGet);
                 });
-                DebuggerInspector inspector = new DebuggerInspector(InstanceState.inMemory(), controller, ignored -> { }, runtime);
+                DebuggerInspector inspector = new DebuggerInspector(new NotificationCenter(), InstanceState.inMemory(), controller, ignored -> { }, runtime);
                 try {
                     inspector.beginFrame(FRAME);
                     inspector.showVariables(FRAME, List.of());

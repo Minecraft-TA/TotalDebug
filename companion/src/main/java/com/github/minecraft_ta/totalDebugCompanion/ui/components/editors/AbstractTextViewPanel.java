@@ -4,7 +4,6 @@ import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.search.SearchManager;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.SearchHeaderBar;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
@@ -48,7 +47,6 @@ public abstract class AbstractTextViewPanel extends JPanel {
             this.editorScrollPane,
             this.editorChromeLayerUI
     );
-    protected final BottomInformationBar bottomInformationBar;
 
     protected JComponent headerComponent;
 
@@ -58,12 +56,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
     private boolean disposed;
 
     protected AbstractTextViewPanel() {
-        this(new BottomInformationBar());
-    }
-
-    protected AbstractTextViewPanel(BottomInformationBar bottomInformationBar) {
         super(new BorderLayout());
-        this.bottomInformationBar = bottomInformationBar;
 
         Gutter gutter = this.editorScrollPane.getGutter();
         gutter.setBorder(new PaddingOnlyGutterBorder(0, 5, 0, 5));
@@ -258,9 +251,6 @@ public abstract class AbstractTextViewPanel extends JPanel {
         this.editorScrollPane.getGutter().setLineNumberFont(newFont);
     }
 
-    public BottomInformationBar getBottomInformationBar() {
-        return this.bottomInformationBar;
-    }
 
     public void dispose() {
         if (this.disposed) {

@@ -8,7 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ResourceViewPanel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
+import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 
 import javax.swing.Icon;
@@ -69,8 +69,8 @@ public final class ResourceView implements IEditorPanel {
     }
 
     @Override
-    public BottomInformationBar getInformationBar() {
-        return this.panel.getBottomInformationBar();
+    public Runnable subscribeMetadata(Consumer<String> listener) {
+        return this.panel.subscribeMetadata(listener);
     }
 
     @Override

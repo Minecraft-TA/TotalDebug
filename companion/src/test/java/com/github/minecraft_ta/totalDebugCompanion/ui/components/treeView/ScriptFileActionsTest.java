@@ -36,6 +36,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
@@ -47,6 +48,49 @@ class ScriptFileActionsTest {
     }
     private static List<String> labels(JPopupMenu menu) {
         return Arrays.stream(menu.getComponents()).map(component -> ((JMenuItem) component).getText()).toList();
+    }
+    @Test void failedSavesCompleteWithoutAModalAndDoNotResurrectDismissedNotifications() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("save-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "save-test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("save-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            var files = window.editorContext().project().scriptFiles();
+            Path script = files.create(files.root(), "SaveTest", false, "return 1;");
+            var originalTime = Files.getLastModifiedTime(script);
+            edt(() -> window.navigation().navigate(new NavigationTarget.LocalFile(script), Activation.KEEP_CURRENT_WINDOW)).get(10, TimeUnit.SECONDS);
+            ScriptView view = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
+            RSyntaxTextArea editor = edt(() -> find(view.getComponent(), RSyntaxTextArea.class));
+            Files.writeString(script, "// externally changed");
+            CompletableFuture<Void> failed = edt(() -> {
+                editor.setText("return 2;");
+                editor.getActionMap().get("saveScript").actionPerformed(new ActionEvent(editor, 0, "save"));
+                return view.pendingSave();
+            });
+            assertThrows(ExecutionException.class, () -> failed.get(10, TimeUnit.SECONDS));
+            assertEquals(1, app.notifications().snapshot().entries().size());
+            long id = app.notifications().snapshot().entries().getFirst().id();
+            app.notifications().dismiss(id);
+            CompletableFuture<Void> retry = edt(() -> {
+                editor.getActionMap().get("saveScript").actionPerformed(new ActionEvent(editor, 0, "save"));
+                return view.pendingSave();
+            });
+            assertThrows(ExecutionException.class, () -> retry.get(10, TimeUnit.SECONDS));
+            assertTrue(app.notifications().snapshot().entries().isEmpty());
+            Path renamed = script.resolveSibling("Renamed.tdscript");
+            var rename = edt(() -> window.scriptFileActions().rename(script, renamed));
+            assertThrows(ExecutionException.class, () -> rename.get(10, TimeUnit.SECONDS));
+            assertFalse(Files.exists(renamed));
+            Files.writeString(script, "return 1;");
+            Files.setLastModifiedTime(script, originalTime);
+            edt(() -> {
+                editor.getActionMap().get("saveScript").actionPerformed(new ActionEvent(editor, 0, "save"));
+                return view.pendingSave();
+            }).get(10, TimeUnit.SECONDS);
+            assertEquals("return 2;", Files.readString(script));
+            assertTrue(app.notifications().snapshot().entries().isEmpty());
+            edt(() -> { window.dispose(); return null; });
+        }
     }
     @Test void movingOpenFolderPreservesDraftUndoAndEditorAndDeletesWithoutResurrection() throws Exception {
         Path home = Files.createDirectories(directory.resolve("home"));
@@ -97,6 +141,8 @@ class ScriptFileActionsTest {
             edt(() -> window.scriptFileActions().create(root, "One", true, "")).get(10, TimeUnit.SECONDS);
             edt(() -> window.scriptFileActions().create(root, "Two", true, "")).get(10, TimeUnit.SECONDS);
             FileTreeView treeView = edt(() -> find(window, FileTreeView.class));
+            edt(() -> window.editorContext().navigation().navigate(new NavigationTarget.LocalDirectory(root), Activation.KEEP_CURRENT_WINDOW)).get(10, TimeUnit.SECONDS);
+            assertEquals(root, edt(() -> ScriptFileActions.path(treeView.tree().getSelectionPath())));
             edt(() -> { treeView.tree().collapseRow(0); return null; });
             for (String folder : List.of("One", "Two")) edt(() -> window.scriptFileActions().create(root.resolve(folder), "Test", false, "return 1;")).get(10, TimeUnit.SECONDS);
             assertEquals(2, edt(() -> window.getEditorTabs().getTabCount()));

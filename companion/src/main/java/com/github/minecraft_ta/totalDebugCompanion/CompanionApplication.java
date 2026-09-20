@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -66,6 +70,9 @@ import java.util.function.Consumer;
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
+    private final NotificationCenter notifications = new NotificationCenter();
+    private EditorScriptRunService editorRuns;
+    public NotificationCenter notifications() { return notifications; }
     private ScriptExecutionService scriptExecutions;
     private CompanionSession session;
     private final CompanionLaunchConfiguration launchConfiguration;
@@ -99,6 +106,16 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(this::updateRuntimeIndexUi);
             debuggerController = createDebuggerController();
+            debuggerController.addListener(new DebuggerSessionController.Listener() {
+                private Throwable lastFailure;
+                @Override public void statusChanged(DebuggerSessionController.Status status) {
+                    if (!closed && !switching && status.failure() != null && status.failure() != lastFailure) {
+                        notifications.publish(Severity.ERROR, "Debugger operation failed", status.detail() + "\n" + status.failure(),
+                                Source.capture(current, "Debugger", null));
+                    }
+                    lastFailure = status.failure();
+                }
+            });
             restoreProfile();
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
                 @Override public void openClass(OpenClassMessage message) {
@@ -125,6 +142,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void disconnected() {
+                    if (editorRuns != null) editorRuns.disconnected(closed || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                     scriptCompiler.runtimeDisconnected();
                     updateGameStatus(new ServiceStatus(
                             ServiceStatus.State.INACTIVE,
@@ -154,6 +172,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
             });
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
+            editorRuns = new EditorScriptRunService(scriptExecutions, session, notifications);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (CompletionException failure) {
@@ -177,6 +196,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     @Override public void close() {
         if (closed) return;
         closed = true;
+        notifications.close();
+        if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
             projectWorker.close();
             synchronized (lifecycleLock) {
@@ -366,6 +387,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
             // a broken debugger/connection cannot detach cleanly.
             if (mcpServer != null) runCleanup("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            if (editorRuns != null) editorRuns.disconnected(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
             runCleanup("Clear debugger target", () -> getDebuggerController().clearTarget().join());
@@ -582,7 +604,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             server.start();
             mcpServer = server;
             updateMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening",
-                    "MCP is listening at " + server.endpointUrl()));
+                    server.endpointUrl()));
             System.err.println("TotalDebug Companion MCP listening at " + server.endpointUrl());
             return server;
         } catch (Exception failure) { server.close(); throw failure; }
@@ -604,6 +626,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     "MCP startup failed: " + exception
             ));
             System.err.println("TotalDebug Companion MCP is unavailable: " + exception.getMessage());
+            notifications.publish(Severity.ERROR, "MCP startup failed", exception.toString(), Source.application("MCP"));
             exception.printStackTrace(System.err);
         }
     }
@@ -641,7 +664,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit, this);
+                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {
@@ -695,7 +718,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             onUi(view -> view.setMcpStatus(status));
         }
     }
+    private RuntimeIndexService.Status lastIndexStatus;
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
+        if (!closed && !switching && status.phase() == RuntimeIndexService.Phase.FAILED && !status.equals(lastIndexStatus)) {
+            notifications.publish(Severity.ERROR, "Class indexing failed", status.detail() + (status.failure() == null ? "" : "\n" + status.failure()),
+                    Source.capture(current, "Index", null));
+        }
+        lastIndexStatus = status;
         synchronized (lifecycleLock) {
             var installed = current == null ? null : current.runtime();
             boolean failedLocalRefresh = status.phase() == RuntimeIndexService.Phase.FAILED

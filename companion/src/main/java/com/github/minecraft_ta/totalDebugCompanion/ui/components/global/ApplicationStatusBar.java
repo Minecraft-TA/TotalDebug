@@ -1,6 +1,14 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
-import java.awt.CardLayout;
+import javax.swing.SwingUtilities;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import java.awt.Insets;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
+import java.util.function.Function;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
@@ -12,7 +20,6 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.JavaBreadcrumbReso
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.AnimatedFlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -22,12 +29,10 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.Timer;
-import java.awt.Component;
 import java.awt.Dimension;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -36,9 +41,15 @@ public final class ApplicationStatusBar extends JPanel {
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
     private final BreadcrumbBar breadcrumbs;
     private final JLabel editorStatusLabel = new JLabel();
-    private final JLabel taskLabel = new JLabel();
     private final JButton taskState = new JButton();
-    private final JPanel taskCards = new JPanel(new CardLayout());
+    private final JPanel taskCards = new JPanel();
+    private final JProgressBar taskProgress = new JProgressBar();
+    private final JPopupMenu taskPopup = new JPopupMenu();
+    private final StatusDetailsPanel taskDetails = new StatusDetailsPanel("");
+    private final JButton retry = new JButton("Retry class indexing");
+    private final NotificationWidget notifications;
+    private final ScriptActivityWidget scriptActivity;
+    private boolean disposed;
     private final ServiceStatusWidget gameStatus = new ServiceStatusWidget(
             "Game",
             new ServiceStatus(
@@ -55,11 +66,9 @@ public final class ApplicationStatusBar extends JPanel {
                     "The MCP server has not started."
             )
     );
-    private final AnimatedFlatSVGIcon processIcon = new AnimatedFlatSVGIcon("icons/process");
-    private final Consumer<BottomInformationBar.State> editorStatusListener = this::setEditorStatus;
     private final Timer memberDebounce;
 
-    private BottomInformationBar selectedEditorStatus;
+    private Runnable removeMetadataListener = () -> {};
     private EditorLocation selectedLocation = EditorLocation.empty();
     private NavigationTarget selectedTarget;
     private JavaEditorContext selectedJavaContext;
@@ -72,10 +81,11 @@ public final class ApplicationStatusBar extends JPanel {
             null
     );
 
-    private final Runnable retryIndex;
 
-    public ApplicationStatusBar(Consumer<NavigationTarget> navigator, Runnable retryIndex) {
-        this.retryIndex = retryIndex;
+    public ApplicationStatusBar(Consumer<NavigationTarget> navigator, Runnable retryIndex, NotificationCenter center,
+                                EditorScriptRunService runs, Function<Source, String> unavailable, Consumer<Source> openSource) {
+        this.notifications = new NotificationWidget(center, unavailable, openSource);
+        this.scriptActivity = new ScriptActivityWidget(runs);
         this.breadcrumbs = new BreadcrumbBar(Objects.requireNonNull(navigator, "navigator"));
         this.memberDebounce = new Timer(140, event -> refreshMember());
         this.memberDebounce.setRepeats(false);
@@ -87,9 +97,10 @@ public final class ApplicationStatusBar extends JPanel {
         add(this.breadcrumbs);
         add(Box.createHorizontalStrut(12));
         add(this.editorStatusLabel);
+        add(this.scriptActivity);
+        add(this.notifications);
         add(Box.createHorizontalGlue());
 
-        JProgressBar taskProgress = new JProgressBar();
         taskProgress.setIndeterminate(true);
         taskProgress.setStringPainted(false);
         taskProgress.setBorderPainted(false);
@@ -97,25 +108,21 @@ public final class ApplicationStatusBar extends JPanel {
         taskProgress.setMinimumSize(progressSize);
         taskProgress.setPreferredSize(progressSize);
         taskProgress.setMaximumSize(progressSize);
-        taskProgress.setAlignmentY(Component.CENTER_ALIGNMENT);
-        this.taskLabel.setAlignmentY(Component.CENTER_ALIGNMENT);
-        JPanel activity = new JPanel();
-        activity.setOpaque(false);
-        activity.setLayout(new BoxLayout(activity, BoxLayout.LINE_AXIS));
-        activity.add(this.taskLabel);
-        activity.add(Box.createHorizontalStrut(8));
-        activity.add(taskProgress);
-        activity.setAlignmentY(Component.CENTER_ALIGNMENT);
-        this.taskCards.add(activity, "progress");
-        this.taskCards.setOpaque(false);
-        this.taskCards.setMaximumSize(new Dimension(360, 19));
-
-        this.taskState.setBorderPainted(false);
-        this.taskState.setContentAreaFilled(false);
-        this.taskState.setFocusable(false);
-        this.taskState.setHorizontalAlignment(JButton.RIGHT);
-        this.taskState.addActionListener(event -> showTaskPopup());
-        this.taskCards.add(this.taskState, "state");
+        taskCards.setLayout(new BoxLayout(taskCards, BoxLayout.LINE_AXIS));
+        taskCards.setOpaque(false);
+        taskCards.setMaximumSize(new Dimension(360, 22));
+        FlatIconButton.configure(taskState);
+        taskState.setMargin(new Insets(0, 6, 0, 6));
+        taskState.putClientProperty("html.disable", true);
+        taskState.addActionListener(event -> showTaskPopup());
+        taskProgress.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) { taskState.doClick(); }
+        });
+        taskCards.add(taskState);
+        taskCards.add(taskProgress);
+        taskPopup.add(taskDetails);
+        retry.addActionListener(event -> { if (runtimeStatus.phase() == RuntimeIndexService.Phase.FAILED) retryIndex.run(); });
+        taskPopup.add(retry);
         add(this.gameStatus);
         add(this.mcpStatus);
         add(this.taskCards);
@@ -125,7 +132,13 @@ public final class ApplicationStatusBar extends JPanel {
     }
 
     public void dispose() {
+        disposed = true;
         ThemeManager.removeThemeChangeListener(this.themeListener);
+        notifications.close();
+        scriptActivity.close();
+        gameStatus.close();
+        mcpStatus.close();
+        taskPopup.setVisible(false);
         setEditor(null);
     }
 
@@ -135,10 +148,9 @@ public final class ApplicationStatusBar extends JPanel {
         this.removeAstListener.run();
         this.removeCaretListener = () -> {};
         this.removeAstListener = () -> {};
-        if (this.selectedEditorStatus != null) {
-            this.selectedEditorStatus.removeListener(this.editorStatusListener);
-        }
-        this.selectedEditorStatus = editor == null ? null : editor.getInformationBar();
+        this.removeMetadataListener.run();
+        this.editorStatusLabel.setText("");
+        this.removeMetadataListener = editor == null ? () -> {} : editor.subscribeMetadata(this.editorStatusLabel::setText);
         this.selectedLocation = editor == null ? EditorLocation.empty() : editor.getLocation();
         this.selectedTarget = editor == null ? null : editor.getNavigationTarget();
         this.selectedJavaContext = editor == null ? null : editor.getJavaEditorContext();
@@ -152,11 +164,6 @@ public final class ApplicationStatusBar extends JPanel {
                     snapshot -> requestMemberRefresh()
             );
             requestMemberRefresh();
-        }
-        if (this.selectedEditorStatus == null) {
-            setEditorStatus(new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN));
-        } else {
-            this.selectedEditorStatus.addListener(this.editorStatusListener);
         }
     }
 
@@ -197,25 +204,23 @@ public final class ApplicationStatusBar extends JPanel {
 
     public void setRuntimeStatus(RuntimeIndexService.Status status) {
         UIUtils.onEdt(() -> {
-            this.runtimeStatus = status;
-            CardLayout cards = (CardLayout) this.taskCards.getLayout();
-            if (status.active()) {
-                this.taskLabel.setText(status.detail());
-                this.taskLabel.setToolTipText(status.detail());
-                cards.show(this.taskCards, "progress");
-                return;
-            }
-            this.taskState.setIcon(switch (status.phase()) {
+            if (disposed) return;
+            runtimeStatus = status;
+            taskProgress.setVisible(status.active());
+            taskState.setIcon(switch (status.phase()) {
                 case READY -> Icons.SUCCESS;
                 case FAILED -> Icons.ERROR;
                 default -> Icons.INFORMATION;
             });
-            this.taskState.setText(status.detail());
-            this.taskState.setToolTipText("Show background activity");
-            cards.show(this.taskCards, "state");
-
+            taskState.setText(status.detail());
+            taskState.setToolTipText("Show index status");
+            taskDetails.setDetails(status.sourceKind() + " index: " + status.phase() + "\n" + status.detail()
+                    + (status.failure() == null ? "" : "\n" + status.failure()));
+            retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED);
         });
     }
+
+    public void refreshContext() { notifications.selectionChanged(); }
 
     public void setGameStatus(ServiceStatus status) {
         this.gameStatus.setStatus(status);
@@ -225,57 +230,19 @@ public final class ApplicationStatusBar extends JPanel {
         this.mcpStatus.setStatus(status);
     }
 
-    private void setEditorStatus(BottomInformationBar.State state) {
-        UIUtils.onEdt(() -> {
-            this.editorStatusLabel.setText(state.text());
-            this.editorStatusLabel.setForeground(
-                    state.style() == BottomInformationBar.Style.PLAIN ? ThemeColors.mutedText() : getForeground()
-            );
-            if (state.style() != BottomInformationBar.Style.PROCESS) {
-                this.processIcon.stop();
-            }
-            this.editorStatusLabel.setIcon(switch (state.style()) {
-                case INFORMATION -> Icons.INFORMATION;
-                case PROCESS -> this.processIcon;
-                case SUCCESS -> Icons.SUCCESS;
-                case FAILURE -> Icons.ERROR;
-                case PLAIN -> null;
-            });
-
-        });
-    }
-
     private void applyTheme() {
+        notifications.applyTheme();
+        scriptActivity.applyTheme();
+        gameStatus.applyTheme();
+        mcpStatus.applyTheme();
+        SwingUtilities.updateComponentTreeUI(taskPopup);
         this.breadcrumbs.applyTheme();
-        this.taskLabel.setForeground(ThemeColors.mutedText());
-        setEditorStatus(this.selectedEditorStatus == null
-                ? new BottomInformationBar.State("", BottomInformationBar.Style.PLAIN)
-                : this.selectedEditorStatus.state());
+        this.editorStatusLabel.setForeground(ThemeColors.mutedText());
         repaint();
     }
 
     private void showTaskPopup() {
-        JPopupMenu popup = new JPopupMenu();
-        JMenuItem summary = new JMenuItem(this.runtimeStatus.detail());
-        summary.setEnabled(false);
-        popup.add(summary);
-        if (this.runtimeStatus.failure() != null) {
-            String detail = this.runtimeStatus.failure().toString();
-            JMenuItem failure = new JMenuItem(detail);
-            failure.setEnabled(false);
-            popup.add(failure);
-        }
-        if (this.runtimeStatus.phase() == RuntimeIndexService.Phase.FAILED) {
-            popup.addSeparator();
-            JMenuItem retry = new JMenuItem("Retry class indexing");
-            retry.addActionListener(event -> retryIndex.run());
-            popup.add(retry);
-        }
-        popup.show(
-                this.taskState,
-                Math.min(0, this.taskState.getWidth() - popup.getPreferredSize().width),
-                -popup.getPreferredSize().height
-        );
+        taskPopup.show(taskState, Math.min(0, taskState.getWidth() - taskPopup.getPreferredSize().width),
+                -taskPopup.getPreferredSize().height);
     }
-
 }

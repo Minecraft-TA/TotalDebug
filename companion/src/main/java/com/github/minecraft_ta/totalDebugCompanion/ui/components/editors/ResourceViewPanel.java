@@ -5,7 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
+import java.util.function.Consumer;
+import java.beans.PropertyChangeListener;
 
 import javax.swing.*;
 import java.awt.*;
@@ -25,7 +26,7 @@ public final class ResourceViewPanel extends JPanel {
     private final NavigationService navigation;
     private final ContentSource source;
     private final ResourceFileType fileType;
-    private final BottomInformationBar informationBar = new BottomInformationBar();
+    private String metadata = "";
 
     private CompletableFuture<LoadedResource> loadTask;
     private Component activeView;
@@ -47,7 +48,7 @@ public final class ResourceViewPanel extends JPanel {
             this.loadTask.cancel(true);
         }
         showCenteredMessage("Loading " + this.source.displayName() + "...", null);
-        this.informationBar.setProcessInfoText("Loading " + this.source.displayName());
+        setMetadata("");
         CompletableFuture<LoadedResource> task = CompletableFuture.supplyAsync(() -> {
             try {
                 return ResourceLoader.load(this.source, this.fileType);
@@ -66,7 +67,6 @@ public final class ResourceViewPanel extends JPanel {
             if (failure != null) {
                 Throwable cause = unwrap(failure);
                 showCenteredMessage(messageFor(cause), this::reload);
-                this.informationBar.setFailureInfoText(messageFor(cause));
                 return;
             }
             showContent(content);
@@ -75,8 +75,8 @@ public final class ResourceViewPanel extends JPanel {
 
     private void showContent(LoadedResource content) {
         Component view = switch (content) {
-            case LoadedResource.Text text -> new TextFileViewPanel(text, this.fileType, this.informationBar);
-            case LoadedResource.Image image -> new ImageViewPanel(image, this.informationBar);
+            case LoadedResource.Text text -> new TextFileViewPanel(text, this.fileType, this::setMetadata);
+            case LoadedResource.Image image -> new ImageViewPanel(image, this::setMetadata);
         };
         if (view instanceof AbstractTextViewPanel text) text.installNavigationHistoryMenu(navigation);
         replaceActiveView(view);
@@ -160,7 +160,16 @@ public final class ResourceViewPanel extends JPanel {
         disposeActiveView();
     }
 
-    public BottomInformationBar getBottomInformationBar() {
-        return this.informationBar;
+    private void setMetadata(String value) {
+        String previous = metadata;
+        metadata = value;
+        firePropertyChange("metadata", previous, value);
+    }
+
+    public Runnable subscribeMetadata(Consumer<String> listener) {
+        PropertyChangeListener changed = event -> listener.accept((String) event.getNewValue());
+        addPropertyChangeListener("metadata", changed);
+        listener.accept(metadata);
+        return () -> removePropertyChangeListener("metadata", changed);
     }
 }

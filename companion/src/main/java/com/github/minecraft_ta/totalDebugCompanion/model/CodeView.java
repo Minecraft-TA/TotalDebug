@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.CodeViewPanel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 
 import javax.swing.*;
 import java.awt.*;
@@ -126,10 +125,6 @@ public class CodeView implements IEditorPanel {
         return this.location;
     }
 
-    @Override
-    public BottomInformationBar getInformationBar() {
-        return this.codeViewPanel.getBottomInformationBar();
-    }
 
     @Override
     public NavigationTarget getNavigationTarget() {

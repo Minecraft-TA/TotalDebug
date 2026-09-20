@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationViewState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
@@ -111,10 +110,6 @@ public class ScriptView implements IEditorPanel {
         return new EditorLocation("Scripts", StreamSupport.stream(context.project().scriptFiles().root().relativize(path).spliterator(), false).map(Path::toString).toList(), this.path.toString());
     }
 
-    @Override
-    public BottomInformationBar getInformationBar() {
-        return this.scriptPanel == null ? null : this.scriptPanel.getBottomInformationBar();
-    }
 
     @Override
     public NavigationTarget getNavigationTarget() {

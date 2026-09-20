@@ -126,6 +126,12 @@ public final class PrimarySecondaryLabel extends JPanel {
     private static final class SearchHighlightLabel extends JLabel {
         private JComponent speedSearchOwner;
 
+        @Override public Dimension getMinimumSize() {
+            Dimension size = super.getMinimumSize();
+            size.width = 0;
+            return size;
+        }
+
         void setSpeedSearchOwner(JComponent speedSearchOwner) {
             this.speedSearchOwner = speedSearchOwner;
         }
