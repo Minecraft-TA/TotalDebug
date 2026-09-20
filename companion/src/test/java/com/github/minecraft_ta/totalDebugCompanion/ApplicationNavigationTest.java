@@ -21,6 +21,7 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import javax.swing.SwingUtilities;
+import javax.swing.JLabel;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -124,6 +125,27 @@ class ApplicationNavigationTest {
                     assertNull(popup.get(window));
                 } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
             });
+        }
+    }
+
+    @Test void gamePopupReflectsRenamedConnectedProject() throws Exception {
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(3, TimeUnit.SECONDS);
+            var name = new AtomicReference<JLabel>();
+            SwingUtilities.invokeAndWait(() -> {
+                var window = app.createWindow();
+                window.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Connected"));
+                try {
+                    var barField = window.getClass().getDeclaredField("statusBar");
+                    barField.setAccessible(true);
+                    var bar = barField.get(window);
+                    var nameField = bar.getClass().getDeclaredField("gameName");
+                    nameField.setAccessible(true);
+                    name.set((JLabel) nameField.get(bar));
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+            app.renameProject(app.currentProject().id(), "Renamed pack").get(3, TimeUnit.SECONDS);
+            SwingUtilities.invokeAndWait(() -> assertEquals("Renamed pack", name.get().getText()));
         }
     }
 

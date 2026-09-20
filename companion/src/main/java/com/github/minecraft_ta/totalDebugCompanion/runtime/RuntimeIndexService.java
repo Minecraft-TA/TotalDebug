@@ -73,7 +73,8 @@ public final class RuntimeIndexService implements AutoCloseable {
             Path indexFile,
             List<RuntimeSnapshotBytecodeSource.Source> sources,
             ClassIndex index,
-            LocalSourceGuard localGuard
+            LocalSourceGuard localGuard,
+            boolean rebuilt
     ) implements AutoCloseable {
         public ReadySnapshot {
             Objects.requireNonNull(identity);
@@ -85,7 +86,7 @@ public final class RuntimeIndexService implements AutoCloseable {
 
         public ReadySnapshot(String inventoryId, String signature, Path indexFile,
                              List<RuntimeSnapshotBytecodeSource.Source> sources, ClassIndex index) {
-            this(IndexIdentity.runtime(inventoryId), signature, indexFile, sources, index, null);
+            this(IndexIdentity.runtime(inventoryId), signature, indexFile, sources, index, null, false);
         }
 
         @Override public ClassIndex index() {
@@ -127,7 +128,6 @@ public final class RuntimeIndexService implements AutoCloseable {
         final Path gameDirectory;
         boolean local;
         boolean forceBuild;
-        boolean rebuilt;
         long started;
         boolean allowLocalFallback;
         String detail = "";
@@ -211,7 +211,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 return;
             }
             this.pending = null;
-            if (gameDirectory == null && !Files.isRegularFile(inventoryFile)) {
+            if (!forceBuild && gameDirectory == null && !Files.isRegularFile(inventoryFile)) {
                 update(new Status(Phase.WAITING, "Waiting for runtime inventory", null));
                 return;
             }
@@ -402,7 +402,6 @@ public final class RuntimeIndexService implements AutoCloseable {
             Path indexFile,
             String javaHome
     ) throws IOException {
-        work.rebuilt = true;
         AtomicFiles.cleanupAbandonedStaging(indexFile.getParent());
         checkpoint(work);
         List<IndexSource> indexSources = new ArrayList<>();
@@ -449,7 +448,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             checkpoint(work);
             ClassIndex validated = IndexCache.write(indexFile, index,
                     new IndexCache.Manifest(identity, publishedSources, work.sourceDetail), () -> checkpoint(work));
-            return readySnapshot(identity, indexFile, publishedSources, validated, work.localGuard);
+            return readySnapshot(identity, indexFile, publishedSources, validated, work.localGuard, true);
         } catch (CancellationException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -532,7 +531,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             guard.checkAll();
         }
         try (var phase = RuntimePhase.start("index.cache-load")) {
-            return readySnapshot(manifest.identity(), indexFile, manifest.sources(), this.indexLoader.apply(indexFile.toString()), guard);
+            return readySnapshot(manifest.identity(), indexFile, manifest.sources(), this.indexLoader.apply(indexFile.toString()), guard, false);
         } catch (RuntimeException exception) {
             throw new IOException("Unable to load the runtime class index: " + indexFile, exception);
         }
@@ -556,10 +555,10 @@ public final class RuntimeIndexService implements AutoCloseable {
 
     private static ReadySnapshot readySnapshot(IndexIdentity identity, Path file,
                                               List<RuntimeSnapshotBytecodeSource.Source> sources, ClassIndex index,
-                                              LocalSourceGuard guard) throws IOException {
+                                              LocalSourceGuard guard, boolean rebuilt) throws IOException {
         try {
             if (guard != null) guard.checkAll();
-            return new ReadySnapshot(identity, identity.signature(), file, sources, index, guard);
+            return new ReadySnapshot(identity, identity.signature(), file, sources, index, guard, rebuilt);
         } catch (IOException | RuntimeException failure) { index.close(); throw failure; }
     }
 
@@ -568,7 +567,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         try (var phase = RuntimePhase.start("index.install")) {
             synchronized (this.lifecycleLock) {
                 checkpoint(work);
-                Metrics metrics = new Metrics(snapshot.index().getStatistics().classCount(), System.nanoTime() - work.started, work.rebuilt);
+                Metrics metrics = new Metrics(snapshot.index().getStatistics().classCount(), System.nanoTime() - work.started, snapshot.rebuilt());
                 this.readyHandler.accept(snapshot);
                 this.activeInventoryId = snapshot.inventoryId();
                 this.activeMetrics = metrics;

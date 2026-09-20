@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,6 +26,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CodeModeJobServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test void replacementServiceCannotAttributeAnOldScriptsResultToANewJob() {
+        var ids = new AtomicInteger(-1);
+        int oldId;
+        try (var old = new CodeModeJobService(() -> true, new FakeTransport(), Map::of, Clock.systemUTC(), ids)) {
+            oldId = old.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD).scriptId();
+        }
+        try (var replacement = new CodeModeJobService(() -> true, new FakeTransport(), Map::of, Clock.systemUTC(), ids)) {
+            var job = replacement.submit("return 2;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            assertTrue(job.scriptId() < oldId);
+            replacement.acceptResult(oldId, completed("old output", number("1")));
+            assertEquals(CodeModeJobService.JobState.COMPILING, replacement.get(job.jobId()).orElseThrow().state());
+            replacement.acceptResult(job.scriptId(), completed("new output", number("2")));
+            assertEquals("new output", replacement.get(job.jobId()).orElseThrow().output());
+        }
+    }
 
     @Test
     void recordsExactSourceAndTerminalOutput() throws Exception {

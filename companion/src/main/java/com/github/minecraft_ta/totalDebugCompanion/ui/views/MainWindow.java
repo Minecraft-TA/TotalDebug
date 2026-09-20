@@ -118,7 +118,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
                     if (failure == null || disposed) return;
                     Throwable cause = failure;
                     while (cause.getCause() != null) cause = cause.getCause();
-                    notifications.publish(Severity.ERROR, "Unable to retry indexing", cause.toString(), Source.application("Index"));
+                    notifications.publish(Severity.ERROR, "Unable to refresh index", cause.toString(), Source.application("Index"));
                 })), notifications, editorRuns, this::notificationUnavailable, source -> navigation().navigate(source.target()));
         this.statusBar.setMcpToggle(toggleMcp);
         getContentPane().add(new WorkspacePanel(
@@ -478,7 +478,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         refreshActions();
     }
 
-    @Override public void refreshProjects() { this.projectSelector.refresh(); }
+    @Override public void refreshProjects() { this.projectSelector.refresh(); refreshGameIdentity(); }
 
     @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");

@@ -65,6 +65,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
@@ -84,6 +85,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
     private volatile CompanionMcpServer mcpServer;
+    // Submitted Minecraft scripts may outlive an HTTP server restart.
+    private final AtomicInteger mcpScriptIds = new AtomicInteger(-1);
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
@@ -336,8 +339,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             boolean rebuild = selected.admit(() -> {
                 if (runtimeIndexService.status().phase() != RuntimeIndexService.Phase.READY) return false;
                 if (selected.runtime() == null) return false;
-                closeRuntime();
-                runtimeIndexService.rebuild(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
+                runtimeIndexService.rebuild(selected.profile().dataDirectory(),
+                        selected.runtime().snapshot().isRuntime() ? null : selected.profile().workspaceDirectory());
                 return true;
             });
             if (rebuild) {
@@ -402,7 +405,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
             // a broken debugger/connection cannot detach cleanly.
-            if (mcpServer != null) runCleanup("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            CompanionMcpServer server = mcpServer;
+            if (server != null) runCleanup("Disconnect execution jobs", server::prepareProjectSwitch);
             if (editorRuns != null) editorRuns.disconnected(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
@@ -514,7 +518,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             ProjectScope scope = requireProject();
             CompanionProfile current = scope.profile();
             var previous = scope.runtime();
-            if (previous != null && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
+            if (previous != null && !snapshot.rebuilt() && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
                     && previous.snapshot().signature().equals(snapshot.signature())) {
                 bytecodeSource.close();
                 if (previous.snapshot() != snapshot) snapshot.close();
@@ -610,7 +614,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     private void startMcpServer() throws Exception {
         var jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
-                this::isConnected, this::runtimeContext);
+                this::isConnected, this::runtimeContext, mcpScriptIds);
         startMcpServer(jobs, CompanionMcpServer.MCP_PORT);
     }
 
@@ -760,10 +764,13 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         lastIndexStatus = status;
         synchronized (lifecycleLock) {
             var installed = current == null ? null : current.runtime();
-            boolean failedLocalRefresh = status.phase() == RuntimeIndexService.Phase.FAILED
-                    && status.sourceKind() == IndexIdentity.Kind.LOCAL
-                    && installed != null && !installed.snapshot().isRuntime();
-            if (status.phase() == RuntimeIndexService.Phase.EMPTY || failedLocalRefresh) {
+            boolean staleLocalIndex = false;
+            if (status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.LOCAL
+                    && installed != null && installed.snapshot().localGuard() != null) {
+                try { installed.snapshot().localGuard().checkAll(); }
+                catch (IOException failure) { staleLocalIndex = true; }
+            }
+            if (status.phase() == RuntimeIndexService.Phase.EMPTY || staleLocalIndex) {
                 closeRuntime();
                 onUi(CompanionUi::runtimeChanged);
             }

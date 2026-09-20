@@ -165,9 +165,19 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Stopped", "Stopped"));
             assertTrue(checkbox.isEnabled());
             assertFalse(field(bar, "mcpEndpoint", JButton.class).isVisible());
+            assertFalse(field(bar, "mcpEndpoint", JButton.class).isEnabled());
+            bar.setGameIdentity("Pack", directory, 1);
+            JButton copyDirectory = field(bar, "gameDirectory", JButton.class);
+            copyDirectory.getModel().setArmed(true);
+            copyDirectory.getModel().setPressed(true);
+            bar.setGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Disconnected"));
+            copyDirectory.getModel().setPressed(false);
+            assertFalse(copyDirectory.isEnabled());
             bar.setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.BUILDING, "Building class index", null));
             assertFalse(field(bar, "retry", JButton.class).isEnabled());
             bar.setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.READY, "Ready", null));
+            assertTrue(field(bar, "retry", JButton.class).isEnabled());
+            bar.setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.EMPTY, "No mod archives found", null));
             assertTrue(field(bar, "retry", JButton.class).isEnabled());
         });
     }

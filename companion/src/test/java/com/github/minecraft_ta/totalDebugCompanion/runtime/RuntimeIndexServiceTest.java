@@ -32,6 +32,17 @@ class RuntimeIndexServiceTest {
     @TempDir
     Path temporaryDirectory;
 
+    @Test void forcedRebuildReportsMissingInventoryInsteadOfWaitingForIt() throws Exception {
+        var failed = new CountDownLatch(1);
+        try (var service = new RuntimeIndexService(new Object(), ignored -> { throw new AssertionError("No inventory"); })) {
+            service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
+            service.rebuild(temporaryDirectory, null);
+            assertTrue(failed.await(5, TimeUnit.SECONDS));
+            assertEquals(RuntimeIndexService.Phase.FAILED, service.status().phase());
+            assertNotNull(service.status().failure());
+        }
+    }
+
     @Test void explicitRebuildBypassesValidCacheAndCapturesMetricsBeforeHandoff() throws Exception {
         Path root = temporaryDirectory.resolve("rebuild");
         var paths = new InstancePaths(root);

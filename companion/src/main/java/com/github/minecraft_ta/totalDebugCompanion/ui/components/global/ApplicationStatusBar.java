@@ -160,6 +160,7 @@ public final class ApplicationStatusBar extends JPanel {
         gameContent.add(gameDirectoryRow);
         gameContent.add(gameProcessRow);
         gameDirectoryRow.setVisible(false);
+        gameDirectory.setEnabled(false);
         gameProcessRow.setVisible(false);
         gameStatus.setContent(gameContent);
         add(this.gameStatus);
@@ -263,7 +264,9 @@ public final class ApplicationStatusBar extends JPanel {
                     || status.phase() == RuntimeIndexService.Phase.READY && !status.detail().equals(taskState.getText()));
             if (taskFailure.isVisible()) PopupElements.wrappedText(taskFailure, status.failure() == null ? status.detail() : status.failure().toString(), 320);
             retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry indexing" : "Rebuild index");
-            retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED || status.phase() == RuntimeIndexService.Phase.READY);
+            retry.getAccessibleContext().setAccessibleName(retry.getToolTipText());
+            retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED || status.phase() == RuntimeIndexService.Phase.READY
+                    || status.phase() == RuntimeIndexService.Phase.EMPTY);
             if (taskPopup.isVisible()) taskPopup.pack();
         });
     }
@@ -275,6 +278,7 @@ public final class ApplicationStatusBar extends JPanel {
         if (status.state() != ServiceStatus.State.AVAILABLE) {
             gameName.setText(status.detail());
             gameDirectoryRow.setVisible(false);
+            gameDirectory.setEnabled(false);
             gameProcessRow.setVisible(false);
             gamePath = null;
         }
@@ -288,6 +292,7 @@ public final class ApplicationStatusBar extends JPanel {
         gameDirectory.setText(parent == null ? directory.toString() : "…" + directory.getFileSystem().getSeparator() + parent.getFileName() + directory.getFileSystem().getSeparator() + directory.getFileName());
         gameDirectory.setToolTipText("Copy " + directory);
         gameDirectoryRow.setVisible(true);
+        gameDirectory.setEnabled(true);
         gameProcess.setText(Long.toString(processId));
         gameProcessRow.setVisible(processId > 0);
         gameStatus.refreshPopup();
@@ -302,6 +307,7 @@ public final class ApplicationStatusBar extends JPanel {
         mcpAddress = status.state() == ServiceStatus.State.AVAILABLE ? status.detail() : "";
         mcpEndpoint.setText(mcpAddress);
         mcpEndpoint.setVisible(!mcpAddress.isEmpty());
+        mcpEndpoint.setEnabled(!mcpAddress.isEmpty());
         mcpDetail.setVisible(status.state() == ServiceStatus.State.FAILED || status.state() == ServiceStatus.State.PENDING);
         if (mcpDetail.isVisible()) PopupElements.wrappedText(mcpDetail, status.detail(), 280);
         mcpStatus.refreshPopup();
