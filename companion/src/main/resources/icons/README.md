@@ -78,3 +78,5 @@ File-tree and navigation assets:
 
 `process/step_1..8.svg` is the spinner driven by `AnimatedFlatSVGIcon`. It is still the older
 JetBrains asset and has no dark variant.
+
+Folder actions use JetBrains `expui/actions/newFolder`, `expui/actions/moveToButton`, and `expui/general/edit` for rename, with their matching dark variants.

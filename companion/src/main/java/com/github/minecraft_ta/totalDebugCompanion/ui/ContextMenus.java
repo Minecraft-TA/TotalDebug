@@ -60,8 +60,9 @@ public final class ContextMenus {
 
     public static void installTree(JTree tree, Function<TreePath, JPopupMenu> menu) {
         install(tree, point -> {
-            TreePath path = tree.getPathForLocation(point.x, point.y);
-            if (path == null) return null;
+            TreePath path = tree.getClosestPathForLocation(point.x, point.y);
+            Rectangle row = path == null ? null : tree.getPathBounds(path);
+            if (!tree.contains(point) || row == null || point.y < row.y || point.y >= row.y + row.height) return null;
             if (!tree.isPathSelected(path)) tree.setSelectionPath(path);
             return tree.isPathSelected(path) ? menu.apply(path) : null;
         }, () -> menu.apply(tree.getSelectionPath()), () -> {

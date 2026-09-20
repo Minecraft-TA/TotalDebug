@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import java.io.UncheckedIOException;
+import java.io.IOException;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
@@ -29,7 +31,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFi
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.BasePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.CodeCompletionPopup;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.CreateScriptWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.FileNamePopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
@@ -93,6 +95,15 @@ import javax.swing.tree.TreePath;
 
 /** Applies one named UI state, waits until it is stable, and optionally captures it. */
 final class UiScenarioDriver {
+    private static ScriptView scriptView(MainWindow window, String name) {
+        try {
+            var files = window.editorContext().project().scriptFiles();
+            var path = files.root().resolve(name + ".tdscript");
+            if (!Files.exists(path)) files.create(files.root(), name, false, "");
+            return new ScriptView(window.editorContext(), path);
+        } catch (IOException failure) { throw new UncheckedIOException(failure); }
+    }
+
     private final int READY_POLLS = 2;
     private final int TREE_READY_POLLS = 4;
 
@@ -215,8 +226,7 @@ final class UiScenarioDriver {
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> {
                 selectCodeEditor(context);
                 context.once("new-script", () -> {
-                    var dialog = new CreateScriptWindow(
-                            mainWindow.getEditorTabs(), mainWindow.editorContext(), () -> {});
+                    var dialog = mainWindow.scriptFileActions().creationPopup(mainWindow.editorContext().project().paths().scripts(), false);
                     findComponent(dialog, JTextField.class).setText(
                             scenario == UiRenderScenario.NEW_SCRIPT ? "" : "My Script");
                     dialog.setLocation(mainWindow.getX() + (mainWindow.getWidth() - dialog.getWidth()) / 2,
@@ -225,10 +235,9 @@ final class UiScenarioDriver {
                 });
             }
             case SCRIPT_TOOLBAR -> context.once("script-toolbar", () ->
-                    mainWindow.getEditorTabs().openEditorTab(new ScriptView(
-                            mainWindow.editorContext(), "MyScript")));
+                    mainWindow.getEditorTabs().openEditorTab(scriptView(mainWindow, "MyScript")));
             case SCRIPT_PROBLEMS, SCRIPT_PROBLEMS_OUTDATED -> context.once("script-problems", () -> {
-                var view = new ScriptView(mainWindow.editorContext(), "ProblemExample");
+                var view = scriptView(mainWindow, "ProblemExample");
                 mainWindow.getEditorTabs().openEditorTab(view);
                 var panel = (ScriptPanel) view.getComponent();
                 var editor = findComponent(panel, RSyntaxTextArea.class);
@@ -413,7 +422,7 @@ final class UiScenarioDriver {
             }
             case EVALUATE_CODE, EVALUATE_EXPRESSION -> context.once("open-evaluate", () -> {
                 var window = new EvaluateExpressionWindow(
-                        mainWindow, null, mainWindow.editorContext(), mainWindow::refreshRuntimeSources); // This fixture renders the editor without an execution backend.
+                        mainWindow, null, mainWindow.editorContext(), mainWindow.scriptFileActions()); // This fixture renders the editor without an execution backend.
                 var editor = findComponent(window, JavaExpressionField.class);
                 editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
                         ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
@@ -548,7 +557,7 @@ final class UiScenarioDriver {
             case SIGNATURE_HELP -> Arrays.stream(mainWindow.getOwnedWindows())
                     .anyMatch(window -> window instanceof SignatureHelpPopup && window.isShowing());
             case NEW_SCRIPT, NEW_SCRIPT_INVALID -> Arrays.stream(mainWindow.getOwnedWindows())
-                    .anyMatch(window -> window instanceof CreateScriptWindow
+                    .anyMatch(window -> window instanceof FileNamePopup
                             && window.isShowing());
             case SCRIPT_TOOLBAR -> mainWindow.getEditorTabs().getSelectedEditor()
                     instanceof ScriptView;

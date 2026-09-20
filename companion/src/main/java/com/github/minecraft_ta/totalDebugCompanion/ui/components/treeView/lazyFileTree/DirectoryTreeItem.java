@@ -10,6 +10,9 @@ public abstract class DirectoryTreeItem extends TreeItem {
 
     public abstract List<TreeItem> loadChildren();
 
+    /** An empty snapshot lets a new node omit the lazy-loading placeholder. */
+    boolean isInitiallyEmpty() { return false; }
+
     @Override
     public final boolean isDirectory() {
         return true;

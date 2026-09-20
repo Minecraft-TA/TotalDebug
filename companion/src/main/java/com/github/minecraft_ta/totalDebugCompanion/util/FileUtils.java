@@ -5,47 +5,61 @@ import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
-public class FileUtils {
+/** Shares one watcher thread across materialized directories; subscriptions own their registrations. */
+public final class FileUtils {
+    private static WatchService service;
+    private static final Map<WatchKey, Set<Runnable>> listeners = new HashMap<>();
 
-    public static Runnable startNewDirectoryWatcher(Path directory, Runnable onChange) {
+    public static synchronized Runnable startNewDirectoryWatcher(Path directory, Runnable onChange) {
         try {
-            var watchService = FileSystems.getDefault().newWatchService();
-            directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE);
-
-            Thread watcherThread = new Thread(() -> {
-                while (!Thread.currentThread().isInterrupted()) {
-                    try {
-                        var key = watchService.take();
-
-                        if (key.pollEvents().stream()
-                                .anyMatch(e -> e.kind() != StandardWatchEventKinds.OVERFLOW &&
-                                               e.kind() != StandardWatchEventKinds.ENTRY_MODIFY)) {
-                            onChange.run();
-                        }
-
-                        if (!key.reset())
-                            break;
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    } catch (ClosedWatchServiceException ignored) {
-                        break;
-                    }
-                }
-            }, "directory-watcher-" + directory.getFileName());
-            watcherThread.setDaemon(true);
-            watcherThread.start();
-            return () -> {
-                try {
-                    watchService.close();
-                } catch (IOException ignored) {
-                }
-                watcherThread.interrupt();
-            };
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to watch directory " + directory, e);
-        }
+            if (service == null) {
+                service = FileSystems.getDefault().newWatchService();
+                WatchService current = service;
+                Thread thread = new Thread(() -> watch(current), "directory-watcher");
+                thread.setDaemon(true);
+                thread.start();
+            }
+            WatchKey key = directory.register(service, StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_DELETE);
+            listeners.computeIfAbsent(key, ignored -> new HashSet<>()).add(onChange);
+            return () -> unsubscribe(key, onChange);
+        } catch (IOException failure) { throw new IllegalStateException("Unable to watch directory " + directory, failure); }
     }
 
+    private static void watch(WatchService current) {
+        try {
+            while (true) {
+                WatchKey key = current.take();
+                boolean changed = !key.pollEvents().isEmpty();
+                Set<Runnable> callbacks;
+                synchronized (FileUtils.class) { callbacks = Set.copyOf(listeners.getOrDefault(key, Set.of())); }
+                if (changed) callbacks.forEach(callback -> {
+                    try { callback.run(); }
+                    catch (RuntimeException failure) { System.getLogger(FileUtils.class.getName()).log(System.Logger.Level.WARNING, "Directory refresh failed", failure); }
+                });
+                key.reset();
+            }
+        } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        catch (ClosedWatchServiceException ignored) { }
+    }
+
+    private static synchronized void unsubscribe(WatchKey key, Runnable callback) {
+        var callbacks = listeners.get(key);
+        if (callbacks == null) return;
+        callbacks.remove(callback);
+        if (!callbacks.isEmpty()) return;
+        listeners.remove(key);
+        key.cancel();
+        if (listeners.isEmpty() && service != null) {
+            try { service.close(); } catch (IOException ignored) { }
+            service = null;
+        }
+    }
 }

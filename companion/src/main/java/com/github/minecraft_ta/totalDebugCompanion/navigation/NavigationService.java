@@ -457,6 +457,14 @@ public final class NavigationService {
         });
     }
 
+    public CompletableFuture<Void> relocatePreview(IEditorPanel previous, Path path) {
+        IEditorPanel replacement = path.getFileName().toString().endsWith(ScriptView.FILE_EXTENSION)
+                ? new ScriptView(editors.get(), path)
+                : path.getFileName().toString().endsWith(".java") ? new CodeView(editors.get(), path, 0)
+                : new ResourceView(editors.get(), new LocalFileSource(path), null);
+        return tabs.replacePreview(previous, replacement);
+    }
+
     private CompletableFuture<Void> openLocalFile(NavigationTarget.LocalFile target, Activation activation) {
         Path path = target.path();
         if (!Files.isRegularFile(path)) {
@@ -464,13 +472,13 @@ public final class NavigationService {
         }
         String fileName = path.getFileName().toString();
         Path scripts = requireProject().paths().scripts().toAbsolutePath().normalize();
-        if (path.getParent().equals(scripts)
+        if (path.startsWith(scripts) && !path.equals(scripts)
                 && fileName.endsWith(ScriptView.FILE_EXTENSION)) {
             String scriptName = fileName.substring(0, fileName.length() - ScriptView.FILE_EXTENSION.length());
             return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                     ScriptView.class,
-                    view -> view.getTitle().equals(fileName),
-                    () -> new ScriptView(editors.get(), scriptName)
+                    view -> view.getPath().equals(path),
+                    () -> new ScriptView(editors.get(), path)
             ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
         }
         if (fileName.endsWith(".java")) {
@@ -576,6 +584,10 @@ public final class NavigationService {
             try {
                 if (!isCurrent(context)) {
                     result.completeExceptionally(new CancellationException("Project changed"));
+                    return;
+                }
+                if (window.scriptFileActions().isBusy()) {
+                    result.completeExceptionally(new IllegalStateException("Wait for the file operation to finish before navigating."));
                     return;
                 }
                 operation.get().whenComplete((ignored, failure) -> {

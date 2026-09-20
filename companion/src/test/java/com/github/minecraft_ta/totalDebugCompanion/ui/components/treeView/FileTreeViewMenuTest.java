@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
 import org.junit.jupiter.api.Test;
@@ -30,23 +29,22 @@ class FileTreeViewMenuTest {
             List<NavigationTarget> opened = new ArrayList<>();
             var view = new FileTreeView(() -> null, opened::add);
             var tree = (LazyFileJTree) view.getViewport().getView();
-            var sourceMenu = view.createContextMenu(new DecompiledSourcesTreeItem.SourceItem("example.Test"), opened::add);
+            var sourceMenu = view.createContextMenu(new DecompiledSourcesTreeItem.SourceItem("example.Test"));
             assertEquals("example.Test", item(sourceMenu, "Copy reference").getActionCommand());
-            assertSame(Icons.JUMP_TO_SOURCE, item(sourceMenu, "Open source").getIcon());
-            item(sourceMenu, "Open source").doClick(0);
-            assertEquals(List.of(new NavigationTarget.RuntimeClass("example.Test")), opened);
-            var fileMenu = view.createContextMenu(tree.getItemFactory().createFileSystemFileItem(file), opened::add);
+            assertEquals(1, sourceMenu.getComponentCount());
+            assertTrue(opened.isEmpty());
+            var fileMenu = view.createContextMenu(tree.getItemFactory().createFileSystemFileItem(file));
             assertEquals(file.toString(), item(fileMenu, "Copy path").getActionCommand());
-            assertNotNull(item(fileMenu, "Delete file"));
-            var folderMenu = view.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(directory, false), opened::add);
+            assertEquals(1, fileMenu.getComponentCount(), "Unowned local files remain read-only");
+            var folderMenu = view.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(directory, false));
             assertEquals(1, folderMenu.getComponentCount());
             assertEquals(directory.toString(), item(folderMenu, "Copy path").getActionCommand());
             var root = new ZipFileRootItem(archive);
-            assertEquals(archive.toString(), item(view.createContextMenu(root, opened::add), "Copy path").getActionCommand());
-            var entryMenu = view.createContextMenu(root.loadChildren().getFirst(), opened::add);
+            assertEquals(archive.toString(), item(view.createContextMenu(root), "Copy path").getActionCommand());
+            var entryMenu = view.createContextMenu(root.loadChildren().getFirst());
             assertEquals("Test", item(entryMenu, "Copy reference").getActionCommand());
             assertEquals(archive + "!/Test.class", item(entryMenu, "Copy path").getActionCommand());
-            assertEquals(0, view.createContextMenu(null, opened::add).getComponentCount());
+            assertEquals(0, view.createContextMenu(null).getComponentCount());
         });
     }
 

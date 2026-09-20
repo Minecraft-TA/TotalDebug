@@ -10,42 +10,61 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomIn
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
+import java.util.stream.StreamSupport;
+import java.util.concurrent.CompletableFuture;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 
 public class ScriptView implements IEditorPanel {
     public static final String FILE_EXTENSION = ".tdscript";
 
     private final EditorContext context;
     private final String text;
-    private final Path path;
+    private Path path;
+    private ScriptFiles.Version version;
+    private final String compilationName;
+    private final String editorKey = "script-editor-" + UUID.randomUUID();
+    private boolean fileOperation;
+    private boolean deleted;
+
+    public String compilationName() { return compilationName; }
+    public String editorKey() { return editorKey; }
+    public boolean fileOperation() { return fileOperation; }
+    public void setFileOperation(boolean value) {
+        fileOperation = value;
+        if (scriptPanel != null) scriptPanel.setFileOperation(value);
+    }
+    public String currentText() { return scriptPanel == null ? text : scriptPanel.sourceText(); }
+    public CompletableFuture<Void> pendingSave() { return scriptPanel == null ? CompletableFuture.completedFuture(null) : scriptPanel.pendingSave(); }
+    public boolean isRunning() { return scriptPanel != null && scriptPanel.isRunning(); }
+    public void persist(String contents) throws IOException {
+        version = context.project().scriptFiles().save(path, contents, version);
+    }
+    public void relocated(Path from, Path to) { path = ScriptFiles.relocated(path, from, to); }
+    public void deleted() { deleted = true; }
+    public void discardOnClose() { deleted = true; }
+    public void edited() { deleted = false; }
+    public void saved(String contents) { if (scriptPanel != null) scriptPanel.saved(contents); }
+
     protected ScriptPanel scriptPanel;
 
-    public ScriptView(EditorContext context, String scriptName) {
+    public ScriptView(EditorContext context, Path path) {
         this.context = context;
-        if (!JavaSnippetSource.isValidClassName(scriptName)) {
-            throw new IllegalArgumentException("Invalid script name: " + scriptName);
-        }
-        if (context.project() == null) {
-            throw new IllegalStateException("Open a Minecraft profile before creating scripts");
-        }
-        this.path = context.project().paths().scripts().resolve(scriptName + FILE_EXTENSION);
+        if (context.project() == null) throw new IllegalStateException("Open a project before opening scripts");
         try {
-            Files.createDirectories(this.path.getParent());
-            if (!Files.exists(this.path)) {
-                this.text = "";
-                com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(this.path, this.text);
-            } else {
-                this.text = Files.readString(this.path);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+            this.path = context.project().scriptFiles().resolve(path);
+            this.compilationName = getScriptName();
+            if (!JavaSnippetSource.isValidClassName(compilationName)) throw new IOException("Invalid script name: " + compilationName);
+            var loaded = context.project().scriptFiles().read(this.path);
+            this.text = loaded.text();
+            this.version = loaded.version();
+        } catch (IOException failure) { throw new IllegalStateException(failure.getMessage(), failure); }
     }
 
     @Override
     public boolean canClose() {
-        return this.scriptPanel == null || this.scriptPanel.canSave();
+        return !fileOperation && (deleted || this.scriptPanel == null || this.scriptPanel.canSave());
     }
 
     public String getSourceText() {
@@ -72,7 +91,7 @@ public class ScriptView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return null;
+        return context.project().scriptFiles().root().relativize(path).toString();
     }
 
     @Override
@@ -89,7 +108,7 @@ public class ScriptView implements IEditorPanel {
 
     @Override
     public EditorLocation getLocation() {
-        return new EditorLocation("Scripts", java.util.List.of(this.path.getFileName().toString()), this.path.toString());
+        return new EditorLocation("Scripts", StreamSupport.stream(context.project().scriptFiles().root().relativize(path).spliterator(), false).map(Path::toString).toList(), this.path.toString());
     }
 
     @Override

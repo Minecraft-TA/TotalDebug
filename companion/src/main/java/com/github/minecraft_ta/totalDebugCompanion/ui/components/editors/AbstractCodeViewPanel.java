@@ -15,6 +15,8 @@ import javax.swing.event.CaretListener;
 import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.nio.file.Path;
 
 /** Java-specific parsing and navigation layered on top of the shared text editor. */
 public class AbstractCodeViewPanel extends AbstractTextViewPanel implements JavaEditorContext {
@@ -33,12 +35,17 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
             String className,
             Function<String, JavaEditorSource> sourceFactory, boolean diagnostics
     ) {
+        this(context, identifier, className, sourceFactory, diagnostics, () -> Path.of(identifier));
+    }
+
+    protected AbstractCodeViewPanel(EditorContext context, String identifier, String className,
+                                    Function<String, JavaEditorSource> sourceFactory, boolean diagnostics, Supplier<Path> sourcePath) {
         super();
         this.context = context;
         installNavigationHistoryMenu(context.navigation());
         this.identifier = identifier;
 
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, sourcePath, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
         this.analysis = new JavaEditorAnalysis(editorPane, context.astCache(), identifier, className,
                 sourceFactory, context.analysisExecutor(), diagnostics);

@@ -25,6 +25,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -349,6 +350,20 @@ class EditorTabsTest {
         return null;
     }
 
+    @Test void closeResolvesEditorIdentityAfterReentrantSaveCompletion() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var tabs = new EditorTabs();
+            var first = new TestEditor(); var closing = new TestEditor(); var kept = new TestEditor();
+            tabs.openEditorTab(first); tabs.openEditorTab(closing); tabs.openEditorTab(kept);
+            closing.beforeClose = () -> tabs.closeMatching(view -> view == first);
+            tabs.removeTabAt(1);
+            assertEquals(List.of(kept), tabs.editors());
+            assertTrue(first.disposed); assertTrue(closing.disposed); assertFalse(kept.disposed);
+            tabs.closeMatching(view -> true);
+            tabs.analysisExecutor().shutdownNow();
+        });
+    }
+
     private static final class TestEditor implements IEditorPanel {
         private final JPanel panel = new JPanel();
         private final CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -356,7 +371,8 @@ class EditorTabsTest {
         private boolean canClose = true;
         private EditorLocation location = EditorLocation.empty();
 
-        @Override public boolean canClose() { return this.canClose; }
+        private Runnable beforeClose = () -> {};
+        @Override public boolean canClose() { var action = beforeClose; beforeClose = () -> {}; action.run(); return this.canClose; }
         @Override public EditorLocation getLocation() { return this.location; }
 
         @Override

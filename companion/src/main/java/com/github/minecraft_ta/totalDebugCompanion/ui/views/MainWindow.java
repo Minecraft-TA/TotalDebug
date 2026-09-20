@@ -30,6 +30,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.Workspac
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeViewHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -49,6 +50,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     private final EditorTabs editorTabs = new EditorTabs();
     private final FileTreeView fileTreeView;
+    private final ScriptFileActions scriptFileActions;
+    public ScriptFileActions scriptFileActions() { return scriptFileActions; }
     private final NavigationService navigationService;
     private final JMenu scriptMenu = new JMenu("Script");
     private final ProjectSelector projectSelector;
@@ -91,6 +94,8 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
         this.fileTreeView = new FileTreeView(project, target -> navigation().navigate(target));
         this.navigationService = new NavigationService(this, this.editorTabs, this.fileTreeView, project.get(), this::editorContext);
+        this.scriptFileActions = new ScriptFileActions(this, editorTabs, fileTreeView, this::editorContext);
+        this.fileTreeView.setFileActions(scriptFileActions);
         this.statusBar = new ApplicationStatusBar(target -> this.navigationService.navigate(target), () ->
                 projects.retryIndex().whenComplete((ignored, failure) -> UIUtils.onEdt(() -> {
                     if (failure == null || disposed) return;
@@ -133,12 +138,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
-                var window = new CreateScriptWindow(editorTabs, editorContext(), fileTreeView::refreshScripts);
-                window.setLocationRelativeTo(MainWindow.this);
-                window.setVisible(true);
+                scriptFileActions.newScript();
             }
         };
         this.scriptMenu.add(this.newScriptAction);
+        this.scriptMenu.add(new AbstractAction("New Folder", Icons.NEW_FOLDER) {
+            @Override public void actionPerformed(ActionEvent event) { scriptFileActions.newFolder(); }
+        });
         menuBar.add(this.scriptMenu);
         menuBar.add(Box.createHorizontalGlue());
         this.debuggerActions = new DebuggerActions(debugger);
@@ -184,6 +190,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         if (!disposed) {
             disposed = true;
             projectSelector.dispose();
+            fileTreeView.dispose();
             debugger.removeListener(debuggerListener);
             debuggerActions.close();
             debuggerShortcuts.close();
@@ -198,7 +205,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         super.dispose();
     }
 
-    @Override public boolean canExit() { return editorTabs.canCloseAll(); }
+    @Override public boolean canExit() { return !scriptFileActions.isBusy() && editorTabs.canCloseAll(); }
     @Override public void setSwitching(boolean switching) {
         setEnabled(!switching);
         this.projectSelector.refresh();
@@ -321,7 +328,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             this.snippetExecutions = new SnippetExecutionService(session, scripts, project.get());
         }
         if (this.evaluateExpressionWindow == null) {
-            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this.fileTreeView::refreshScripts);
+            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this.scriptFileActions);
         }
         return this.evaluateExpressionWindow;
     }
@@ -444,7 +451,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
-        if (!this.editorTabs.canCloseAll()) return false;
+        if (scriptFileActions.isBusy() || !this.editorTabs.canCloseAll()) return false;
         setEnabled(false);
         return true;
     }

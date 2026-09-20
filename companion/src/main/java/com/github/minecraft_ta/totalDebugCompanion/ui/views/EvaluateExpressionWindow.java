@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -9,7 +9,6 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
@@ -28,7 +27,6 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -43,9 +41,6 @@ import java.awt.Frame;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -91,14 +86,14 @@ public final class EvaluateExpressionWindow extends JDialog {
     private boolean cancelPending;
 
     private final EditorContext editorContext;
-    private final Runnable refreshSources;
+    private final ScriptFileActions scriptFiles;
 
-    public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, Runnable refreshSources) {
+    public EvaluateExpressionWindow(Frame owner, SnippetExecutionService executions, EditorContext editorContext, ScriptFileActions scriptFiles) {
         super(owner, "Evaluate Expression", false);
         ContextMenus.installOutput(this.output, "Copy output");
         ContextMenus.installOutput(this.problems, "Copy all");
         this.editorContext = editorContext;
-        this.refreshSources = refreshSources;
+        this.scriptFiles = scriptFiles;
         this.executions = executions;
         this.history = editorContext.project().state().expressionHistory();
         configureInput();
@@ -410,39 +405,13 @@ public final class EvaluateExpressionWindow extends JDialog {
         if (requested.isEmpty()) {
             return;
         }
-        String name = JOptionPane.showInputDialog(this, "Script name:", "Save as Script",
-                JOptionPane.PLAIN_MESSAGE);
-        if (name == null) {
-            return;
-        }
-        name = name.trim();
-        if (!JavaSnippetSource.isValidClassName(name)) {
-            JOptionPane.showMessageDialog(this, "Enter a valid Java identifier.",
-                    "Invalid script name", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-        Path path = editorContext.project().paths().scripts().resolve(name + ScriptView.FILE_EXTENSION);
-        if (Files.exists(path)) {
-            JOptionPane.showMessageDialog(this, "A script with that name already exists.",
-                    "Script exists", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
         StringBuilder source = new StringBuilder();
         for (String imported : this.expressionSupport.imports()) {
             source.append("import ").append(imported).append(";\n");
         }
         if (JavaSnippetSource.detectMode(requested) == JavaSnippetSource.Mode.BODY) source.append(requested).append(System.lineSeparator());
         else source.append("return ").append(requested).append(';').append(System.lineSeparator());
-        try {
-            Files.createDirectories(path.getParent());
-            com.github.minecraft_ta.totaldebug.storage.AtomicFiles.createNewString(path, source.toString());
-        } catch (IOException exception) {
-            JOptionPane.showMessageDialog(this, exception.getMessage(),
-                    "Unable to save script", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-        refreshSources.run();
-        editorContext.navigation().navigate(new NavigationTarget.LocalFile(path));
+        scriptFiles.saveAsScript(source.toString());
     }
 
     private void applyTheme() {

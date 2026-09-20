@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 public class CustomJavaLinkGenerator implements LinkGenerator {
 
@@ -33,16 +34,14 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
     private final IntFunction<String> ownerClassResolver;
     private final BiConsumer<String, String> packageNavigator;
     private final Consumer<NavigationTarget> navigator;
-    private final Path sourcePath;
+    private final Supplier<Path> sourcePath;
+    private final String identifier;
 
-    public CustomJavaLinkGenerator(ASTCache cache, String identifier, BiConsumer<String, String> packageNavigator, Consumer<NavigationTarget> navigator) {
-        this(
-                cache, offset -> JavaSymbolResolver.selectElement(cache, identifier, offset),
+    public CustomJavaLinkGenerator(ASTCache cache, String identifier, Supplier<Path> sourcePath,
+                                   BiConsumer<String, String> packageNavigator, Consumer<NavigationTarget> navigator) {
+        this(cache, offset -> JavaSymbolResolver.selectElement(cache, identifier, offset),
                 offset -> JavaSymbolResolver.navigationOwnerClass(cache, identifier, offset),
-                packageNavigator,
-                Path.of(identifier),
-                navigator
-        );
+                packageNavigator, sourcePath, navigator, identifier);
     }
 
     CustomJavaLinkGenerator(
@@ -62,6 +61,13 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
             Path sourcePath,
             Consumer<NavigationTarget> navigator
     ) {
+        this(cache, elementResolver, ownerClassResolver, packageNavigator, () -> sourcePath, navigator, sourcePath.toString());
+    }
+
+    private CustomJavaLinkGenerator(ASTCache cache, ElementResolver elementResolver, IntFunction<String> ownerClassResolver,
+                                    BiConsumer<String, String> packageNavigator, Supplier<Path> sourcePath,
+                                    Consumer<NavigationTarget> navigator, String identifier) {
+        this.identifier = identifier;
         this.cache = cache;
         this.elementResolver = Objects.requireNonNull(elementResolver, "elementResolver");
         this.ownerClassResolver = Objects.requireNonNull(ownerClassResolver, "ownerClassResolver");
@@ -102,14 +108,14 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
 
         public LinkResult(IJavaElement el, int navigationOffset, int sourceOffset) {
             this.el = el;
-            this.snapshot = cache.getSnapshot(sourcePath.toString());
+            this.snapshot = cache.getSnapshot(identifier);
             this.navigationOffset = navigationOffset;
             this.sourceOffset = sourceOffset;
         }
 
         @Override
         public HyperlinkEvent execute() {
-            if (cache.getSnapshot(sourcePath.toString()) != snapshot) return null;
+            if (cache.getSnapshot(identifier) != snapshot) return null;
             try {
                 if (el instanceof LocalVariable || el instanceof SourceMethod || el instanceof SourceField || el instanceof SourceType) {
                     var sourceRange = switch (el) {
@@ -131,7 +137,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                         return null;
                     }
                     navigator.accept(new NavigationTarget.LocalFile(
-                            sourcePath,
+                            sourcePath.get(),
                             editorOffset
                     ));
                     return null;
@@ -170,7 +176,7 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
         private void navigateResolvedSymbol() throws JavaModelException {
             JavaSymbolResolver.Resolution resolution = JavaSymbolResolver.resolve(
                     cache,
-                    sourcePath.toString(),
+                    identifier,
                     this.navigationOffset
             );
             if (resolution.symbol() == null) {

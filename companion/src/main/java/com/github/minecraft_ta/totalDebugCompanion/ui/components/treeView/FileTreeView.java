@@ -25,6 +25,23 @@ import java.util.function.Consumer;
 
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
+    private ScriptFileActions fileActions;
+    LazyFileJTree tree() { return tree; }
+    public void setFileActions(ScriptFileActions actions) { fileActions = actions; }
+    public CompletableFuture<Void> refreshDirectory(Path parent) {
+        if (parent == null) return CompletableFuture.completedFuture(null);
+        var scope = project.get();
+        var root = (LazyTreeNode) tree.getModel().getRoot();
+        boolean scriptsPresent = false;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
+            if (scope != null && item instanceof FileSystemDirectoryItem folder && folder.getPath().equals(scope.paths().scripts())) scriptsPresent = true;
+        }
+        if (!scriptsPresent) reloadProfile();
+        return tree.refreshDirectory(parent);
+    }
+    public void dispose() { tree.setRootNodes(); }
+
 
     private final Supplier<ProjectScope> project;
     private ProjectScope displayedProject;
@@ -36,7 +53,7 @@ public class FileTreeView extends JScrollPane {
 
         this.tree = new LazyFileJTree();
         ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
-                ? node.getUserObject() : null, navigator));
+                ? node.getUserObject() : null));
 
         this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
@@ -109,26 +126,22 @@ public class FileTreeView extends JScrollPane {
         }
     }
 
-    JPopupMenu createContextMenu(TreeItem item, Consumer<NavigationTarget> navigator) {
+    JPopupMenu createContextMenu(TreeItem item) {
         JPopupMenu menu = new JPopupMenu();
         if (item == null) return menu;
         String reference = reference(item);
         String location = location(item);
-        if (!item.isDirectory()) {
-            JMenuItem open = new JMenuItem("Open source", Icons.JUMP_TO_SOURCE);
-            open.addActionListener(event -> openItem(item, navigator));
-            menu.add(open);
+        Path path = item instanceof FileSystemFileItem file ? file.getPath()
+                : item instanceof FileSystemDirectoryItem folder ? folder.getPath() : null;
+        if (fileActions != null && fileActions.managed(path)) {
+            fileActions.addMenu(menu, path);
+            return menu;
         }
         if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
         if (location != null && !location.isBlank()) {
             Action copyPath = ContextMenus.copyAction("Copy path", location);
             if (reference == null) ContextMenus.defaultCopy(copyPath);
             menu.add(copyPath);
-        }
-        if (item instanceof FileSystemFileItem) {
-            JMenuItem delete = new JMenuItem("Delete file", Icons.DELETE);
-            delete.addActionListener(event -> this.tree.deleteSelectedItems());
-            menu.add(delete);
         }
         return menu;
     }

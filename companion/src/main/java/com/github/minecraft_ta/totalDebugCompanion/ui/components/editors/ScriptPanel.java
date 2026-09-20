@@ -27,7 +27,6 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
-import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 
 import org.eclipse.jdt.core.ToolFactory;
 import org.eclipse.jdt.core.formatter.CodeFormatter;
@@ -47,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import javax.swing.*;
@@ -129,9 +129,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     public ScriptPanel(EditorContext context, ScriptView scriptView) {
         super(
-                context, scriptView.getPath().toString(),
-                scriptView.getScriptName(),
-                text -> JavaSnippetSource.body(scriptView.getScriptName(), text).editorSource(), true
+                context, scriptView.editorKey(),
+                scriptView.compilationName(),
+                text -> JavaSnippetSource.body(scriptView.compilationName(), text).editorSource(), true, scriptView::getPath
         );
         this.scriptView = scriptView;
         this.codeCompletionPopup = new CodeCompletionPopup(context.owner());
@@ -152,14 +152,14 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setHeaderComponent(headerBar);
 
         this.editorPane.getDocument().addDocumentListener((DocumentChangeListener) event -> {
-            if (!disposed && event.getType() != DocumentEvent.EventType.CHANGE) problemsPanel.refreshSourceState();
+            if (!disposed && event.getType() != DocumentEvent.EventType.CHANGE) { scriptView.edited(); problemsPanel.refreshSourceState(); }
         });
         this.editorPane.setText(scriptView.getSourceText());
         this.editorPane.getActionMap().put(DefaultEditorKit.deletePrevCharAction, new CustomDeletePrevCharAction());
 
         setupLogPanel();
         setupSaveBehavior();
-        this.completion = new ScriptCompletionController(editorPane, scriptView.getScriptName(), codeCompletionPopup,
+        this.completion = new ScriptCompletionController(editorPane, scriptView.compilationName(), codeCompletionPopup,
                 ForkJoinPool.commonPool(), analysis::completionAccepted);
         setupSignatureHelp();
         setupFormatting();
@@ -217,7 +217,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         JavaSnippetSource.GeneratedSource generated;
         try {
             generated = JavaSnippetSource.body(
-                    this.scriptView.getScriptName(),
+                    this.scriptView.compilationName(),
                     UIUtils.getText(this.editorPane)
             );
             generated.requireExecutableSize();
@@ -246,8 +246,8 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     }
 
     private void setRunButtonsState(boolean state) {
-        this.runButton.setEnabled(state);
-        this.runServerButton.setEnabled(state);
+        this.runButton.setEnabled(state && !scriptView.fileOperation());
+        this.runServerButton.setEnabled(state && !scriptView.fileOperation());
         this.stopButton.setEnabled(!state);
     }
 
@@ -370,6 +370,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
 
     private Timer saveTimer;
     private String savedText;
+    private CompletableFuture<Void> saveTail = CompletableFuture.completedFuture(null);
 
     private void setupSaveBehavior() {
         this.savedText = this.scriptView.getSourceText();
@@ -431,7 +432,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
             public void actionPerformed(ActionEvent e) {
                 String editorText = UIUtils.getText(editorPane);
                 JavaSnippetSource.GeneratedSource generated = JavaSnippetSource.body(
-                        scriptView.getScriptName(),
+                        scriptView.compilationName(),
                         editorText
                 );
                 int bodyOffset = generated.sourceMap().editorBodyOffset();
@@ -481,10 +482,10 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private void requestSignatureHelp() {
         if (disposed || !signatureHelpActive) return;
         long request = ++signatureRequest;
-        var generated = JavaSnippetSource.body(scriptView.getScriptName(), UIUtils.getText(editorPane));
+        var generated = JavaSnippetSource.body(scriptView.compilationName(), UIUtils.getText(editorPane));
         int caret = generated.sourceMap().toGeneratedOffset(editorPane.getCaretPosition());
         if (caret < 0) { hideSignatureHelp(); return; }
-        CompletableFuture.supplyAsync(() -> SignatureHelp.find(scriptView.getScriptName(), generated.source(), caret))
+        CompletableFuture.supplyAsync(() -> SignatureHelp.find(scriptView.compilationName(), generated.source(), caret))
                 .whenComplete((help, failure) -> SwingUtilities.invokeLater(() -> {
                     if (disposed || request != signatureRequest || !signatureHelpActive || !editorPane.isFocusOwner()) return;
                     if (failure != null) LOGGER.log(System.Logger.Level.WARNING, "Unable to load parameter information", failure);
@@ -509,28 +510,60 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         super.dispose();
     }
 
-    public boolean canSave() {
-        this.saveTimer.stop();
-        return saveScript();
+    public String sourceText() { return UIUtils.getText(editorPane); }
+    public boolean isRunning() { return stopButton.isEnabled(); }
+    public void saved(String contents) { savedText = contents; }
+    public CompletableFuture<Void> pendingSave() { return saveTail; }
+    public void setFileOperation(boolean value) {
+        saveTimer.stop();
+        editorPane.setEditable(!value);
+        runButton.setEnabled(!value && !isRunning());
+        runServerButton.setEnabled(!value && !isRunning());
+        if (!value && !sourceText().equals(savedText)) saveTimer.restart();
     }
 
-    private boolean saveScript() {
-        if (!SwingUtilities.isEventDispatchThread()) {
-            throw new IllegalStateException("Script saves must capture editor text on the EDT");
-        }
-        String text = UIUtils.getText(this.editorPane);
-        if (text.equals(this.savedText)) {
-            return true;
-        }
-        try {
-            AtomicFiles.writeString(this.scriptView.getPath(), text);
-            this.savedText = text;
-            return true;
-        } catch (IOException exception) {
-            JOptionPane.showMessageDialog(this, "Unable to save " + this.scriptView.getPath()
-                    + "\n" + exception.getMessage(), "Script save failed", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
+    public boolean canSave() {
+        if (scriptView.fileOperation()) return false;
+        saveTimer.stop();
+        var saved = saveScript();
+        if (saved.isDone()) return saved.getNow(false) || confirmDiscard();
+        // Existing window/tab close checks are synchronous. Pump EDT events while disk work finishes.
+        var loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+        scriptView.setFileOperation(true);
+        saved.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(loop::exit));
+        loop.enter();
+        scriptView.setFileOperation(false);
+        return saved.getNow(false) || confirmDiscard();
+    }
+
+    private boolean confirmDiscard() {
+        boolean discard = JOptionPane.showOptionDialog(this, "Discard unsaved changes to " + scriptView.getTitle() + "?",
+                "Close script", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null,
+                new String[]{"Keep editing", "Discard changes and close"}, "Keep editing") == 1;
+        if (discard) scriptView.discardOnClose();
+        return discard;
+    }
+
+    private CompletableFuture<Boolean> saveScript() {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Capture script text on the EDT");
+        if (scriptView.fileOperation() || disposed) return CompletableFuture.completedFuture(false);
+        String text = sourceText();
+        if (text.equals(savedText) && saveTail.isDone()) return CompletableFuture.completedFuture(true);
+        var result = new CompletableFuture<Boolean>();
+        var write = saveTail.handle((ignored, failure) -> null).thenRunAsync(() -> {
+            try { scriptView.persist(text); }
+            catch (IOException failure) { throw new CompletionException(failure); }
+        });
+        var published = new CompletableFuture<Void>();
+        saveTail = published;
+        write.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
+            if (failure == null) savedText = text;
+            else if (!disposed) JOptionPane.showMessageDialog(this, "Unable to save " + scriptView.getPath()
+                    + "\n" + failure.getCause().getMessage(), "Script save failed", JOptionPane.ERROR_MESSAGE);
+            if (failure == null) published.complete(null); else published.completeExceptionally(failure);
+            result.complete(failure == null);
+        }));
+        return result;
     }
 
     private static class CustomDeletePrevCharAction extends TextAction {

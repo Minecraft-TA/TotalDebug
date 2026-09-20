@@ -24,7 +24,7 @@ class ThemeListenerDisposalTest {
                 app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game" + i)))).get(3, TimeUnit.SECONDS);
                 SwingUtilities.invokeAndWait(() -> {
                     var window = app.createWindow();
-                    new EvaluateExpressionWindow(window, null, window.editorContext(), () -> { });
+                    new EvaluateExpressionWindow(window, null, window.editorContext(), window.scriptFileActions());
                 });
             }
             SwingUtilities.invokeAndWait(() -> assertEquals(baseline.get(), ThemeManager.listenerCount(),

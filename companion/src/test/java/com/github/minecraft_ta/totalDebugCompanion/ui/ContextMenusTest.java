@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.event.ActionEvent;
+import java.awt.Component;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,31 +38,38 @@ class ContextMenusTest {
             JTree tree = new JTree(root);
             tree.setRootVisible(false);
             List<String> copied = new ArrayList<>();
+            List<JPopupMenu> shown = new ArrayList<>();
             ContextMenus.installTree(tree, path -> {
-                JPopupMenu menu = new JPopupMenu();
+                JPopupMenu menu = new JPopupMenu() {
+                    @Override public void show(Component invoker, int x, int y) { shown.add(this); }
+                };
                 if (path != null) menu.add(ContextMenus.defaultCopy(ContextMenus.action("Copy value", null, null,
                         () -> copied.add(path.getLastPathComponent().toString()))));
                 return menu;
             });
-            JFrame window = new JFrame();
-            try {
-                window.add(tree);
-                window.setSize(400, 300);
-                window.setVisible(true);
-                tree.setSelectionRow(0);
-                tree.getActionMap().get("copyRow").actionPerformed(new ActionEvent(tree, 0, ""));
-                assertEquals(List.of("first"), copied);
-                var bounds = tree.getRowBounds(1);
-                tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
-                        0, bounds.x + 5, bounds.y + bounds.height / 2, 1, true, MouseEvent.BUTTON3));
-                var menu = (JPopupMenu) MenuSelectionManager.defaultManager().getSelectedPath()[0];
-                ((JMenuItem) menu.getComponent(0)).doClick(0);
-                assertEquals(List.of("first", "second"), copied);
-                MenuSelectionManager.defaultManager().clearSelectedPath();
-                tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
-                        0, 20, 250, 1, true, MouseEvent.BUTTON3));
-                assertEquals(0, MenuSelectionManager.defaultManager().getSelectedPath().length);
-            } finally { window.dispose(); }
+            tree.setSize(400, 300);
+            tree.setSelectionRow(0);
+            tree.getActionMap().get("copyRow").actionPerformed(new ActionEvent(tree, 0, ""));
+            assertEquals(List.of("first"), copied);
+            var bounds = tree.getRowBounds(1);
+            // The painted row extends beyond the renderer's icon/text bounds.
+            assertTrue(bounds.x + bounds.width < 390);
+            tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                    0, 390, bounds.y + bounds.height / 2, 1, true, MouseEvent.BUTTON3));
+            assertEquals(1, shown.size());
+            ((JMenuItem) shown.getFirst().getComponent(0)).doClick(0);
+            assertEquals(List.of("first", "second"), copied);
+            tree.addSelectionRow(0);
+            tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                    0, 390, bounds.y, 1, true, MouseEvent.BUTTON3));
+            assertEquals(2, tree.getSelectionCount(), "Right click must preserve the selected group");
+            assertEquals(2, shown.size());
+            tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                    0, 20, 250, 1, true, MouseEvent.BUTTON3));
+            assertEquals(2, shown.size(), "Empty space below the rows is not a row");
+            tree.dispatchEvent(new MouseEvent(tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
+                    0, 401, bounds.y, 1, true, MouseEvent.BUTTON3));
+            assertEquals(2, shown.size());
         });
     }
 

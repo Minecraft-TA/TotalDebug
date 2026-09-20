@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
@@ -688,6 +689,20 @@ public final class DebuggerSessionController implements AutoCloseable {
                 applyAllBreakpoints(current);
             }
         });
+    }
+
+    public CompletableFuture<Void> remapScriptActions(UnaryOperator<String> remap) {
+        var previous = breakpointDefinitions();
+        var updated = previous.stream().map(definition -> {
+            var request = definition.request();
+            var action = request.action();
+            if (action == null || action.script() == null) return definition;
+            String script = remap.apply(action.script());
+            return script.equals(action.script()) ? definition : new BreakpointDefinition(definition.sourceUri(), definition.binaryName(),
+                    new DebugEngine.SourceBreakpoint(request.line(), request.debuggerLine(), request.method(), request.condition(), request.hitCondition(),
+                            new DebugEngine.BreakpointAction(null, script, action.continueOnSuccess())), definition.enabled());
+        }).toList();
+        return updated.equals(previous) ? CompletableFuture.completedFuture(null) : replaceBreakpointDefinitions(updated);
     }
 
     public CompletableFuture<Void> replaceBreakpointDefinitions(List<BreakpointDefinition> definitions) {

@@ -12,7 +12,8 @@ public class LazyTreeNode extends DefaultMutableTreeNode {
     LazyTreeNode(TreeItem treeItem) {
         super(treeItem);
 
-        this.childrenLoaded = !treeItem.isDirectory() || treeItem.isHiddenRoot();
+        this.childrenLoaded = !treeItem.isDirectory() || treeItem.isHiddenRoot()
+                || treeItem instanceof DirectoryTreeItem directory && directory.isInitiallyEmpty();
         if (!this.childrenLoaded)
             add(new DefaultMutableTreeNode("Loading..."));
     }

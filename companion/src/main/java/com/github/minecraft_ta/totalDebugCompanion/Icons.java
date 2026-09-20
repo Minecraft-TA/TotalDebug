@@ -45,6 +45,9 @@ public class Icons {
     public static final FlatSVGIcon JAVA_FILE = new FlatSVGIcon("icons/javaFile.svg");
     public static final FlatSVGIcon TEXT_FILE = new FlatSVGIcon("icons/text.svg");
     public static final FlatSVGIcon JAR_FILE = new FlatSVGIcon("icons/jar.svg");
+    public static final FlatSVGIcon NEW_FOLDER = new FlatSVGIcon("icons/newFolder.svg");
+    public static final FlatSVGIcon RENAME = new FlatSVGIcon("icons/rename.svg");
+    public static final FlatSVGIcon MOVE_TO_FOLDER = new FlatSVGIcon("icons/moveToFolder.svg");
     public static final FlatSVGIcon FOLDER = new FlatSVGIcon("icons/folder.svg");
     public static final FlatSVGIcon PACKAGE = new FlatSVGIcon("icons/package.svg");
     public static final FlatSVGIcon SOURCE_ROOT = new FlatSVGIcon("icons/sourceRoot.svg");

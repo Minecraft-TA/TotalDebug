@@ -21,10 +21,6 @@ public class TreeItem {
         this.isHiddenRoot = isHiddenRoot;
     }
 
-    public void delete() {
-
-    }
-
     public void dispose() {
 
     }

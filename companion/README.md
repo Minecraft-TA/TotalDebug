@@ -20,6 +20,8 @@ In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the sele
 
 Ctrl+Shift+Enter completes the statement containing the caret, without opening autocomplete. It adds missing call delimiters and semicolons, opens ordinary conditional/loop blocks, and moves to the next editing position. Missing expressions remain input positions. An open suggestion popup closes without accepting a suggestion. The command is one undoable edit and works without a connected runtime.
 
+Organize scripts in ordinary folders. Right-click a folder to create a script or folder inside it. File and folder menus offer Rename, Move to and Delete; scripts also offer Duplicate. F2 renames the selection. Drag files or folders onto a folder to move them; Move to is also available in the menu. Moves preserve open scripts, undo and running state. Deletion uses the recycle bin where available and requires stopping affected running scripts first. Duplicate copies the current draft, and external file changes are reported instead of silently overwritten.
+
 Postfix templates transform the expression before the dot:
 
 | Suffix | Available for | Expansion |

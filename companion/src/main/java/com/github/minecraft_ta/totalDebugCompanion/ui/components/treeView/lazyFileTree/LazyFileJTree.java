@@ -13,8 +13,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
+import java.nio.file.Path;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
@@ -63,16 +62,6 @@ public class LazyFileJTree extends JTree {
 
             @Override
             public void treeWillCollapse(TreeExpansionEvent event) {
-            }
-        });
-
-        addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyReleased(KeyEvent e) {
-                if (e.getKeyCode() != KeyEvent.VK_DELETE)
-                    return;
-
-                deleteSelectedItems();
             }
         });
 
@@ -210,6 +199,7 @@ public class LazyFileJTree extends JTree {
                     while (cause.getCause() != null) cause = cause.getCause();
                     var error = new TreeItem(Objects.requireNonNullElse(cause.getMessage(), cause.toString()));
                     error.setIcon(Icons.ERROR);
+                    children(node).forEach(LazyFileJTree::disposeNode);
                     node.replaceChildren(List.of(error));
                     getModel().nodeStructureChanged(node);
                 }
@@ -360,7 +350,7 @@ public class LazyFileJTree extends JTree {
         LazyTreeNode hiddenRoot = (LazyTreeNode) getModel().getRoot();
         for (int i = 0; i < hiddenRoot.getChildCount(); i++) {
             if (hiddenRoot.getChildAt(i) instanceof LazyTreeNode child) {
-                child.getUserObject().dispose();
+                disposeNode(child);
             }
         }
         hiddenRoot.removeAllChildren();
@@ -422,7 +412,7 @@ public class LazyFileJTree extends JTree {
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             var child = parent.getChildAt(i);
             if (retained.contains(child)) continue;
-            if (child instanceof LazyTreeNode node) node.getUserObject().dispose();
+            if (child instanceof LazyTreeNode node) disposeNode(node);
             removedIndices.add(i);
             removed.add(child);
             parent.remove(i);
@@ -474,26 +464,44 @@ public class LazyFileJTree extends JTree {
         return nameOrder != 0 ? nameOrder : first.getName().compareTo(second.getName());
     }
 
-    public void deleteSelectedItems() {
-        var paths = getSelectionModel().getSelectionPaths();
-        if (paths == null || paths.length == 0)
-            return;
+    public CompletableFuture<Void> refreshDirectory(Path directory) {
+        var result = new CompletableFuture<Void>();
+        UIUtils.onEdt(() -> {
+            var loads = new ArrayList<CompletableFuture<Void>>();
+            var nodes = ((LazyTreeNode) getModel().getRoot()).depthFirstEnumeration();
+            while (nodes.hasMoreElements()) {
+                if (!(nodes.nextElement() instanceof LazyTreeNode node)
+                        || !(node.getUserObject() instanceof FileSystemDirectoryItem item) || !item.getPath().equals(directory)) continue;
+                boolean loaded = node.areChildrenLoaded() || activeLoads.containsKey(node);
+                node.markChildrenStale();
+                if (loaded) loads.add(loadItemsForNode(node));
+            }
+            CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+                if (failure == null) result.complete(null); else result.completeExceptionally(failure);
+            });
+        });
+        return result;
+    }
 
-        var toReload = new HashSet<LazyTreeNode>();
-        Arrays.stream(paths)
-                .map(TreePath::getLastPathComponent)
-                .filter(Objects::nonNull)
-                .forEach(node -> {
-                    var item = ((LazyTreeNode) node).getUserObject();
-                    item.delete();
+    public CompletableFuture<Void> restoreItemPath(String rootName, List<String> segments, boolean select) {
+        var result = new CompletableFuture<Void>();
+        UIUtils.onEdt(() -> {
+            var root = findTopLevelNode(rootName);
+            if (root == null) { result.complete(null); return; }
+            findItemPath(root, segments, 0).whenComplete((path, failure) -> {
+                if (path != null) {
+                    if (select) addSelectionPath(path);
+                    else expandPath(path);
+                }
+                if (failure == null) result.complete(null); else result.completeExceptionally(failure);
+            });
+        });
+        return result;
+    }
 
-                    toReload.add(((LazyTreeNode) node).getParent());
-                });
-        for (var lazyTreeNode : toReload) {
-            lazyTreeNode.markChildrenStale();
-            loadItemsForNode(lazyTreeNode);
-        }
-
+    private static void disposeNode(LazyTreeNode node) {
+        for (var child : children(node)) disposeNode(child);
+        node.getUserObject().dispose();
     }
 
     private LazyTreeNode findTopLevelNodeForItem(TreeItem item) {

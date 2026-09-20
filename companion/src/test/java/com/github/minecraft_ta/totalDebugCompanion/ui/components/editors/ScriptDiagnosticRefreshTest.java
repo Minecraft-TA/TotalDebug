@@ -32,10 +32,12 @@ class ScriptDiagnosticRefreshTest {
             ScriptPanel[] selected = new ScriptPanel[1];
             var initial = new CountDownLatch(1);
             var fixedResult = new CountDownLatch(1);
+            Files.createDirectories(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts"));
+            Files.writeString(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts/DiagnosticProof.tdscript"), "");
             SwingUtilities.invokeAndWait(() -> {
                 var window = app.createWindow();
                 CompanionClassIndex.set(index);
-                var panel = (ScriptPanel) new ScriptView(window.editorContext(), "DiagnosticProof").getComponent();
+                var panel = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("DiagnosticProof.tdscript")).getComponent();
                 panel.editorPane.setParserDelay(Integer.MAX_VALUE);
                 panel.astCache().addChangeListener(panel.astKey(), snapshot -> {
                     if (snapshot == null) return;

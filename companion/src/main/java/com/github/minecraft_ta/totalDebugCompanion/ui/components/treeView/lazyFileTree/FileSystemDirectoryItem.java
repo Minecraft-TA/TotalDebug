@@ -7,18 +7,24 @@ import javax.swing.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.DirectoryIteratorException;
 import java.util.List;
-import java.util.Objects;
+import java.util.ArrayList;
 
 public class FileSystemDirectoryItem extends DirectoryTreeItem {
 
     private final LazyFileJTree tree;
     private final Path path;
     private final Runnable stopWatching;
+    private final boolean watch;
+    private boolean initiallyEmpty;
+    private volatile boolean changed;
+    public Path getPath() { return path; }
 
     FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path, boolean watch) {
         super(path.getFileName().toString());
         this.tree = lazyFileJTree;
+        this.watch = watch;
         if (!Files.isDirectory(path))
             throw new IllegalArgumentException("Not a directory");
 
@@ -26,31 +32,53 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
         setIcon(Icons.FOLDER);
 
         this.stopWatching = watch
-                ? FileUtils.startNewDirectoryWatcher(path, () -> SwingUtilities.invokeLater(() -> lazyFileJTree.loadItemsForTopLevelItem(this)))
+                ? FileUtils.startNewDirectoryWatcher(path, () -> {
+                    changed = true;
+                    SwingUtilities.invokeLater(() -> lazyFileJTree.refreshDirectory(path));
+                })
                 : () -> {};
     }
 
     @Override
     public List<TreeItem> loadChildren() {
+        var children = new ArrayList<TreeItem>();
         try (var paths = Files.list(this.path)) {
-            return paths.map(this::createChildIfPresent)
-                    .filter(Objects::nonNull)
-                    .toList();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            var iterator = paths.iterator();
+            while (iterator.hasNext()) {
+                var child = createChildIfPresent(iterator.next());
+                if (child != null) children.add(child);
+            }
+            return children;
+        } catch (IOException | RuntimeException failure) {
+            children.forEach(TreeItem::dispose);
+            throw new IllegalStateException("Unable to read " + path, failure);
         }
     }
 
     private TreeItem createChildIfPresent(Path child) {
         try {
-            if (Files.isDirectory(child))
-                return tree.getItemFactory().createFileSystemDirectoryItem(child, false);
+            if (Files.isDirectory(child)) {
+                var item = tree.getItemFactory().createFileSystemDirectoryItem(child, watch);
+                // This runs in the parent's background scan. Peek once, without loading descendants.
+                try (var entries = Files.newDirectoryStream(child)) {
+                    item.initiallyEmpty = !entries.iterator().hasNext();
+                } catch (IOException | DirectoryIteratorException ignored) {
+                    // Unknown contents stay lazy; opening the folder reports any read failure.
+                }
+                return item;
+            }
             return tree.getItemFactory().createFileSystemFileItem(child);
         } catch (IllegalArgumentException exception) {
             if (!Files.exists(child))
                 return null;
             throw exception;
         }
+    }
+
+    @Override
+    boolean isInitiallyEmpty() {
+        // A watcher notification before attachment invalidates the initial snapshot too.
+        return initiallyEmpty && !changed;
     }
 
     @Override
