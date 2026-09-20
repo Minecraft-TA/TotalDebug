@@ -141,7 +141,7 @@ Keep `ServiceStatus`, `RuntimeIndexService.Status`, `DebuggerSessionController`,
 | Control | First usable popup | Subsequent controls |
 | --- | --- | --- |
 | Game | Connected instance name, copyable game directory, real process ID when available. | Connection actions belong to the separately planned connection lifecycle. |
-| MCP | Enable MCP server checkbox, copyable endpoint, compact pending/failure text. Startup and shutdown serialize on a dedicated lifecycle worker, since HTTP requests can depend on the project worker. | No port configuration. Disabling does not cancel scripts already submitted to Minecraft. Script IDs are application-owned so late results cannot collide with jobs submitted after restarting MCP. |
+| MCP | Enable MCP server checkbox, copyable endpoint, compact pending/failure text. Startup and shutdown serialize on a dedicated lifecycle worker, since HTTP requests can depend on the project worker. | No port configuration. Disabling does not cancel scripts already submitted to Minecraft. The application owns the job service independently of HTTP. Running-job tracking and IDs survive server restarts, and project retirement can cancel jobs while HTTP is disabled. |
 | Index | Always clickable. Show measured class count and elapsed duration, distinguishing Indexed from Loaded. Refresh rebuilds a ready index while bypassing its cache; the old binding stays usable until a validated replacement is installed. Runtime rebuilds do not fall back to local scanning. Failed-state Retry preserves valid fallback browsing, and EMPTY permits rescanning after adding mods. Busy controls are disabled. | No percentage or Cancel until supported by the service. |
 | Debugger | Plain target/phase label and relevant attach/detach/resume/step actions. Show Debugger and breakpoint actions remain normal menu items. | No generic textbox or Copy details panel. |
 
@@ -179,7 +179,7 @@ Completion means all migrated outcomes use one center, activities cannot be over
 
 ## Local verification record
 
-- The final full Companion suite passed with 1,009 tests, zero failures, errors, or skips. Production/test compilation passed. The earlier mod launch-contract check remains valid; this revision changes no mod or shared protocol code.
+- Full Companion runs and focused regression checks passed; the PR records the latest totals. Production/test compilation passed. The earlier mod launch-contract check remains valid; this revision changes no mod or shared protocol code.
 - Focused checks cover real compilation with controlled protocol-result delivery, cancellation, duplicate/late results, closed observers, disconnect and retirement, save-failure propagation, notification retention and source-click races. Dark/light status, history, debugger, and balloon views were rendered from actual Swing components and inspected in the main-window layout. Added cases cover MCP shutdown while project work is blocked, forced index rebuild/ownership replacement, reconnect metrics, long text, and no-project debugger access.
 - Standards and lifecycle/specification audits completed, and their findings were addressed. GitHub review is the next gate. The prior review findings about local-directory identity and no-project debugger access were addressed.
 - One earlier full-suite attempt crashed inside the published JIndex native library during a code-insight query. The narrowed indexed-insight checks and subsequent full suite passed. The cause was not established; no speculative dependency or index-lifecycle change was made. The local crash report is retained in `companion/build/notifications-native-crash.log`.
@@ -187,4 +187,6 @@ Completion means all migrated outcomes use one center, activities cannot be over
 
 - One intermediate full-suite run timed out in the pre-existing save/undo timing test. Its focused run and the final full suite passed. No save-code change was made without a reproducible cause.
 
-- Automatic review follow-up added regression coverage for LOCAL/RUNTIME cache-write failures retaining the old binding, empty-project rescanning, renamed game identity, and late results across MCP restarts. The final missing-inventory and copy-press guards are covered by focused tests after the 1,009-test full run.
+- Automatic review follow-up added regression coverage for LOCAL/RUNTIME cache-write failures retaining the old binding, empty-project rescanning, renamed game identity, and late results across MCP restarts. The missing-inventory and copy-press guards have focused regression coverage.
+
+- MCP job ownership is independent of the HTTP server. Sequential and overlapping disable/project-switch tests verify real cancellation requests; restarting HTTP keeps the same job owner and distinct script IDs. Standalone server tests close their borrowed job service explicitly.

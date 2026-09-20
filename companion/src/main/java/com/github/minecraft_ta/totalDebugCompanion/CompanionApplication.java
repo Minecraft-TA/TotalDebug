@@ -65,7 +65,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
@@ -85,8 +84,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
     private volatile CompanionMcpServer mcpServer;
-    // Submitted Minecraft scripts may outlive an HTTP server restart.
-    private final AtomicInteger mcpScriptIds = new AtomicInteger(-1);
+    // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
+    private volatile CodeModeJobService mcpJobs;
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
@@ -156,7 +155,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                             "Minecraft is not connected."
                     ));
                     debuggerController.clearTarget();
-                    CompanionMcpServer current = mcpServer;
+                    CodeModeJobService current = mcpJobs;
                     if (current != null) {
                         current.runtimeDisconnected();
                     }
@@ -208,6 +207,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             mcpWorker.close();
             runCleanup("Close MCP", this::closeMcpServer);
             projectWorker.close();
+            if (mcpJobs != null) runCleanup("Close MCP jobs", mcpJobs::close);
             synchronized (lifecycleLock) {
                 if (current != null && current.isActive()) current.beginSwitch();
                 switching = true;
@@ -405,8 +405,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
             // a broken debugger/connection cannot detach cleanly.
-            CompanionMcpServer server = mcpServer;
-            if (server != null) runCleanup("Disconnect execution jobs", server::prepareProjectSwitch);
+            CodeModeJobService jobs = mcpJobs;
+            if (jobs != null) runCleanup("Disconnect execution jobs", jobs::prepareProjectSwitch);
             if (editorRuns != null) editorRuns.disconnected(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
@@ -613,12 +613,16 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     private void startMcpServer() throws Exception {
-        var jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
-                this::isConnected, this::runtimeContext, mcpScriptIds);
+        CodeModeJobService jobs = mcpJobs;
+        if (jobs == null) jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
+                this::isConnected, this::runtimeContext);
         startMcpServer(jobs, CompanionMcpServer.MCP_PORT);
     }
 
     CompanionMcpServer startMcpServer(CodeModeJobService jobs, int port) throws Exception {
+        if (mcpServer != null) throw new IllegalStateException("MCP server is already running");
+        if (mcpJobs != null && mcpJobs != jobs) throw new IllegalStateException("MCP jobs belong to the application");
+        mcpJobs = jobs;
         CompanionMcpServer server = new CompanionMcpServer(this, jobs, port);
         try {
             server.start();

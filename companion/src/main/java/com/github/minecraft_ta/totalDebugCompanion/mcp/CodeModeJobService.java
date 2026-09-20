@@ -39,7 +39,7 @@ public final class CodeModeJobService implements AutoCloseable {
     private final Transport transport;
     private final Supplier<Map<String, Object>> runtimeContext;
     private final Clock clock;
-    private final AtomicInteger nextScriptId;
+    private final AtomicInteger nextScriptId = new AtomicInteger(-1);
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Map<Integer, String> jobsByScriptId = new ConcurrentHashMap<>();
     private volatile boolean closed;
@@ -49,8 +49,7 @@ public final class CodeModeJobService implements AutoCloseable {
             ScriptExecutionService scripts,
             Supplier<ProjectScope> project,
             BooleanSupplier available,
-            Supplier<Map<String, Object>> runtimeContext,
-            AtomicInteger scriptIds
+            Supplier<Map<String, Object>> runtimeContext
     ) {
         this(
                 Objects.requireNonNull(session, "session"),
@@ -90,8 +89,7 @@ public final class CodeModeJobService implements AutoCloseable {
                     }
                 },
                 runtimeContext,
-                Clock.systemUTC(),
-                scriptIds
+                Clock.systemUTC()
         );
         this.resultListener = message -> {
             int scriptId = message.scriptId();
@@ -118,19 +116,13 @@ public final class CodeModeJobService implements AutoCloseable {
             Supplier<Map<String, Object>> runtimeContext,
             Clock clock
     ) {
-        this(available, transport, runtimeContext, clock, new AtomicInteger(-1));
-    }
-
-    CodeModeJobService(BooleanSupplier available, Transport transport, Supplier<Map<String, Object>> runtimeContext,
-                       Clock clock, AtomicInteger scriptIds) {
         this(
                 null,
                 null,
                 available,
                 transport,
                 runtimeContext,
-                clock,
-                scriptIds
+                clock
         );
     }
 
@@ -140,8 +132,7 @@ public final class CodeModeJobService implements AutoCloseable {
             BooleanSupplier available,
             Transport transport,
             Supplier<Map<String, Object>> runtimeContext,
-            Clock clock,
-            AtomicInteger scriptIds
+            Clock clock
     ) {
         this.session = session;
         this.statusExecutor = statusExecutor;
@@ -149,7 +140,6 @@ public final class CodeModeJobService implements AutoCloseable {
         this.transport = Objects.requireNonNull(transport, "transport");
         this.runtimeContext = Objects.requireNonNull(runtimeContext, "runtimeContext");
         this.clock = Objects.requireNonNull(clock, "clock");
-        this.nextScriptId = Objects.requireNonNull(scriptIds, "scriptIds");
     }
 
     public boolean isAvailable() {

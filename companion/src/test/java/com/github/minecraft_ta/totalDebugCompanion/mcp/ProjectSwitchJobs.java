@@ -7,11 +7,16 @@ import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /** Holds compilation until application teardown cancels it. */
 public final class ProjectSwitchJobs {
     private ProjectSwitchJobs() { }
     public static CodeModeJobService create() {
+        return create(ignored -> {});
+    }
+
+    public static CodeModeJobService create(IntConsumer cancelled) {
         return new CodeModeJobService(() -> true, new CodeModeJobService.Transport() {
             private final Map<Integer, Consumer<ExecutionResult>> compiling = new HashMap<>();
             @Override public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
@@ -19,6 +24,7 @@ public final class ProjectSwitchJobs {
                 compiling.put(id, failure);
             }
             @Override public void cancel(int id) {
+                cancelled.accept(id);
                 var failure = compiling.remove(id);
                 if (failure != null) failure.accept(new ExecutionResult(ExecutionStatus.COMPILATION_FAILED,
                         ExecutionText.empty(), null, ExecutionText.complete("Compilation cancelled")));

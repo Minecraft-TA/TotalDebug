@@ -42,7 +42,7 @@ class CompanionMcpServerTest {
                 0, new DebuggerMcpService(() -> null, name -> null),
                 () -> { throw new IllegalStateException("No Minecraft project is loaded"); }, new TestProjectControls()
         );
-        try (server; HttpClient client = HttpClient.newHttpClient()) {
+        try (jobs; server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();
             assertTrue(Files.isRegularFile(server.endpointDescriptor()));
             McpEndpointDescriptor descriptor = McpEndpointDescriptor.read(server.endpointDescriptor());
@@ -153,7 +153,7 @@ class CompanionMcpServerTest {
                 0, new DebuggerMcpService(() -> null, name -> null),
                 () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory()), new TestProjectControls()
         );
-        try (server; HttpClient client = HttpClient.newHttpClient()) {
+        try (jobs; server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();
             String sessionId = initialize(client, server.endpointUrl());
 
