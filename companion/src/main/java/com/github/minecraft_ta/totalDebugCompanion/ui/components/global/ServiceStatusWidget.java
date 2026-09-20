@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import javax.swing.SwingUtilities;
+import javax.swing.JComponent;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import java.awt.Insets;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -20,7 +22,6 @@ import java.util.Objects;
 /** Compact status-bar widget backed entirely by a published service status. */
 final class ServiceStatusWidget extends JButton implements AutoCloseable {
     private final JPopupMenu popup = new JPopupMenu();
-    private final StatusDetailsPanel details = new StatusDetailsPanel("");
     private boolean closed;
     private final String serviceName;
     private ServiceStatus status;
@@ -33,7 +34,6 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
         FlatIconButton.configure(this);
         setMargin(new Insets(0, 6, 0, 6));
         putClientProperty("html.disable", true);
-        popup.add(details);
         setRolloverEnabled(true);
         setIcon(new StatusDotIcon());
         setIconTextGap(5);
@@ -48,19 +48,18 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
     private void applyStatus(ServiceStatus status) {
         if (closed) return;
         this.status = Objects.requireNonNull(status, "status");
-        details.setDetails(status.detail());
         setText(this.serviceName + ": " + status.summary());
         setToolTipText("Show " + this.serviceName + " status");
         repaint();
     }
 
     private void showStatusPopup() {
-        popup.show(
-                this,
-                Math.min(0, getWidth() - popup.getPreferredSize().width),
-                -popup.getPreferredSize().height
-        );
+        PopupElements.showAbove(popup, this);
     }
+
+    void setContent(JComponent content) { PopupElements.content(popup, content); }
+
+    void refreshPopup() { if (popup.isVisible()) popup.pack(); }
 
     void applyTheme() { SwingUtilities.updateComponentTreeUI(popup); }
 

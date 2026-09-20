@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.StatusDetailsPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
+import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -61,7 +63,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final NavigationService navigationService;
     private final JMenu scriptMenu = new JMenu("Script");
     private final ProjectSelector projectSelector;
-    private final StatusDetailsPanel debuggerDetails = new StatusDetailsPanel("");
+    private final JLabel debuggerDetails = PopupElements.label("");
     private JPopupMenu debuggerPopup;
     private final JButton debuggerState = new JButton("Debugger: Unavailable", Icons.DEBUG);
     private final ApplicationStatusBar statusBar;
@@ -88,10 +90,13 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final CompanionSession session;
     private final RuntimeIndexService indexLoader;
     private final FrameNavigation frameNavigation;
+    private final ProjectControls projects;
+    private boolean gameConnected;
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
                       ScriptExecutionService scripts, CompanionSession session, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
-                      ProjectControls projects) {
+                      ProjectControls projects, Consumer<Boolean> toggleMcp) {
+        this.projects = projects;
         this.notifications = notifications;
         this.editorRuns = editorRuns;
         this.projectSelector = new ProjectSelector(projects, notifications);
@@ -115,6 +120,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
                     while (cause.getCause() != null) cause = cause.getCause();
                     notifications.publish(Severity.ERROR, "Unable to retry indexing", cause.toString(), Source.application("Index"));
                 })), notifications, editorRuns, this::notificationUnavailable, source -> navigation().navigate(source.target()));
+        this.statusBar.setMcpToggle(toggleMcp);
         getContentPane().add(new WorkspacePanel(
                 new FileTreeViewHeader(),
                 this.fileTreeView,
@@ -254,13 +260,29 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     private void showDebuggerMenu(DebuggerSessionController debugger) {
+        if (project.get() == null) return;
         DebuggerSessionController.Status status = debugger.status();
         JPopupMenu popup = new JPopupMenu();
         debuggerPopup = popup;
+        popup.setBorder(PopupChrome.border());
+        debuggerDetails.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         popup.add(debuggerDetails);
         updateDebuggerDetails(status);
         popup.addSeparator();
 
+        if (debuggerActions.attach().isEnabled()) popup.add(debuggerActions.attach());
+        if (debuggerActions.detach().isEnabled()) popup.add(debuggerActions.detach());
+        popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
+            @Override public void actionPerformed(ActionEvent event) { debuggerWindow(debugger).showWindow(); }
+        });
+        if (status.phase() == DebuggerSessionController.Phase.PAUSED) {
+            popup.addSeparator();
+            popup.add(debuggerActions.resume());
+            popup.add(debuggerActions.stepOver());
+            popup.add(debuggerActions.stepInto());
+            popup.add(debuggerActions.stepOut());
+        }
+        popup.addSeparator();
         popup.add(new AbstractAction("View Breakpoints", Icons.VIEW_BREAKPOINTS) {
             @Override
             public void actionPerformed(ActionEvent event) {
@@ -271,33 +293,29 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         mute.setIcon(Icons.MUTE_BREAKPOINTS);
         mute.addActionListener(event -> debugger.setBreakpointsMuted(mute.isSelected()));
         popup.add(mute);
-        popup.addSeparator();
-
-        popup.add(new AbstractAction("Show Debugger", Icons.DEBUG) {
-            @Override public void actionPerformed(ActionEvent event) { debuggerWindow(debugger).showWindow(); }
-        });
-        popup.add(debuggerActions.attach());
-        popup.add(debuggerActions.detach());
-        popup.addSeparator();
-        popup.add(debuggerActions.resume());
-        popup.add(debuggerActions.stepOver());
-        popup.add(debuggerActions.stepInto());
-        popup.add(debuggerActions.stepOut());
         popup.show(
                 this.debuggerState,
-                Math.max(0, this.debuggerState.getWidth() - popup.getPreferredSize().width),
+                Math.min(0, this.debuggerState.getWidth() - popup.getPreferredSize().width),
                 this.debuggerState.getHeight()
         );
     }
 
     private void updateDebuggerDetails(DebuggerSessionController.Status status) {
-        debuggerDetails.setDetails((status.target() == null ? "" : status.target().displayName() + "\n")
-                + status.detail() + (status.failure() == null ? "" : "\n" + status.failure()));
+        debuggerDetails.putClientProperty("html.disable", true);
+        debuggerDetails.setText((status.target() == null ? "" : status.target().displayName() + ": ") + debuggerPhaseLabel(status));
+        if (status.failure() != null) PopupElements.wrappedText(debuggerDetails, debuggerDetails.getText() + "\n" + status.failure(), 320);
     }
 
     private void setDebuggerState(DebuggerSessionController.Status status) {
+        refreshGameIdentity();
+        if (debuggerPopup != null) debuggerPopup.setVisible(false);
         updateDebuggerDetails(status);
-        String label = switch (status.phase()) {
+        this.debuggerState.setText("Debugger: " + debuggerPhaseLabel(status));
+        this.debuggerState.setToolTipText(status.detail());
+    }
+
+    private static String debuggerPhaseLabel(DebuggerSessionController.Status status) {
+        return switch (status.phase()) {
             case UNAVAILABLE -> "Unavailable";
             case DETACHED -> "Detached";
             case ATTACHING -> "Attaching";
@@ -306,8 +324,6 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             case DETACHING -> "Detaching";
             case FAILED -> "Failed";
         };
-        this.debuggerState.setText("Debugger: " + label);
-        this.debuggerState.setToolTipText(status.detail());
     }
 
     private DebuggerWindow debuggerWindow(DebuggerSessionController debugger) {
@@ -509,11 +525,22 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     @Override public void setGameStatus(ServiceStatus status) {
+        gameConnected = status.state() == ServiceStatus.State.AVAILABLE;
         this.statusBar.setGameStatus(status);
+        refreshGameIdentity();
         if (status.state() != ServiceStatus.State.AVAILABLE && this.snippetExecutions != null) {
             this.snippetExecutions.runtimeDisconnected();
         }
         refreshActions();
+    }
+
+    private void refreshGameIdentity() {
+        ProjectScope scope = project.get();
+        if (!gameConnected || scope == null || !scope.isActive()) return;
+        String name = projects.projects().stream().filter(item -> item.profile().equals(scope.profile()))
+                .map(ProjectRegistry.Project::name).findFirst().orElse(scope.profile().workspaceDirectory().getFileName().toString());
+        var target = debugger.status().target();
+        statusBar.setGameIdentity(name, scope.profile().workspaceDirectory(), target == null ? 0 : target.processId());
     }
 
     @Override public void setMcpStatus(ServiceStatus status) {

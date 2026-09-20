@@ -109,6 +109,24 @@ class ApplicationNavigationTest {
         }
     }
 
+    @Test void debuggerMenuCannotOpenWithoutAProject() throws Exception {
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token")) {
+            SwingUtilities.invokeAndWait(() -> {
+                var window = app.createWindow();
+                try {
+                    var state = window.getClass().getDeclaredField("debuggerState");
+                    state.setAccessible(true);
+                    var button = (AbstractButton) state.get(window);
+                    assertFalse(button.isVisible());
+                    button.doClick(0);
+                    var popup = window.getClass().getDeclaredField("debuggerPopup");
+                    popup.setAccessible(true);
+                    assertNull(popup.get(window));
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+        }
+    }
+
     @Test void lateWindowReplaysGameAndMcpStatuses() throws Exception {
         var configuration = new CompanionLaunchConfiguration(directory);
         try (var app = new CompanionApplication(configuration, "test-token")) {

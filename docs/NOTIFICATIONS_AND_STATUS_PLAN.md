@@ -1,6 +1,6 @@
 # Notifications and status plan
 
-Status: implementation of slices 1–4, September 20, 2026. MCP lifecycle and connection controls remain separate follow-up slices. The script-run owner is named `EditorScriptRunService` in the implementation.
+Status: backend implemented September 20, 2026; compact presentation revision September 21, 2026. MCP enable/disable and index rebuilding are included. Game connection controls remain a separate follow-up. The script-run owner is `EditorScriptRunService`.
 
 ## Decision
 
@@ -23,7 +23,7 @@ Paths below are relative to `companion/src/main/java/com/github/minecraft_ta/tot
 | `NavigationService.reportNavigationFailure` | Reports an error as information, or drops it when no editor is selected. Other navigation failures use a modal. | Publish navigation outcomes through the same notification center, preserving cancellation and stale-context guards. |
 | `ResourceViewPanel` | Loading and failure already appear inside the resource view, with Retry on failure. The bottom message repeats them. | Delete both duplicate bottom writes. Keep inline Loading/error/Retry and resource disposal checks. |
 | `ScriptPanel` | Receives execution results directly, owns the run identifier, and mixes run phase with unrelated feedback. | Move run observation out of the panel. Keep result rendering, diagnostics, and source editing in the panel. |
-| `ServiceStatusWidget`, `ApplicationStatusBar.showTaskPopup`, `MainWindow.showDebuggerMenu` | Use disabled menu items for readable status details. | Replace the duplicated detail blocks with one small selectable detail component. Keep each popup's own controls. |
+| `ServiceStatusWidget`, `ApplicationStatusBar.showTaskPopup`, `MainWindow.showDebuggerMenu` | Generic readonly textboxes and oversized buttons obscure small amounts of status information. | Delete `StatusDetailsPanel`. Use plain labels, compact icon/link actions, and normal debugger menu items. Share only control styling and spacing. |
 | `ApplicationStatusBar.taskCards` | Active indexing replaces the clickable state button with an unclickable progress panel. | Use one interactive index widget in every phase, with progress inside it. |
 
 The current producer inventory has **28 writes**: 22 outcomes, four activity updates, and two metadata updates. Of those, resource loading and its duplicate failure message can disappear outright. The remaining outcomes belong to notification producers; the script phase writes become run state; text/image metadata stays local.
@@ -90,17 +90,19 @@ The status bar subscribes directly to this owner's active-run snapshot. Show the
 
 ## Notification behavior
 
-Use a compact, focusable notification button in the status bar with an icon, unread count, and width-bounded message preview. Keep active script progress and resource metadata separate so an error or format result cannot overwrite them. The exact width allocation is verified at narrow window sizes before acceptance.
+Use a compact, focusable notification button in the status bar with an icon and width-bounded message preview. Keep the unread count in its accessible description. Keep active script progress and resource metadata separate so an error or format result cannot overwrite them.
 
-The button opens a bounded list with occurrence time, source, message, and selectable detail text for the selected entry. Provide Copy, Dismiss, and Clear all. Clear all only clears session history and needs no confirmation. Enter/Space opens the popup, Escape closes it, and keyboard focus is visible. Do not use disabled menu items to imitate labels. Render external text literally, including strings that begin with HTML-like markup.
+The button opens bounded history with occurrence time, source, and message. Expand a row to show plain-text details and inline Open source/Copy details actions. Dismiss belongs to that row; Clear history is a small header icon. No selected-detail textbox or global action strip. Clear history needs no confirmation. Enter/Space opens the popup, Escape closes it, and keyboard focus is visible. Render external text literally, including HTML-like markup. Keep row controls stable during unrelated publications.
 
-No notification expiry timer is needed for the first implementation:
+History has no expiry timer:
 
 - The preview chooses the newest unread warning/error, otherwise the newest unread information/success.
 - Opening history acknowledges only the entries actually presented as visible. Selecting an entry acknowledges it. Merely changing tabs does not acknowledge anything.
 - New events arriving while history is open remain unread until displayed. Use captured IDs, not a global "mark everything read" operation that could swallow concurrent arrivals.
 - After acknowledgement, the preview falls back to another unread event or the icon alone. Read events remain in history until dismissed, cleared, or evicted.
 - A notification never steals focus or opens a modal by itself.
+
+New warning/error notifications may show one compact balloon above the status bar. Routine outcomes stay in the bar. Outcomes already displayed by the visible script editor do not create duplicate balloons. Opening history suppresses balloons; replaying or updating history does not show them again. The balloon contains a bounded summary, Show details, and a dismiss icon. It expires after ten seconds, pauses while hovered, and never deletes its history entry. Theme changes, window resizing, disposal, and removal of the underlying entry dismiss it.
 
 Keep success messages for deliberate operations that need confirmation, such as running or formatting a script. Do not publish autosave successes, every connection heartbeat, every index phase, or every debugger step. A format operation with no edits should report "Already formatted" rather than a misleading applied-edits count.
 
@@ -134,24 +136,24 @@ There are seven current `showMessageDialog` call sites, two input-dialog sites, 
 
 ## Service popup work
 
-Keep `ServiceStatus`, `RuntimeIndexService.Status`, `DebuggerSessionController`, and `DebuggerActions` authoritative. Add one reusable detail section for selectable text and Copy. Each popup builds its own action buttons from the current controller capabilities; no universal service/action model.
+Keep `ServiceStatus`, `RuntimeIndexService.Status`, `DebuggerSessionController`, and `DebuggerActions` authoritative. `PopupElements` shares labels, links, icon buttons, and spacing. Each popup owns its content and actions; no universal service/action model or generic detail panel.
 
 | Control | First usable popup | Subsequent controls |
 | --- | --- | --- |
-| Game | Readable connection state, useful project/connection details already available, Copy details. | Connection actions belong to the separately planned connection lifecycle. Do not create a second reconnect controller here. |
-| MCP | Readable server state, endpoint when available, Copy endpoint/details. | Add enable/disable/restart only after defining backend start/stop concurrency and configuration behavior. Current private startup/close methods are not yet a safe toggle API. |
-| Index | Always clickable during waiting/preparing/building/loading/ready/empty/failed. Show source kind, actual phase, failure details, existing Retry when allowed. | No percentage or Cancel until the service exposes meaningful support. |
-| Debugger | Readable target/status/failure details and Copy; retain existing attach/detach/resume/step/breakpoint actions and controller enablement. | Make Show Debugger available where its window is useful beyond a paused session; verify each phase before broadening it. |
+| Game | Connected instance name, copyable game directory, real process ID when available. | Connection actions belong to the separately planned connection lifecycle. |
+| MCP | Enable MCP server checkbox, copyable endpoint, compact pending/failure text. Startup and shutdown serialize on a dedicated lifecycle worker, since HTTP requests can depend on the project worker. | No port configuration. Disabling does not cancel scripts already submitted to Minecraft. |
+| Index | Always clickable. Show measured class count and elapsed duration, distinguishing Indexed from Loaded. Refresh rebuilds a ready index while bypassing its cache; failed-state Retry preserves valid fallback browsing. Busy controls are disabled. | No percentage or Cancel until supported by the service. |
+| Debugger | Plain target/phase label and relevant attach/detach/resume/step actions. Show Debugger and breakpoint actions remain normal menu items. | No generic textbox or Copy details panel. |
 
-An open popup should reflect current state and re-evaluate action availability. Updates must preserve text selection and keyboard focus whenever the corresponding content is unchanged. Constrain popup width/height, wrap or scroll long details, and keep Copy available for the full retained detail. No explanatory filler beneath headings.
+An open popup reflects current state and re-evaluates action availability. Updates preserve keyboard focus whenever the corresponding content is unchanged. Constrain popup width/height, wrap or scroll long details, and keep Copy available for full notification details. No explanatory filler beneath headings. Index metrics are captured on the worker before the native snapshot is handed to the application.
 
 ## Implementation sequence
 
 1. **Notification model and non-run producers.** Implement center, app wiring, notification view, navigation/code-insight/format outcomes, and targeted nonblocking action failures. Test history and startup/lifecycle races. Within this slice, remove the replaced producer calls rather than maintain dual publication.
 2. **Script lifecycle and final old-model removal.** Move editor run observation into `EditorScriptRunService`, preserve cancel-on-close explicitly, migrate run feedback, retain resource metadata through the small dedicated contract, and delete `BottomInformationBar` and all getters/styles/constructor plumbing. Finish save-failure deduplication without changing close protection. At this point no old notification path remains.
-3. **Game/MCP/index detail presentation.** Introduce the shared readable detail section, keep index interactive while active, wire Copy and existing Retry, verify live popup updates. Reuse this detail section in notification details only if the actual layout fits; do not force unlike lists and service controls into one widget.
-4. **Debugger presentation.** Replace disabled detail rows, preserve real actions, check state-dependent window access, keyboard behavior, and failure copying.
-5. **Separate control slices.** Plan and implement MCP lifecycle controls and connection controls against their owning services. These are follow-up behavior changes, not prerequisites for an honest notification system. Coordinate with the existing separate connection plan without rewriting it here.
+3. **Compact presentation.** Replace the generic detail panels with approved purpose-specific content, expandable notification rows, and selective balloons. Wire MCP toggle and actual index rebuild; verify lifecycle and visual updates.
+4. **Debugger presentation.** Use plain status and existing menu actions, with phase-dependent availability.
+5. **Game connection controls.** Coordinate with the separate connection plan without introducing another connection owner here.
 
 Audit each slice before committing it. Keep intermediate commits explicit about any remaining old model; do not call the notification migration complete before slice 2 removes it. No temporary forwarding adapters or parallel history implementations.
 
@@ -177,8 +179,10 @@ Completion means all migrated outcomes use one center, activities cannot be over
 
 ## Local verification record
 
-- The full Companion suite passed with 998 tests, zero failures, errors, or skips. The mod launch-contract check and final production/test compilation also passed.
-- Focused checks cover real compilation with controlled protocol-result delivery, cancellation, duplicate/late results, closed observers, disconnect and retirement, save-failure propagation, notification retention and source-click races. Dark/light status and history previews were rendered and inspected.
-- Standards and lifecycle/specification audits completed, and their findings were addressed. GitHub review is the next gate.
+- The final full Companion suite passed with 1,004 tests, zero failures, errors, or skips. Production/test compilation passed. The earlier mod launch-contract check remains valid; this revision changes no mod or shared protocol code.
+- Focused checks cover real compilation with controlled protocol-result delivery, cancellation, duplicate/late results, closed observers, disconnect and retirement, save-failure propagation, notification retention and source-click races. Dark/light status, history, debugger, and balloon views were rendered from actual Swing components and inspected in the main-window layout. Added cases cover MCP shutdown while project work is blocked, forced index rebuild/ownership replacement, reconnect metrics, long text, and no-project debugger access.
+- Standards and lifecycle/specification audits completed, and their findings were addressed. GitHub review is the next gate. The prior review findings about local-directory identity and no-project debugger access were addressed.
 - One earlier full-suite attempt crashed inside the published JIndex native library during a code-insight query. The narrowed indexed-insight checks and subsequent full suite passed. The cause was not established; no speculative dependency or index-lifecycle change was made. The local crash report is retained in `companion/build/notifications-native-crash.log`.
-- No fresh Minecraft execution session was used for this slice. Script execution tests use the real compiler and controlled transport results. MCP start/stop controls and connection controls remain follow-up work.
+- No fresh Minecraft execution session was used for this slice. Script execution tests use the real compiler and controlled transport results. Game connection controls remain follow-up work.
+
+- One intermediate full-suite run timed out in the pre-existing save/undo timing test. Its focused run and the final full suite passed. No save-code change was made without a reproducible cause.

@@ -43,9 +43,15 @@ public final class RuntimeIndexService implements AutoCloseable {
         FAILED
     }
 
-    public record Status(Phase phase, String detail, Throwable failure, IndexIdentity.Kind sourceKind) {
+    public record Metrics(long classes, long elapsedNanos, boolean rebuilt) {}
+
+    public record Status(Phase phase, String detail, Throwable failure, IndexIdentity.Kind sourceKind, Metrics metrics) {
         public Status(Phase phase, String detail, Throwable failure) {
             this(phase, detail, failure, IndexIdentity.Kind.RUNTIME);
+        }
+
+        public Status(Phase phase, String detail, Throwable failure, IndexIdentity.Kind sourceKind) {
+            this(phase, detail, failure, sourceKind, null);
         }
 
         public Status {
@@ -110,6 +116,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     private final CopyOnWriteArrayList<Consumer<Status>> listeners = new CopyOnWriteArrayList<>();
     private volatile Status status = new Status(Phase.WAITING, "Waiting for runtime inventory", null);
     private String activeInventoryId;
+    private Metrics activeMetrics;
     private Path activeDataDirectory;
     private Work pending;
     private boolean closed;
@@ -119,6 +126,9 @@ public final class RuntimeIndexService implements AutoCloseable {
         final Path inventoryFile;
         final Path gameDirectory;
         boolean local;
+        boolean forceBuild;
+        boolean rebuilt;
+        long started;
         boolean allowLocalFallback;
         String detail = "";
         String sourceDetail = "";
@@ -182,9 +192,18 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     public void restore(Path dataDirectory, Path gameDirectory) {
+        restore(dataDirectory, gameDirectory, false);
+    }
+
+    public void rebuild(Path dataDirectory, Path gameDirectory) {
+        restore(dataDirectory, gameDirectory, true);
+    }
+
+    private void restore(Path dataDirectory, Path gameDirectory, boolean forceBuild) {
         synchronized (this.lifecycleLock) {
             ensureOpen();
             this.activeInventoryId = null;
+            this.activeMetrics = null;
             this.activeDataDirectory = null;
             Path root = normalizeDataDirectory(dataDirectory);
             Path inventoryFile = new InstancePaths(root).inventory();
@@ -197,7 +216,9 @@ public final class RuntimeIndexService implements AutoCloseable {
                 return;
             }
             update(new Status(Phase.LOADING, "Loading the previous runtime inventory", null));
-            submit(new Work(root, inventoryFile, null, gameDirectory));
+            Work work = new Work(root, inventoryFile, null, gameDirectory);
+            work.forceBuild = forceBuild;
+            submit(work);
         }
     }
 
@@ -205,6 +226,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         synchronized (this.lifecycleLock) {
             this.pending = null;
             this.activeInventoryId = null;
+            this.activeMetrics = null;
             this.activeDataDirectory = null;
         }
     }
@@ -216,7 +238,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             String inventoryId = Objects.requireNonNull(expectedInventoryId, "expectedInventoryId");
             if (inventoryId.equals(this.activeInventoryId) && root.equals(this.activeDataDirectory)) {
                 this.pending = null;
-                update(new Status(Phase.READY, "Class index ready", null));
+                update(new Status(Phase.READY, "Runtime index ready", null, IndexIdentity.Kind.RUNTIME, activeMetrics));
                 return;
             }
             Path file = Objects.requireNonNull(inventoryFile, "inventoryFile").toAbsolutePath().normalize();
@@ -252,6 +274,7 @@ public final class RuntimeIndexService implements AutoCloseable {
     }
 
     private void buildOrLoad(Work work) {
+        work.started = System.nanoTime();
         try (var phase = RuntimePhase.start("index.request")) {
             checkpoint(work);
             Path expectedFile = new InstancePaths(work.root).inventory();
@@ -290,7 +313,7 @@ public final class RuntimeIndexService implements AutoCloseable {
                 }
                 update(work, new Status(Phase.LOADING, "Loading class index", null));
                 Path indexFile = new InstancePaths(work.root).index();
-                ReadySnapshot cached = loadCachedSnapshot(indexFile, inventory.id());
+                ReadySnapshot cached = work.forceBuild ? null : loadCachedSnapshot(indexFile, inventory.id());
                 if (cached != null) {
                     return cached;
                 }
@@ -354,7 +377,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         Path indexFile = new InstancePaths(work.root).index();
         ReadySnapshot ready = CacheFiles.locked(indexFile.getParent(), () -> {
             checkpoint(work);
-            if (Files.isRegularFile(indexFile)) {
+            if (!work.forceBuild && Files.isRegularFile(indexFile)) {
                 try {
                     var manifest = IndexCache.read(indexFile);
                     if (identity.equals(manifest.identity())) {
@@ -379,6 +402,7 @@ public final class RuntimeIndexService implements AutoCloseable {
             Path indexFile,
             String javaHome
     ) throws IOException {
+        work.rebuilt = true;
         AtomicFiles.cleanupAbandonedStaging(indexFile.getParent());
         checkpoint(work);
         List<IndexSource> indexSources = new ArrayList<>();
@@ -544,11 +568,13 @@ public final class RuntimeIndexService implements AutoCloseable {
         try (var phase = RuntimePhase.start("index.install")) {
             synchronized (this.lifecycleLock) {
                 checkpoint(work);
+                Metrics metrics = new Metrics(snapshot.index().getStatistics().classCount(), System.nanoTime() - work.started, work.rebuilt);
                 this.readyHandler.accept(snapshot);
                 this.activeInventoryId = snapshot.inventoryId();
+                this.activeMetrics = metrics;
                 this.activeDataDirectory = work.root;
                 installed = true;
-                update(work, new Status(Phase.READY, work.detail + work.sourceDetail + (snapshot.isRuntime() ? "Runtime index ready" : "Local index ready"), null));
+                update(work, new Status(Phase.READY, work.detail + work.sourceDetail + (snapshot.isRuntime() ? "Runtime index ready" : "Local index ready"), null, snapshot.identity().kind(), metrics));
             }
         } finally {
             if (!installed) {
@@ -576,7 +602,7 @@ public final class RuntimeIndexService implements AutoCloseable {
         synchronized (this.lifecycleLock) {
             checkpoint(work);
             update(new Status(status.phase(), work.runtimeFailure + status.detail(), status.failure(),
-                    work.local ? IndexIdentity.Kind.LOCAL : IndexIdentity.Kind.RUNTIME));
+                    work.local ? IndexIdentity.Kind.LOCAL : IndexIdentity.Kind.RUNTIME, status.metrics()));
         }
     }
 

@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectDirectories;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
@@ -131,6 +132,26 @@ class OfflineProjectIntegrationTest {
             });
             captureThemes(popup.get(), "offline-empty-search");
         } finally { SwingUtilities.invokeAndWait(() -> { if (popup.get() != null) popup.get().dispose(); }); }
+    }
+
+    @Test void readyIndexRefreshReplacesTheRuntimeAndRebuildsItsCache() throws Exception {
+        Path game = Files.createDirectories(root.resolve("refresh"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        writeProjectJar(mods.resolve("demo.jar"), 42);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var previous = app.requireProject().requireRuntime();
+            var directorySource = Source.capture(app.requireProject(), "Scripts", new NavigationTarget.LocalDirectory(game));
+            assertNull(directorySource.runtimeSignature());
+            app.retryIndex().get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var replacement = app.requireProject().requireRuntime();
+            assertNotSame(previous, replacement);
+            assertEquals(previous.snapshot().identity(), replacement.snapshot().identity());
+            assertTrue(app.getRuntimeIndexStatus().metrics().rebuilt());
+            assertNotNull(replacement.snapshot().index().findClass("demo", "Example"));
+        }
     }
 
     @Test void failedRuntimeHandoverPreservesLocalBrowsingAndCanBeRetriedOffline() throws Exception {

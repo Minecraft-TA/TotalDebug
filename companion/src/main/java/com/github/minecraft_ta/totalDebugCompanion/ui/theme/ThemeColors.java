@@ -50,6 +50,10 @@ public final class ThemeColors {
         return first(new Color(0x3871E1), "Component.accentColor", "ProgressBar.foreground");
     }
 
+    public static Color link() {
+        return first(new Color(0x589DF6), "Link.activeForeground", "Component.linkColor", "Component.accentColor");
+    }
+
     /** Error / invalid-input red. */
     public static Color error() {
         return first(new Color(0xDB5860), "Actions.Red");

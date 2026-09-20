@@ -74,6 +74,7 @@ public class Icons {
     public static final FlatSVGIcon CLOSE_ICON = new FlatSVGIcon("icons/close.svg");
     public static final FlatSVGIcon CLOSE_HOVERED_ICON = new FlatSVGIcon("icons/closeHovered.svg");
     public static final FlatSVGIcon DELETE = new FlatSVGIcon("icons/delete.svg");
+    public static final FlatSVGIcon REFRESH = new FlatSVGIcon("icons/refresh.svg");
     public static final FlatSVGIcon SETTINGS = new FlatSVGIcon("icons/settings.svg");
 
     public static final FlatSVGIcon RUN = new FlatSVGIcon("icons/run.svg");

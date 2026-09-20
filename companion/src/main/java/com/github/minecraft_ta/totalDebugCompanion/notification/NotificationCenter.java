@@ -21,11 +21,11 @@ public final class NotificationCenter implements AutoCloseable {
         public static Source capture(ProjectScope project, String label, NavigationTarget target) {
             return new Source(label, project == null ? null : project.profile().id(),
                     project == null ? null : project.profile().workspaceDirectory().toString(), target,
-                    target == null || target instanceof NavigationTarget.LocalFile || project == null
+                    target == null || target instanceof NavigationTarget.LocalFile || target instanceof NavigationTarget.LocalDirectory || project == null
                             ? null : project.runtimeSignature());
         }
     }
-    public record Entry(long id, Instant time, Severity severity, String message, String details, Source source, boolean read) {
+    public record Entry(long id, Instant time, Severity severity, String message, String details, Source source, boolean read, boolean shownAtSource) {
         public String copyText() {
             return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(time)
                     + "\n" + source.label() + (source.projectDirectory() == null ? "" : "\nProject: " + source.projectDirectory())
@@ -50,12 +50,17 @@ public final class NotificationCenter implements AutoCloseable {
     private boolean closed;
 
     public long publish(Severity severity, String message, String details, Source source) {
+        return publish(severity, message, details, source, false);
+    }
+
+    /** Mark outcomes also displayed by their editor, so that view can avoid duplicate alerts. */
+    public long publish(Severity severity, String message, String details, Source source, boolean shownAtSource) {
         long id;
         synchronized (this) {
             if (closed) return 0;
             id = ++nextId;
             entries.addFirst(new Entry(id, Instant.now(), Objects.requireNonNull(severity), bounded(message), bounded(details),
-                    Objects.requireNonNull(source), false));
+                    Objects.requireNonNull(source), false, shownAtSource));
             if (entries.size() > LIMIT) entries.removeLast();
             revision++;
         }
@@ -70,7 +75,7 @@ public final class NotificationCenter implements AutoCloseable {
             for (int i = 0; i < entries.size(); i++) {
                 Entry entry = entries.get(i);
                 if (entry.id() != id) continue;
-                entries.set(i, new Entry(id, entry.time(), entry.severity(), entry.message(), bounded(details), entry.source(), entry.read()));
+                entries.set(i, new Entry(id, entry.time(), entry.severity(), entry.message(), bounded(details), entry.source(), entry.read(), entry.shownAtSource()));
                 revision++;
                 break;
             }
@@ -82,7 +87,7 @@ public final class NotificationCenter implements AutoCloseable {
         synchronized (this) {
             if (closed) return;
             entries.replaceAll(entry -> ids.contains(entry.id()) && !entry.read()
-                    ? new Entry(entry.id(), entry.time(), entry.severity(), entry.message(), entry.details(), entry.source(), true) : entry);
+                    ? new Entry(entry.id(), entry.time(), entry.severity(), entry.message(), entry.details(), entry.source(), true, entry.shownAtSource()) : entry);
             revision++;
         }
         changed();

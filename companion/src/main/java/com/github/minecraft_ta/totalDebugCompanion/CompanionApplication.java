@@ -83,7 +83,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
-    private CompanionMcpServer mcpServer;
+    private volatile CompanionMcpServer mcpServer;
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
@@ -93,6 +93,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private volatile boolean switching;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
+    // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
+    private final ExecutorService mcpWorker = Executors.newSingleThreadExecutor(
+            runnable -> Thread.ofPlatform().daemon().name("companion-mcp-lifecycle").unstarted(runnable));
 
     public CompanionApplication(CompanionLaunchConfiguration configuration, String token) throws IOException {
         this(configuration, token, null);
@@ -188,7 +191,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     public void start() throws IOException {
         updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
         session.bindAndPublish(launchConfiguration);
-        startOptionalMcpServer();
+        setMcpEnabled(true).join();
     }
 
     public void awaitExit() throws InterruptedException { exitRequested.await(); }
@@ -199,13 +202,14 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         notifications.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
+            mcpWorker.close();
+            runCleanup("Close MCP", this::closeMcpServer);
             projectWorker.close();
             synchronized (lifecycleLock) {
                 if (current != null && current.isActive()) current.beginSwitch();
                 switching = true;
             }
             if (runtimeIndexService != null) runCleanup("Close runtime loader", runtimeIndexService::close);
-            runCleanup("Close MCP", this::closeMcpServer);
             if (session != null) runCleanup("Close session", session::close);
             if (debuggerController != null) runCleanup("Close debugger", debuggerController::close);
             CompanionUi view = ui;
@@ -328,6 +332,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         ProjectScope selected = current;
         if (selected == null) return CompletableFuture.failedFuture(new IllegalStateException("No project is open"));
         return CompletableFuture.runAsync(() -> {
+            if (runtimeIndexService.status().active()) return;
+            boolean rebuild = selected.admit(() -> {
+                if (runtimeIndexService.status().phase() != RuntimeIndexService.Phase.READY) return false;
+                if (selected.runtime() == null) return false;
+                closeRuntime();
+                runtimeIndexService.rebuild(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
+                return true;
+            });
+            if (rebuild) {
+                onUi(CompanionUi::runtimeChanged);
+                return;
+            }
             boolean requestedRuntime = selected.admit(() -> {
                 if (!isConnected() || runtimeIndexService.status().sourceKind() == IndexIdentity.Kind.LOCAL) return false;
                 if (!session.send(new RetryRuntimeInventoryMessage()))
@@ -631,6 +647,23 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }
     }
 
+    public CompletableFuture<Void> setMcpEnabled(boolean enabled) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        return CompletableFuture.runAsync(() -> {
+            if (closed) return;
+            if (enabled) {
+                if (mcpServer == null) startOptionalMcpServer();
+            } else {
+                updateMcpStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Stopping", "Stopping the MCP server"));
+                try { closeMcpServer(); }
+                catch (RuntimeException failure) {
+                    updateMcpStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Unavailable", failure.toString()));
+                    notifications.publish(Severity.ERROR, "Unable to stop MCP", failure.toString(), Source.application("MCP"));
+                }
+            }
+        }, mcpWorker);
+    }
+
     private void closeMcpServer() {
         CompanionMcpServer server = mcpServer;
         mcpServer = null;
@@ -664,7 +697,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this);
+                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {

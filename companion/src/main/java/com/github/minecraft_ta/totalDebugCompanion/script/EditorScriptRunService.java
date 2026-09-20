@@ -143,7 +143,7 @@ public final class EditorScriptRunService implements AutoCloseable {
             boolean cancelled = state.phase() == Phase.CANCELLED;
             String message = cancelled ? "Run cancelled" : success ? "Run completed" : result.status() == ExecutionStatus.COMPILATION_FAILED ? "Compilation failed" : "Run failed";
             notifications.publish(cancelled ? Severity.INFORMATION : success ? Severity.SUCCESS : Severity.ERROR, message,
-                    result.error() == null ? "" : result.error().text(), run.source);
+                    result.error() == null ? "" : result.error().text(), run.source, true);
         }
         for (Consumer<State> target : targets) target.accept(state);
         changed();

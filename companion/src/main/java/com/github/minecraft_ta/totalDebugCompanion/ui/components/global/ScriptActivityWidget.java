@@ -1,6 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import javax.swing.SwingUtilities;
+import javax.swing.BorderFactory;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import java.awt.Insets;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
@@ -36,7 +39,8 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
         setToolTipText("Script activity");
         rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
         scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        popup.add(scroll);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        PopupElements.content(popup, scroll);
         addActionListener(event -> { refreshPopup(); popup.show(this, 0, -popup.getPreferredSize().height); });
         unsubscribe = runs.subscribe(() -> UIUtils.onEdt(this::refresh));
     }
@@ -72,13 +76,13 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
 
     private static final class RunRow extends JPanel {
         final JLabel label = new JLabel();
-        final JButton stop = new JButton("Stop");
+        final JButton stop;
         RunRow(EditorScriptRunService.Run run) {
             super(new BorderLayout(8, 0));
             label.putClientProperty("html.disable", true);
             label.setMinimumSize(new Dimension(0, label.getPreferredSize().height));
             add(label, BorderLayout.CENTER);
-            stop.addActionListener(event -> run.stop());
+            stop = PopupElements.icon(Icons.STOP, "Stop script", run::stop);
             add(stop, BorderLayout.EAST);
             setMaximumSize(new Dimension(Integer.MAX_VALUE, stop.getPreferredSize().height));
         }
