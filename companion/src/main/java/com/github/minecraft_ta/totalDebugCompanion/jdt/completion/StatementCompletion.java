@@ -9,10 +9,17 @@ import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ArrayCreation;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.LambdaExpression;
+import org.eclipse.jdt.core.dom.ExpressionStatement;
+import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
+import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.ThrowStatement;
 import org.eclipse.jdt.core.dom.Statement;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import static org.eclipse.jdt.core.compiler.ITerminalSymbols.*;
@@ -27,6 +34,9 @@ public final class StatementCompletion {
     }
     private static final Set<String> HEADERS = Set.of("if", "while", "for", "else");
     private static final Set<String> NEEDS_OPERAND = Set.of("=", "+", "-", "*", "/", "%", "&&", "||", "&", "|", "^", "!", "~", "==", "!=", "<", ">", "<=", ">=", "?", ":", ",", ".", "+=", "-=", "*=", "/=", "return", "throw", "new", "instanceof", "import", "static");
+
+    private record Syntax(Statement statement, Map<Integer, LambdaExpression> lambdas) { }
+    private Syntax syntax;
 
     private final String source;
     private final String newline;
@@ -63,6 +73,8 @@ public final class StatementCompletion {
         int lineEnd = source.indexOf('\n', caret);
         if (lineEnd < 0) lineEnd = source.length();
         if (source.substring(lineStart, lineEnd).isBlank()) return result(caret);
+        Plan lambda = lambdaBody();
+        if (lambda != null) return lambda;
         int start = statementStart();
         int first = 0;
         while (first < tokens.size() && tokens.get(first).start < start) first++;
@@ -72,30 +84,94 @@ public final class StatementCompletion {
         if (HEADERS.contains(token.text)) return header(first);
         if (Set.of("switch", "try", "catch", "finally", "do", "synchronized", "class", "interface", "enum", "record", "}").contains(token.text))
             return result(caret);
-        return statement(first);
+        return statement(first, true);
     }
 
-    private int statementStart() {
-        // Recovery supplies starts for multiline and nested statements; token boundaries constrain repairs below.
+    private Plan lambdaBody() {
+        Plan best = null;
+        int nearest = Integer.MAX_VALUE;
+        for (int i = 0; i < tokens.size(); i++) {
+            var arrow = tokens.get(i);
+            if (!arrow.is("->")) continue;
+            Token next = i + 1 < tokens.size() ? tokens.get(i + 1) : null;
+            boolean braces = next != null && next.is("{");
+            int start, end, bodyStart;
+            if (braces) {
+                if (i + 2 >= tokens.size() || !tokens.get(i + 2).is("}")) continue;
+                start = next.end;
+                end = tokens.get(i + 2).start;
+                bodyStart = next.start;
+            } else {
+                if (next != null && !Set.of(")", "]", "}", ",", ";").contains(next.text)) continue;
+                start = arrow.end;
+                end = next == null ? source.length() : next.start;
+                bodyStart = start + 1;
+            }
+            if (!source.substring(start, end).isBlank()) continue;
+            // Parse a minimal body to distinguish a lambda from a switch rule and locate its owner.
+            String replacement = braces ? source.substring(start, end) : " {}";
+            String repaired = braces ? source : source.substring(0, start) + replacement + source.substring(end);
+            int mappedCaret = caret <= start ? caret : caret >= end ? caret + replacement.length() - (end - start) : start;
+            Syntax context = braces ? syntax() : parseSyntax(repaired, mappedCaret);
+            var lambda = context.lambdas.get(bodyStart);
+            if (lambda == null) continue;
+            ASTNode owner = lambda.getParent();
+            while (owner != null && !(owner instanceof Statement)) owner = owner.getParent();
+            if (owner == null || owner != context.statement) continue;
+            int distance = Math.max(0, Math.max(lambda.getStartPosition() - mappedCaret, mappedCaret - bodyStart));
+            if (distance >= nearest) continue;
+            String indent = indentation(arrow.start);
+            String opening = (braces ? "" : " {") + newline + indent + indentUnit;
+            String text = opening + newline + indent + (braces ? "" : "}");
+            var changes = new ArrayList<Edit>();
+            if (!source.substring(start, end).equals(text)) changes.add(new Edit(start, end - start, text));
+            if (owner instanceof ExpressionStatement || owner instanceof VariableDeclarationStatement
+                    || owner instanceof ReturnStatement || owner instanceof ThrowStatement) {
+                var repair = new StatementCompletion(repaired, mappedCaret, indentUnit, scan(repaired));
+                int first = 0;
+                while (first < repair.tokens.size() && repair.tokens.get(first).start < owner.getStartPosition()) first++;
+                for (var edit : repair.statement(first, false).edits) {
+                    int originalOffset = edit.offset - replacement.length() + end - start;
+                    changes.add(new Edit(originalOffset, edit.length, edit.text));
+                }
+            }
+            best = new Plan(List.copyOf(changes), start + opening.length());
+            nearest = distance;
+        }
+        return best;
+    }
+
+    private Syntax syntax() {
+        if (syntax == null) syntax = parseSyntax(source, caret);
+        return syntax;
+    }
+
+    private static Syntax parseSyntax(String source, int caret) {
         var parser = JdtConfiguration.createParser();
         parser.setKind(ASTParser.K_STATEMENTS);
         parser.setStatementsRecovery(true);
         parser.setSource(JavaSnippetSource.splitImports(source).body().toCharArray());
-        ASTNode root = parser.createAST(null);
-        int[] best = {-1, Integer.MAX_VALUE};
-        boolean tokenStartsAtCaret = tokens.stream().anyMatch(token -> token.start == caret);
-        root.accept(new ASTVisitor() {
+        Statement[] best = {null};
+        Map<Integer, LambdaExpression> lambdas = new HashMap<>();
+        boolean tokenStartsAtCaret = scan(source).stream().anyMatch(token -> token.start == caret);
+        parser.createAST(null).accept(new ASTVisitor() {
             @Override public void preVisit(ASTNode node) {
-                if (!(node instanceof Statement) || node instanceof Block) return;
+                if (node instanceof LambdaExpression lambda && lambda.getBody() instanceof Block body)
+                    lambdas.put(body.getStartPosition(), lambda);
+                if (!(node instanceof Statement statement) || node instanceof Block) return;
                 int start = node.getStartPosition(), end = start + node.getLength();
                 boolean trailingSpace = end < caret && source.substring(end, caret).isBlank()
                         && !source.substring(end, caret).contains("\n");
-                if (start <= caret && (caret < end || caret == end && !tokenStartsAtCaret || trailingSpace) && node.getLength() < best[1]) {
-                    best[0] = start;
-                    best[1] = node.getLength();
-                }
+                if (start <= caret && (caret < end || caret == end && !tokenStartsAtCaret || trailingSpace)
+                        && (best[0] == null || node.getLength() < best[0].getLength())) best[0] = statement;
             }
         });
+        return new Syntax(best[0], lambdas);
+    }
+
+    private int statementStart() {
+        // Recovery supplies starts for multiline and nested statements; token boundaries constrain repairs below.
+        Statement statement = syntax().statement;
         int start = 0, parentheses = 0, brackets = 0;
         for (int i = 0; i < tokens.size() && tokens.get(i).end <= caret; i++) {
             var token = tokens.get(i);
@@ -123,10 +199,10 @@ public final class StatementCompletion {
             }
             if (!closed) return start;
         }
-        return best[0] >= 0 ? best[0] : start;
+        return statement != null ? statement.getStartPosition() : start;
     }
 
-    private Plan statement(int first) {
+    private Plan statement(int first, boolean advanceLine) {
         var stack = new ArrayList<String>();
         int last = first;
         for (int i = first; i < tokens.size(); i++) {
@@ -155,7 +231,7 @@ public final class StatementCompletion {
         if (!validStatement(text)) return result(caret);
         if (!endToken.is(";")) suffix.append(';');
         add(insertAt, suffix.toString());
-        return nextLine(endToken.end, indentation(tokens.get(first).start));
+        return advanceLine ? nextLine(endToken.end, indentation(tokens.get(first).start)) : result(caret);
     }
 
     private Plan header(int first) {

@@ -5,13 +5,53 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.time.Duration;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class StatementCompletionTest {
+    @Test void unrelatedEmptyCallbacksDoNotMultiplyParsingWork() {
+        String source = "run(x -> {});\n".repeat(1000) + "call()";
+        assertTimeout(Duration.ofSeconds(2), () -> {
+            var plan = StatementCompletion.plan(source, source.length() - 1, "    ");
+            assertTrue(plan.edits().stream().allMatch(edit -> edit.offset() >= source.lastIndexOf("call()")));
+            assertEquals(source.length() + 2, plan.caret());
+        });
+    }
     static Stream<String[]> cases() {
         return Stream.of(
+            pair("run(() -> {});|next();", "run(() -> {});next();\n|"),
+            pair("if (test(() -> {})) { run(|); }", "if (test(() -> {})) { run();\n    |\n}"),
+            pair("run(() -> {}, () -> { foo(|); });", "run(() -> {}, () -> { foo();\n    |\n});"),
+            pair("run(x -> |", "run(x -> {\n    |\n});"),
+            pair("run(x -> |;", "run(x -> {\n    |\n});"),
+            pair("run(x -> |)\nnext();", "run(x -> {\n    |\n});\nnext();"),
+            pair("name.keySet().forEach((object) -> |)", "name.keySet().forEach((object) -> {\n    |\n});"),
+            pair("run(() -> |) // note", "run(() -> {\n    |\n}); // note"),
+            pair("run(() -> |)\nnext();", "run(() -> {\n    |\n});\nnext();"),
+            pair("Runnable task = () -> |", "Runnable task = () -> {\n    |\n};"),
+            pair("return map(x -> |)", "return map(x -> {\n    |\n});"),
+            pair("map(x -> |).toList()", "map(x -> {\n    |\n}).toList();"),
+            pair("run(x -> {|})", "run(x -> {\n    |\n});"),
+            pair("name.keySet().forE|ach((object) -> );", "name.keySet().forEach((object) -> {\n    |\n});"),
+            pair("import java.util.List;\n\nname.forEach(value -> |);", "import java.util.List;\n\nname.forEach(value -> {\n    |\n});"),
+            pair("run(a -> , (v|eryLongParameter, anotherParameter) -> );", "run(a -> , (veryLongParameter, anotherParameter) -> {\n    |\n});"),
+            pair("run(a -> invoke(b -> |));", "run(a -> invoke(b -> {\n    |\n}));"),
+            pair("run(x -> {\n    |\n});", "run(x -> {\n    |\n});"),
+            pair("switch (x) { case A -> |; }", "switch (x) { case A -> ;\n    |\n}"),
+            pair("switch (x) { case A -> {|} }", "switch (x) { case A -> {|} }"),
+            pair("run(x -> |/* keep */);", "run(x -> |/* keep */);"),
+            pair("run(x -> x + |);", "run(x -> x + |);"),
+            pair("other(|); run(x -> );", "other();\n|run(x -> );"),
+            pair("name.keySet().forEach((object) -> |);", "name.keySet().forEach((object) -> {\n    |\n});"),
+            pair("name.keySet().forEach((obj|ect) -> );", "name.keySet().forEach((object) -> {\n    |\n});"),
+            pair("name.keySet().forEach(object ->|);", "name.keySet().forEach(object -> {\n    |\n});"),
+            pair("  run(() -> |); next();", "  run(() -> {\n      |\n  }); next();"),
+            pair("Runnable task = () -> |;", "Runnable task = () -> {\n    |\n};"),
+            pair("run(() -> {|});", "run(() -> {\n    |\n});"),
+            pair("run(() -> { | });", "run(() -> {\n    |\n});"),
+            pair("\trun(() -> |);\r\n", "\trun(() -> {\r\n\t    |\r\n\t});\r\n"),
             pair("call(|); /* note\nmore */ next();", "call(); /* note\nmore */\n|next();"),
             pair("call(|); /* note */ next();", "call(); /* note */\n|next();"),
             pair("call(|) /* note\nmore */", "call(); /* note\nmore */\n|"),
@@ -119,7 +159,8 @@ class StatementCompletionTest {
     }
     @Test void everyCaretOffsetProducesBoundedEditsWithoutRemovingUserCode() {
         for (String source : List.of("", "\n", "if", "if (x) { call(); } else { other(); }", "import java.util.List;\n\nint a = 3;\ncall(a)",
-                "for (int i=0; i<3; i++) { logln(i); }", "call(a,\n b)\nnext();", "if (ready &&)", "// comment\ncall()", "if ((", "call(\"unfinished", "new int[]")) {
+                "for (int i=0; i<3; i++) { logln(i); }", "call(a,\n b)\nnext();", "if (ready &&)", "// comment\ncall()", "if ((", "call(\"unfinished", "new int[]",
+                "run((value) -> );", "run(x -> {}); next();", "run(a -> , b -> );", "switch (x) { case A -> ; }")) {
             for (int caret = 0; caret <= source.length(); caret++) {
                 var plan = StatementCompletion.plan(source, caret, "\t");
                 int previous = 0, length = source.length();

@@ -64,7 +64,7 @@ public final class ScriptFiles {
             if (folder) Files.createDirectory(destination);
             else AtomicFiles.createNewString(destination, text);
         } catch (FileAlreadyExistsException collision) {
-            throw new IOException("A file or folder with that name already exists.", collision);
+            throw new IOException("\"" + destination.getFileName() + "\" already exists.", collision);
         }
         return destination;
     }

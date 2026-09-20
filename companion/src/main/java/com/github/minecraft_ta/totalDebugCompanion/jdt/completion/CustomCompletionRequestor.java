@@ -5,12 +5,16 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.*;
 import org.eclipse.jdt.internal.codeassist.InternalCompletionProposal;
+import org.eclipse.jdt.internal.codeassist.InternalCompletionContext;
+import org.eclipse.jdt.internal.compiler.lookup.LocalVariableBinding;
 import org.eclipse.jdt.internal.compiler.lookup.FieldBinding;
 import org.eclipse.jdt.internal.compiler.lookup.MethodBinding;
 import org.eclipse.jdt.internal.compiler.lookup.ReferenceBinding;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 public class CustomCompletionRequestor extends CompletionRequestor implements IProgressMonitor {
@@ -55,15 +59,28 @@ public class CustomCompletionRequestor extends CompletionRequestor implements IP
 
     private List<CompletionItem> convertProposals() {
         List<CompletionItem> candidates = new ArrayList<>();
+        var snippets = SnippetCompletionProposalProvider.getSnippets(this.unit, this);
+        Set<String> visibleLocals = new HashSet<>();
+        if (context instanceof InternalCompletionContext internal
+                && proposals.stream().anyMatch(proposal -> proposal.getKind() == CompletionProposal.LOCAL_VARIABLE_REF)) {
+            var locals = internal.getVisibleLocalVariables();
+            if (locals != null) for (int i = 0; i < locals.size(); i++) {
+                if (locals.elementAt(i) instanceof LocalVariableBinding local) visibleLocals.add(new String(local.name));
+            }
+        }
         for (var proposal : proposals) {
             if (!CompletionLabels.supports(proposal, context)) continue;
+            // JDT also proposes unresolved words as Object locals. Only offer actual declarations in scope.
+            if (proposal.getKind() == CompletionProposal.LOCAL_VARIABLE_REF && !visibleLocals.contains(CompletionLabels.name(proposal))) continue;
+            if (proposal.getKind() == CompletionProposal.KEYWORD
+                    && snippets.stream().anyMatch(snippet -> snippet.getName().equals(CompletionLabels.name(proposal)))) continue;
             candidates.add(item(proposal));
         }
         candidates.addAll(SubtypeCompletion.find(unit, this, candidates));
         var postfix = PostfixCompletion.find(unit, this, proposalProvider);
         completionToken = postfix.token();
         candidates.addAll(postfix.items());
-        candidates.addAll(SnippetCompletionProposalProvider.getSnippets(this.unit, this));
+        candidates.addAll(snippets);
         List<CompletionItem> result = new ArrayList<>();
         for (var item : CompletionRanking.order(candidates, completionToken)) {
             if (isCanceled()) break;

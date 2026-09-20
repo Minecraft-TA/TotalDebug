@@ -8,19 +8,55 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.nio.file.Path;
+import org.junit.jupiter.api.io.TempDir;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FileNamePopupTest {
+    @Test void duplicateNameKeepsTheFriendlyMessageAndPopupWidth(@TempDir Path directory) throws Exception {
+        var files = new ScriptFiles(directory.resolve("scripts"));
+        Path original = files.create(files.root(), "Test", false, "keep");
+        IOException collision = assertThrows(IOException.class, () -> files.create(files.root(), "Test", false, "replace"));
+        var work = new CompletableFuture<Void>();
+        var dialog = new AtomicReference<FileNamePopup>();
+        int[] width = {0};
+        SwingUtilities.invokeAndWait(() -> {
+            var popup = new FileNamePopup(null, "New Script", "Script", Icons.JAVA_FILE, "Test", name -> null, name -> work);
+            dialog.set(popup);
+            width[0] = popup.getWidth();
+            find(popup, JTextField.class).postActionEvent();
+        });
+        work.completeExceptionally(new CompletionException(new ExecutionException(collision)));
+        SwingUtilities.invokeAndWait(() -> {
+            var popup = dialog.get();
+            try {
+                assertTrue(labels(popup).contains("\"Test.tdscript\" already exists."), labels(popup));
+                assertFalse(labels(popup).contains(directory.toString()));
+                assertEquals(width[0], popup.getWidth());
+                var field = find(popup, JTextField.class);
+                assertTrue(field.isEnabled());
+                assertEquals("Test", field.getText());
+                field.setText("DifferentName");
+                assertFalse(labels(popup).contains("already exists"));
+            } finally { popup.dispose(); }
+        });
+        assertEquals("keep", files.read(original).text());
+    }
+
     @Test void keyboardOnlyNameEntryKeepsValidationAndReportsAsyncFailure() throws Exception {
         var work = new CompletableFuture<Void>();
         var dialog = new AtomicReference<FileNamePopup>();
+        int[] width = {0};
         SwingUtilities.invokeAndWait(() -> {
             var popup = new FileNamePopup(null, "New Script", "Script", Icons.JAVA_FILE, "", name -> {
                 try { ScriptFiles.validateName(name, true); return null; } catch (IOException failure) { return failure.getMessage(); }
             }, name -> work);
             dialog.set(popup);
+            width[0] = popup.getWidth();
             var field = find(popup, JTextField.class);
             assertTrue(popup.isUndecorated());
             assertNull(find(popup, JButton.class));
@@ -29,11 +65,13 @@ class FileNamePopupTest {
             field.setText("MyScript"); field.postActionEvent();
             assertFalse(field.isEnabled());
         });
-        work.completeExceptionally(new IOException("Already exists"));
+        String detail = "Unable to create the file in " + "a long folder name/".repeat(30);
+        work.completeExceptionally(new IOException(detail));
         SwingUtilities.invokeAndWait(() -> {
             var popup = dialog.get();
             assertTrue(find(popup, JTextField.class).isEnabled());
-            assertTrue(labels(popup).contains("Already exists"));
+            assertTrue(labels(popup).contains(detail));
+            assertEquals(width[0], popup.getWidth(), "A long error must not stretch the name popup");
             for (var listener : popup.getWindowFocusListeners()) listener.windowLostFocus(new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS));
             assertFalse(popup.isDisplayable());
             popup.dispose();

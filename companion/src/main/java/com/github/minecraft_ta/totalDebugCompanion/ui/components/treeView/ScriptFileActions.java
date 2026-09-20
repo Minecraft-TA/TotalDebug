@@ -34,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.function.Function;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.awt.event.ActionEvent;
 import java.util.function.UnaryOperator;
 
@@ -384,7 +385,9 @@ public final class ScriptFileActions {
     }
     private void report(CompletableFuture<?> work) {
         work.whenComplete((ignored, failure) -> { if (failure != null) SwingUtilities.invokeLater(() -> {
-            Throwable cause = failure; while (cause.getCause() != null) cause = cause.getCause();
+            Throwable cause = failure;
+            while ((cause instanceof CompletionException || cause instanceof ExecutionException) && cause.getCause() != null)
+                cause = cause.getCause();
             JOptionPane.showMessageDialog(owner, cause.getMessage(), "File operation failed", JOptionPane.ERROR_MESSAGE);
         }); });
     }

@@ -18,9 +18,11 @@ Evaluate expressions or Java statement bodies, inspect their results, and save r
 
 In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the selected suggestion. Selection survives result updates. Ctrl+P shows call parameters and emphasizes the current argument; Escape closes the popup. Field and method icons show visibility, static and final modifiers. Private members remain available through the script linker.
 
-Ctrl+Shift+Enter completes the statement containing the caret, without opening autocomplete. It adds missing call delimiters and semicolons, opens ordinary conditional/loop blocks, and moves to the next editing position. Missing expressions remain input positions. An open suggestion popup closes without accepting a suggestion. The command is one undoable edit and works without a connected runtime.
+Ctrl+Shift+Enter completes the statement containing the caret, without opening autocomplete. It adds missing call delimiters and semicolons, opens ordinary conditional/loop blocks, and moves to the next editing position. Missing or empty lambda bodies become multiline blocks, with the caret inside and the enclosing statement's semicolon completed. Missing expressions remain input positions. An open suggestion popup closes without accepting a suggestion. The command is one undoable edit and works without a connected runtime.
 
 Organize scripts in ordinary folders. Right-click a folder to create a script or folder inside it. File and folder menus offer Rename, Move to and Delete; scripts also offer Duplicate. F2 renames the selection. Drag files or folders onto a folder to move them; Move to is also available in the menu. Moves preserve open scripts, undo and running state. Deletion uses the recycle bin where available and requires stopping affected running scripts first. Duplicate copies the current draft, and external file changes are reported instead of silently overwritten.
+
+At the start of a statement, `if`, `for` and `fori` insert condition, foreach and indexed-loop templates. Enter accepts the template; Tab moves through its fields and into the body.
 
 Postfix templates transform the expression before the dot:
 

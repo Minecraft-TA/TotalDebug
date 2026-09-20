@@ -9,6 +9,8 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
 /** The name-entry interaction shared by script/folder creation, rename and duplication. */
@@ -23,13 +25,20 @@ public final class FileNamePopup extends JDialog {
         name.putClientProperty("JTextField.placeholderText", "Name");
         name.putClientProperty("JTextField.leadingIcon", icon);
         name.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        var error = new JLabel();
+        var error = new JLabel() {
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                size.width = 0; // The name field determines popup width; long errors remain available as a tooltip.
+                return size;
+            }
+        };
         error.setName("fileNameError");
         error.setForeground(ThemeColors.error());
         error.setBorder(BorderFactory.createEmptyBorder(4, 6, 2, 6));
         Runnable check = () -> {
             String problem = name.getText().isEmpty() ? null : validate.apply(name.getText());
             error.setText(problem);
+            error.setToolTipText(problem);
             error.setVisible(problem != null);
             pack();
         };
@@ -45,11 +54,14 @@ public final class FileNamePopup extends JDialog {
                 submitting = false;
                 if (failure == null) { dispose(); return; }
                 Throwable cause = failure;
-                while (cause.getCause() != null) cause = cause.getCause();
+                while ((cause instanceof CompletionException || cause instanceof ExecutionException) && cause.getCause() != null)
+                    cause = cause.getCause();
                 error.setText(cause.getMessage());
+                error.setToolTipText(cause.getMessage());
                 error.setVisible(true);
                 name.setEnabled(true);
                 pack();
+                name.requestFocusInWindow();
             }));
         });
         getRootPane().registerKeyboardAction(event -> dispose(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);

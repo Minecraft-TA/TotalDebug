@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItemKind;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomTextEdit;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.Range;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
@@ -452,6 +453,73 @@ public class ScriptCompletionPopupTest {
         press(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK); complete();
         assertEquals("if (true) {\n  \n}", edt(editor::getText));
         assertEquals("if (true) {\n  ".length(), edt(editor::getCaretPosition));
+    }
+
+    @Test void ifTemplateSelectsConditionThenMovesIntoTheBody() throws Exception {
+        setText("if"); request(); complete(); select("if"); press(KeyEvent.VK_ENTER);
+        assertEquals("condition", edt(editor::getSelectedText));
+        edt(() -> { editor.replaceSelection("true"); return null; });
+        press(KeyEvent.VK_TAB);
+        assertEquals("if (true) {\n\t\n}", edt(editor::getText));
+        assertEquals("if (true) {\n\t".length(), edt(editor::getCaretPosition));
+    }
+
+    @Test void statementTemplatesReplaceTheWholeKeywordAtAnInteriorCaret() throws Exception {
+        for (String keyword : List.of("if", "for")) {
+            setText(keyword);
+            edt(() -> { editor.setCaretPosition(keyword.length() - 1); return null; });
+            request(); complete(); select(keyword); press(KeyEvent.VK_ENTER);
+            assertEquals(keyword.equals("if") ? "if (condition) {\n\t\n}" : "for (var item : items) {\n\t\n}", edt(editor::getText));
+        }
+    }
+
+    @Test void existingHeadersDoNotOfferAnotherStatementTemplate() throws Exception {
+        for (String source : List.of("if (true) {}", "for (;;) {}")) {
+            String keyword = source.substring(0, source.indexOf(' '));
+            for (int caret : List.of(keyword.length() - 1, keyword.length())) {
+                setText(source);
+                edt(() -> { editor.setCaretPosition(caret); return null; });
+                request(); complete();
+                edt(() -> {
+                    var model = popup.items().getModel();
+                    for (int i = 0; i < model.getSize(); i++) {
+                        var item = (CompletionItem) model.getElementAt(i);
+                        assertFalse(item.getName().equals(keyword) && item.getKind() == CompletionItemKind.SNIPPET);
+                    }
+                    return null;
+                });
+                assertEquals(source, edt(editor::getText));
+            }
+        }
+    }
+
+    @Test void completeStatementExpandsLambdaBodyAndPreservesTheCallInOneUndoStep() throws Exception {
+        for (String before : List.of("name.keySet().forEach((object) -> );", "name.keySet().forEach((object) -> )")) {
+            setText(before);
+            edt(() -> { editor.setCaretPosition(before.indexOf("->") + 3); editor.discardAllEdits(); return null; });
+            press(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK); complete();
+            String after = "name.keySet().forEach((object) -> {\n\t\n});";
+            assertEquals(after, edt(editor::getText));
+            assertEquals(after.indexOf('\t') + 1, edt(editor::getCaretPosition));
+            press(KeyEvent.VK_ENTER, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK); complete();
+            assertEquals(after, edt(editor::getText));
+            edt(() -> { editor.undoLastAction(); return null; });
+            assertEquals(before, edt(editor::getText));
+            edt(() -> { editor.redoLastAction(); return null; });
+            assertEquals(after, edt(editor::getText));
+        }
+    }
+
+    @Test void forTemplateEditsCollectionThenVariableThenBody() throws Exception {
+        setText("String[] values = null;\nfor"); request(); complete(); select("for"); press(KeyEvent.VK_ENTER);
+        assertEquals("items", edt(editor::getSelectedText));
+        edt(() -> { editor.replaceSelection("values"); return null; });
+        press(KeyEvent.VK_TAB);
+        assertEquals("item", edt(editor::getSelectedText));
+        edt(() -> { editor.replaceSelection("value"); return null; });
+        press(KeyEvent.VK_TAB);
+        assertEquals("String[] values = null;\nfor (var value : values) {\n\t\n}", edt(editor::getText));
+        assertEquals(edt(editor::getText).indexOf("\t") + 1, edt(editor::getCaretPosition));
     }
 
     private void setText(String text) throws Exception { edt(() -> { editor.setText(text); editor.setCaretPosition(text.length()); return null; }); }
