@@ -34,6 +34,8 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -125,7 +127,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     bar.setMcpToggle(ignored -> {});
                     bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening", "http://127.0.0.1:32123/mcp"));
                     bar.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Connected"));
-                    bar.setGameIdentity("All the Mods 10", Path.of("C:/Games/ATM10SKY/minecraft"), 24064);
+                    bar.setGameIdentity("All the Mods 10", Path.of("C:/Games/ATM10SKY/minecraft"));
                     frame.validate();
                     for (String name : new String[]{"mcpStatus", "gameStatus"}) {
                         var service = field(bar, name, ServiceStatusWidget.class);
@@ -162,6 +164,92 @@ class StatusInteractionTest extends StatusBarTestFixture {
         });
     }
 
+    @Test void reconnectShowsRealStateAndKeepsThePopupUsableInBothThemes() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (CompanionTheme theme : CompanionTheme.available()) {
+                ThemeManager.installTheme(theme);
+                var bar = statusBar(target -> {});
+                var game = field(bar, "gameStatus", ServiceStatusWidget.class);
+                var retry = field(bar, "gameReconnect", JButton.class);
+                var popup = field(game, "popup", JPopupMenu.class);
+                var directoryRow = field(bar, "gameDirectoryRow", JPanel.class);
+                var calls = new AtomicInteger();
+                var attempt = new CompletableFuture<Void>();
+                var frame = new JFrame();
+                frame.setAutoRequestFocus(false);
+                frame.add(bar, BorderLayout.SOUTH);
+                frame.setBounds(100, 100, 720, 400);
+                try {
+                    assertFalse(game.isEnabled());
+                    assertFalse(retry.isVisible());
+                    bar.setGameReconnect(() -> { calls.incrementAndGet(); return attempt; });
+                    assertTrue(game.isEnabled());
+                    assertTrue(retry.getText() == null || retry.getText().isEmpty());
+                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    frame.setVisible(true);
+                    game.doClick(0);
+                    assertTrue(popup.isShowing());
+                    retry.doClick(0);
+                    retry.doClick(0);
+                    assertEquals(1, calls.get());
+                    assertFalse(retry.isEnabled());
+                    bar.setGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for Minecraft to reconnect."));
+                    attempt.complete(null);
+                    assertFalse(retry.isEnabled(), "Only backend connection state can enable the pending action");
+                    assertEquals("Game: Reconnecting", game.getText());
+                    assertTrue(popup.isShowing());
+                    bar.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected."));
+                    bar.setGameIdentity("All the Mods 10", Path.of("C:/Games/ATM10/minecraft"));
+                    assertTrue(retry.getText() == null || retry.getText().isEmpty());
+                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    assertTrue(retry.isEnabled());
+                    assertTrue(directoryRow.isVisible());
+                    capture(frame, "game-connected-" + theme.id());
+                    bar.setGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", "No matching Minecraft connected within 30 seconds."));
+                    assertTrue(popup.isShowing());
+                    assertTrue(retry.isEnabled());
+                    assertTrue(retry.getText() == null || retry.getText().isEmpty());
+                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    assertFalse(directoryRow.isVisible());
+                    Rectangle owner = new Rectangle(frame.getRootPane().getLocationOnScreen(), frame.getRootPane().getSize());
+                    assertTrue(owner.contains(new Rectangle(popup.getLocationOnScreen(), popup.getSize())));
+                    capture(frame, "game-retry-" + theme.id());
+                    assertTrue(notifications.snapshot().entries().isEmpty(), "UI must not duplicate backend notifications");
+                    bar.setGameReconnect(null);
+                    assertFalse(popup.isVisible());
+                    assertFalse(game.isEnabled());
+                } finally {
+                    frame.dispose();
+                    bar.dispose();
+                }
+            }
+        });
+    }
+
+    @Test void staleReconnectCompletionCannotEnableAnotherAttemptOrADisposedControl() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var bar = statusBar(target -> {});
+            var retry = field(bar, "gameReconnect", JButton.class);
+            var oldAttempt = new CompletableFuture<Void>();
+            var newAttempt = new CompletableFuture<Void>();
+            bar.setGameReconnect(() -> oldAttempt);
+            retry.doClick(0);
+            bar.setGameReconnect(null);
+            bar.setGameReconnect(() -> newAttempt);
+            retry.doClick(0);
+            oldAttempt.completeExceptionally(new IllegalStateException("Project changed"));
+            assertFalse(retry.isEnabled());
+            newAttempt.completeExceptionally(new IllegalStateException("Connection failed"));
+            assertTrue(retry.isEnabled());
+            var closingAttempt = new CompletableFuture<Void>();
+            bar.setGameReconnect(() -> closingAttempt);
+            retry.doClick(0);
+            bar.dispose();
+            closingAttempt.complete(null);
+            assertFalse(retry.isEnabled());
+        });
+    }
+
     @Test void gameDirectoryLabelsHandleRootsAndRootChildren() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var bar = statusBar(target -> {});
@@ -169,12 +257,12 @@ class StatusInteractionTest extends StatusBarTestFixture {
             JLabel label = field(directory, "label", JLabel.class);
             Path root = Path.of("").toAbsolutePath().getRoot();
             for (Path path : new Path[]{root, root.resolve("Minecraft"), Path.of("Minecraft")}) {
-                bar.setGameIdentity("Test", path, 1);
+                bar.setGameIdentity("Test", path);
                 assertEquals(path.toString(), label.getText());
                 assertEquals(path.toString(), label.getToolTipText());
             }
             Path nested = root.resolve("Games").resolve("Minecraft");
-            bar.setGameIdentity("Test", nested, 1);
+            bar.setGameIdentity("Test", nested);
             String separator = nested.getFileSystem().getSeparator();
             assertEquals("\u2026" + separator + "Games" + separator + "Minecraft", label.getText());
             assertEquals(nested.toString(), label.getToolTipText());

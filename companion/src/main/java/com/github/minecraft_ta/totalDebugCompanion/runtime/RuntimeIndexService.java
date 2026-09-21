@@ -175,11 +175,13 @@ public final class RuntimeIndexService implements AutoCloseable {
     public void waiting(String detail) {
         synchronized (this.lifecycleLock) {
             ensureOpen();
-            // Preparation can announce an unchanged inventory after an offline restore.
-            // Keep that work until the live identity proves that it is different.
-            if (this.pending == null) {
-                update(new Status(Phase.WAITING, detail, null));
-            }
+            // A saved inventory does not establish the identity of a newly connected runtime.
+            // Retire in-flight restores too, so they cannot publish READY after this transition.
+            this.pending = null;
+            this.activeInventoryId = null;
+            this.activeDataDirectory = null;
+            this.activeMetrics = null;
+            update(new Status(Phase.WAITING, detail, null));
         }
     }
 

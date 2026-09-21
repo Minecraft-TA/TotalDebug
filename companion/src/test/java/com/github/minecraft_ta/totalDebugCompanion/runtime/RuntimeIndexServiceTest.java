@@ -126,7 +126,7 @@ class RuntimeIndexServiceTest {
     }
 
     @Test
-    void keepsTheRestoredSnapshotWhenTheLiveInventoryMatches() throws Exception {
+    void reusesConfirmedInventoryButRevalidatesItAfterLivePreparation() throws Exception {
         String inventoryId = "matching-inventory";
         Path dataDirectory = this.temporaryDirectory.resolve("data");
         Path indexFile = new InstancePaths(dataDirectory).index();
@@ -174,9 +174,16 @@ class RuntimeIndexServiceTest {
             assertEquals(1, installations.get());
             var metrics = service.status().metrics();
             assertNotNull(metrics);
+            var reconfirmed = new CountDownLatch(1);
+            service.addStatusListener(status -> {
+                if (status.phase() == RuntimeIndexService.Phase.READY && installations.get() == 2) reconfirmed.countDown();
+            });
             service.waiting("Preparing inventory after reconnect");
-            service.accept(dataDirectory, inventoryId, dataDirectory.resolve("missing-inventory.properties"));
-            assertEquals(metrics, service.status().metrics());
+            assertEquals(RuntimeIndexService.Phase.WAITING, service.status().phase());
+            service.accept(dataDirectory, inventoryId, new InstancePaths(dataDirectory).inventory());
+            assertTrue(reconfirmed.await(5, TimeUnit.SECONDS));
+            assertEquals(metrics.classes(), service.status().metrics().classes());
+            assertEquals(cachedModified, Files.getLastModifiedTime(indexFile), "Confirmation reloads the cache without rebuilding it");
         } finally {
             snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
         }
@@ -241,7 +248,7 @@ class RuntimeIndexServiceTest {
     }
 
     @Test
-    void joinsLiveInventoryWhileTheSameSnapshotIsStillLoading() throws Exception {
+    void livePreparationRetiresTheUnconfirmedRestoreEvenWhenInventoryLaterMatches() throws Exception {
         Path root = this.temporaryDirectory.resolve("joining");
         var paths = new InstancePaths(root);
         Path jar = Files.write(this.temporaryDirectory.resolve("joining.jar"), archive(RuntimeIndexServiceTest.class, null));
@@ -279,7 +286,7 @@ class RuntimeIndexServiceTest {
             service.accept(root, "same", paths.inventory());
             release.countDown();
             assertTrue(installed.await(5, TimeUnit.SECONDS));
-            assertEquals(1, loads.get(), "Matching live inventory must reuse the in-flight load");
+            assertEquals(2, loads.get(), "Live confirmation must not revive a restore retired during preparation");
             assertEquals(1, snapshots.size());
         } finally {
             release.countDown();

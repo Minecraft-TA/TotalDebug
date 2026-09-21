@@ -16,6 +16,7 @@ public interface ProjectControls {
     RuntimeIndexService.Status getRuntimeIndexStatus();
     IndexIdentity.Kind indexSourceKind();
     CompletableFuture<Void> retryIndex();
+    CompletableFuture<Void> reconnectGame(ProjectScope expectedProject);
     CompletableFuture<Void> openProject(CompanionProfile profile, String nameOverride);
     CompletableFuture<Void> renameProject(String id, String nameOverride);
     CompletableFuture<Void> forgetProject(String id);

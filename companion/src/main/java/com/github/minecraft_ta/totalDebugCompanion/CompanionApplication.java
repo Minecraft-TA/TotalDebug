@@ -65,6 +65,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
@@ -93,6 +94,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private volatile boolean closed;
     private ProjectRegistry projects;
     private volatile boolean switching;
+    private record Reconnect(ProjectScope project, CompletableFuture<Void> result) { }
+    private volatile Reconnect reconnect;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
     // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
@@ -138,22 +141,28 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void connected() {
-                    updateGameStatus(new ServiceStatus(
-                            ServiceStatus.State.AVAILABLE,
-                            "Connected",
-                            "Minecraft is connected and authenticated."
-                    ));
+                    synchronized (lifecycleLock) {
+                        if (closed || switching) return;
+                        updateGameStatus(new ServiceStatus(
+                                ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
+                        if (reconnect != null && reconnect.project() == current) {
+                            var completed = reconnect;
+                            reconnect = null;
+                            completed.result().complete(null);
+                        }
+                    }
                 }
 
                 @Override
                 public void disconnected() {
-                    if (editorRuns != null) editorRuns.disconnected(closed || current == null || current.phase() == ProjectScope.Phase.RETIRED);
+                    if (editorRuns != null) editorRuns.disconnected(closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                     scriptCompiler.runtimeDisconnected();
-                    updateGameStatus(new ServiceStatus(
-                            ServiceStatus.State.INACTIVE,
-                            "Offline",
-                            "Minecraft is not connected."
-                    ));
+                    synchronized (lifecycleLock) {
+                        if (reconnect != null)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
+                        else if (gameStatus == null || gameStatus.state() != ServiceStatus.State.FAILED)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+                    }
                     debuggerController.clearTarget();
                     CodeModeJobService current = mcpJobs;
                     if (current != null) {
@@ -164,6 +173,15 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
+                }
+
+                @Override public void failed(String detail, ClientHelloMessage hello) {
+                    synchronized (lifecycleLock) {
+                        if (closed || switching) return;
+                        if (hello != null && (current == null || !current.profile().id().equals(hello.profileId()))) return;
+                        if (reconnect != null) failReconnect(reconnect, detail);
+                        else updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", detail));
+                    }
                 }
 
                 @Override
@@ -191,8 +209,19 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     public void start() throws IOException {
+        if (SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Start Companion outside the event dispatch thread");
         updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
-        session.bindAndPublish(launchConfiguration);
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    session.bindAndPublish(launchConfiguration);
+                    publishConnectionTarget();
+                } catch (IOException failure) { throw new CompletionException(failure); }
+            }, projectWorker).join();
+        } catch (CompletionException failure) {
+            if (failure.getCause() instanceof IOException io) throw io;
+            throw failure;
+        }
         setMcpEnabled(true).join();
     }
 
@@ -201,6 +230,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     @Override public void close() {
         if (closed) return;
         closed = true;
+        cancelReconnect("Companion is closing");
         notifications.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
@@ -255,6 +285,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (switching || !requested.equals(currentProject())) {
                 throw new IOException("Select this project explicitly before connecting");
             }
+            runtimeInventoryPending("Waiting for Minecraft to announce its current runtime inventory");
         }
     }
 
@@ -351,29 +382,86 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 if (!isConnected() || runtimeIndexService.status().sourceKind() == IndexIdentity.Kind.LOCAL) return false;
                 if (!session.send(new RetryRuntimeInventoryMessage()))
                     throw new IllegalStateException("Minecraft disconnected before runtime inventory could be requested");
-                runtimeIndexService.waiting("Requesting runtime inventory again");
+                runtimeInventoryPending("Requesting runtime inventory again");
                 return true;
             });
             if (requestedRuntime) return;
-            try { selected.refreshLocalSources(); }
+            try {
+                if (restoreOfflineRuntime(selected)) onUi(CompanionUi::runtimeChanged);
+            }
             catch (IOException failure) { throw new CompletionException(failure); }
-            selected.admit(() -> {
-                runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
-                return null;
-            });
-            onUi(CompanionUi::runtimeChanged);
         }, projectWorker);
+    }
+
+    @Override public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) {
+        Reconnect request;
+        synchronized (lifecycleLock) {
+            if (closed || switching || expectedProject == null || current != expectedProject || !expectedProject.isActive())
+                return CompletableFuture.failedFuture(new IllegalStateException("The selected project changed before reconnect"));
+            if (reconnect != null) return reconnect.result();
+            request = new Reconnect(expectedProject, new CompletableFuture<>());
+            reconnect = request;
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
+        }
+        try {
+            projectWorker.execute(() -> {
+                try {
+                    synchronized (lifecycleLock) {
+                        if (closed || reconnect != request || current != request.project() || !request.project().isActive()) return;
+                    }
+                    session.publishProfile(null);
+                    if (mcpJobs != null) mcpJobs.prepareProjectSwitch();
+                    session.disconnect();
+                    publishConnectionTarget();
+                } catch (IOException | RuntimeException failure) { failReconnect(request, failure.getMessage()); }
+            });
+            CompletableFuture.delayedExecutor(30, TimeUnit.SECONDS).execute(() ->
+                    failReconnect(request, "No matching Minecraft connected within 30 seconds."));
+        } catch (RejectedExecutionException failure) { failReconnect(request, "Companion is closing"); }
+        return request.result();
+    }
+
+    private void failReconnect(Reconnect request, String detail) {
+        synchronized (lifecycleLock) {
+            if (reconnect != request) return;
+            reconnect = null;
+            String message = detail == null || detail.isBlank() ? "Minecraft reconnect failed" : detail;
+            if (!closed && !switching && current == request.project() && request.project().isActive()) {
+                updateGameStatus(session != null && session.isConnected()
+                        ? new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft remains connected; reconnect failed: " + message)
+                        : new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", message));
+                notifications.publish(Severity.ERROR, "Minecraft reconnect failed", message, Source.capture(request.project(), "Minecraft", null));
+            }
+            request.result().completeExceptionally(new IOException(message));
+        }
+    }
+
+    private void cancelReconnect(String reason) {
+        synchronized (lifecycleLock) {
+            if (reconnect == null) return;
+            var cancelled = reconnect;
+            reconnect = null;
+            if (!closed) updateGameStatus(session != null && session.isConnected()
+                    ? new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated.")
+                    : new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+            cancelled.result().completeExceptionally(new IOException(reason));
+        }
+    }
+
+    private void publishConnectionTarget() throws IOException {
+        String profile;
+        synchronized (lifecycleLock) {
+            profile = closed || switching || current == null || !current.isActive() ? null : current.profile().id();
+        }
+        if (session != null) session.publishProfile(profile);
     }
 
     private void switchProject(CompanionProfile requested) throws IOException {
         validateProfile(requested);
         if (requested.equals(currentProject())) {
             projects.select(requested);
-            if (!isConnected()) {
-                requireProject().refreshLocalSources();
-                runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
-                onUi(CompanionUi::runtimeChanged);
-            }
+            publishConnectionTarget();
+            if (restoreOfflineRuntime(requireProject())) onUi(CompanionUi::runtimeChanged);
             return;
         }
         // Prepare the actual replacement before disturbing the current project.
@@ -386,7 +474,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (old != null) old.beginSwitch();
         }
         boolean installed = false;
+        Throwable switchFailure = null;
         try {
+            cancelReconnect("Project changed during reconnect");
+            if (session != null) session.publishProfile(null);
             if (ui != null) {
                 boolean[] canSwitch = {false};
                 SwingUtilities.invokeAndWait(() -> canSwitch[0] = ui.prepareProjectSwitch());
@@ -426,11 +517,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             catch (IOException failure) {
                 throw new IOException("Project opened, but its selection could not be saved: " + failure.getMessage(), failure);
             }
+        } catch (IOException | RuntimeException failure) {
+            switchFailure = failure;
+            throw failure;
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            throw new IOException("Project switch interrupted", failure);
+            var interrupted = new IOException("Project switch interrupted", failure);
+            switchFailure = interrupted;
+            throw interrupted;
         } catch (InvocationTargetException failure) {
-            throw new IOException("Unable to close project editors", failure.getCause());
+            var rejected = new IOException("Unable to close project editors", failure.getCause());
+            switchFailure = rejected;
+            throw rejected;
         } finally {
             try {
                 if (!installed) { replacement.retire(); replacement.close(); }
@@ -445,6 +543,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     }
                 }
                 onUi(view -> view.setSwitching(isSwitching()));
+                try { publishConnectionTarget(); }
+                catch (IOException failure) {
+                    updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection unavailable", "Unable to publish Companion endpoint: " + failure.getMessage()));
+                    if (switchFailure != null) switchFailure.addSuppressed(failure);
+                    else throw failure;
+                }
             }
         }
     }
@@ -481,6 +585,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (Files.exists(scripts) && !Files.isDirectory(scripts)) throw new IOException("Scripts path is not a directory: " + scripts);
     }
 
+    private void runtimeInventoryPending(String detail) {
+        scriptCompiler.suspendRuntime();
+        runtimeIndexService.waiting(detail);
+    }
+
     private void handleRuntimeInventory(RuntimeInventoryMessage message) {
         synchronized (lifecycleLock) {
             if (switching) return;
@@ -490,7 +599,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             switch (message.state()) {
                 case RuntimeInventoryMessage.PREPARING -> {
-                    runtimeIndexService.waiting(
+                    runtimeInventoryPending(
                             message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
                 }
                 case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
@@ -520,6 +629,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             var previous = scope.runtime();
             if (previous != null && !snapshot.rebuilt() && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
                     && previous.snapshot().signature().equals(snapshot.signature())) {
+                scriptCompiler.bind(previous.snapshot().isRuntime() ? previous.snapshot() : null);
                 bytecodeSource.close();
                 if (previous.snapshot() != snapshot) snapshot.close();
                 return;
@@ -555,8 +665,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 closeRuntime();
             }
             try {
-                scope.refreshLocalSources();
-                runtimeIndexService.restore(scope.profile().dataDirectory(), scope.profile().workspaceDirectory());
+                restoreOfflineRuntime(scope);
             } catch (IOException failure) {
                 runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage());
             }
@@ -564,6 +673,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }); } catch (RejectedExecutionException failure) {
             if (!closed) throw failure;
         }
+    }
+
+    private boolean restoreOfflineRuntime(ProjectScope scope) throws IOException {
+        if (scope.admit(session::hasClient)) return false;
+        scope.refreshLocalSources();
+        return scope.admit(() -> {
+            // Admission can begin during filesystem discovery. Check again under the same
+            // lock as live admission so no offline restore can undo compiler suspension.
+            if (session.hasClient()) return false;
+            runtimeIndexService.restore(scope.profile().dataDirectory(), scope.profile().workspaceDirectory());
+            return true;
+        });
     }
 
     private void finishRuntimeInstallation(RuntimeBinding installed, ProjectScope selected) {

@@ -8,7 +8,7 @@ TotalDebug and Companion support Minecraft 1.21.1, NeoForge 21.1, Windows x64 an
 
 Press F6 over a block, entity or inventory item to open its runtime class. Companion provides class and member search, Find Usages, hierarchy navigation and archive resources.
 
-Companion stays open when Minecraft exits and reconnects when a matching TotalDebug client starts. Cached source, search and reference navigation remain available offline while the referenced archives and Java installation are present.
+Companion stays open when Minecraft exits. With the game's project selected, TotalDebug connects automatically whether Minecraft or Companion starts first, and reconnects after Companion restarts. Discovery watches the local application endpoint files; background connection never launches or focuses Companion or changes its selected project. Cached source, search and reference navigation remain available offline while the referenced archives and Java installation are present.
 
 The index describes selected runtime archives and prepared class files. It does not reconstruct every transformation inside the running JVM. Decompiled source can differ from original source, and generated local names do not replace missing debugger metadata.
 
@@ -16,7 +16,9 @@ The index describes selected runtime archives and prepared class files. It does 
 
 Companion remembers one project per Minecraft instance and keeps one selected at a time. Scripts, watches, history and caches remain in that instance's existing `total-debug` directory. Standalone startup reopens the selected project, including cached source access while Minecraft is offline.
 
-F6 or an explicit source-open request from another game selects its project before connecting. An ordinary handshake cannot replace the selected project. Selection uses an authenticated loopback request separate from the occupied game socket; it does not depend on the optional MCP host. Companion protocol 15 requires a matching mod/Companion pair.
+F6 or an explicit source-open request from another game selects its project before connecting. An ordinary handshake cannot replace the selected project. Selection uses an authenticated loopback request separate from the occupied game socket; it does not depend on the optional MCP host. Companion protocol 16 requires a matching mod/Companion pair.
+
+The Game popup provides an icon-only Reconnect action for the selected project. It republishes discovery information and resets the active connection while keeping indexed browsing available. Pending means the authenticated connection has not completed; after 30 seconds without a matching game, the popup reports that timeout and permits another attempt. It does not claim Minecraft crashed. A stale action from another project is rejected. If discovery publication fails before disconnecting, the existing connection remains usable and the failure appears in notifications.
 
 Switching saves and closes project editors; a failed save prevents the switch. It detaches the debugger, requests cancellation of owned execution jobs, clears project views and pending results, and restores the selected instance's state. Minecraft processes remain running, and the existing MCP endpoint stays available. Disconnection does not prove arbitrary target code has stopped. See [ownership](../companion/README.md#ownership) for the switch phases and resource lifetimes.
 
@@ -36,7 +38,7 @@ The Notifications button retains the last 100 operation outcomes for the current
 
 Script activity is separate from notification history. Its popup lists active scripts and their Stop buttons; closing an editor requests cancellation. Game, MCP, index, and debugger status popups expose selectable details and Copy. Index status remains accessible while indexing, with Retry available after failure. A listening MCP server's copied detail is its endpoint URL.
 
-The header uses the project name and the shared dropdown SVG. Project rows use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Launcher controls, Companion-initiated game attachment and restoring open tabs remain subsequent work.
+The header uses the project name and the shared dropdown SVG. Project rows use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Selecting a project advertises it to an already-running matching game. Launcher controls and restoring open tabs remain subsequent work.
 
 ## Scripts and evaluation
 

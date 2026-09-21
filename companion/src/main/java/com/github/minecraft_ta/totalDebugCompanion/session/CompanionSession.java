@@ -23,6 +23,11 @@ import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.nio.file.Path;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class CompanionSession implements AutoCloseable {
@@ -53,6 +58,8 @@ public final class CompanionSession implements AutoCloseable {
         default void disconnected() {
         }
 
+        default void failed(String detail, ClientHelloMessage hello) { }
+
         default void runtimeInventory(RuntimeInventoryMessage message) {
         }
 
@@ -69,6 +76,9 @@ public final class CompanionSession implements AutoCloseable {
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
     private ProjectSelectionServer projectSelections;
     private AttachmentHandler projectSelectionHandler;
+    private CompanionSessionDescriptor descriptor;
+    private Path descriptorFile;
+    private volatile ClientHelloMessage clientHello;
 
     public CompanionSession(String expectedToken) {
         this(expectedToken, hello -> { }, new Listener() { });
@@ -93,8 +103,18 @@ public final class CompanionSession implements AutoCloseable {
         }
         this.projectSelections = new ProjectSelectionServer(this.authenticator,
                 this.projectSelectionHandler == null ? this.attachmentHandler : this.projectSelectionHandler, this::isConnected);
-        new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid(), this.projectSelections.port())
-                .writeAtomically(configuration.descriptorFile());
+        this.descriptorFile = configuration.descriptorFile();
+        this.descriptor = new CompanionSessionDescriptor(CompanionProtocol.VERSION, address.getPort(), ProcessHandle.current().pid(), this.projectSelections.port(), null);
+        publishProfile(null);
+    }
+
+    /** Writes only discovery metadata; the application's profile admission remains authoritative. */
+    public synchronized void publishProfile(String profileId) throws IOException {
+        if (state.get() == State.CLOSED) throw new IOException("Companion session is closed");
+        if (descriptor == null) return;
+        var next = new CompanionSessionDescriptor(descriptor.protocolVersion(), descriptor.port(), descriptor.processId(), descriptor.projectPort(), profileId);
+        next.writeAtomically(descriptorFile);
+        descriptor = next;
     }
 
     public void addExecutionResultListener(Consumer<ExecutionResultMessage> listener) {
@@ -113,8 +133,8 @@ public final class CompanionSession implements AutoCloseable {
     public void disconnect() {
         if (!this.server.isClientConnected()) return;
         try {
-            this.server.closeClientAfterPendingWrites().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException failure) {
+            this.server.closeClientAfterPendingWrites().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        } catch (ExecutionException | TimeoutException failure) {
             this.server.closeClient();
         } catch (InterruptedException failure) {
             this.server.closeClient();
@@ -135,6 +155,11 @@ public final class CompanionSession implements AutoCloseable {
         return this.state.get() == State.AUTHENTICATED && this.server.isClientConnected();
     }
 
+    /** Includes a client whose authentication handshake is still in progress. */
+    public boolean hasClient() {
+        return this.server.isClientConnected();
+    }
+
     public boolean send(AbstractMessage message) {
         if (!isConnected()) {
             return false;
@@ -142,7 +167,7 @@ public final class CompanionSession implements AutoCloseable {
         try {
             this.server.getMessageProcessor().enqueueMessage(Objects.requireNonNull(message, "message"));
             return true;
-        } catch (java.util.concurrent.RejectedExecutionException rejected) {
+        } catch (RejectedExecutionException rejected) {
             return false;
         }
     }
@@ -177,6 +202,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.addConnectionListener(new IConnectionListener() {
             @Override
             public void onConnected() {
+                clientHello = null;
                 if (CompanionSession.this.state.get() == State.WAITING_FOR_HELLO) {
                     CompanionSession.this.listener.connecting();
                 }
@@ -195,6 +221,7 @@ public final class CompanionSession implements AutoCloseable {
             @Override
             public void onConnectionError(Throwable cause) {
                 CompanionSession.this.listener.disconnected();
+                CompanionSession.this.listener.failed("Minecraft connection failed: " + cause.getMessage(), clientHello);
             }
         });
     }
@@ -204,6 +231,8 @@ public final class CompanionSession implements AutoCloseable {
             rejectAndClose("Handshake already completed");
             return;
         }
+
+        this.clientHello = hello;
 
         ServerHelloMessage response = this.authenticator.authenticate(hello);
         if (!response.accepted()) {
@@ -230,13 +259,14 @@ public final class CompanionSession implements AutoCloseable {
             return;
         }
         this.server.getMessageProcessor().enqueueMessage(ServerHelloMessage.rejected(reason));
+        this.listener.failed(reason, clientHello);
         this.server.closeClientAfterPendingWrites().whenComplete((ignored, failure) -> {
             this.state.compareAndSet(State.REJECTING, State.WAITING_FOR_HELLO);
         });
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         State previous = this.state.getAndSet(State.CLOSED);
         this.server.close();
         if (this.projectSelections != null) this.projectSelections.close();

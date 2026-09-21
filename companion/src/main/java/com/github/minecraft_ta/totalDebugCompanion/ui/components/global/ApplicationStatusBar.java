@@ -44,6 +44,8 @@ import java.awt.Dimension;
 import java.awt.BorderLayout;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.concurrent.CompletableFuture;
 
 public final class ApplicationStatusBar extends JPanel {
     private final Consumer<CompanionTheme> themeListener = theme -> applyTheme();
@@ -60,11 +62,12 @@ public final class ApplicationStatusBar extends JPanel {
     private final CopyValue mcpEndpoint = new CopyValue("Copy MCP endpoint");
     private final JLabel mcpDetail = PopupElements.label("");
     private Consumer<Boolean> toggleMcp;
+    private final JButton gameReconnect = new FlatIconButton(Icons.REFRESH, false);
+    private Supplier<CompletableFuture<Void>> reconnectGame;
+    private CompletableFuture<Void> reconnectAttempt;
     private final JLabel gameName = PopupElements.label("Minecraft is not connected");
     private final CopyValue gameDirectory = new CopyValue("Copy game directory");
-    private final JLabel gameProcess = PopupElements.label("");
     private final JPanel gameDirectoryRow = PopupElements.row(PopupElements.label("Game directory"), gameDirectory);
-    private final JPanel gameProcessRow = PopupElements.row(PopupElements.label("Process"), gameProcess);
     private final NotificationWidget notifications;
     private final ScriptActivityWidget scriptActivity;
     private boolean disposed;
@@ -138,8 +141,8 @@ public final class ApplicationStatusBar extends JPanel {
         });
         taskCards.add(taskState);
         taskCards.add(taskProgress);
-        retry = new JButton("Rebuild", Icons.REFRESH);
-        retry.setMargin(new Insets(2, 7, 2, 7));
+        retry = new FlatIconButton(Icons.REFRESH, false);
+        retry.setMargin(new Insets(2, 3, 2, 3));
         retry.addActionListener(event -> retryIndex.run());
         JPanel indexContent = PopupElements.column();
         indexContent.add(PopupElements.row(taskDetails, retry));
@@ -161,14 +164,24 @@ public final class ApplicationStatusBar extends JPanel {
         mcpContent.add(mcpDetail);
         mcpStatus.setContent(mcpContent);
         JPanel gameContent = PopupElements.column();
-        gameContent.add(PopupElements.row(gameName, null));
+        gameReconnect.setMargin(new Insets(2, 3, 2, 3));
+        gameReconnect.setVisible(false);
+        gameReconnect.addActionListener(event -> {
+            if (reconnectGame == null || reconnectAttempt != null) return;
+            CompletableFuture<Void> attempt = reconnectGame.get();
+            reconnectAttempt = attempt;
+            refreshGameControls();
+            attempt.whenComplete((ignored, failure) -> UIUtils.onEdt(() -> {
+                if (disposed || reconnectAttempt != attempt) return;
+                reconnectAttempt = null;
+                refreshGameControls();
+            }));
+        });
+        gameContent.add(PopupElements.row(gameName, gameReconnect));
         gameDirectoryRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
-        gameProcessRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
         gameContent.add(gameDirectoryRow);
-        gameContent.add(gameProcessRow);
         gameDirectoryRow.setVisible(false);
         gameDirectory.setEnabled(false);
-        gameProcessRow.setVisible(false);
         gameStatus.setContent(gameContent);
         gameStatus.setPopupAvailable(false);
         JPanel services = new JPanel();
@@ -191,6 +204,8 @@ public final class ApplicationStatusBar extends JPanel {
         ThemeManager.removeThemeChangeListener(this.themeListener);
         notifications.close();
         scriptActivity.close();
+        reconnectGame = null;
+        reconnectAttempt = null;
         gameStatus.close();
         mcpStatus.close();
         taskPopup.setVisible(false);
@@ -279,7 +294,6 @@ public final class ApplicationStatusBar extends JPanel {
                     || status.phase() == RuntimeIndexService.Phase.READY && !status.detail().equals(taskState.getText()));
             if (taskFailure.isVisible()) PopupElements.wrappedText(taskFailure, status.failure() == null ? status.detail() : status.failure().toString(), 320);
             retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry indexing" : "Rebuild index");
-            retry.setText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry" : "Rebuild");
             retry.getAccessibleContext().setAccessibleName(retry.getToolTipText());
             retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED || status.phase() == RuntimeIndexService.Phase.READY
                     || status.phase() == RuntimeIndexService.Phase.EMPTY);
@@ -291,18 +305,34 @@ public final class ApplicationStatusBar extends JPanel {
 
     public void setGameStatus(ServiceStatus status) {
         this.gameStatus.setStatus(status);
-        this.gameStatus.setPopupAvailable(status.state() == ServiceStatus.State.AVAILABLE);
         if (status.state() != ServiceStatus.State.AVAILABLE) {
-            gameName.setText(status.detail());
+            PopupElements.wrappedText(gameName, status.detail(), 300);
             gameDirectoryRow.setVisible(false);
             gameDirectory.setEnabled(false);
-            gameProcessRow.setVisible(false);
             gameDirectory.setValue("", "");
         }
+        refreshGameControls();
+    }
+
+    public void setGameReconnect(Supplier<CompletableFuture<Void>> reconnect) {
+        reconnectGame = reconnect;
+        if (reconnect == null) reconnectAttempt = null;
+        refreshGameControls();
+    }
+
+    private void refreshGameControls() {
+        ServiceStatus.State state = gameStatus.status().state();
+        boolean available = reconnectGame != null;
+        gameReconnect.setVisible(available);
+        gameReconnect.setEnabled(available && reconnectAttempt == null && state != ServiceStatus.State.PENDING);
+        gameReconnect.setToolTipText("Reconnect to the selected Minecraft instance");
+        gameReconnect.getAccessibleContext().setAccessibleName(gameReconnect.getToolTipText());
+        gameStatus.setPopupAvailable(available || state == ServiceStatus.State.AVAILABLE);
         gameStatus.refreshPopup();
     }
 
-    public void setGameIdentity(String name, Path directory, long processId) {
+    public void setGameIdentity(String name, Path directory) {
+        gameName.putClientProperty("html.disable", true);
         gameName.setText(name);
         Path parent = directory.getParent();
         String display = directory.toString();
@@ -313,8 +343,6 @@ public final class ApplicationStatusBar extends JPanel {
         gameDirectory.setValue(display, directory.toString());
         gameDirectoryRow.setVisible(true);
         gameDirectory.setEnabled(true);
-        gameProcess.setText(Long.toString(processId));
-        gameProcessRow.setVisible(processId > 0);
         gameStatus.refreshPopup();
     }
 

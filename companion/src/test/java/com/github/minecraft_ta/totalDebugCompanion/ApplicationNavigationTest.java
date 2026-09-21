@@ -22,6 +22,16 @@ import java.awt.Container;
 import java.awt.Component;
 import javax.swing.AbstractButton;
 import com.github.tth05.scnet.IConnectionListener;
+import com.github.tth05.scnet.Client;
+import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
+import java.net.InetSocketAddress;
+import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -36,6 +46,7 @@ import java.awt.event.FocusEvent;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -215,6 +226,54 @@ class ApplicationNavigationTest {
             });
             app.renameProject(app.currentProject().id(), "Renamed pack").get(3, TimeUnit.SECONDS);
             SwingUtilities.invokeAndWait(() -> assertEquals("Renamed pack", name.get().getText()));
+        }
+    }
+
+    @Test void reconnectPendingKeepsSnippetsUntilTheTransportActuallyDisconnects() throws Exception {
+        var configuration = new CompanionLaunchConfiguration(directory);
+        var game = new Client();
+        try (var app = new CompanionApplication(configuration, "test-token")) {
+            var profile = CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")));
+            app.openProject(profile).get(3, TimeUnit.SECONDS);
+            app.session().bindAndPublish(configuration);
+            ProtocolBindings.registerMod(game.getMessageProcessor());
+            var ready = new CompletableFuture<Void>();
+            game.getMessageBus().listenAlways(ServerHelloMessage.class, hello -> {
+                if (!hello.accepted()) ready.completeExceptionally(new AssertionError(hello.rejectionReason()));
+            });
+            game.getMessageBus().listenAlways(ReadyMessage.class, message -> ready.complete(null));
+            int port = CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION).port();
+            assertTrue(game.connect(new InetSocketAddress("127.0.0.1", port)));
+            game.getMessageProcessor().enqueueMessage(new ClientHelloMessage(CompanionProtocol.VERSION, "test-token", profile.id(),
+                    profile.dataDirectory().toString(), profile.workspaceDirectory().toString()));
+            ready.get(3, TimeUnit.SECONDS);
+            assertTrue(app.isConnected());
+            var completion = new CompletableFuture<ExecutionResult>();
+            SwingUtilities.invokeAndWait(() -> {
+                var window = app.createWindow();
+                try {
+                    var scriptsField = MainWindow.class.getDeclaredField("scripts");
+                    scriptsField.setAccessible(true);
+                    var snippets = new SnippetExecutionService(app.session(), (ScriptExecutionService) scriptsField.get(window), app.requireProject());
+                    var ownerField = MainWindow.class.getDeclaredField("snippetExecutions");
+                    ownerField.setAccessible(true);
+                    ownerField.set(window, snippets);
+                    // Seed an observation without executing game code; the real transport owns its lifetime.
+                    var runsField = SnippetExecutionService.class.getDeclaredField("runs");
+                    runsField.setAccessible(true);
+                    @SuppressWarnings("unchecked")
+                    var observations = (Map<Integer, CompletableFuture<ExecutionResult>>) runsField.get(snippets);
+                    observations.put(Integer.MAX_VALUE, completion);
+                    window.setGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for Minecraft."));
+                    assertFalse(completion.isDone(), "A pending request must preserve the still-connected snippet");
+                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+            });
+            var reconnect = app.reconnectGame(app.requireProject());
+            assertThrows(ExecutionException.class, () -> completion.get(5, TimeUnit.SECONDS));
+            assertFalse(app.isConnected());
+            assertFalse(reconnect.isDone(), "Reconnect still waits for the replacement game");
+        } finally {
+            game.close();
         }
     }
 

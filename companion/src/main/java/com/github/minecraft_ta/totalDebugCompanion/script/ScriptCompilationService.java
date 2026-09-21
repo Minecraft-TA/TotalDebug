@@ -196,6 +196,16 @@ public final class ScriptCompilationService implements AutoCloseable {
         this.detailTransfer.clear();
     }
 
+    /** Revoke compilation immediately; the runtime owner can retain its index for cached browsing. */
+    public void suspendRuntime() {
+        this.snapshot = null;
+        synchronized (this) {
+            invalidateComparison();
+            this.serverUnavailable = "Waiting for the current Minecraft runtime inventory";
+        }
+        for (int id : this.pending.keySet()) cancel(id);
+    }
+
     /** Must complete before the old native index is closed by its owner. */
     public void bind(ReadySnapshot snapshot) {
         if (snapshot != null && !snapshot.isRuntime()) throw new IllegalArgumentException("Script compilation requires a runtime inventory");

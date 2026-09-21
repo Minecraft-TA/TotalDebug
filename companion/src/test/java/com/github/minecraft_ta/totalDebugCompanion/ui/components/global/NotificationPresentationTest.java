@@ -110,9 +110,9 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Stopped", "Stopped"));
             assertTrue(checkbox.isEnabled());
             assertFalse(field(bar, "mcpEndpoint", CopyValue.class).isVisible());
-            assertFalse(button(field(bar, "mcpEndpoint", CopyValue.class), "Copy").isEnabled());
-            bar.setGameIdentity("Pack", directory, 1);
-            JButton copyDirectory = button(field(bar, "gameDirectory", CopyValue.class), "Copy");
+            assertFalse(button(field(bar, "mcpEndpoint", CopyValue.class), "Copy MCP endpoint").isEnabled());
+            bar.setGameIdentity("Pack", directory);
+            JButton copyDirectory = button(field(bar, "gameDirectory", CopyValue.class), "Copy game directory");
             copyDirectory.getModel().setArmed(true);
             copyDirectory.getModel().setPressed(true);
             bar.setGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Disconnected"));
@@ -172,7 +172,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
     }
     private static JButton button(Container container, String text) {
         for (Component child : container.getComponents()) {
-            if (child instanceof JButton button && text.equals(button.getText())) return button;
+            if (child instanceof JButton button && text.equals(button.getAccessibleContext().getAccessibleName())) return button;
             if (child instanceof Container nested) { var result = button(nested, text); if (result != null) return result; }
         }
         return null;
