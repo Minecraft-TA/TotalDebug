@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -78,17 +79,17 @@ public final class DebuggerPanel extends JPanel {
     private DebuggerSessionController.PausedState currentPause;
     private boolean disposed;
 
-    DebuggerPanel(
+    DebuggerPanel(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation
     ) {
-        this(state, controller, debuggerActions, frameNavigation, () -> {
+        this(notifications, state, controller, debuggerActions, frameNavigation, () -> {
         }, target -> {
         });
     }
 
-    DebuggerPanel(
+    DebuggerPanel(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation,
@@ -100,7 +101,7 @@ public final class DebuggerPanel extends JPanel {
         this.debuggerActions = Objects.requireNonNull(debuggerActions, "debuggerActions");
         this.frameNavigation = Objects.requireNonNull(frameNavigation, "frameNavigation");
         this.frames = new DebuggerFramesPane(this::selectFrame, frameNavigation);
-        this.inspector = new DebuggerInspector(state, controller, navigation);
+        this.inspector = new DebuggerInspector(notifications, state, controller, navigation);
 
         this.attach = toolbarButton(debuggerActions.attach());
         this.resume = toolbarButton(debuggerActions.resume());

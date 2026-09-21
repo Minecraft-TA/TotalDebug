@@ -1,13 +1,16 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import javax.swing.SwingUtilities;
+import javax.swing.JComponent;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import java.awt.Insets;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
-import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import java.awt.Color;
 import java.awt.Component;
@@ -17,7 +20,10 @@ import java.awt.RenderingHints;
 import java.util.Objects;
 
 /** Compact status-bar widget backed entirely by a published service status. */
-final class ServiceStatusWidget extends JButton {
+final class ServiceStatusWidget extends JButton implements AutoCloseable {
+    private final JPopupMenu popup = new JPopupMenu();
+    private boolean closed;
+    private boolean popupAvailable = true;
     private final String serviceName;
     private ServiceStatus status;
 
@@ -26,10 +32,9 @@ final class ServiceStatusWidget extends JButton {
             throw new IllegalArgumentException("Service name must not be blank");
         }
         this.serviceName = serviceName;
-        setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
-        setContentAreaFilled(false);
-        setBorderPainted(false);
-        setFocusable(false);
+        FlatIconButton.configure(this);
+        setMargin(new Insets(0, 6, 0, 6));
+        putClientProperty("html.disable", true);
         setRolloverEnabled(true);
         setIcon(new StatusDotIcon());
         setIconTextGap(5);
@@ -42,37 +47,31 @@ final class ServiceStatusWidget extends JButton {
     }
 
     private void applyStatus(ServiceStatus status) {
+        if (closed) return;
         this.status = Objects.requireNonNull(status, "status");
         setText(this.serviceName + ": " + status.summary());
-        setToolTipText("Show " + this.serviceName + " status");
+        setToolTipText(popupAvailable ? "Show " + this.serviceName + " controls" : status.detail());
         repaint();
     }
 
-    @Override
-    protected void paintComponent(Graphics graphics) {
-        if (getModel().isRollover()) {
-            Graphics hoverGraphics = graphics.create();
-            hoverGraphics.setColor(ThemeColors.hoverBackground());
-            hoverGraphics.fillRect(0, 0, getWidth(), getHeight());
-            hoverGraphics.dispose();
-        }
-        super.paintComponent(graphics);
+    private void showStatusPopup() {
+        if (popupAvailable) PopupElements.showAbove(popup, this);
     }
 
-    private void showStatusPopup() {
-        JPopupMenu popup = new JPopupMenu();
-        JMenuItem heading = new JMenuItem(this.serviceName);
-        heading.setEnabled(false);
-        popup.add(heading);
-        JMenuItem description = new JMenuItem(this.status.detail());
-        description.setEnabled(false);
-        popup.add(description);
-        popup.show(
-                this,
-                Math.min(0, getWidth() - popup.getPreferredSize().width),
-                -popup.getPreferredSize().height
-        );
+    void setPopupAvailable(boolean available) {
+        popupAvailable = available;
+        setEnabled(available);
+        if (!available) popup.setVisible(false);
+        applyStatus(status);
     }
+
+    void setContent(JComponent content) { PopupElements.content(popup, content); }
+
+    void refreshPopup() { if (popup.isVisible()) PopupElements.showAbove(popup, this); }
+
+    void applyTheme() { SwingUtilities.updateComponentTreeUI(popup); }
+
+    @Override public void close() { closed = true; popup.setVisible(false); }
 
     private final class StatusDotIcon implements Icon {
         private static final int SIZE = 7;

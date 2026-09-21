@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.tth05.jindex.ClassIndex;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -29,6 +31,58 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RuntimeIndexServiceTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test void forcedRebuildReportsMissingInventoryInsteadOfWaitingForIt() throws Exception {
+        var failed = new CountDownLatch(1);
+        try (var service = new RuntimeIndexService(new Object(), ignored -> { throw new AssertionError("No inventory"); })) {
+            service.addStatusListener(status -> { if (status.phase() == RuntimeIndexService.Phase.FAILED) failed.countDown(); });
+            service.rebuild(temporaryDirectory, null);
+            assertTrue(failed.await(5, TimeUnit.SECONDS));
+            assertEquals(RuntimeIndexService.Phase.FAILED, service.status().phase());
+            assertNotNull(service.status().failure());
+        }
+    }
+
+    @Test void explicitRebuildBypassesValidCacheAndCapturesMetricsBeforeHandoff() throws Exception {
+        Path root = temporaryDirectory.resolve("rebuild");
+        var paths = new InstancePaths(root);
+        Path jar = Files.write(temporaryDirectory.resolve("fixture.jar"), archive(RuntimeInventoryTest.class, null));
+        var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
+        var source = new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(), module);
+        try (ClassIndex cached = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
+            IndexCache.write(paths.index(), cached, new IndexCache.Manifest("same", List.of(source))).close();
+        }
+        new RuntimeInventory("same", "21", System.getProperty("java.home"), true,
+                List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
+                .write(paths.inventory());
+        var rebuilt = new CountDownLatch(1);
+        var loaded = new CountDownLatch(1);
+        var installations = new AtomicInteger();
+        try (var service = new RuntimeIndexService(new Object(), snapshot -> {
+            try (snapshot) {
+                if (installations.incrementAndGet() == 1) assertNotNull(snapshot.index().findClass(RuntimeIndexServiceTest.class.getName()));
+                else assertNotNull(snapshot.index().findClass(RuntimeInventoryTest.class.getName()));
+            }
+        })) {
+            service.addStatusListener(status -> {
+                if (status.phase() == RuntimeIndexService.Phase.FAILED) { loaded.countDown(); rebuilt.countDown(); }
+                if (status.phase() == RuntimeIndexService.Phase.READY) {
+                    if (status.metrics().rebuilt()) rebuilt.countDown(); else loaded.countDown();
+                }
+            });
+            service.restore(root);
+            assertTrue(loaded.await(10, TimeUnit.SECONDS));
+            assertEquals(RuntimeIndexService.Phase.READY, service.status().phase(), service.status().detail());
+            assertEquals(1, service.status().metrics().classes());
+            assertTrue(service.status().metrics().elapsedNanos() > 0);
+            service.rebuild(root, null);
+            assertTrue(rebuilt.await(30, TimeUnit.SECONDS));
+            assertEquals(RuntimeIndexService.Phase.READY, service.status().phase(), service.status().detail());
+            assertTrue(service.status().metrics().rebuilt());
+            assertTrue(service.status().metrics().classes() > 1);
+            assertEquals(2, installations.get());
+        }
+    }
 
     @Test
     void indexesOnlyThePublishedSourcesNotArbitraryEmbeddedJars() throws Exception {
@@ -75,7 +129,7 @@ class RuntimeIndexServiceTest {
     void keepsTheRestoredSnapshotWhenTheLiveInventoryMatches() throws Exception {
         String inventoryId = "matching-inventory";
         Path dataDirectory = this.temporaryDirectory.resolve("data");
-        Path indexFile = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(dataDirectory).index();
+        Path indexFile = new InstancePaths(dataDirectory).index();
         Path classes = Files.createDirectories(this.temporaryDirectory.resolve("classes"));
         try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
             IndexCache.write(indexFile, index, new IndexCache.Manifest(inventoryId,
@@ -86,7 +140,7 @@ class RuntimeIndexServiceTest {
         new RuntimeInventory(inventoryId, "21", System.getProperty("java.home"), true,
                 List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.DIRECTORY, classes, classes.toUri().toString(),
                         new RuntimeInventory.RuntimeModule("test", "Test", RuntimeInventory.ModuleKind.MOD))))
-                .write(new com.github.minecraft_ta.totaldebug.storage.InstancePaths(dataDirectory).inventory());
+                .write(new InstancePaths(dataDirectory).inventory());
 
         var cachedModified = Files.getLastModifiedTime(indexFile);
         AtomicInteger installations = new AtomicInteger();
@@ -118,6 +172,11 @@ class RuntimeIndexServiceTest {
             assertTrue(settled.await(5, TimeUnit.SECONDS));
             assertEquals(RuntimeIndexService.Phase.READY, service.status().phase());
             assertEquals(1, installations.get());
+            var metrics = service.status().metrics();
+            assertNotNull(metrics);
+            service.waiting("Preparing inventory after reconnect");
+            service.accept(dataDirectory, inventoryId, dataDirectory.resolve("missing-inventory.properties"));
+            assertEquals(metrics, service.status().metrics());
         } finally {
             snapshots.forEach(RuntimeIndexService.ReadySnapshot::close);
         }
@@ -127,10 +186,10 @@ class RuntimeIndexServiceTest {
     @Test
     void rebuildsOneIndexInPlaceAndRestoresOnlyTheCurrentInventory() throws Exception {
         Path root = this.temporaryDirectory.resolve("instance");
-        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(root);
+        var paths = new InstancePaths(root);
         Path jar = this.temporaryDirectory.resolve("current.jar");
         var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
-        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        var snapshots = new CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
         try {
             for (int version = 0; version < 2; version++) {
                 Class<?> type = version == 0 ? RuntimeIndexServiceTest.class : RuntimeInventoryTest.class;
@@ -184,7 +243,7 @@ class RuntimeIndexServiceTest {
     @Test
     void joinsLiveInventoryWhileTheSameSnapshotIsStillLoading() throws Exception {
         Path root = this.temporaryDirectory.resolve("joining");
-        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(root);
+        var paths = new InstancePaths(root);
         Path jar = Files.write(this.temporaryDirectory.resolve("joining.jar"), archive(RuntimeIndexServiceTest.class, null));
         var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
         new RuntimeInventory("same", "21", System.getProperty("java.home"), true,
@@ -198,7 +257,7 @@ class RuntimeIndexServiceTest {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch installed = new CountDownLatch(1);
         AtomicInteger loads = new AtomicInteger();
-        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        var snapshots = new CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
         try (RuntimeIndexService service = new RuntimeIndexService(new Object(), snapshot -> {
             snapshots.add(snapshot);
             installed.countDown();
@@ -266,7 +325,7 @@ class RuntimeIndexServiceTest {
         var release = new CountDownLatch(1);
         var installed = new CountDownLatch(1);
         var discarded = new AtomicReference<ClassIndex>();
-        var snapshots = new java.util.concurrent.CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
+        var snapshots = new CopyOnWriteArrayList<RuntimeIndexService.ReadySnapshot>();
         try (var service = new RuntimeIndexService(new Object(), snapshot -> {
             snapshots.add(snapshot);
             installed.countDown();
@@ -324,7 +383,7 @@ class RuntimeIndexServiceTest {
     }
 
     private com.github.minecraft_ta.totaldebug.storage.InstancePaths cachedFixture(String id) throws Exception {
-        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(temporaryDirectory.resolve(id));
+        var paths = new InstancePaths(temporaryDirectory.resolve(id));
         Path jar = Files.write(temporaryDirectory.resolve(id + ".jar"), archive(RuntimeIndexServiceTest.class, null));
         var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
         new RuntimeInventory(id, "21", System.getProperty("java.home"), true,

@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.formdev.flatlaf.util.SystemFileChooser;
+
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
@@ -228,9 +232,9 @@ public final class ScriptFileActions {
         });
     }
     private void chooseDestination(List<Path> paths) {
-        var chooser = new JFileChooser(context.get().project().scriptFiles().root().toFile());
-        chooser.setDialogTitle("Move to folder"); chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (chooser.showDialog(owner, "Move") == JFileChooser.APPROVE_OPTION) report(move(paths, chooser.getSelectedFile().toPath()));
+        var chooser = new SystemFileChooser(context.get().project().scriptFiles().root().toFile());
+        chooser.setDialogTitle("Move to folder"); chooser.setFileSelectionMode(SystemFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showDialog(owner, "Move") == SystemFileChooser.APPROVE_OPTION) report(move(paths, chooser.getSelectedFile().toPath()));
     }
     private void confirmDelete(List<Path> paths) {
         if (paths.isEmpty() || busy) return;
@@ -384,11 +388,13 @@ public final class ScriptFileActions {
         }, submit::apply);
     }
     private void report(CompletableFuture<?> work) {
+        var notifications = context.get().notifications();
+        Source source = Source.capture(context.get().project(), "Scripts", null);
         work.whenComplete((ignored, failure) -> { if (failure != null) SwingUtilities.invokeLater(() -> {
             Throwable cause = failure;
             while ((cause instanceof CompletionException || cause instanceof ExecutionException) && cause.getCause() != null)
                 cause = cause.getCause();
-            JOptionPane.showMessageDialog(owner, cause.getMessage(), "File operation failed", JOptionPane.ERROR_MESSAGE);
+            notifications.publish(Severity.ERROR, "File operation failed", cause.toString(), source);
         }); });
     }
 }

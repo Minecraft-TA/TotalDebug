@@ -25,6 +25,7 @@ class CodeModeJobServiceTest {
     @TempDir
     Path temporaryDirectory;
 
+
     @Test
     void recordsExactSourceAndTerminalOutput() throws Exception {
         FakeTransport transport = new FakeTransport();

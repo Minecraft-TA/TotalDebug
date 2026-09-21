@@ -32,6 +32,10 @@ Companion first restores a usable saved runtime snapshot. Otherwise it shows the
 
 The status bar distinguishes a local index from a runtime index. A local index supports inspection, not script execution. Minecraft's published runtime replaces it when ready and remains available after disconnection. Reopening the same offline project rescans its mod files. Detecting a changed archive during source reading retires the stale index and requests a rescan. A failed runtime refresh preserves an existing local view. See the [implementation plan](PROJECT_OPENING_PLAN.md) for scope and validation.
 
+The Notifications button retains the last 100 operation outcomes for the current Companion session. Open it to read or copy details, dismiss an entry, or clear history. Closing a source tab does not remove its notifications. Open source uses the recorded location in the originating project; it opens the current file rather than a historical copy. Repeated autosave failures update one entry until a save succeeds.
+
+Script activity is separate from notification history. Its popup lists active scripts and their Stop buttons; closing an editor requests cancellation. Game, MCP, index, and debugger status popups expose selectable details and Copy. Index status remains accessible while indexing, with Retry available after failure. A listening MCP server's copied detail is its endpoint URL.
+
 The header uses the project name and the shared dropdown SVG. Project rows use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Launcher controls, Companion-initiated game attachment and restoring open tabs remain subsequent work.
 
 ## Scripts and evaluation

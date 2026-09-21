@@ -25,6 +25,8 @@ Use `--tests 'package.TestClass'` on the owning test task for focused feedback. 
 
 The checked-in configuration enables configuration cache, build cache and filesystem watching. Avoid habitual `clean` during editing. A warm unchanged invocation and a test that actually executes measure different things. The worker cap and heap ceiling are shared build settings, not a guarantee about total resident JVM memory.
 
+Companion defaults `awt.useSystemAAFontSettings` to `on` during `CompanionApp` class initialization, before AWT caches font hints. This selects grayscale text antialiasing for standalone and IDE launches as well as mod launches. An explicit JVM property takes precedence. Java-runtime selection, log reservation and `--app-home` remain launch-site responsibilities.
+
 Build conventions and custom tasks live in `build-logic`. Root `check` explicitly includes its functional tests. Those tests use temporary fake Minecraft instances; normal builds do not install anything.
 
 ## Dependencies

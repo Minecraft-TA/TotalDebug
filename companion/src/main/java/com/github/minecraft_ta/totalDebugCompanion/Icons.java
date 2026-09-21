@@ -74,6 +74,8 @@ public class Icons {
     public static final FlatSVGIcon CLOSE_ICON = new FlatSVGIcon("icons/close.svg");
     public static final FlatSVGIcon CLOSE_HOVERED_ICON = new FlatSVGIcon("icons/closeHovered.svg");
     public static final FlatSVGIcon DELETE = new FlatSVGIcon("icons/delete.svg");
+    public static final FlatSVGIcon REFRESH = new FlatSVGIcon("icons/refresh.svg");
+    public static final FlatSVGIcon NOTIFICATIONS = new FlatSVGIcon("icons/notifications.svg");
     public static final FlatSVGIcon SETTINGS = new FlatSVGIcon("icons/settings.svg");
 
     public static final FlatSVGIcon RUN = new FlatSVGIcon("icons/run.svg");
@@ -128,4 +130,5 @@ public class Icons {
     public static final FlatSVGIcon EXPAND_EDITOR = new FlatSVGIcon("icons/expand_editor.svg");
     public static final FlatSVGIcon COLLAPSE_EDITOR = new FlatSVGIcon("icons/collapse_editor.svg");
     public static final FlatSVGIcon DOWN_ARROW = new FlatSVGIcon("icons/arrow_down.svg");
+    public static final FlatSVGIcon RIGHT_ARROW = new FlatSVGIcon("icons/arrow_right.svg");
 }

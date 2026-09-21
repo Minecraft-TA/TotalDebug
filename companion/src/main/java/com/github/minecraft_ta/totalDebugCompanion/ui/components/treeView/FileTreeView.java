@@ -281,8 +281,8 @@ public class FileTreeView extends JScrollPane {
                 continue;
             }
             List<String> relative = new ArrayList<>();
-            for (Path segment : root.relativize(target)) {
-                relative.add(segment.toString());
+            if (!target.equals(root)) {
+                for (Path segment : root.relativize(target)) relative.add(segment.toString());
             }
             return this.tree.revealItemPath(root.getFileName().toString(), relative);
         }

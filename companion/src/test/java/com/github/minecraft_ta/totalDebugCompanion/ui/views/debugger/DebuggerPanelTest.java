@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -42,7 +43,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             var controller = new DebuggerSessionController(ignored -> null);
             var actions = new DebuggerActions(controller);
-            var panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activate) -> {});
+            var panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activate) -> {});
             try {
                 for (String tooltip : List.of("Attach debugger", "Continue (F9)", "Step Over (F8)",
                         "Step Into (F7)", "Step Out (Shift+F8)", "Detach debugger", "View breakpoints", "Add Watch (Shift+Enter)")) {
@@ -75,7 +76,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
             });
 
             JavaExpressionField field = find(panel, JavaExpressionField.class);
@@ -107,7 +108,7 @@ class DebuggerPanelTest {
         AtomicReference<DebuggerPanel> panelReference = new AtomicReference<>();
         DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
         DebuggerActions actions = new DebuggerActions(controller);
-        SwingUtilities.invokeAndWait(() -> panelReference.set(new DebuggerPanel(InstanceState.inMemory(),
+        SwingUtilities.invokeAndWait(() -> panelReference.set(new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(),
                 controller,
                 actions,
                 (frame, activateEditor) -> {
@@ -138,7 +139,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(),
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(),
                     controller,
                     actions,
                     (frame, activateEditor) -> {
@@ -188,7 +189,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
             });
             DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
                     1,
@@ -233,7 +234,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
             });
             DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
                     1,
@@ -281,7 +282,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(),
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(),
                     controller,
                     actions,
                     (frame, activateEditor) -> {
@@ -337,7 +338,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(),
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(),
                     controller,
                     actions,
                     (frame, activateEditor) -> navigated.set(frame)
@@ -382,7 +383,7 @@ class DebuggerPanelTest {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
             AtomicReference<DebugEngine.StackFrame> navigated = new AtomicReference<>();
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(),
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(),
                     controller,
                     actions,
                     (frame, activateEditor) -> navigated.set(frame)
@@ -464,7 +465,7 @@ class DebuggerPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             DebuggerSessionController controller = new DebuggerSessionController(ignored -> null);
             DebuggerActions actions = new DebuggerActions(controller);
-            DebuggerPanel panel = new DebuggerPanel(InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
+            DebuggerPanel panel = new DebuggerPanel(new NotificationCenter(), InstanceState.inMemory(), controller, actions, (frame, activateEditor) -> {
             });
             DebugEngine.StackFrame frame = new DebugEngine.StackFrame(
                     1,

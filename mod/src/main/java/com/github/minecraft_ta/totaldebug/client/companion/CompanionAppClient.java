@@ -54,7 +54,6 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 public final class CompanionAppClient implements AutoCloseable {
-    private static final String SWING_TEXT_ANTIALIASING_JVM_OPTION = "-Dawt.useSystemAAFontSettings=on";
 
     private final Path workspaceDirectory;
     private final Path dataDirectory;
@@ -592,7 +591,6 @@ public final class CompanionAppClient implements AutoCloseable {
     static List<String> buildLaunchCommand(Path javaExecutable, Path launchJar, Path appHome) {
         return List.of(
                 javaExecutable.toString(),
-                SWING_TEXT_ANTIALIASING_JVM_OPTION,
                 "-jar",
                 launchJar.toString(),
                 CompanionLaunchContract.APP_HOME_ARGUMENT,

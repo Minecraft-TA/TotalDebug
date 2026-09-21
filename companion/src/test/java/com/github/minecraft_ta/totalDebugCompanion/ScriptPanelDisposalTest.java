@@ -47,13 +47,13 @@ class ScriptPanelDisposalTest {
                 firstCompletion.pack();
                 firstSignature.pack();
                 secondCompletion.pack();
-                assertEquals(2, bus.owners.size());
+                assertTrue(bus.owners.isEmpty(), "Editors no longer subscribe to transport results");
                 first.dispose();
                 first.dispose();
                 assertFalse(firstCompletion.isDisplayable());
                 assertFalse(firstSignature.isDisplayable());
                 assertTrue(secondCompletion.isDisplayable());
-                assertEquals(1, bus.owners.size());
+                assertTrue(bus.owners.isEmpty());
                 second.dispose();
                 assertTrue(bus.owners.isEmpty());
             });

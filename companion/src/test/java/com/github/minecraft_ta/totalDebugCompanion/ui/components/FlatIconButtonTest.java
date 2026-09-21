@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,27 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FlatIconButtonTest {
+    @Test void popupActionsPaintDistinctHoverAndPressedStates() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (var theme : CompanionTheme.available()) {
+                ThemeManager.installTheme(theme);
+                for (JButton button : new JButton[]{PopupElements.icon(Icons.DELETE, "Clear history", () -> {}),
+                        PopupElements.link("Copy details", Icons.COPY, () -> {})}) {
+                    int[] normal = pixels(button);
+                    button.dispatchEvent(new MouseEvent(button, MouseEvent.MOUSE_ENTERED, 0, 0, 4, 4, 0, false));
+                    assertTrue(button.getModel().isRollover(), "Mouse entry must update the model");
+                    int[] hover = pixels(button);
+                    assertFalse(Arrays.equals(normal, hover), theme.id() + " " + button.getToolTipText() + " hover");
+                    button.getModel().setArmed(true);
+                    button.getModel().setPressed(true);
+                    assertFalse(Arrays.equals(hover, pixels(button)), theme.id() + " " + button.getToolTipText() + " press");
+                    button.getModel().setArmed(false);
+                    button.getModel().setPressed(false);
+                }
+            }
+        });
+    }
+
     @Test
     void bothThemesPaintDistinctKeyboardFocusAndSelectedStates() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

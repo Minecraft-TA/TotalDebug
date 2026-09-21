@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CompanionLaunchContractTest {
     @Test
-    void launchesCompanionWithGrayscaleTextAntialiasing() {
+    void launchesCompanionWithItsAppHome() {
         Path javaExecutable = Path.of("runtime", "bin", "java.exe");
         Path companionJar = Path.of("companion", "TotalDebugCompanion.jar");
         Path appHome = Path.of("total-debug", "companion-app");
@@ -17,7 +17,6 @@ class CompanionLaunchContractTest {
         assertEquals(
                 List.of(
                         javaExecutable.toString(),
-                        "-Dawt.useSystemAAFontSettings=on",
                         "-jar",
                         companionJar.toString(),
                         "--app-home",

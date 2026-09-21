@@ -10,10 +10,24 @@ import javax.swing.JSplitPane;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Graphics;
+import java.awt.Dimension;
 
 /** Owns the main workspace geometry and every separator between its regions. */
 public final class WorkspacePanel extends JPanel {
     private static final int TREE_WIDTH = 350;
+    private JComponent notificationPanel;
+
+    public void setNotificationPanel(JComponent panel) {
+        notificationPanel = panel;
+        panel.setBorder(BorderFactory.createCompoundBorder(DynamicMatteBorder.separatorRule(0, 1, 0, 0), panel.getBorder()));
+        add(panel, BorderLayout.EAST);
+    }
+
+    @Override public void doLayout() {
+        if (notificationPanel != null)
+            notificationPanel.setPreferredSize(new Dimension(Math.min(420, getWidth() / 2), 0));
+        super.doLayout();
+    }
 
     public WorkspacePanel(
             JComponent treeHeader,

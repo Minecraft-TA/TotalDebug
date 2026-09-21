@@ -99,7 +99,9 @@ final class ModuleFilterPopup extends JPopupMenu {
         actions.add(new JLabel("Select:"));
         actions.add(Box.createHorizontalStrut(4));
         actions.add(all);
+        actions.add(Box.createHorizontalStrut(4));
         actions.add(none);
+        actions.add(Box.createHorizontalStrut(4));
         actions.add(invert);
         actions.add(Box.createHorizontalGlue());
         return actions;
@@ -108,6 +110,7 @@ final class ModuleFilterPopup extends JPopupMenu {
     private JButton actionButton(String text, Runnable action) {
         JButton button = new JButton(text);
         FlatIconButton.configure(button);
+        button.putClientProperty("JButton.buttonType", null);
         button.addActionListener(event -> action.run());
         return button;
     }

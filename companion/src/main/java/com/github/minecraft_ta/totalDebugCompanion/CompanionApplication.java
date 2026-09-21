@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -66,6 +70,9 @@ import java.util.function.Consumer;
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
+    private final NotificationCenter notifications = new NotificationCenter();
+    private EditorScriptRunService editorRuns;
+    public NotificationCenter notifications() { return notifications; }
     private ScriptExecutionService scriptExecutions;
     private CompanionSession session;
     private final CompanionLaunchConfiguration launchConfiguration;
@@ -76,7 +83,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
-    private CompanionMcpServer mcpServer;
+    private volatile CompanionMcpServer mcpServer;
+    // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
+    private volatile CodeModeJobService mcpJobs;
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
@@ -86,6 +95,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private volatile boolean switching;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
+    // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
+    private final ExecutorService mcpWorker = Executors.newSingleThreadExecutor(
+            runnable -> Thread.ofPlatform().daemon().name("companion-mcp-lifecycle").unstarted(runnable));
 
     public CompanionApplication(CompanionLaunchConfiguration configuration, String token) throws IOException {
         this(configuration, token, null);
@@ -99,6 +111,16 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(this::updateRuntimeIndexUi);
             debuggerController = createDebuggerController();
+            debuggerController.addListener(new DebuggerSessionController.Listener() {
+                private Throwable lastFailure;
+                @Override public void statusChanged(DebuggerSessionController.Status status) {
+                    if (!closed && !switching && status.failure() != null && status.failure() != lastFailure) {
+                        notifications.publish(Severity.ERROR, "Debugger operation failed", status.detail() + "\n" + status.failure(),
+                                Source.capture(current, "Debugger", null));
+                    }
+                    lastFailure = status.failure();
+                }
+            });
             restoreProfile();
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
                 @Override public void openClass(OpenClassMessage message) {
@@ -125,6 +147,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void disconnected() {
+                    if (editorRuns != null) editorRuns.disconnected(closed || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                     scriptCompiler.runtimeDisconnected();
                     updateGameStatus(new ServiceStatus(
                             ServiceStatus.State.INACTIVE,
@@ -132,7 +155,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                             "Minecraft is not connected."
                     ));
                     debuggerController.clearTarget();
-                    CompanionMcpServer current = mcpServer;
+                    CodeModeJobService current = mcpJobs;
                     if (current != null) {
                         current.runtimeDisconnected();
                     }
@@ -154,6 +177,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
             });
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
+            editorRuns = new EditorScriptRunService(scriptExecutions, session, notifications);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (CompletionException failure) {
@@ -169,7 +193,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     public void start() throws IOException {
         updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
         session.bindAndPublish(launchConfiguration);
-        startOptionalMcpServer();
+        setMcpEnabled(true).join();
     }
 
     public void awaitExit() throws InterruptedException { exitRequested.await(); }
@@ -177,14 +201,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     @Override public void close() {
         if (closed) return;
         closed = true;
+        notifications.close();
+        if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
+            mcpWorker.close();
+            runCleanup("Close MCP", this::closeMcpServer);
             projectWorker.close();
+            if (mcpJobs != null) runCleanup("Close MCP jobs", mcpJobs::close);
             synchronized (lifecycleLock) {
                 if (current != null && current.isActive()) current.beginSwitch();
                 switching = true;
             }
             if (runtimeIndexService != null) runCleanup("Close runtime loader", runtimeIndexService::close);
-            runCleanup("Close MCP", this::closeMcpServer);
             if (session != null) runCleanup("Close session", session::close);
             if (debuggerController != null) runCleanup("Close debugger", debuggerController::close);
             CompanionUi view = ui;
@@ -307,6 +335,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         ProjectScope selected = current;
         if (selected == null) return CompletableFuture.failedFuture(new IllegalStateException("No project is open"));
         return CompletableFuture.runAsync(() -> {
+            if (runtimeIndexService.status().active()) return;
+            boolean rebuild = selected.admit(() -> {
+                if (runtimeIndexService.status().phase() != RuntimeIndexService.Phase.READY) return false;
+                if (selected.runtime() == null) return false;
+                runtimeIndexService.rebuild(selected.profile().dataDirectory(),
+                        selected.runtime().snapshot().isRuntime() ? null : selected.profile().workspaceDirectory());
+                return true;
+            });
+            if (rebuild) {
+                onUi(CompanionUi::runtimeChanged);
+                return;
+            }
             boolean requestedRuntime = selected.admit(() -> {
                 if (!isConnected() || runtimeIndexService.status().sourceKind() == IndexIdentity.Kind.LOCAL) return false;
                 if (!session.send(new RetryRuntimeInventoryMessage()))
@@ -365,7 +405,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
             // a broken debugger/connection cannot detach cleanly.
-            if (mcpServer != null) runCleanup("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            CodeModeJobService jobs = mcpJobs;
+            if (jobs != null) runCleanup("Disconnect execution jobs", jobs::prepareProjectSwitch);
+            if (editorRuns != null) editorRuns.disconnected(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
             runCleanup("Clear debugger target", () -> getDebuggerController().clearTarget().join());
@@ -476,7 +518,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             ProjectScope scope = requireProject();
             CompanionProfile current = scope.profile();
             var previous = scope.runtime();
-            if (previous != null && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
+            if (previous != null && !snapshot.rebuilt() && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
                     && previous.snapshot().signature().equals(snapshot.signature())) {
                 bytecodeSource.close();
                 if (previous.snapshot() != snapshot) snapshot.close();
@@ -571,18 +613,22 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     private void startMcpServer() throws Exception {
-        var jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
+        CodeModeJobService jobs = mcpJobs;
+        if (jobs == null) jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
                 this::isConnected, this::runtimeContext);
         startMcpServer(jobs, CompanionMcpServer.MCP_PORT);
     }
 
     CompanionMcpServer startMcpServer(CodeModeJobService jobs, int port) throws Exception {
+        if (mcpServer != null) throw new IllegalStateException("MCP server is already running");
+        if (mcpJobs != null && mcpJobs != jobs) throw new IllegalStateException("MCP jobs belong to the application");
+        mcpJobs = jobs;
         CompanionMcpServer server = new CompanionMcpServer(this, jobs, port);
         try {
             server.start();
             mcpServer = server;
             updateMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening",
-                    "MCP is listening at " + server.endpointUrl()));
+                    server.endpointUrl()));
             System.err.println("TotalDebug Companion MCP listening at " + server.endpointUrl());
             return server;
         } catch (Exception failure) { server.close(); throw failure; }
@@ -604,8 +650,26 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     "MCP startup failed: " + exception
             ));
             System.err.println("TotalDebug Companion MCP is unavailable: " + exception.getMessage());
+            notifications.publish(Severity.ERROR, "MCP startup failed", exception.toString(), Source.application("MCP"));
             exception.printStackTrace(System.err);
         }
+    }
+
+    public CompletableFuture<Void> setMcpEnabled(boolean enabled) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        return CompletableFuture.runAsync(() -> {
+            if (closed) return;
+            if (enabled) {
+                if (mcpServer == null) startOptionalMcpServer();
+            } else {
+                updateMcpStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Stopping", "Stopping the MCP server"));
+                try { closeMcpServer(); }
+                catch (RuntimeException failure) {
+                    updateMcpStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Unavailable", failure.toString()));
+                    notifications.publish(Severity.ERROR, "Unable to stop MCP", failure.toString(), Source.application("MCP"));
+                }
+            }
+        }, mcpWorker);
     }
 
     private void closeMcpServer() {
@@ -641,7 +705,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit, this);
+                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {
@@ -695,13 +759,22 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             onUi(view -> view.setMcpStatus(status));
         }
     }
+    private RuntimeIndexService.Status lastIndexStatus;
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
+        if (!closed && !switching && status.phase() == RuntimeIndexService.Phase.FAILED && !status.equals(lastIndexStatus)) {
+            notifications.publish(Severity.ERROR, "Class indexing failed", status.detail() + (status.failure() == null ? "" : "\n" + status.failure()),
+                    Source.capture(current, "Index", null));
+        }
+        lastIndexStatus = status;
         synchronized (lifecycleLock) {
             var installed = current == null ? null : current.runtime();
-            boolean failedLocalRefresh = status.phase() == RuntimeIndexService.Phase.FAILED
-                    && status.sourceKind() == IndexIdentity.Kind.LOCAL
-                    && installed != null && !installed.snapshot().isRuntime();
-            if (status.phase() == RuntimeIndexService.Phase.EMPTY || failedLocalRefresh) {
+            boolean staleLocalIndex = false;
+            if (status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.LOCAL
+                    && installed != null && installed.snapshot().localGuard() != null) {
+                try { installed.snapshot().localGuard().checkAll(); }
+                catch (IOException failure) { staleLocalIndex = true; }
+            }
+            if (status.phase() == RuntimeIndexService.Phase.EMPTY || staleLocalIndex) {
                 closeRuntime();
                 onUi(CompanionUi::runtimeChanged);
             }
