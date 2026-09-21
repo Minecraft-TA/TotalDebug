@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
+
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
@@ -227,10 +229,7 @@ public final class BreakpointsWindow extends JDialog {
         JPanel listPanel = new JPanel(new BorderLayout());
         listPanel.add(toolbar, BorderLayout.NORTH);
         listPanel.add(breakpointList, BorderLayout.CENTER);
-        listPanel.setBorder(DynamicMatteBorder.separatorRule(0, 0, 0, 1));
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listPanel, this.details);
-        split.setBorder(BorderFactory.createEmptyBorder());
-        split.setDividerSize(1);
+        JSplitPane split = new ThinSplitPane(listPanel, this.details);
         split.setResizeWeight(0.34);
         setContentPane(split);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
