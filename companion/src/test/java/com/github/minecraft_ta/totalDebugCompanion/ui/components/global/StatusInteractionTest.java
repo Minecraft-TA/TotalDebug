@@ -3,14 +3,25 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.JFrame;
+import javax.swing.JButton;
+import javax.swing.JScrollPane;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -149,6 +160,77 @@ class StatusInteractionTest extends StatusBarTestFixture {
                 }
             } finally { frame.dispose(); bar.dispose(); }
         });
+    }
+
+    @Test void gameDirectoryLabelsHandleRootsAndRootChildren() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var bar = statusBar(target -> {});
+            CopyValue directory = field(bar, "gameDirectory", CopyValue.class);
+            JLabel label = field(directory, "label", JLabel.class);
+            Path root = Path.of("").toAbsolutePath().getRoot();
+            for (Path path : new Path[]{root, root.resolve("Minecraft"), Path.of("Minecraft")}) {
+                bar.setGameIdentity("Test", path, 1);
+                assertEquals(path.toString(), label.getText());
+                assertEquals(path.toString(), label.getToolTipText());
+            }
+            Path nested = root.resolve("Games").resolve("Minecraft");
+            bar.setGameIdentity("Test", nested, 1);
+            String separator = nested.getFileSystem().getSeparator();
+            assertEquals("\u2026" + separator + "Games" + separator + "Minecraft", label.getText());
+            assertEquals(nested.toString(), label.getToolTipText());
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void activityPopupAndStopControlsStayInsideTheirViewports(boolean longName, @TempDir Path directory) throws Exception {
+        var project = new ProjectScope(new Object(), new CompanionProfile("activity-test", directory, directory), InstanceState.inMemory());
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                var bar = statusBar(target -> {});
+                var activity = field(bar, "scriptActivity", ScriptActivityWidget.class);
+                var runs = field(activity, "runs", EditorScriptRunService.class);
+                var frame = new JFrame();
+                // Put the actual activity control at the right edge of a small owner.
+                frame.add(activity, BorderLayout.SOUTH);
+                frame.setAutoRequestFocus(false);
+                frame.setBounds(100, 100, 340, 400);
+                frame.setVisible(true);
+                var inspected = new AtomicBoolean();
+                // Inspect the real initial run event before the disconnected fixture rejects submission.
+                Runnable unsubscribe = runs.subscribe(() -> {
+                    if (runs.activeRuns().isEmpty() || !inspected.compareAndSet(false, true)) return;
+                    frame.validate();
+                    activity.doClick(0);
+                    var popup = field(activity, "popup", JPopupMenu.class);
+                    var scroll = field(activity, "scroll", JScrollPane.class);
+                    var rows = field(activity, "rows", JPanel.class);
+                    JPanel row = (JPanel) rows.getComponent(0);
+                    JButton stop = field(row, "stop", JButton.class);
+                    Rectangle stopBounds = SwingUtilities.convertRectangle(row, stop.getBounds(), scroll.getViewport());
+                    assertTrue(new Rectangle(scroll.getViewport().getSize()).contains(stopBounds), "Stop must remain visible");
+                    Rectangle owner = new Rectangle(frame.getRootPane().getLocationOnScreen(), frame.getRootPane().getSize());
+                    assertTrue(owner.contains(new Rectangle(popup.getLocationOnScreen(), popup.getSize())), "Activity popup must stay in its owner");
+                    stop.doClick(0);
+                    assertEquals(EditorScriptRunService.Phase.STOPPING, runs.activeRuns().getFirst().state().phase());
+                    assertFalse(stop.isEnabled());
+                    assertTrue(owner.contains(new Rectangle(popup.getLocationOnScreen(), popup.getSize())), "Refresh must preserve containment");
+                });
+                try {
+                    String label = longName ? "Long script name ".repeat(30) : "Test";
+                    runs.start(project, Source.capture(project, label, null), "", false, ScriptExecutionEnvironment.THREAD);
+                    assertTrue(inspected.get());
+                    assertFalse(field(activity, "popup", JPopupMenu.class).isVisible());
+                } finally {
+                    unsubscribe.run();
+                    frame.dispose();
+                    bar.dispose();
+                }
+            });
+        } finally {
+            project.retire();
+            project.close();
+        }
     }
 
     private static <T> T field(Object object, String name, Class<T> type) {

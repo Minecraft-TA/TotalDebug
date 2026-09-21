@@ -1,21 +1,24 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
-import javax.swing.SwingUtilities;
-import javax.swing.BorderFactory;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
-import java.awt.Insets;
-import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.BoxLayout;
 import javax.swing.JScrollPane;
+import javax.swing.Scrollable;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Insets;
+import java.awt.Rectangle;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -25,7 +28,7 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
     private final EditorScriptRunService runs;
     private final Runnable unsubscribe;
     private final JPopupMenu popup = new JPopupMenu();
-    private final JPanel rows = new JPanel();
+    private final JPanel rows = new ActivityRows();
     private final JScrollPane scroll = new JScrollPane(rows);
     private final Map<Integer, RunRow> runRows = new LinkedHashMap<>();
     private boolean closed;
@@ -41,7 +44,7 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
         scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         PopupElements.content(popup, scroll);
-        addActionListener(event -> { refreshPopup(); popup.show(this, 0, -popup.getPreferredSize().height); });
+        addActionListener(event -> { refreshPopup(); PopupElements.showAbove(popup, this); });
         unsubscribe = runs.subscribe(() -> UIUtils.onEdt(this::refresh));
     }
     private void refresh() {
@@ -50,8 +53,8 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
         setVisible(!active.isEmpty());
         setText(active.size() == 1 ? active.getFirst().source().label() + ": " + active.getFirst().state().phase().label()
                 : active.size() + " scripts active");
-        refreshPopup();
         if (active.isEmpty()) popup.setVisible(false);
+        refreshPopup();
     }
     private void refreshPopup() {
         var active = runs.activeRuns();
@@ -71,7 +74,15 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
             row.stop.setEnabled(run.state().phase() != EditorScriptRunService.Phase.STOPPING);
         }
         scroll.setPreferredSize(new Dimension(380, Math.min(180, Math.max(30, rows.getPreferredSize().height))));
-        if (popup.isVisible()) popup.pack();
+        if (popup.isVisible()) PopupElements.showAbove(popup, this);
+    }
+
+    private static final class ActivityRows extends JPanel implements Scrollable {
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) { return 24; }
+        @Override public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) { return Math.max(24, visible.height - 24); }
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
     }
 
     private static final class RunRow extends JPanel {
