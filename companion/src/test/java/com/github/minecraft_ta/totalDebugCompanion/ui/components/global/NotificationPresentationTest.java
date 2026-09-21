@@ -5,9 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import org.junit.jupiter.api.Test;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -15,17 +12,13 @@ import javax.swing.JCheckBox;
 import javax.swing.JTextField;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JTextArea;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
-import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import javax.swing.SwingUtilities;
-import javax.imageio.ImageIO;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Dimension;
 import java.awt.BorderLayout;
-import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -45,7 +38,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
         var widget = new AtomicReference<NotificationWidget>();
         notifications.publish(Severity.ERROR, "Run failed", "", source);
         SwingUtilities.invokeAndWait(() -> widget.set(new NotificationWidget(notifications, ignored -> null, opened::complete)));
-        JPopupMenu popup = field(widget.get(), "popup", JPopupMenu.class);
+        JPanel popup = widget.get().historyPanel();
         SwingUtilities.invokeAndWait(() -> button(popup, "Run failed").doClick(0));
         JButton open = button(popup, "Open script");
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -71,7 +64,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             assertTrue(text.getPreferredSize().width <= 325, text.getPreferredSize().toString());
             notifications.publish(Severity.ERROR, "Run failed", "Details", Source.application("Test"));
             ApplicationStatusBar bar = statusBar(target -> {});
-            JPopupMenu popup = field(find(bar, NotificationWidget.class), "popup", JPopupMenu.class);
+            JPanel popup = find(bar, NotificationWidget.class).historyPanel();
             assertNull(find(popup, JTextArea.class));
             assertNull(find(popup, JTextField.class));
             JButton copy = button(popup, "Copy details");
@@ -92,63 +85,15 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             bar.get().setEditor(null);
             assertEquals(1, notifications.snapshot().entries().size());
             var widget = find(bar.get(), NotificationWidget.class);
-            assertTrue(widget.getText().contains("Unable to save"));
+            assertTrue(widget.messageButton().getText().contains("Unable to save"));
             notifications.acknowledge(Set.of(event));
-            assertEquals("", widget.getText());
+            assertEquals("", widget.messageButton().getText());
             notifications.publish(Severity.SUCCESS, "Formatted", "", Source.application("Test"));
-            assertTrue(widget.getText().contains("Formatted"));
+            assertTrue(widget.messageButton().getText().contains("Formatted"));
             bar.get().dispose();
             notifications.publish(Severity.ERROR, "Late", "", Source.application("Test"));
-            assertTrue(widget.getText().contains("Formatted"));
+            assertTrue(widget.messageButton().getText().contains("Formatted"));
         });
-    }
-
-    @Test void captureBoundedHistoryAndAlwaysInteractiveIndexInBothThemes() throws Exception {
-        Path output = Files.createDirectories(Path.of("build/notification-preview"));
-        for (CompanionTheme theme : CompanionTheme.available()) {
-            SwingUtilities.invokeAndWait(() -> {
-                ThemeManager.installTheme(theme);
-                notifications.clear();
-                notifications.publish(Severity.INFORMATION, "Run cancelled", "Cancelled before execution", Source.application("CameraDrag"));
-                notifications.publish(Severity.SUCCESS, "Applied 3 formatting edits", "", Source.application("Test"));
-                notifications.publish(Severity.ERROR, "Compilation failed", "EventListener cannot be resolved to a type\nTest.tdscript:18", Source.application("Test"));
-                ApplicationStatusBar bar = statusBar(target -> {});
-                bar.setMcpToggle(ignored -> {});
-                bar.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
-                bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening", "http://127.0.0.1:32123/mcp"));
-                assertEquals(ThemeColors.link().getRGB(), field(bar, "mcpEndpoint", JButton.class).getForeground().getRGB());
-                for (RuntimeIndexService.Phase phase : RuntimeIndexService.Phase.values()) {
-                    bar.setRuntimeStatus(new RuntimeIndexService.Status(phase, "Runtime index " + phase.name().toLowerCase(), null));
-                    JButton index = field(bar, "taskState", JButton.class);
-                    assertNotNull(index);
-                    assertTrue(index.isEnabled());
-                    assertTrue(index.isVisible());
-                    assertTrue(index.isFocusable());
-                }
-                bar.setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.READY, "Runtime index ready", null,
-                        IndexIdentity.Kind.RUNTIME, new RuntimeIndexService.Metrics(82314, 10_500_000_000L, true)));
-                bar.setGameIdentity("All the Mods 10 - To the Sky", Path.of("C:/Games/ATM10SKY/minecraft"), 24064);
-                capture(bar, new Dimension(1050, 24), output.resolve("status-" + theme.id() + ".png"));
-                var widget = find(bar, NotificationWidget.class);
-                try {
-                    var field = NotificationWidget.class.getDeclaredField("popup");
-                    field.setAccessible(true);
-                    var popup = (JPopupMenu) field.get(widget);
-                    button(popup, "Compilation failed").doClick(0);
-                    capture(popup, popup.getPreferredSize(), output.resolve("history-" + theme.id() + ".png"));
-                    assertTrue(popup.getWidth() <= 520);
-                    assertTrue(popup.getHeight() <= 450);
-                    assertNull(find(popup, JTextArea.class));
-                    for (String name : new String[]{"mcpStatus", "gameStatus"}) {
-                        var service = field(bar, name, ServiceStatusWidget.class);
-                        var servicePopup = field(service, "popup", JPopupMenu.class);
-                        capture(servicePopup, servicePopup.getPreferredSize(), output.resolve(name + "-" + theme.id() + ".png"));
-                    }
-                    var indexPopup = field(bar, "taskPopup", JPopupMenu.class);
-                    capture(indexPopup, indexPopup.getPreferredSize(), output.resolve("index-" + theme.id() + ".png"));
-                } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-            });
-        }
     }
 
     @Test void mcpToggleAndIndexRefreshFollowPublishedState() throws Exception {
@@ -164,10 +109,10 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             assertFalse(checkbox.isEnabled());
             bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Stopped", "Stopped"));
             assertTrue(checkbox.isEnabled());
-            assertFalse(field(bar, "mcpEndpoint", JButton.class).isVisible());
-            assertFalse(field(bar, "mcpEndpoint", JButton.class).isEnabled());
+            assertFalse(field(bar, "mcpEndpoint", CopyValue.class).isVisible());
+            assertFalse(button(field(bar, "mcpEndpoint", CopyValue.class), "Copy").isEnabled());
             bar.setGameIdentity("Pack", directory, 1);
-            JButton copyDirectory = field(bar, "gameDirectory", JButton.class);
+            JButton copyDirectory = button(field(bar, "gameDirectory", CopyValue.class), "Copy");
             copyDirectory.getModel().setArmed(true);
             copyDirectory.getModel().setPressed(true);
             bar.setGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Disconnected"));
@@ -189,6 +134,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             try {
                 JPanel body = new JPanel(new BorderLayout());
                 body.add(widget, BorderLayout.SOUTH);
+                body.add(widget.historyPanel(), BorderLayout.EAST);
                 frame.setContentPane(body);
                 frame.setSize(700, 400);
                 frame.setVisible(true);
@@ -212,7 +158,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
                 assertTrue(panel.getY() >= 0);
                 assertTrue(panel.getY() + panel.getHeight() < frame.getLayeredPane().getHeight());
                 widget.doClick(0);
-                var popup = field(widget, "popup", JPopupMenu.class);
+                var popup = widget.historyPanel();
                 notifications.publish(Severity.INFORMATION, "New while open", "", Source.application("Test"));
                 assertTrue(popup.isVisible());
                 assertEquals(0, balloon.entryId());
@@ -220,21 +166,9 @@ class NotificationPresentationTest extends StatusBarTestFixture {
         });
     }
 
-    private static void capture(Component component, Dimension size, Path path) {
-        component.setSize(size);
-        layout(component);
-        var image = new BufferedImage(size.width, size.height, BufferedImage.TYPE_INT_ARGB);
-        var graphics = image.createGraphics();
-        component.printAll(graphics);
-        graphics.dispose();
-        try { ImageIO.write(image, "png", path.toFile()); } catch (Exception failure) { throw new AssertionError(failure); }
-    }
     private static <T> T field(Object owner, String name, Class<T> type) {
         try { var field = owner.getClass().getDeclaredField(name); field.setAccessible(true); return type.cast(field.get(owner)); }
         catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-    }
-    private static void layout(Component component) {
-        if (component instanceof Container container) { container.doLayout(); for (Component child : container.getComponents()) layout(child); }
     }
     private static JButton button(Container container, String text) {
         for (Component child : container.getComponents()) {

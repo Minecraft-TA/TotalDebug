@@ -23,6 +23,7 @@ import java.util.Objects;
 final class ServiceStatusWidget extends JButton implements AutoCloseable {
     private final JPopupMenu popup = new JPopupMenu();
     private boolean closed;
+    private boolean popupAvailable = true;
     private final String serviceName;
     private ServiceStatus status;
 
@@ -49,17 +50,24 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
         if (closed) return;
         this.status = Objects.requireNonNull(status, "status");
         setText(this.serviceName + ": " + status.summary());
-        setToolTipText("Show " + this.serviceName + " status");
+        setToolTipText(popupAvailable ? "Show " + this.serviceName + " controls" : status.detail());
         repaint();
     }
 
     private void showStatusPopup() {
-        PopupElements.showAbove(popup, this);
+        if (popupAvailable) PopupElements.showAbove(popup, this);
+    }
+
+    void setPopupAvailable(boolean available) {
+        popupAvailable = available;
+        setEnabled(available);
+        if (!available) popup.setVisible(false);
+        applyStatus(status);
     }
 
     void setContent(JComponent content) { PopupElements.content(popup, content); }
 
-    void refreshPopup() { if (popup.isVisible()) popup.pack(); }
+    void refreshPopup() { if (popup.isVisible()) PopupElements.showAbove(popup, this); }
 
     void applyTheme() { SwingUtilities.updateComponentTreeUI(popup); }
 

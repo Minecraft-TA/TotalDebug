@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import javax.swing.SwingUtilities;
+import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import javax.swing.JCheckBox;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
@@ -38,7 +39,9 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.Timer;
+import javax.swing.JComponent;
 import java.awt.Dimension;
+import java.awt.BorderLayout;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -54,13 +57,11 @@ public final class ApplicationStatusBar extends JPanel {
     private final JLabel taskFailure = PopupElements.label("");
     private final JButton retry;
     private final JCheckBox mcpEnabled = new JCheckBox("Enable MCP server");
-    private String mcpAddress = "";
-    private final JButton mcpEndpoint = PopupElements.link("", Icons.COPY, () -> PopupElements.copy(mcpAddress));
+    private final CopyValue mcpEndpoint = new CopyValue("Copy MCP endpoint");
     private final JLabel mcpDetail = PopupElements.label("");
     private Consumer<Boolean> toggleMcp;
     private final JLabel gameName = PopupElements.label("Minecraft is not connected");
-    private Path gamePath;
-    private final JButton gameDirectory = PopupElements.link("", Icons.COPY, () -> PopupElements.copy(gamePath.toString()));
+    private final CopyValue gameDirectory = new CopyValue("Copy game directory");
     private final JLabel gameProcess = PopupElements.label("");
     private final JPanel gameDirectoryRow = PopupElements.row(PopupElements.label("Game directory"), gameDirectory);
     private final JPanel gameProcessRow = PopupElements.row(PopupElements.label("Process"), gameProcess);
@@ -102,17 +103,21 @@ public final class ApplicationStatusBar extends JPanel {
         this.breadcrumbs = new BreadcrumbBar(Objects.requireNonNull(navigator, "navigator"));
         this.memberDebounce = new Timer(140, event -> refreshMember());
         this.memberDebounce.setRepeats(false);
-        setLayout(new BoxLayout(this, BoxLayout.LINE_AXIS));
+        setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(1, 7, 1, 5));
         setMinimumSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
         setPreferredSize(new Dimension(0, UiMetrics.STATUS_BAR_HEIGHT));
 
-        add(this.breadcrumbs);
-        add(Box.createHorizontalStrut(12));
-        add(this.editorStatusLabel);
-        add(this.scriptActivity);
-        add(this.notifications);
-        add(Box.createHorizontalGlue());
+        JPanel context = new JPanel();
+        context.setOpaque(false);
+        context.setLayout(new BoxLayout(context, BoxLayout.LINE_AXIS));
+        context.add(this.breadcrumbs);
+        context.add(Box.createHorizontalStrut(12));
+        context.add(this.editorStatusLabel);
+        context.add(this.scriptActivity);
+        context.add(this.notifications.messageButton());
+        context.add(Box.createHorizontalGlue());
+        add(context, BorderLayout.CENTER);
 
         taskProgress.setIndeterminate(true);
         taskProgress.setStringPainted(false);
@@ -133,7 +138,9 @@ public final class ApplicationStatusBar extends JPanel {
         });
         taskCards.add(taskState);
         taskCards.add(taskProgress);
-        retry = PopupElements.icon(Icons.REFRESH, "Rebuild index", retryIndex);
+        retry = new JButton("Rebuild", Icons.REFRESH);
+        retry.setMargin(new Insets(2, 7, 2, 7));
+        retry.addActionListener(event -> retryIndex.run());
         JPanel indexContent = PopupElements.column();
         indexContent.add(PopupElements.row(taskDetails, retry));
         indexContent.add(taskFailure);
@@ -163,13 +170,21 @@ public final class ApplicationStatusBar extends JPanel {
         gameDirectory.setEnabled(false);
         gameProcessRow.setVisible(false);
         gameStatus.setContent(gameContent);
-        add(this.gameStatus);
-        add(this.mcpStatus);
-        add(this.taskCards);
+        gameStatus.setPopupAvailable(false);
+        JPanel services = new JPanel();
+        services.setOpaque(false);
+        services.setLayout(new BoxLayout(services, BoxLayout.LINE_AXIS));
+        services.add(this.gameStatus);
+        services.add(this.mcpStatus);
+        services.add(this.taskCards);
+        services.add(this.notifications);
+        add(services, BorderLayout.EAST);
         applyTheme();
         ThemeManager.addThemeChangeListener(this.themeListener);
         setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.WAITING, "Waiting for runtime inventory", null));
     }
+
+    public JComponent notificationPanel() { return notifications.historyPanel(); }
 
     public void dispose() {
         disposed = true;
@@ -264,10 +279,11 @@ public final class ApplicationStatusBar extends JPanel {
                     || status.phase() == RuntimeIndexService.Phase.READY && !status.detail().equals(taskState.getText()));
             if (taskFailure.isVisible()) PopupElements.wrappedText(taskFailure, status.failure() == null ? status.detail() : status.failure().toString(), 320);
             retry.setToolTipText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry indexing" : "Rebuild index");
+            retry.setText(status.phase() == RuntimeIndexService.Phase.FAILED ? "Retry" : "Rebuild");
             retry.getAccessibleContext().setAccessibleName(retry.getToolTipText());
             retry.setEnabled(status.phase() == RuntimeIndexService.Phase.FAILED || status.phase() == RuntimeIndexService.Phase.READY
                     || status.phase() == RuntimeIndexService.Phase.EMPTY);
-            if (taskPopup.isVisible()) taskPopup.pack();
+            if (taskPopup.isVisible()) showTaskPopup();
         });
     }
 
@@ -275,22 +291,21 @@ public final class ApplicationStatusBar extends JPanel {
 
     public void setGameStatus(ServiceStatus status) {
         this.gameStatus.setStatus(status);
+        this.gameStatus.setPopupAvailable(status.state() == ServiceStatus.State.AVAILABLE);
         if (status.state() != ServiceStatus.State.AVAILABLE) {
             gameName.setText(status.detail());
             gameDirectoryRow.setVisible(false);
             gameDirectory.setEnabled(false);
             gameProcessRow.setVisible(false);
-            gamePath = null;
+            gameDirectory.setValue("", "");
         }
         gameStatus.refreshPopup();
     }
 
     public void setGameIdentity(String name, Path directory, long processId) {
         gameName.setText(name);
-        gamePath = directory;
         Path parent = directory.getParent();
-        gameDirectory.setText(parent == null ? directory.toString() : "…" + directory.getFileSystem().getSeparator() + parent.getFileName() + directory.getFileSystem().getSeparator() + directory.getFileName());
-        gameDirectory.setToolTipText("Copy " + directory);
+        gameDirectory.setValue(parent == null ? directory.toString() : "\u2026" + directory.getFileSystem().getSeparator() + parent.getFileName() + directory.getFileSystem().getSeparator() + directory.getFileName(), directory.toString());
         gameDirectoryRow.setVisible(true);
         gameDirectory.setEnabled(true);
         gameProcess.setText(Long.toString(processId));
@@ -304,10 +319,8 @@ public final class ApplicationStatusBar extends JPanel {
         this.mcpStatus.setStatus(status);
         mcpEnabled.setEnabled(status.state() != ServiceStatus.State.PENDING && toggleMcp != null);
         if (status.state() != ServiceStatus.State.PENDING) mcpEnabled.setSelected(status.state() == ServiceStatus.State.AVAILABLE);
-        mcpAddress = status.state() == ServiceStatus.State.AVAILABLE ? status.detail() : "";
-        mcpEndpoint.setText(mcpAddress);
-        mcpEndpoint.setVisible(!mcpAddress.isEmpty());
-        mcpEndpoint.setEnabled(!mcpAddress.isEmpty());
+        String mcpAddress = status.state() == ServiceStatus.State.AVAILABLE ? status.detail() : "";
+        mcpEndpoint.setValue(mcpAddress, mcpAddress);
         mcpDetail.setVisible(status.state() == ServiceStatus.State.FAILED || status.state() == ServiceStatus.State.PENDING);
         if (mcpDetail.isVisible()) PopupElements.wrappedText(mcpDetail, status.detail(), 280);
         mcpStatus.refreshPopup();

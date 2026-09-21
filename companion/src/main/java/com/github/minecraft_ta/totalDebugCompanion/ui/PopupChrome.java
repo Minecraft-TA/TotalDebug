@@ -4,8 +4,11 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 
 import javax.swing.BorderFactory;
 import javax.swing.SwingUtilities;
+import javax.swing.JPopupMenu;
+import javax.swing.JRootPane;
 import javax.swing.border.Border;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.GraphicsConfiguration;
 import java.awt.Insets;
@@ -54,6 +57,31 @@ public final class PopupChrome {
     public static Point clampToScreen(Component invoker, Point desired, Dimension size) {
         Rectangle screen = usableScreenBounds(invoker);
         return isOnConfiguredScreen(invoker, screen) ? clamp(desired, size, screen) : desired;
+    }
+
+    /** Status popups stay within their owning application, even on a split desktop. */
+    public static void showMenu(JPopupMenu popup, Component invoker, boolean above) {
+        JRootPane root = SwingUtilities.getRootPane(invoker);
+        Point origin = invoker.getLocationOnScreen();
+        Rectangle bounds = new Rectangle(root.getLocationOnScreen(), root.getSize());
+        Rectangle screen = usableScreenBounds(invoker);
+        if (bounds.intersects(screen)) bounds = bounds.intersection(screen);
+        // State may have changed earlier in this EDT event, before deferred revalidation.
+        invalidateLayout(popup);
+        popup.setPreferredSize(null);
+        Dimension preferred = popup.getPreferredSize();
+        Dimension size = new Dimension(Math.min(preferred.width, bounds.width), Math.min(preferred.height, bounds.height));
+        popup.setPopupSize(size);
+        Point desired = new Point(origin.x + invoker.getWidth() - size.width,
+                above ? origin.y - size.height : origin.y + invoker.getHeight());
+        Point location = clamp(desired, size, bounds);
+        popup.show(invoker, location.x - origin.x, location.y - origin.y);
+    }
+
+    private static void invalidateLayout(Container container) {
+        for (Component child : container.getComponents())
+            if (child instanceof Container nested) invalidateLayout(nested);
+        container.invalidate();
     }
 
     public static Point centeredLocation(Rectangle bounds, Dimension size) {

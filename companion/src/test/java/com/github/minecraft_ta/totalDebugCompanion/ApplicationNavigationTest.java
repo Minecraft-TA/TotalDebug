@@ -10,6 +10,11 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfig
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
+import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.net.Socket;
@@ -22,6 +27,13 @@ import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import javax.swing.SwingUtilities;
 import javax.swing.JLabel;
+import javax.swing.JButton;
+import javax.swing.JMenu;
+import javax.swing.JTree;
+import javax.swing.text.JTextComponent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -35,6 +47,63 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ApplicationNavigationTest {
     @TempDir Path directory;
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void headerUsesSettingsGearAndInitialFocusBelongsToTheWorkArea(boolean resource) throws Exception {
+        CompanionApp.configureTokenMakers();
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(3, TimeUnit.SECONDS);
+            Path script = app.requireProject().scriptFiles().create(app.requireProject().paths().scripts(), "Test", false, "return 1;");
+            Path textFile = Files.writeString(directory.resolve("example.txt"), "Example text");
+            var windowRef = new AtomicReference<MainWindow>();
+            var focused = new CompletableFuture<Component>();
+            var expected = new AtomicReference<Component>();
+            SwingUtilities.invokeAndWait(() -> {
+                var window = app.createWindow();
+                assertInstanceOf(JTree.class, window.getFocusTraversalPolicy().getDefaultComponent(window));
+                JButton settings = null;
+                JMenu scripts = null;
+                for (Component component : window.getJMenuBar().getComponents()) {
+                    if (component instanceof JMenu menu) {
+                        assertNotEquals("File", menu.getText());
+                        if ("Script".equals(menu.getText())) scripts = menu;
+                    }
+                    if (component instanceof JButton button && "Settings".equals(button.getToolTipText())) settings = button;
+                }
+                assertNotNull(settings);
+                assertEquals("", settings.getText());
+                assertNotNull(settings.getIcon());
+                assertNotNull(scripts);
+                boolean breakpoints = false;
+                for (int i = 0; i < scripts.getItemCount(); i++)
+                    if (scripts.getItem(i) != null && "View Breakpoints".equals(scripts.getItem(i).getText())) breakpoints = scripts.getItem(i).isEnabled();
+                assertTrue(breakpoints);
+                window.getEditorTabs().openEditorTab(resource
+                        ? new ResourceView(window.editorContext(), new LocalFileSource(textFile), null)
+                        : new ScriptView(window.editorContext(), script));
+                windowRef.set(window);
+            });
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (expected.get() == null && System.nanoTime() < deadline) {
+                SwingUtilities.invokeAndWait(() -> expected.set(findText(windowRef.get().getEditorTabs().getSelectedComponent())));
+                if (expected.get() == null) Thread.sleep(5);
+            }
+            assertNotNull(expected.get());
+            SwingUtilities.invokeAndWait(() -> {
+                var window = windowRef.get();
+                expected.get().addFocusListener(new FocusAdapter() {
+                    @Override public void focusGained(FocusEvent event) { focused.complete(event.getComponent()); }
+                });
+                window.setBounds(50, 60, 984, 620);
+                window.setAutoRequestFocus(true);
+                window.setVisible(true);
+                window.requestFocus();
+                window.getFocusTraversalPolicy().getDefaultComponent(window).requestFocusInWindow(FocusEvent.Cause.ACTIVATION);
+            });
+            assertSame(expected.get(), focused.get(5, TimeUnit.SECONDS));
+        }
+    }
     @Test void frameNavigationWaitsForTheRuntimeInItsProject() throws Exception {
         var ui = new RecordingUi();
         var home = Files.createDirectories(directory.resolve("app"));
@@ -171,6 +240,15 @@ class ApplicationNavigationTest {
                 });
             }
         }
+    }
+
+    private static JTextComponent findText(Component component) {
+        if (component instanceof JTextComponent text) return text;
+        if (component instanceof Container container) for (Component child : container.getComponents()) {
+            JTextComponent text = findText(child);
+            if (text != null) return text;
+        }
+        return null;
     }
 
     private static boolean hasButton(Container parent, String text) {

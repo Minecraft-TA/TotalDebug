@@ -193,6 +193,11 @@ public abstract class AbstractTextViewPanel extends JPanel {
         return this.editorPane.requestFocusInWindow();
     }
 
+    @Override
+    public boolean requestFocusInWindow(FocusEvent.Cause cause) {
+        return this.editorPane.requestFocusInWindow(cause);
+    }
+
     public NavigationViewState captureNavigationViewState() {
         Point viewport = this.editorScrollPane.getViewport().getViewPosition();
         return new NavigationViewState(this.editorPane.getCaretPosition(), viewport.x, viewport.y);

@@ -18,7 +18,9 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
+import javax.swing.JComponent;
+import javax.swing.KeyStroke;
+import javax.swing.AbstractAction;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
@@ -31,6 +33,17 @@ import java.awt.FlowLayout;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
+import java.awt.KeyboardFocusManager;
+import java.awt.Window;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZoneId;
@@ -50,13 +63,22 @@ final class NotificationWidget extends JButton implements AutoCloseable {
     private final Function<Source, String> unavailable;
     private final Consumer<Source> open;
     private final Runnable unsubscribe;
-    private final JPopupMenu popup = new JPopupMenu();
+    private final JPanel history = new JPanel(new BorderLayout(0, 6));
+    private final JButton message = new JButton();
+    private Component previousFocus;
+    private Window owner;
+    private final WindowAdapter activation = new WindowAdapter() {
+        @Override public void windowActivated(WindowEvent event) { SwingUtilities.invokeLater(NotificationWidget.this::acknowledgeVisible); }
+    };
+    private Long previewId;
+    private boolean unread;
     private final JPanel rows = new HistoryRows();
     private final Map<Long, NotificationRow> entries = new LinkedHashMap<>();
     private final JScrollPane scroll = new JScrollPane(rows);
     private final JLabel empty = PopupElements.label("No notifications");
     private final NotificationBalloon balloon = new NotificationBalloon();
     private final JButton clear;
+    private final JButton closeHistory;
     private Predicate<Source> sourceVisible = source -> false;
     private long revision = -1;
     private long lastId;
@@ -71,35 +93,85 @@ final class NotificationWidget extends JButton implements AutoCloseable {
         setMargin(new Insets(0, 6, 0, 6));
         setToolTipText("Notifications");
         getAccessibleContext().setAccessibleName("Notifications");
-        setMaximumSize(new Dimension(280, 22));
+        setIcon(Icons.NOTIFICATIONS);
+        setPreferredSize(new Dimension(32, 22));
+        setMinimumSize(getPreferredSize());
+        setMaximumSize(getPreferredSize());
+        FlatIconButton.configure(message);
+        message.setMargin(new Insets(0, 6, 0, 6));
+        message.setMinimumSize(new Dimension(0, 22));
+        message.setMaximumSize(new Dimension(280, 22));
+        message.putClientProperty("html.disable", true);
+        message.addActionListener(event -> showHistory(previewId));
         putClientProperty("html.disable", true);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.getVerticalScrollBar().setUnitIncrement(24);
         scroll.getViewport().addChangeListener(event -> acknowledgeVisible());
         clear = PopupElements.icon(Icons.DELETE, "Clear history", center::clear);
-        JPanel content = new JPanel(new BorderLayout(0, 6));
-        content.setOpaque(false);
-        content.add(PopupElements.row(PopupElements.label("Notifications"), clear), BorderLayout.NORTH);
-        content.add(scroll, BorderLayout.CENTER);
-        PopupElements.content(popup, content);
-        scroll.getViewport().setBackground(UIManager.getColor("PopupMenu.background"));
-        addActionListener(event -> showHistory(null));
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
+        controls.setOpaque(false);
+        controls.add(clear);
+        closeHistory = PopupElements.icon(Icons.CLOSE_ICON, "Close notifications", this::hideHistory);
+        controls.add(closeHistory);
+        history.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        history.add(PopupElements.row(PopupElements.label("Notifications"), controls), BorderLayout.NORTH);
+        history.add(scroll, BorderLayout.CENTER);
+        history.setVisible(false);
+        history.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ESCAPE"), "closeHistory");
+        history.getActionMap().put("closeHistory", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent event) { hideHistory(); }
+        });
+        scroll.getViewport().addComponentListener(new ComponentAdapter() {
+            @Override public void componentResized(ComponentEvent event) {
+                entries.values().forEach(NotificationRow::wrapDetails);
+                rows.revalidate();
+            }
+        });
+        addActionListener(event -> { if (history.isVisible()) hideHistory(); else showHistory(null); });
         unsubscribe = center.subscribe(snapshot -> UIUtils.onEdt(() -> render(snapshot)));
     }
 
     void setSourceVisible(Predicate<Source> predicate) { sourceVisible = predicate; }
+
+    JPanel historyPanel() { return history; }
+    JButton messageButton() { return message; }
+
+    private void hideHistory() {
+        history.setVisible(false);
+        setSelected(false);
+        Component restoreFocus = previousFocus;
+        previousFocus = null;
+        if (restoreFocus != null && restoreFocus.isShowing()) restoreFocus.requestFocusInWindow();
+        else requestFocusInWindow();
+    }
+
+    @Override public void addNotify() {
+        super.addNotify();
+        owner = SwingUtilities.getWindowAncestor(this);
+        if (owner != null) owner.addWindowListener(activation);
+    }
+
+    @Override public void removeNotify() {
+        if (owner != null) owner.removeWindowListener(activation);
+        owner = null;
+        previousFocus = null;
+        super.removeNotify();
+    }
 
     private void showHistory(Long id) {
         balloon.close();
         selectionChanged();
         NotificationRow row = id == null ? null : entries.get(id);
         if (row != null) row.expand(true);
-        PopupElements.showAbove(popup, this);
+        if (!history.isVisible()) previousFocus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        history.setVisible(true);
+        setSelected(true);
         SwingUtilities.invokeLater(() -> {
-            if (closed || !popup.isVisible()) return;
+            if (closed || !history.isShowing()) return;
             if (row != null) { rows.scrollRectToVisible(row.getBounds()); row.toggle.requestFocusInWindow(); }
             else if (rows.getComponentCount() > 0 && rows.getComponent(0) instanceof NotificationRow first) first.toggle.requestFocusInWindow();
+            else closeHistory.requestFocusInWindow();
             acknowledgeVisible();
         });
     }
@@ -111,8 +183,13 @@ final class NotificationWidget extends JButton implements AutoCloseable {
         updating = true;
         try {
             Entry preview = snapshot.preview();
-            setText(preview == null ? "" : preview.message());
-            setIcon(preview == null ? Icons.INFORMATION : icon(preview));
+            previewId = preview == null ? null : preview.id();
+            message.setText(preview == null ? "" : preview.message());
+            message.setIcon(preview == null ? null : icon(preview));
+            message.setToolTipText(preview == null ? null : "Show notification: " + preview.message());
+            message.setVisible(preview != null);
+            unread = snapshot.unread() > 0;
+            repaint();
             getAccessibleContext().setAccessibleDescription(snapshot.unread() + " unread notifications");
             Point position = scroll.getViewport().getViewPosition();
             NotificationRow anchor = entries.values().stream().filter(row -> row.getY() <= position.y && row.getY() + row.getHeight() > position.y).findFirst().orElse(null);
@@ -146,23 +223,21 @@ final class NotificationWidget extends JButton implements AutoCloseable {
                     .filter(entry -> entry.severity() == NotificationCenter.Severity.ERROR || entry.severity() == NotificationCenter.Severity.WARNING)
                     .filter(entry -> !entry.shownAtSource() || !sourceVisible.test(entry.source())).findFirst().orElse(null);
             for (Entry entry : snapshot.entries()) lastId = Math.max(lastId, entry.id());
-            if (!initial && attention != null && !popup.isVisible() && isShowing())
+            if (!initial && attention != null && !history.isVisible() && isShowing())
                 balloon.show(this, attention, () -> showHistory(attention.id()));
         } finally { updating = false; }
         SwingUtilities.invokeLater(this::acknowledgeVisible);
     }
 
     private void resizeHistory() {
-        scroll.setPreferredSize(new Dimension(440, Math.min(340, Math.max(32, rows.getPreferredSize().height))));
         rows.revalidate();
         rows.repaint();
-        if (popup.isVisible()) popup.pack();
     }
 
     void selectionChanged() { entries.values().stream().filter(row -> row.expanded).forEach(row -> row.checkSource(false)); }
 
     private void acknowledgeVisible() {
-        if (closed || updating || !popup.isVisible()) return;
+        if (closed || updating || !history.isShowing() || owner == null || !owner.isActive()) return;
         Set<Long> ids = new HashSet<>();
         var visible = scroll.getViewport().getViewRect();
         for (NotificationRow row : entries.values()) if (!row.entry.read() && visible.intersects(row.getBounds())) ids.add(row.entry.id());
@@ -200,17 +275,18 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             toggle.setIconTextGap(8);
             toggle.setMinimumSize(new Dimension(0, toggle.getPreferredSize().height));
             dismiss = PopupElements.icon(Icons.CLOSE_ICON, "Dismiss notification", () -> center.dismiss(this.entry.id()));
-            chevron = PopupElements.icon(UIManager.getIcon("Tree.collapsedIcon"), "Expand notification", () -> expand(!expanded));
+            chevron = PopupElements.icon(Icons.RIGHT_ARROW, "Expand notification", () -> expand(!expanded));
             JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
             controls.setOpaque(false);
             controls.add(dismiss);
             controls.add(chevron);
             content.add(PopupElements.row(toggle, controls));
+            int textIndent = toggle.getInsets().left + toggle.getIcon().getIconWidth() + toggle.getIconTextGap();
             JPanel metadata = PopupElements.row(context, time);
             context.setMinimumSize(new Dimension(0, context.getPreferredSize().height));
-            metadata.setBorder(BorderFactory.createEmptyBorder(3, 24, 0, 24));
+            metadata.setBorder(BorderFactory.createEmptyBorder(3, textIndent, 0, 24));
             content.add(metadata);
-            body.setBorder(BorderFactory.createEmptyBorder(10, 24, 0, 0));
+            body.setBorder(BorderFactory.createEmptyBorder(10, textIndent, 0, 0));
             body.add(detail);
             JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
             links.setOpaque(false);
@@ -239,22 +315,26 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             context.setForeground(ThemeColors.secondaryText());
             time.setText(DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(entry.time()));
             time.setForeground(ThemeColors.secondaryText());
-            if (changed || detail.getText().isEmpty()) PopupElements.wrappedText(detail, entry.details(), 360);
+            if (changed || detail.getText().isEmpty()) wrapDetails();
             detail.setVisible(!entry.details().isEmpty());
             openSource.setVisible(entry.source().target() != null);
             sourceGap.setVisible(openSource.isVisible());
             if (expanded && changed) checkSource(false);
         }
 
+        void wrapDetails() {
+            PopupElements.wrappedText(detail, entry.details(), Math.max(100, scroll.getViewport().getWidth() - body.getInsets().left - 4));
+        }
+
         void expand(boolean value) {
             expanded = value;
             body.setVisible(value);
             dismiss.setVisible(value);
-            chevron.setIcon(value ? Icons.DOWN_ARROW : UIManager.getIcon("Tree.collapsedIcon"));
+            chevron.setIcon(value ? Icons.DOWN_ARROW : Icons.RIGHT_ARROW);
             chevron.setToolTipText(value ? "Collapse notification" : "Expand notification");
             if (value) checkSource(false); else sourceRequest++;
             resizeHistory();
-            if (value && !entry.read()) center.acknowledge(Set.of(entry.id()));
+            if (value) SwingUtilities.invokeLater(NotificationWidget.this::acknowledgeVisible);
         }
 
         private void checkSource(boolean activate) {
@@ -273,7 +353,7 @@ final class NotificationWidget extends JButton implements AutoCloseable {
                 directory = true;
             } else {
                 openSource.setEnabled(true);
-                if (activate) { popup.setVisible(false); open.accept(entry.source()); }
+                if (activate) open.accept(entry.source());
                 return;
             }
             openSource.setToolTipText("Checking source");
@@ -283,16 +363,27 @@ final class NotificationWidget extends JButton implements AutoCloseable {
                 if (currentReason == null && (failure != null || !Boolean.TRUE.equals(exists))) currentReason = "The source is no longer available";
                 openSource.setEnabled(currentReason == null);
                 openSource.setToolTipText(currentReason);
-                if (activate && currentReason == null) { popup.setVisible(false); open.accept(entry.source()); }
+                if (activate && currentReason == null) open.accept(entry.source());
             }));
         }
     }
 
     void applyTheme() {
-        SwingUtilities.updateComponentTreeUI(popup);
-        scroll.getViewport().setBackground(UIManager.getColor("PopupMenu.background"));
+        SwingUtilities.updateComponentTreeUI(history);
+        scroll.getViewport().setBackground(history.getBackground());
         entries.values().forEach(row -> { row.toggle.setForeground(ThemeColors.text()); row.update(row.entry); });
         balloon.close();
+    }
+
+    @Override protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
+        if (unread) {
+            Graphics2D badge = (Graphics2D) graphics.create();
+            badge.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            badge.setColor(ThemeColors.link());
+            badge.fill(new Ellipse2D.Double(getWidth() / 2.0 + 4, 2, 5, 5));
+            badge.dispose();
+        }
     }
 
     private static final class HistoryRows extends JPanel implements Scrollable {
@@ -308,7 +399,10 @@ final class NotificationWidget extends JButton implements AutoCloseable {
         closed = true;
         unsubscribe.run();
         balloon.close();
-        popup.setVisible(false);
+        history.setVisible(false);
+        previousFocus = null;
+        if (owner != null) owner.removeWindowListener(activation);
+        owner = null;
         rows.removeAll();
         entries.clear();
     }

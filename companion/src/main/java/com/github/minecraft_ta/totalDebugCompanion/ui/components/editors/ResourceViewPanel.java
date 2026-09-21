@@ -10,6 +10,7 @@ import java.beans.PropertyChangeListener;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.FocusEvent;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -124,6 +125,12 @@ public final class ResourceViewPanel extends JPanel {
     public boolean requestFocusInWindow() {
         return this.activeView instanceof AbstractTextViewPanel textView
                 ? textView.requestFocusInWindow() : super.requestFocusInWindow();
+    }
+
+    @Override
+    public boolean requestFocusInWindow(FocusEvent.Cause cause) {
+        return this.activeView instanceof AbstractTextViewPanel textView
+                ? textView.requestFocusInWindow(cause) : super.requestFocusInWindow(cause);
     }
 
     private void disposeActiveView() {

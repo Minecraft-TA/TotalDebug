@@ -99,9 +99,7 @@ public final class PopupElements {
         button.setFont(UIManager.getFont("Label.font").deriveFont(Font.PLAIN));
         button.setHorizontalTextPosition(SwingConstants.LEFT);
         button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setMargin(new Insets(2, 0, 2, 0));
-        button.setBorder(BorderFactory.createEmptyBorder());
-        button.putClientProperty("JButton.buttonType", "borderless");
+        button.setMargin(new Insets(2, 3, 2, 3));
         button.setForeground(new Color(ThemeColors.link().getRGB()));
         button.addPropertyChangeListener("UI", event -> button.setForeground(new Color(ThemeColors.link().getRGB())));
         return button;
@@ -113,7 +111,7 @@ public final class PopupElements {
     }
 
     public static void showAbove(JPopupMenu popup, Component invoker) {
-        popup.show(invoker, Math.min(0, invoker.getWidth() - popup.getPreferredSize().width), -popup.getPreferredSize().height);
+        PopupChrome.showMenu(popup, invoker, true);
     }
 
     public static void copy(String text) {
