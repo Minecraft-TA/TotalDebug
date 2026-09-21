@@ -139,12 +139,8 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
             return "JDK modules";
         }
         String logical = source.logicalUri();
-        int nested = logical.lastIndexOf("!/");
-        if (nested >= 0) {
-            String entry = logical.substring(nested + 2);
-            int separator = entry.lastIndexOf('/');
-            return separator < 0 ? entry : entry.substring(separator + 1);
-        }
+        // A trailing archive-root delimiter identifies the archive itself, not an empty entry.
+        while (logical.endsWith("!/")) logical = logical.substring(0, logical.length() - 2);
         URI uri = URI.create(logical);
         if ("file".equalsIgnoreCase(uri.getScheme())) {
             Path fileName = Path.of(uri).getFileName();
@@ -153,12 +149,18 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
             }
             return fileName.toString();
         }
-        String path = uri.getPath();
+        String path = uri.isOpaque() ? uri.getSchemeSpecificPart() : uri.getPath();
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("Runtime source URI has no display path: " + logical);
         }
-        int separator = path.lastIndexOf('/');
-        return separator < 0 ? path : path.substring(separator + 1);
+        while (path.endsWith("/") && path.length() > 1) path = path.substring(0, path.length() - 1);
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        if ("union".equalsIgnoreCase(uri.getScheme()) && !logical.contains("!/")) {
+            // Union filesystem instance ids are not part of the backing archive's filename.
+            name = name.replaceFirst("#\\d+$", "");
+        }
+        if (name.isBlank()) throw new IllegalArgumentException("Runtime source URI has no file name: " + source.logicalUri());
+        return name;
     }
 
     private static List<Path> directories(Path directory) {
