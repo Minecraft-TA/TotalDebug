@@ -305,7 +305,12 @@ public final class ApplicationStatusBar extends JPanel {
     public void setGameIdentity(String name, Path directory, long processId) {
         gameName.setText(name);
         Path parent = directory.getParent();
-        gameDirectory.setValue(parent == null ? directory.toString() : "\u2026" + directory.getFileSystem().getSeparator() + parent.getFileName() + directory.getFileSystem().getSeparator() + directory.getFileName(), directory.toString());
+        String display = directory.toString();
+        if (parent != null && parent.getFileName() != null) {
+            String separator = directory.getFileSystem().getSeparator();
+            display = "\u2026" + separator + parent.getFileName() + separator + directory.getFileName();
+        }
+        gameDirectory.setValue(display, directory.toString());
         gameDirectoryRow.setVisible(true);
         gameDirectory.setEnabled(true);
         gameProcess.setText(Long.toString(processId));
