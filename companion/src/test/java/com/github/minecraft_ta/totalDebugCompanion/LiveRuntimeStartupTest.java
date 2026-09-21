@@ -42,6 +42,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -128,6 +130,43 @@ class LiveRuntimeStartupTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
+    void disconnectBeforeLiveInventoryResumesInterruptedOfflineIndexing(boolean localFallback) throws Exception {
+        var profile = CompanionProfile.forGame(Files.createDirectories(root.resolve("game")));
+        var paths = new InstancePaths(profile.dataDirectory());
+        if (localFallback) {
+            Path archive = Files.createDirectories(profile.workspaceDirectory().resolve("mods")).resolve("sample.jar");
+            try (var output = new ZipOutputStream(Files.newOutputStream(archive))) {
+                output.putNextEntry(new ZipEntry("sample/LiveVersion.class"));
+                output.write(classBytes("oldOnly"));
+                output.closeEntry();
+            }
+        } else {
+            install(cache("A", "oldOnly"), paths);
+        }
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        try (var app = new CompanionApplication(config, TOKEN);
+             var restoreGate = new HeldCache(paths, () -> null)) {
+            app.session().bindAndPublish(config);
+            app.openProject(profile).get(10, TimeUnit.SECONDS);
+            var executions = field(app, "scriptExecutions", ScriptExecutionService.class);
+            try (var game = new Game(app, profile, config)) {
+                game.inventory(RuntimeInventoryMessage.preparing("Live runtime is still preparing"));
+                assertNull(app.requireProject().runtime(), "The held offline index must not have installed yet");
+                assertFalse(executions.isReady());
+            }
+            await(() -> !app.session().hasClient() && !app.isConnected());
+            restoreGate.release();
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY
+                    && app.requireProject().runtime() != null);
+            var snapshot = app.requireProject().requireRuntime().snapshot();
+            assertEquals(!localFallback, snapshot.isRuntime());
+            assertNotNull(snapshot.index().findClass("sample", "LiveVersion"), "Offline browsing must recover without manual retry");
+            assertFalse(executions.isReady(), "An offline index must not enable game execution");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void offlineActionsDuringAuthenticationCannotRestoreUnconfirmedCompilation(boolean retryIndex) throws Exception {
         var cachedA = cache("A", "oldOnly");
         var profile = CompanionProfile.forGame(Files.createDirectories(root.resolve("game")));
@@ -199,16 +238,7 @@ class LiveRuntimeStartupTest {
 
     private InstancePaths cache(String identity, String method) throws Exception {
         Path classes = Files.createDirectories(root.resolve("sources-" + identity).resolve("sample"));
-        var writer = new ClassWriter(0);
-        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, "sample/LiveVersion", null, "java/lang/Object", null);
-        var body = writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, method, "()I", null, null);
-        body.visitCode();
-        body.visitInsn(Opcodes.ICONST_1);
-        body.visitInsn(Opcodes.IRETURN);
-        body.visitMaxs(1, 0);
-        body.visitEnd();
-        writer.visitEnd();
-        Files.write(classes.resolve("LiveVersion.class"), writer.toByteArray());
+        Files.write(classes.resolve("LiveVersion.class"), classBytes(method));
         var paths = new InstancePaths(root.resolve("cached-" + identity));
         Path source = classes.getParent();
         var module = new RuntimeInventory.RuntimeModule("sample", "Sample", RuntimeInventory.ModuleKind.MOD);
@@ -224,6 +254,19 @@ class LiveRuntimeStartupTest {
             try (var snapshot = ready.get(15, TimeUnit.SECONDS)) { assertEquals(identity, snapshot.inventoryId()); }
         }
         return paths;
+    }
+
+    private static byte[] classBytes(String method) {
+        var writer = new ClassWriter(0);
+        writer.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, "sample/LiveVersion", null, "java/lang/Object", null);
+        var body = writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, method, "()I", null, null);
+        body.visitCode();
+        body.visitInsn(Opcodes.ICONST_1);
+        body.visitInsn(Opcodes.IRETURN);
+        body.visitMaxs(1, 0);
+        body.visitEnd();
+        writer.visitEnd();
+        return writer.toByteArray();
     }
 
     private static void install(InstancePaths cached, InstancePaths target) throws Exception {

@@ -17,6 +17,8 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.SwingUtilities;
@@ -259,6 +261,69 @@ class CompanionReconnectTest {
                     assertSame(binding, app.requireProject().runtime());
                 }
             }
+        }
+    }
+
+    @Test void authenticationDuringReconnectCleanupCannotCompleteTheRequest() throws Exception {
+        var ui = new TestUi();
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        var cleaning = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var app = new CompanionApplication(config, TOKEN, ui)) {
+            app.session().bindAndPublish(config);
+            var selected = profile("selected");
+            app.openProject(selected).get(5, TimeUnit.SECONDS);
+            var jobs = ProjectSwitchJobs.create(ignored -> {
+                cleaning.countDown();
+                try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
+                catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+            });
+            app.startMcpServer(jobs, 0);
+            jobs.submit("return 1;", List.of(), CodeModeJobService.ExecutionSide.CLIENT,
+                    CodeModeJobService.ExecutionEnvironment.THREAD);
+            var reconnect = app.reconnectGame(app.requireProject());
+            try {
+                assertTrue(cleaning.await(5, TimeUnit.SECONDS));
+                try (var earlyGame = socket(config)) {
+                    assertTrue(handshake(earlyGame, selected, TOKEN));
+                    await(app::isConnected);
+                    flushUi();
+                    assertFalse(reconnect.isDone(), "A session that reconnect will still tear down cannot complete the request");
+                    assertEquals(ServiceStatus.State.PENDING, ui.game.state());
+                    release.countDown();
+                    assertEquals(-1, earlyGame.getInputStream().read());
+                }
+                app.renameProject(selected.id(), null).get(5, TimeUnit.SECONDS);
+                try (var replacement = socket(config)) {
+                    assertTrue(handshake(replacement, selected, TOKEN));
+                    reconnect.get(5, TimeUnit.SECONDS);
+                    assertTrue(app.isConnected());
+                }
+            } finally { release.countDown(); }
+        }
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS)
+    void cancelledReconnectRestoresTheAdvertisementAfterWithdrawal() throws Exception {
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        try (var app = new CompanionApplication(config, TOKEN, new TestUi())) {
+            app.session().bindAndPublish(config);
+            var selected = profile("selected");
+            app.openProject(selected).get(5, TimeUnit.SECONDS);
+            try (var reader = Files.newBufferedReader(config.descriptorFile())) {
+                var reconnect = app.reconnectGame(app.requireProject());
+                await(() -> {
+                    try (var files = Files.list(config.descriptorFile().getParent())) {
+                        return files.anyMatch(path -> path.getFileName().toString().startsWith(".td-"));
+                    } catch (IOException failure) { throw new AssertionError(failure); }
+                });
+                var cancel = CompanionApplication.class.getDeclaredMethod("cancelReconnect", String.class);
+                cancel.setAccessible(true);
+                cancel.invoke(app, "Cancelled during withdrawal");
+                assertTrue(reconnect.isCompletedExceptionally());
+            }
+            app.renameProject(selected.id(), null).get(5, TimeUnit.SECONDS);
+            assertEquals(selected.id(), read(config).selectedProfileId(), "Cancellation must not leave discovery disabled");
         }
     }
 

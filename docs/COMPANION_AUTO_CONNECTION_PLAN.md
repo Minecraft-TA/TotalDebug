@@ -231,3 +231,11 @@ The audit found and corrected these behaviors:
 The audit also removed a redundant connection-state predicate and a manifest-send pass-through. Protocol 16 requires the paired mod and Companion; there is no compatibility path for the earlier descriptor contract.
 
 Final local verification: Java 21, published dependencies, and :check :localBundle with --warning-mode fail passed in 6 minutes 14 seconds. The five module suites report 1,602 tests, zero failures/errors/skips; packaging and build-logic verification also passed. Independent standards and behavior re-reviews found no outstanding blockers after these corrections.
+
+## PR review follow-up
+
+Reconnect completion now requires both teardown and republication to finish. A request-owned flag is checked under the lifecycle lock, and the worker also checks for a replacement that authenticated during publication. Cancelled requests restore the selected-project advertisement after withdrawal. A real socket test gates job cleanup, authenticates during that gate, and verifies that only the post-reset connection completes reconnect; a Windows reader test covers cancellation while withdrawal is blocked.
+
+An early disconnect resumes a cancelled initial offline restore on the project worker. Recovery checks the original scope, absence of a replacement client, WAITING status, and absence of an installed binding. It preserves retained indexes and newer live loads. Cached-runtime and local-mod fallback tests both failed before this fix and now recover browsing without enabling execution offline.
+
+Review follow-up verification: the full Companion suite passed with 1,097 tests and no failures/errors/skips, and the paired bundle rebuilt successfully in 5 minutes 24 seconds. Independent behavior and architecture re-reviews found no blockers in the follow-up.
