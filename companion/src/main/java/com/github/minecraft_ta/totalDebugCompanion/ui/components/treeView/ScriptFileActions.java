@@ -15,9 +15,12 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.FileSystemDirectoryItem;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryChain;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.FileSystemFileItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.FileNamePopup;
+import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
 import javax.swing.*;
 import javax.swing.tree.TreePath;
@@ -86,9 +89,10 @@ public final class ScriptFileActions {
                 if (busy || !support.isDrop() || !support.isDataFlavorSupported(DRAG)) return false;
                 try {
                     var drag = (Drag) support.getTransferable().getTransferData(DRAG);
-                    Path destination = path(((JTree.DropLocation) support.getDropLocation()).getPath());
+                    TreeItem target = tree.tree().itemAt(support.getDropLocation().getDropPoint());
+                    Path destination = path(target);
                     boolean accepted = drag.project == context.get().project() && managed(destination)
-                            && ((LazyTreeNode) ((JTree.DropLocation) support.getDropLocation()).getPath().getLastPathComponent()).getUserObject().isDirectory()
+                            && target != null && target.isDirectory()
                             && drag.paths.stream().noneMatch(p -> destination.startsWith(p) || destination.equals(p.getParent()));
                     if (accepted) support.setDropAction(MOVE);
                     return accepted;
@@ -98,7 +102,7 @@ public final class ScriptFileActions {
                 if (!canImport(support)) return false;
                 try {
                     var drag = (Drag) support.getTransferable().getTransferData(DRAG);
-                    report(move(drag.paths, path(((JTree.DropLocation) support.getDropLocation()).getPath())));
+                    report(move(drag.paths, path(tree.tree().itemAt(support.getDropLocation().getDropPoint()))));
                     return true;
                 } catch (Exception failure) { report(CompletableFuture.failedFuture(failure)); return false; }
             }
@@ -119,8 +123,11 @@ public final class ScriptFileActions {
     }
     static Path path(TreePath path) {
         if (path == null || !(path.getLastPathComponent() instanceof LazyTreeNode node)) return null;
-        return node.getUserObject() instanceof FileSystemFileItem file ? file.getPath()
-                : node.getUserObject() instanceof FileSystemDirectoryItem folder ? folder.getPath() : null;
+        return path(node.selectedItem());
+    }
+    private static Path path(TreeItem item) {
+        return item instanceof FileSystemFileItem file ? file.getPath()
+                : item instanceof FileSystemDirectoryItem folder ? folder.getPath() : null;
     }
     private static List<Path> topLevel(List<Path> paths) {
         var normalized = paths.stream().map(p -> p.toAbsolutePath().normalize()).distinct().toList();
@@ -289,7 +296,9 @@ public final class ScriptFileActions {
                 return CompletableFuture.failedFuture(new IOException("A breakpoint uses " + reference + ". Change or remove that action before deleting it."));
         }
         var expanded = tree.tree().getExpandedDescendants(new TreePath(tree.tree().getModel().getRoot()));
-        List<Path> expandedPaths = expanded == null ? List.of() : Collections.list(expanded).stream().map(ScriptFileActions::path).filter(this::managed).toList();
+        List<Path> expandedPaths = expanded == null ? List.of() : Collections.list(expanded).stream()
+                .map(value -> path(DirectoryChain.last(((LazyTreeNode) value.getLastPathComponent()).getUserObject())))
+                .filter(this::managed).toList();
         List<Path> selectionPaths = selected();
         busy = true; tree.tree().setEnabled(false);
         Map<ScriptView, String> drafts = new LinkedHashMap<>();
@@ -306,7 +315,7 @@ public final class ScriptFileActions {
                 ctx.project().requireActive();
                 for (Path root : roots) ctx.project().scriptFiles().mutable(root);
                 for (var entry : drafts.entrySet()) { entry.getKey().pendingSave().join(); entry.getKey().persist(entry.getValue()); saved.add(entry.getKey()); }
-                work.run(ctx.project().scriptFiles(), changes);
+                FileUtils.withPausedDirectoryWatchers(roots, () -> work.run(ctx.project().scriptFiles(), changes));
             } catch (IOException failure) { throw new CompletionException(failure); }
             finally {
                 if (deleting) {

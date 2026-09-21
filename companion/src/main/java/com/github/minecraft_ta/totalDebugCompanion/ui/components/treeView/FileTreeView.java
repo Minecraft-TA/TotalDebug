@@ -53,7 +53,7 @@ public class FileTreeView extends JScrollPane {
 
         this.tree = new LazyFileJTree();
         ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
-                ? node.getUserObject() : null));
+                ? node.selectedItem() : null));
 
         this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
@@ -160,7 +160,7 @@ public class FileTreeView extends JScrollPane {
         if (item instanceof ZipFileRootItem.Entry entry) {
             return entry.getArchivePath().toAbsolutePath().normalize() + "!/" + entry.getEntryPath();
         }
-        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem
+        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem || item instanceof ZipFileRootItem.DirectoryEntry
                 || item instanceof RuntimeSourceTreeItem || item instanceof RuntimeSourceTreeItem.RuntimeDirectoryEntry
                 || item instanceof RuntimeSourceTreeItem.RuntimeFileEntry) return item.getTooltip();
         return null;

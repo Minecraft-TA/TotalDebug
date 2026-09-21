@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import javax.swing.JMenuItem;
+import javax.swing.Action;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import java.util.Arrays;
@@ -40,6 +41,43 @@ import java.util.concurrent.ExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @Test void compactMiddleFolderActionsKeepTheirRealTargetAndRelocateOpenScripts() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path root = window.editorContext().project().scriptFiles().root();
+            Path items = Files.createDirectories(root.resolve("modules/client/items"));
+            Path script = Files.writeString(items.resolve("Test.tdscript"), "return 1;");
+            FileTreeView files = find(window, FileTreeView.class);
+            edt(() -> { files.reloadProfile(); window.getEditorTabs().openEditorTab(new ScriptView(window.editorContext(), script)); return null; });
+            ScriptView editor = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
+            assertTrue(files.revealLocalPath(root.resolve("modules/client")).get(5, TimeUnit.SECONDS));
+            Path target = edt(() -> ScriptFileActions.path(files.tree().getSelectionPath()));
+            assertEquals(root.resolve("modules/client"), target);
+            edt(() -> {
+                var node = (LazyTreeNode) files.tree().getSelectionPath().getLastPathComponent();
+                var menu = files.createContextMenu(node.selectedItem());
+                var copy = Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast)
+                        .filter(item -> item.getText().equals("Copy path")).findFirst().orElseThrow();
+                assertEquals(target.toString(), copy.getAction().getValue(Action.ACTION_COMMAND_KEY));
+                return null;
+            });
+            edt(() -> window.scriptFileActions().rename(target, root.resolve("modules/server"))).get(10, TimeUnit.SECONDS);
+            assertEquals(root.resolve("modules/server/items/Test.tdscript"), editor.getPath());
+            assertTrue(Files.isRegularFile(editor.getPath()));
+            assertFalse(Files.exists(target));
+            Path destination = Files.createDirectories(root.resolve("Destination"));
+            assertTrue(files.revealLocalPath(root.resolve("modules/server")).get(5, TimeUnit.SECONDS));
+            Path moved = edt(() -> ScriptFileActions.path(files.tree().getSelectionPath()));
+            edt(() -> window.scriptFileActions().move(List.of(moved), destination)).get(10, TimeUnit.SECONDS);
+            assertEquals(destination.resolve("server/items/Test.tdscript"), editor.getPath());
+            assertTrue(Files.isRegularFile(editor.getPath()));
+            edt(() -> { window.dispose(); return null; });
+        }
+    }
+
     @TempDir Path directory;
     @BeforeEach void configureEditor() throws Exception {
         var configure = CompanionApp.class.getDeclaredMethod("configureLookAndFeel");

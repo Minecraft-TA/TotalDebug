@@ -172,12 +172,35 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
     static final class RuntimeDirectoryEntry extends DirectoryTreeItem {
         private final Path classRoot;
         private final Path directory;
+        private boolean empty;
 
         RuntimeDirectoryEntry(Path classRoot, Path directory) {
             super(directory.getFileName().toString());
             this.classRoot = classRoot;
             this.directory = directory;
-            setIcon(Icons.PACKAGE);
+            setIcon(resourceDirectory() ? Icons.FOLDER : Icons.PACKAGE);
+        }
+
+        private boolean resourceDirectory() {
+            if (classRoot.equals(directory)) return false;
+            String first = classRoot.relativize(directory).getName(0).toString();
+            return first.equalsIgnoreCase("assets") || first.equalsIgnoreCase("data") || first.equalsIgnoreCase("META-INF");
+        }
+
+        @Override public String compactSeparator() {
+            if (classRoot.equals(directory)) return null;
+            return resourceDirectory() ? "/" : ".";
+        }
+
+        @Override protected boolean isInitiallyEmpty() { return empty; }
+        @Override public Object compactIdentity() throws IOException { return directory.toRealPath(); }
+
+        @Override public DirectoryTreeItem singleDirectoryChild() throws IOException {
+            if (!ordinaryDirectory(directory)) return null;
+            var entries = firstChildren(directory);
+            empty = entries.isEmpty();
+            return entries.size() == 1 && ordinaryDirectory(entries.getFirst())
+                    ? new RuntimeDirectoryEntry(classRoot, entries.getFirst()) : null;
         }
 
         @Override

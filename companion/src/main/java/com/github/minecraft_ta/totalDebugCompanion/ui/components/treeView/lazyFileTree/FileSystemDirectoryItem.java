@@ -20,6 +20,7 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
     private boolean initiallyEmpty;
     private volatile boolean changed;
     public Path getPath() { return path; }
+    boolean changedDuringDiscovery() { return changed; }
 
     FileSystemDirectoryItem(LazyFileJTree lazyFileJTree, Path path, boolean watch) {
         super(path.getFileName().toString());
@@ -76,9 +77,23 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
     }
 
     @Override
-    boolean isInitiallyEmpty() {
+    protected boolean isInitiallyEmpty() {
         // A watcher notification before attachment invalidates the initial snapshot too.
         return initiallyEmpty && !changed;
+    }
+
+    @Override public String compactSeparator() { return "/"; }
+    @Override public Object compactIdentity() throws IOException { return path.toRealPath(); }
+
+    @Override public DirectoryTreeItem singleDirectoryChild() throws IOException {
+        if (!ordinaryDirectory(path)) return null;
+        var entries = firstChildren(path);
+        initiallyEmpty = entries.isEmpty();
+        if (entries.size() != 1 || !ordinaryDirectory(entries.getFirst())) return null;
+        TreeItem child = createChildIfPresent(entries.getFirst());
+        if (child instanceof DirectoryTreeItem directory) return directory;
+        if (child != null) child.dispose();
+        return null;
     }
 
     @Override

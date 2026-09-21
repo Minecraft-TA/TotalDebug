@@ -56,7 +56,7 @@ public class ZipFileRootItem extends DirectoryTreeItem {
                 var index = name.lastIndexOf('/');
                 root.add(
                         index == -1 ? "" : name.substring(0, index),
-                        new Node(index == -1 ? name : name.substring(index + 1), el.getSize(), el.getCompressedSize())
+                        new Node(index == -1 ? name : name.substring(index + 1), el.getSize(), el.getCompressedSize(), el.isDirectory())
                 );
             }
         } catch (IOException e) {
@@ -82,17 +82,31 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         @Override
         public List<TreeItem> loadChildren() {
-            return node.getChildren().stream().map(n -> {
-                String childPath = this.entryPath.isEmpty() ? n.name : this.entryPath + '/' + n.name;
-                boolean childResourceTree = this.resourceTree
-                        || n.name.equalsIgnoreCase("assets")
-                        || n.name.equalsIgnoreCase("data")
-                        || n.name.equalsIgnoreCase("META-INF");
-                if (n.getChildren().isEmpty()) {
-                    return new Entry(this.archivePath, n, childPath);
-                }
-                return new DirectoryEntry(this.archivePath, n, childPath, childResourceTree);
-            }).toList();
+            return node.getChildren().stream().map(this::child).toList();
+        }
+
+        private TreeItem child(Node n) {
+            String childPath = this.entryPath.isEmpty() ? n.name : this.entryPath + '/' + n.name;
+            boolean childResourceTree = this.resourceTree
+                    || n.name.equalsIgnoreCase("assets")
+                    || n.name.equalsIgnoreCase("data")
+                    || n.name.equalsIgnoreCase("META-INF");
+            if (!n.directory) {
+                return new Entry(this.archivePath, n, childPath);
+            }
+            return new DirectoryEntry(this.archivePath, n, childPath, childResourceTree);
+        }
+
+        @Override public String compactSeparator() {
+            return resourceTree || !node.hasClassDescendant() ? "/" : ".";
+        }
+
+        @Override protected boolean isInitiallyEmpty() { return node.getChildren().isEmpty(); }
+
+        @Override public DirectoryTreeItem singleDirectoryChild() {
+            var children = node.getChildren();
+            return children.size() == 1 && children.getFirst().directory
+                    ? (DirectoryTreeItem) child(children.getFirst()) : null;
         }
 
         @Override
@@ -106,7 +120,7 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
-            return this.entryPath + '/';
+            return this.archivePath.toAbsolutePath().normalize() + "!/" + this.entryPath + '/';
         }
     }
 
@@ -162,12 +176,14 @@ public class ZipFileRootItem extends DirectoryTreeItem {
         private final long size;
         private final long compressedSize;
         private List<Node> children;
+        private final boolean directory;
 
         private Node(String name) {
-            this(name, -1, -1);
+            this(name, -1, -1, true);
         }
 
-        private Node(String name, long size, long compressedSize) {
+        private Node(String name, long size, long compressedSize, boolean directory) {
+            this.directory = directory;
             this.name = name;
             this.size = size;
             this.compressedSize = compressedSize;
@@ -180,7 +196,9 @@ public class ZipFileRootItem extends DirectoryTreeItem {
             if (!this.name.equals(part1) && !isRoot)
                 return false;
             if (index == -1 && (!isRoot || this.name.equals(part1))) {
-                getChildren().add(node);
+                Node existing = getChildren().stream().filter(child -> child.directory && node.directory && child.name.equals(node.name)).findFirst().orElse(null);
+                if (existing == null) getChildren().add(node);
+                else existing.getChildren().addAll(node.getChildren());
                 return true;
             }
 
