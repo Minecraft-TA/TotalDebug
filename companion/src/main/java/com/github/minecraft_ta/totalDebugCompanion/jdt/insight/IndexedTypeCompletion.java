@@ -33,7 +33,7 @@ final class IndexedTypeCompletion {
             DebuggerCompletionRange range,
             Set<String> occupiedNames
     ) {
-        if (!CompanionClassIndex.isOpen()) {
+        if (!CompanionClassIndex.isOpen() || !CompanionClassIndex.supportsQuery(range.prefix())) {
             return List.of();
         }
         List<TypeCandidate> candidates = Arrays.stream(CompanionClassIndex.get().findClasses(
@@ -90,7 +90,7 @@ final class IndexedTypeCompletion {
     }
 
     private static IndexedClass resolveType(CompilationUnit unit, String sourceName) {
-        if (!CompanionClassIndex.isOpen() || sourceName.isBlank()
+        if (!CompanionClassIndex.isOpen() || !CompanionClassIndex.supportsQuery(sourceName) || sourceName.isBlank()
                 || sourceName.indexOf('(') >= 0 || sourceName.indexOf('[') >= 0) {
             return null;
         }

@@ -34,6 +34,7 @@ public class NameLookupImpl extends NameLookup {
     @Override
     public boolean isPackage(String[] pkgName) {
         String packageName = String.join(".", pkgName);
+        if (!CompanionClassIndex.supportsQuery(packageName)) return false;
         return SCRIPT_PROGRAM_PACKAGE.equals(packageName)
                 || CompanionClassIndex.get().findPackage(Util.concatWith(pkgName, '/')) != null;
     }
@@ -61,6 +62,7 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public Answer findType(String typeName, String packageName, boolean partialMatch, int acceptFlags, boolean considerSecondaryTypes, boolean waitForIndexes, boolean checkRestrictions, IProgressMonitor monitor, IPackageFragmentRoot[] moduleContext, int release) {
+        if (!CompanionClassIndex.supportsQuery(packageName) || !CompanionClassIndex.supportsQuery(typeName)) return null;
         var foundClass = CompanionClassIndex.get().findClass(packageName, typeName.replace('.', '$'));
         if (foundClass != null) {
             return JDTHacks.createNameLookupAnswer(new JIndexResolvedBinaryType(foundClass), null, null);
@@ -83,6 +85,7 @@ public class NameLookupImpl extends NameLookup {
     public IPackageFragment[] findPackageFragments(String name, boolean partialMatch, boolean patternMatch) {
         if (patternMatch || partialMatch)
             throw new IllegalArgumentException();
+        if (!CompanionClassIndex.supportsQuery(name)) return null;
         var pkg = CompanionClassIndex.get().findPackage(name);
         if (pkg == null)
             return null;
@@ -91,13 +94,14 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public void seekTypes(String name, IPackageFragment pkg, boolean partialMatch, int acceptFlags, IJavaElementRequestor requestor, boolean considerSecondaryTypes) {
+        if (name != null && !CompanionClassIndex.supportsQuery(name)) return;
         if (name != null)
             name = name.replace('.', '$');
 
         IndexedClass[] classes;
         if (pkg != null) {
             var packageName = pkg.getElementName();
-            if (packageName.isBlank())
+            if (packageName.isBlank() || !CompanionClassIndex.supportsQuery(packageName))
                 return;
 
             var indexedPackage = CompanionClassIndex.get().findPackage(packageName);
@@ -138,6 +142,7 @@ public class NameLookupImpl extends NameLookup {
 
     @Override
     public void seekPackageFragments(String name, boolean partialMatch, IJavaElementRequestor requestor, IPackageFragmentRoot[] moduleContext) {
+        if (!CompanionClassIndex.supportsQuery(name)) return;
         for (IndexedPackage pkg : CompanionClassIndex.get().findPackages(name)) {
             requestor.acceptPackageFragment(JDTHacks.createPackageFragment(pkg.getNameWithParentsDot()));
         }

@@ -48,6 +48,23 @@ public class JavaEditorAnalysisTest {
     }
     @AfterAll static void closeIndex() { CompanionClassIndex.clear(); index.close(); }
 
+    @Test void nonAsciiInputDoesNotAbortAnalysisOrHideUnrelatedWarnings() throws Exception {
+        for (String code : List.of("l\u00f6", "L\u00f6 value;", "import l\u00f6.Type;", "int l\u00f6 = 1; return l\u00f6;",
+                "String text = \"\u00f6\"; // \u00f6")) {
+            try (var fixture = new Fixture(IMPORTS + "return 1;")) {
+                fixture.finish();
+                assertEquals(3, unused(fixture));
+                onEdt(() -> {
+                    fixture.area.replaceRange(code, IMPORTS.length(), fixture.area.getDocument().getLength());
+                    return null;
+                });
+                fixture.finish();
+                assertNotNull(onEdt(fixture.owner::currentSnapshot), code);
+                assertEquals(3, unused(fixture), code);
+            }
+        }
+    }
+
     @Test void unfinishedMemberIsNeverRedWhileEditingEvenAfterAnalysisCompletes() throws Exception {
         try (var fixture = new Fixture(VALID)) {
             fixture.finish();
@@ -507,7 +524,7 @@ public class JavaEditorAnalysisTest {
 
     @Test void lateResultCannotReachAClosedEditorOrAReplacementWithTheSameKey() throws Exception {
         var fixture = new Fixture(VALID);
-        onEdt(() -> { fixture.owner.close(); return null; });
+        onEdt(() -> { fixture.owner.close(); fixture.inline.close(); return null; });
         var replacement = fixture.cache.register("proof", () -> {});
         fixture.runOne();
         assertEquals(0, fixture.parses, "Closed queued work must not start parsing");
@@ -747,23 +764,23 @@ public class JavaEditorAnalysisTest {
                 fixture.area.getCaret().setVisible(false);
                 return null;
             });
-            int[] before = onEdt(() -> warningPixels(fixture.area));
+            int[] before = onEdt(() -> warningPixels(fixture.area, fixture.inline));
             onEdt(() -> {
                 fixture.area.setCaretPosition(fixture.area.getDocument().getLength());
                 var action = fixture.area.getActionMap().get(fixture.area.getInputMap().get(KeyStroke.getKeyStroke("ENTER")));
                 action.actionPerformed(new ActionEvent(fixture.area, ActionEvent.ACTION_PERFORMED, "Enter"));
-                assertArrayEquals(before, warningPixels(fixture.area), "The next paint must still contain all underlines before the worker runs");
+                assertArrayEquals(before, warningPixels(fixture.area, fixture.inline), "The next paint must still contain all underlines before the worker runs");
                 return null;
             });
             fixture.finish();
-            assertArrayEquals(before, onEdt(() -> warningPixels(fixture.area)), "Accepted analysis must preserve identical warning pixels");
+            assertArrayEquals(before, onEdt(() -> warningPixels(fixture.area, fixture.inline)), "Accepted analysis must preserve identical warning pixels");
         }
     }
 
-    private static int[] warningPixels(RSyntaxTextArea area) throws Exception {
+    private static int[] warningPixels(RSyntaxTextArea area, InlineDiagnostics inline) throws Exception {
         var image = new BufferedImage(area.getWidth(), area.getHeight(), BufferedImage.TYPE_INT_RGB);
         var graphics = image.createGraphics();
-        try { area.paint(graphics); } finally { graphics.dispose(); }
+        try { area.paint(graphics); inline.paint(graphics); } finally { graphics.dispose(); }
         var notice = area.getParserNotices().stream().filter(n -> n.getMessage().contains("never used")).findFirst().orElseThrow();
         var bounds = area.modelToView2D(notice.getOffset());
         int top = (int) bounds.getY();
@@ -814,8 +831,9 @@ public class JavaEditorAnalysisTest {
     private static final class Fixture implements AutoCloseable {
         final ASTCache cache = new ASTCache();
         final ArrayDeque<Runnable> work = new ArrayDeque<>();
-        final RSyntaxTextArea area;
+        final EditorTextArea area;
         final JavaEditorAnalysis owner;
+        final InlineDiagnostics inline;
         int parses;
         boolean fail;
         boolean reject;
@@ -823,7 +841,7 @@ public class JavaEditorAnalysisTest {
 
         Fixture(String text) throws Exception {
             area = onEdt(() -> {
-                var editor = new RSyntaxTextArea() {
+                var editor = new EditorTextArea() {
                     @Override public Graphics getGraphics() {
                         // RSyntax asks its component for font metrics before its first offscreen paint.
                         return new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics();
@@ -844,6 +862,16 @@ public class JavaEditorAnalysisTest {
                 return JavaAnalysis.parse("Proof", request.text(), JavaSnippetSource.body("Proof", request.text()).editorSource(),
                         request.revision(), request.environment());
             }));
+            inline = onEdt(() -> {
+                var painter = new InlineDiagnostics(area, area);
+                owner.setProblemListener(problems -> {
+                    assertEquals(area.getParserNotices().stream().map(n -> n.getOffset() + ":" + n.getLength() + ":" + n.getLevel() + ":" + n.getMessage()).toList(),
+                            problems.stream().map(p -> p.span().start() + ":" + (p.span().end() - p.span().start()) + ":" + p.level() + ":" + p.message()).toList(),
+                            "Inline messages and underlines must receive identical accepted state on every publication");
+                    painter.setProblems(problems);
+                });
+                return painter;
+            });
             onEdt(() -> null);
         }
 
@@ -852,6 +880,6 @@ public class JavaEditorAnalysisTest {
             onEdt(() -> { owner.requestNow(); return null; });
             while (!work.isEmpty()) runOne();
         }
-        @Override public void close() throws Exception { onEdt(() -> { owner.close(); return null; }); }
+        @Override public void close() throws Exception { onEdt(() -> { owner.close(); inline.close(); return null; }); }
     }
 }

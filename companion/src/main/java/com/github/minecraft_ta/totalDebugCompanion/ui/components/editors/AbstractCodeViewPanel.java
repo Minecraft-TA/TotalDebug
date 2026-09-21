@@ -25,6 +25,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     protected final String identifier;
     private boolean astDisposed;
     protected final JavaEditorAnalysis analysis;
+    private final InlineDiagnostics inlineDiagnostics;
 
     public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
         this(context, identifier, className, JavaEditorSource::identity, false);
@@ -49,6 +50,11 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
         this.analysis = new JavaEditorAnalysis(editorPane, context.astCache(), identifier, className,
                 sourceFactory, context.analysisExecutor(), diagnostics);
+        this.inlineDiagnostics = diagnostics ? new InlineDiagnostics(editorPane, editorLayer) : null;
+        if (inlineDiagnostics != null) {
+            editorChromeLayerUI.setInlineDiagnostics(inlineDiagnostics);
+            analysis.setProblemListener(inlineDiagnostics::setProblems);
+        }
     }
 
     @Override
@@ -83,6 +89,8 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         if (!this.astDisposed) {
             this.astDisposed = true;
             this.analysis.close();
+            if (inlineDiagnostics != null) inlineDiagnostics.close();
+            editorChromeLayerUI.setInlineDiagnostics(null);
         }
         super.dispose();
     }

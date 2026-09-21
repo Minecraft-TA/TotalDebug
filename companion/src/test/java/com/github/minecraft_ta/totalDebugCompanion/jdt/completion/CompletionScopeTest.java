@@ -28,6 +28,12 @@ public class CompletionScopeTest {
     }
     @AfterAll static void close() { CompanionClassIndex.clear(); index.close(); }
 
+    @Test void nonAsciiCompletionQueriesDoNotAbortCompletion() throws Exception {
+        assertDoesNotThrow(() -> complete("l\u00f6|"));
+        assertDoesNotThrow(() -> complete("import l\u00f6.|"));
+        assertTrue(complete("int l\u00f6 = 1; l\u00f6|").stream().anyMatch(item -> item.getName().equals("l\u00f6")));
+    }
+
     @Test void memberReferencesAndUnknownNamesDoNotBecomeLocals() throws Exception {
         String imports = "import " + Bus.class.getCanonicalName() + ";\nimport " + Platform.class.getCanonicalName() + ";\nimport java.util.Map;\nimport java.util.List;\n";
         for (String preceding : List.of("", "return null;\n", "return \"value\".clone().clone().getClass();\n")) {

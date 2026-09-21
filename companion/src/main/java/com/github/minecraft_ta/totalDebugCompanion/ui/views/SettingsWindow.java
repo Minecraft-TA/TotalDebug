@@ -62,6 +62,7 @@ public class SettingsWindow extends JDialog {
                 config::setUiFontSize,
                 ThemeManager::reapply
         ));
+        addWideRow(form, row++, createToggle("Show inline diagnostics", config.inlineDiagnostics(), config::setInlineDiagnostics));
         addSection(form, row++, "Debugger");
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on caught exceptions",

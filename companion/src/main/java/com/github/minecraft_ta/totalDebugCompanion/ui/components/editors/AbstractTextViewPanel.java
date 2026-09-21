@@ -37,7 +37,7 @@ public abstract class AbstractTextViewPanel extends JPanel {
         JETBRAINS_MONO_FONT = new Font(FlatJetBrainsMonoFont.FAMILY, Font.PLAIN, 14);
     }
 
-    protected final RSyntaxTextArea editorPane = new RSyntaxTextArea();
+    protected final EditorTextArea editorPane = new EditorTextArea();
     protected final RTextScrollPane editorScrollPane = new RTextScrollPane(this.editorPane);
     protected final EditorChromeLayerUI editorChromeLayerUI = new EditorChromeLayerUI(
             this.editorPane,
