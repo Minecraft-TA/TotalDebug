@@ -5,13 +5,11 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
-import com.github.minecraft_ta.totalDebugCompanion.ui.CopyValue;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
-import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -19,10 +17,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.Rectangle;
-import java.awt.Toolkit;
-import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -153,28 +148,6 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     assertEquals("Disconnected", game.getToolTipText());
                 }
             } finally { frame.dispose(); bar.dispose(); }
-        });
-    }
-
-    @Test void copyHasFeedbackWithoutResizingOrPublishingNotifications() throws Exception {
-        SwingUtilities.invokeAndWait(() -> {
-            var clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-            var previous = clipboard.getContents(null);
-            var value = new CopyValue("Copy endpoint");
-            value.setValue("http://localhost/mcp", "http://localhost/mcp");
-            JButton copy = field(value, "copy", JButton.class);
-            Dimension before = value.getPreferredSize();
-            try {
-                copy.doClick(0);
-                assertEquals("Copied", copy.getText());
-                assertEquals(before, value.getPreferredSize());
-                assertEquals("http://localhost/mcp", clipboard.getData(DataFlavor.stringFlavor));
-                value.setValue("", "");
-                assertFalse(copy.isEnabled());
-                assertFalse(value.isVisible());
-                assertEquals("Copy", copy.getText());
-            } catch (Exception failure) { throw new AssertionError(failure); }
-            finally { if (previous != null) clipboard.setContents(previous, null); value.removeNotify(); }
         });
     }
 

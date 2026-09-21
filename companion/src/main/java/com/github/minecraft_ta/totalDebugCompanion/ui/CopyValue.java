@@ -9,6 +9,7 @@ import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Insets;
+import java.util.function.Consumer;
 
 /** A readable value and an explicit copy action with local feedback. */
 public final class CopyValue extends JPanel {
@@ -18,6 +19,10 @@ public final class CopyValue extends JPanel {
     private String value = "";
 
     public CopyValue(String actionName) {
+        this(actionName, PopupElements::copy);
+    }
+
+    CopyValue(String actionName, Consumer<String> copyAction) {
         super(new BorderLayout(12, 0));
         setOpaque(false);
         copy.setMargin(new Insets(2, 7, 2, 7));
@@ -29,7 +34,7 @@ public final class CopyValue extends JPanel {
         copy.setPreferredSize(size);
         copy.setText("Copy");
         copy.addActionListener(event -> {
-            PopupElements.copy(value);
+            copyAction.accept(value);
             copy.setText("Copied");
             copy.setIcon(Icons.SUCCESS);
             feedback.restart();
