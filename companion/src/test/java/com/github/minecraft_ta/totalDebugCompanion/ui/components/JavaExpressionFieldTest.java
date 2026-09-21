@@ -2,10 +2,33 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
+import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import javax.swing.SwingUtilities;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JavaExpressionFieldTest {
+    @BeforeEach void configureJava() {
+        ((AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance()).putMapping(
+                SyntaxConstants.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
+    }
+    @Test void updatingAnUnfocusedFieldDoesNotActivateItsCaret() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            FlatDarkLaf.setup();
+            var field = new JavaExpressionField();
+            assertFalse(field.isFocusOwner());
+            field.setText("condition");
+            field.setCaretPosition(3);
+            assertFalse(field.getCaret().isVisible(), "Loading breakpoint values must not show an unfocused caret");
+            field.getCaret().setVisible(false);
+            field.setText("replacement");
+            assertFalse(field.getCaret().isVisible());
+        });
+    }
+
     @Test
     void expandedEditorUsesEnterForNewlinesAndControlEnterForEvaluation() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

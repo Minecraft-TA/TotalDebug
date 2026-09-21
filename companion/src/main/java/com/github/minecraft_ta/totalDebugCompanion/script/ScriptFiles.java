@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.Locale;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.UUID;
 import java.nio.file.SimpleFileVisitor;
@@ -27,6 +29,25 @@ public final class ScriptFiles {
     public ScriptFiles(Path root) { this.root = root.toAbsolutePath().normalize(); }
     public Path root() { return root; }
     public boolean contains(Path path) { return path.toAbsolutePath().normalize().startsWith(root); }
+
+    /** Project-relative action references. Do not descend symlinks or Windows reparse directories. */
+    public List<String> listScripts() throws IOException {
+        if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Not a directory: " + root);
+        var names = new ArrayList<String>();
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                return attributes.isSymbolicLink() || attributes.isOther() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (attributes.isRegularFile() && file.getFileName().toString().endsWith(EXTENSION))
+                    names.add(root.relativize(file).toString().replace('\\', '/'));
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        return List.copyOf(names);
+    }
 
     public Path resolve(Path path) throws IOException {
         Path result = (path.isAbsolute() ? path : root.resolve(path)).toAbsolutePath().normalize();

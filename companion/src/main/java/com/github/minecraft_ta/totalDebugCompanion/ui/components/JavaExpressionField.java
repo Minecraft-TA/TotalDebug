@@ -59,6 +59,10 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         super(1, columns);
         setLineWrap(false);
         setHighlightCurrentLine(false);
+        getCaret().setVisible(false);
+        addCaretListener(event -> {
+            if (!isFocusOwner()) getCaret().setVisible(false);
+        });
         setCodeFoldingEnabled(false);
         CodeUtils.initSyntaxScheme(this);
         setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));

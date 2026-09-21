@@ -6,6 +6,8 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 
 import java.awt.Window;
 import java.net.URI;
+import java.nio.file.Path;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 
 /** Deterministic visual fixture for the persisted-breakpoint manager. */
 public final class BreakpointsWindowPreview {
@@ -35,7 +37,7 @@ public final class BreakpointsWindowPreview {
                 null
         )).join();
 
-        BreakpointsWindow window = new BreakpointsWindow(new ASTCache(), owner, controller, target -> {
+        BreakpointsWindow window = new BreakpointsWindow(new ASTCache(), owner, controller, new ScriptFiles(Path.of("companion/build/breakpoint-preview/scripts")), target -> {
         });
         window.setLocation(owner.getX() + 190, owner.getY() + 90);
         window.showWindow();

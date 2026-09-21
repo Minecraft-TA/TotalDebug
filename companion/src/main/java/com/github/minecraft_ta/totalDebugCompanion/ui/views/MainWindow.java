@@ -355,7 +355,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         if (this.breakpointsWindow == null) {
             this.breakpointsWindow = new BreakpointsWindow(
                     editorTabs.astCache(), this,
-                    debugger,
+                    debugger, project.get().scriptFiles(),
                     target -> this.navigationService.navigate(target)
             );
         }

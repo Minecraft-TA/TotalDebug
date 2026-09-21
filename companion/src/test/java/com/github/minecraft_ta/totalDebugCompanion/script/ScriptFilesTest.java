@@ -6,11 +6,39 @@ import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFilesTest {
     @TempDir Path directory;
+    @Test void listsOnlyProjectScriptReferencesAndReportsAnInvalidRoot() throws Exception {
+        var files = new ScriptFiles(directory.resolve("scripts"));
+        assertEquals(List.of(), files.listScripts());
+        files.create(Files.createDirectories(files.root().resolve("nested")), "Debug", false, "return 1;");
+        files.create(files.root(), "Root", false, "return 2;");
+        Files.writeString(files.root().resolve("notes.txt"), "ignore");
+        assertEquals(List.of("nested/Debug.tdscript", "Root.tdscript"), files.listScripts());
+        Path invalid = Files.writeString(directory.resolve("not-a-directory"), "");
+        assertThrows(IOException.class, () -> new ScriptFiles(invalid).listScripts());
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS)
+    void scriptListingDoesNotFollowExternalOrCyclicJunctions() throws Exception {
+        Path root = Files.createDirectory(directory.resolve("scripts"));
+        Path outside = Files.createDirectory(directory.resolve("outside"));
+        Files.writeString(outside.resolve("External.tdscript"), "return 1;");
+        Files.writeString(root.resolve("Local.tdscript"), "return 2;");
+        for (String name : List.of("external", "cycle")) {
+            Path target = name.equals("external") ? outside : root;
+            var process = new ProcessBuilder("cmd", "/c", "mklink", "/J", root.resolve(name).toString(), target.toString()).redirectErrorStream(true).start();
+            String output = new String(process.getInputStream().readAllBytes());
+            assertEquals(0, process.waitFor(), output);
+        }
+        try { assertEquals(List.of("Local.tdscript"), new ScriptFiles(root).listScripts()); }
+        finally { Files.delete(root.resolve("external")); Files.delete(root.resolve("cycle")); }
+    }
+
     @Test void nestedCreateRenameMoveAndSaveKeepTwoSameNamedScriptsIndependent() throws Exception {
         var files = new ScriptFiles(directory.resolve("scripts"));
         Path first = files.create(files.root(), "First folder", true, "");
