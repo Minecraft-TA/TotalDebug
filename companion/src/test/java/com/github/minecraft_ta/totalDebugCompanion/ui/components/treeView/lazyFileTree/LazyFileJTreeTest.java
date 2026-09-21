@@ -1,10 +1,17 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.SwingUtilities;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutionException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -336,6 +343,41 @@ class LazyFileJTreeTest {
         libraries.setSortPriority(20);
 
         assertTrue(LazyFileJTree.compareTreeItems(libraries, javaRuntime) < 0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void backgroundFailuresAreReportedOnlyForTheCurrentRuntime(boolean retired) throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var errors = new ByteArrayOutputStream();
+        var previousError = System.err;
+        LazyFileJTree tree = new LazyFileJTree();
+        DirectoryTreeItem oldRuntime = new DirectoryTreeItem("decompiled-files") {
+            @Override public List<TreeItem> loadChildren() {
+                entered.countDown();
+                try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
+                catch (InterruptedException failure) { throw new AssertionError(failure); }
+                throw new UncheckedIOException(new IOException("Decompiled cache belongs to a different runtime"));
+            }
+        };
+        try (var capture = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+            System.setErr(capture);
+            SwingUtilities.invokeAndWait(() -> tree.setRootNodes(oldRuntime));
+            var reveal = tree.revealItemPath("decompiled-files", List.of("Old.java"));
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            if (retired) SwingUtilities.invokeAndWait(() -> tree.setRootNodes(emptyDirectory("current-runtime")));
+            release.countDown();
+            assertThrows(ExecutionException.class, () -> reveal.get(5, TimeUnit.SECONDS));
+            SwingUtilities.invokeAndWait(() -> { });
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals(!retired, errors.toString(StandardCharsets.UTF_8).contains("Decompiled cache belongs to a different runtime"),
+                    "A retired runtime's failed background load is not a current tree error");
+        } finally {
+            release.countDown();
+            System.setErr(previousError);
+            SwingUtilities.invokeAndWait(() -> tree.setRootNodes());
+        }
     }
 
     @Test

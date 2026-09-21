@@ -324,12 +324,12 @@ public class LazyFileJTree extends JTree {
         load.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
             this.activeLoads.remove(node, load);
             if (failure != null) {
-                failure.printStackTrace(System.err);
                 if (isAttached(node) && (source != node.getUserObject() || revision != node.revision())) {
                     loadItemsForNode(node);
                     return;
                 }
                 if (isAttached(node) && source == node.getUserObject() && revision == node.revision()) {
+                    failure.printStackTrace(System.err);
                     Throwable cause = failure;
                     while (cause.getCause() != null) cause = cause.getCause();
                     var error = new TreeItem(Objects.requireNonNullElse(cause.getMessage(), cause.toString()));

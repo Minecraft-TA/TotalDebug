@@ -61,6 +61,7 @@ public final class TotalDebugClient {
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
         companionApp.setSessionClosedHandler(this.scripts::close);
+        companionApp.startDiscovery(() -> TotalDebugConfig.CLIENT.useCompanionApp.get());
     }
 
     public static synchronized void initialize(Minecraft minecraft) {

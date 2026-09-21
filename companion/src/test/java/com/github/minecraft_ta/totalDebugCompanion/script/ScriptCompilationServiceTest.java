@@ -369,6 +369,7 @@ class ScriptCompilationServiceTest {
             int middle = bytes.length / 2;
             compiler.acceptServerManifest(new ServerManifestMessage("session", "", 0, bytes.length,
                     Arrays.copyOfRange(bytes, 0, middle)));
+            compiler.suspendRuntime();
             compiler.bind(snapshot);
             compiler.acceptServerManifest(new ServerManifestMessage("session", "", middle, bytes.length,
                     Arrays.copyOfRange(bytes, middle, bytes.length)));

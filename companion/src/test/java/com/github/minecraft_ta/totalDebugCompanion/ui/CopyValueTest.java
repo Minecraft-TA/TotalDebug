@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui;
 
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 
 import javax.swing.JButton;
 import javax.swing.SwingUtilities;
@@ -21,13 +22,18 @@ class CopyValueTest {
             Dimension before = value.getPreferredSize();
             try {
                 copy.doClick(0);
-                assertEquals("Copied", copy.getText());
+                assertTrue(copy.getText() == null || copy.getText().isEmpty());
+                assertSame(Icons.SUCCESS, copy.getIcon());
+                assertEquals("Copied", copy.getToolTipText());
                 assertEquals(before, value.getPreferredSize());
                 assertEquals("http://localhost/mcp", clipboard.getData(DataFlavor.stringFlavor));
                 value.setValue("", "");
                 assertFalse(copy.isEnabled());
                 assertFalse(value.isVisible());
-                assertEquals("Copy", copy.getText());
+                assertTrue(copy.getText() == null || copy.getText().isEmpty());
+                assertSame(Icons.COPY, copy.getIcon());
+                assertEquals("Copy endpoint", copy.getToolTipText());
+                assertEquals("Copy endpoint", copy.getAccessibleContext().getAccessibleName());
             } catch (Exception failure) {
                 throw new AssertionError(failure);
             } finally {

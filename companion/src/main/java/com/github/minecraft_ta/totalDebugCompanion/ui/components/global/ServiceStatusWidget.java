@@ -42,6 +42,8 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
         addActionListener(event -> showStatusPopup());
     }
 
+    ServiceStatus status() { return status; }
+
     void setStatus(ServiceStatus status) {
         UIUtils.onEdt(() -> applyStatus(status));
     }

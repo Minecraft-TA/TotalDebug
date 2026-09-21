@@ -140,7 +140,7 @@ Keep `ServiceStatus`, `RuntimeIndexService.Status`, `DebuggerSessionController`,
 
 | Control | First usable popup | Subsequent controls |
 | --- | --- | --- |
-| Game | Connected instance name, copyable game directory, real process ID when available. | Connection actions belong to the separately planned connection lifecycle. |
+| Game | Connected instance name and copyable game directory. | Icon-only Reconnect uses the application-owned connection lifecycle. See the [current interaction review](STATUS_UI_INTERACTION_REVIEW.md). |
 | MCP | Enable MCP server checkbox, copyable endpoint, compact pending/failure text. Startup and shutdown serialize on a dedicated lifecycle worker, since HTTP requests can depend on the project worker. | No port configuration. Disabling does not cancel scripts already submitted to Minecraft. The application owns the job service independently of HTTP. Running-job tracking and IDs survive server restarts, and project retirement can cancel jobs while HTTP is disabled. |
 | Index | Always clickable. Show measured class count and elapsed duration, distinguishing Indexed from Loaded. Refresh rebuilds a ready index while bypassing its cache; the old binding stays usable until a validated replacement is installed. Runtime rebuilds do not fall back to local scanning. Failed-state Retry preserves valid fallback browsing, and EMPTY permits rescanning after adding mods. Busy controls are disabled. | No percentage or Cancel until supported by the service. |
 | Debugger | Plain target/phase label and relevant attach/detach/resume/step actions. Show Debugger and breakpoint actions remain normal menu items. | No generic textbox or Copy details panel. |

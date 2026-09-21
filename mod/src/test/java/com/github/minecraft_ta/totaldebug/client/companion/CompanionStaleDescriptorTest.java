@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.lang.reflect.InvocationTargetException;
@@ -12,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,9 +23,9 @@ class CompanionStaleDescriptorTest {
     Path temporaryDirectory;
 
     @Test
-    void discardsAStaleDescriptorAfterItsPidWasReused() throws Exception {
+    void ignoresAStaleDescriptorWithoutDeletingCompanionOwnedFiles() throws Exception {
         Path appHome = Files.createDirectories(this.temporaryDirectory.resolve("app-home"));
-        var paths = new com.github.minecraft_ta.totaldebug.storage.AppPaths(appHome);
+        var paths = new AppPaths(appHome);
         Files.createDirectories(paths.run());
         Path descriptorFile = paths.instanceDescriptor();
         Path keyFile = paths.instanceKey();
@@ -48,8 +49,8 @@ class CompanionStaleDescriptorTest {
             }
 
             assertNull(descriptor);
-            assertFalse(Files.exists(descriptorFile));
-            assertFalse(Files.exists(keyFile));
+            assertTrue(Files.exists(descriptorFile));
+            assertTrue(Files.exists(keyFile));
         } finally {
             if (previousHome == null) {
                 System.clearProperty(CompanionLaunchContract.APP_HOME_PROPERTY);
@@ -62,7 +63,7 @@ class CompanionStaleDescriptorTest {
     @Test
     void keepsRejectingARealRunningCompanionWithAnotherProtocol() throws Exception {
         Path appHome = Files.createDirectories(this.temporaryDirectory.resolve("locked-app-home"));
-        var paths = new com.github.minecraft_ta.totaldebug.storage.AppPaths(appHome);
+        var paths = new AppPaths(appHome);
         Files.createDirectories(paths.run());
         Path descriptorFile = paths.instanceDescriptor();
         Path keyFile = paths.instanceKey();
@@ -82,8 +83,8 @@ class CompanionStaleDescriptorTest {
                 StandardOpenOption.WRITE
         ); FileLock ignored = channel.lock();
              CompanionAppClient client = new CompanionAppClient(totalDebugDirectory)) {
-            java.io.IOException failure = assertThrows(
-                    java.io.IOException.class,
+            IOException failure = assertThrows(
+                    IOException.class,
                     () -> invokeReadLiveDescriptor(client)
             );
 

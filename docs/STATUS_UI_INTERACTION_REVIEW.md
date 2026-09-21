@@ -36,11 +36,11 @@ These general skills are supplementary references. Web CSS rules and mobile targ
 
 Keep compact status indicators. Use a clear hover target where clicking opens controls. The user requested removing the added dropdown arrows; service controls do not include them. Use tooltips for passive information that does not warrant an empty interactive panel.
 
-MCP keeps its native checkbox. Show the endpoint as a value with a separate compact **Copy** button using the existing copy icon. Give that button an action tooltip, keyboard focus, normal/hover/pressed/disabled states, and brief **Copied** feedback that does not change row width or publish another history event.
+MCP keeps its native checkbox. Show the endpoint as a value with a separate copy icon button. The user confirmed icon-only copy and refresh actions: describe the target in the tooltip and accessible name. Keep keyboard focus, normal/hover/pressed/disabled states, and brief checkmark feedback after copying without changing row width or publishing another history event.
 
-Index retains measured counts and duration. Make **Rebuild** or **Retry** an identifiable compact action, rather than an isolated glyph that looks like metadata. Keep the busy behavior already implemented.
+Index retains measured counts and duration. Its refresh icon uses the shared button hover, press and focus feedback; the tooltip identifies Rebuild index or Retry indexing. Keep the busy behavior already implemented.
 
-Connected Game details remain useful: instance name, directory, and real process ID. Copy is a separate action. Keep connection controls with the separate connection work; do not add inert placeholders.
+Connected Game details show the instance name and directory. The process ID is intentionally omitted from this popup. The directory has a copy icon. Reconnect uses a refresh icon with a descriptive tooltip, wired to the application-owned connection operation for the captured selected project. It is unavailable during project switching or a pending request. Offline and failed states keep the action reachable for an active project, show the actual backend detail, and hide stale connected-game metadata. Old request completions cannot enable a replacement request or update a disposed control. Starting Minecraft remains a separate slice.
 
 ### Debugger
 

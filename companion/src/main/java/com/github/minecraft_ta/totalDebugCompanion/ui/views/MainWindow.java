@@ -233,6 +233,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public boolean canExit() { return !scriptFileActions.isBusy() && editorTabs.canCloseAll(); }
     @Override public void setSwitching(boolean switching) {
         setEnabled(!switching);
+        refreshActions();
         this.projectSelector.refresh();
     }
     @Override public void runtimeChanged() { statusBar.refreshContext(); editorTabs.astCache().refreshEnvironment(); navigationService.runtimeChanged(); refreshRuntimeSources(); refreshActions(); }
@@ -526,7 +527,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     }
 
     private void refreshActions() {
-        boolean hasProfile = project.get() != null;
+        ProjectScope scope = project.get();
+        boolean hasProfile = scope != null;
+        statusBar.setGameReconnect(scope != null && scope.isActive() && !projects.isSwitching()
+                ? () -> projects.reconnectGame(scope) : null);
         this.scriptMenu.setVisible(hasProfile);
         this.evaluateExpressionAction.setEnabled(scripts.isReady());
         this.newScriptAction.setEnabled(hasProfile);
@@ -537,7 +541,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         gameConnected = status.state() == ServiceStatus.State.AVAILABLE;
         this.statusBar.setGameStatus(status);
         refreshGameIdentity();
-        if (status.state() != ServiceStatus.State.AVAILABLE && this.snippetExecutions != null) {
+        if (!projects.isConnected() && this.snippetExecutions != null) {
             this.snippetExecutions.runtimeDisconnected();
         }
         refreshActions();
@@ -548,8 +552,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         if (!gameConnected || scope == null || !scope.isActive()) return;
         String name = projects.projects().stream().filter(item -> item.profile().equals(scope.profile()))
                 .map(ProjectRegistry.Project::name).findFirst().orElse(scope.profile().workspaceDirectory().getFileName().toString());
-        var target = debugger.status().target();
-        statusBar.setGameIdentity(name, scope.profile().workspaceDirectory(), target == null ? 0 : target.processId());
+        statusBar.setGameIdentity(name, scope.profile().workspaceDirectory());
     }
 
     @Override public void setMcpStatus(ServiceStatus status) {
@@ -558,5 +561,6 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     @Override public void setRuntimeIndexStatus(RuntimeIndexService.Status status) {
         this.statusBar.setRuntimeStatus(status);
+        refreshActions();
     }
 }

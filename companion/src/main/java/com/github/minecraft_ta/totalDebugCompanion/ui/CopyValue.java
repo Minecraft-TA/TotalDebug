@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -14,7 +15,8 @@ import java.util.function.Consumer;
 /** A readable value and an explicit copy action with local feedback. */
 public final class CopyValue extends JPanel {
     private final JLabel label = PopupElements.label("");
-    private final JButton copy = new JButton("Copy", Icons.COPY);
+    private final JButton copy = new FlatIconButton(Icons.COPY, false);
+    private final String actionName;
     private final Timer feedback = new Timer(1500, event -> resetFeedback());
     private String value = "";
 
@@ -24,18 +26,14 @@ public final class CopyValue extends JPanel {
 
     CopyValue(String actionName, Consumer<String> copyAction) {
         super(new BorderLayout(12, 0));
+        this.actionName = actionName;
         setOpaque(false);
-        copy.setMargin(new Insets(2, 7, 2, 7));
+        copy.setMargin(new Insets(2, 3, 2, 3));
         copy.setToolTipText(actionName);
         copy.getAccessibleContext().setAccessibleName(actionName);
-        copy.putClientProperty("JButton.minimumWidth", 0);
-        copy.setText("Copied");
-        Dimension size = copy.getPreferredSize();
-        copy.setPreferredSize(size);
-        copy.setText("Copy");
         copy.addActionListener(event -> {
             copyAction.accept(value);
-            copy.setText("Copied");
+            copy.setToolTipText("Copied");
             copy.setIcon(Icons.SUCCESS);
             feedback.restart();
         });
@@ -64,7 +62,7 @@ public final class CopyValue extends JPanel {
 
     private void resetFeedback() {
         feedback.stop();
-        copy.setText("Copy");
+        copy.setToolTipText(actionName);
         copy.setIcon(Icons.COPY);
     }
 

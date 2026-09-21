@@ -10,7 +10,7 @@ Minecraft source with an illustrated debugger pause and a nested Java evaluation
 
 Open a block, entity or item from Minecraft with F6, then navigate its decompiled source. Companion includes class and member search, Find Usages, type hierarchies, editor completion and archive resource previews.
 
-The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. Live tools reconnect when TotalDebug starts again; local indexes do not enable execution.
+The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. TotalDebug watches Companion's application endpoint and connects when its project is selected, in either startup order and after Companion restarts. The Game popup can request Reconnect; it waits for authentication and reports failure after 30 seconds without a matching game. Local indexes do not enable execution.
 
 ## Evaluate and debug
 
