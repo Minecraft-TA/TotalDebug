@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
@@ -230,10 +231,12 @@ class ProjectSwitchLifecycleTest {
     private static void verifyNavigationReset(CompanionApplication app, MainWindow window) throws Exception {
         var pending = new AtomicReference<CompletableFuture<Boolean>>();
         var lookupStarted = new AtomicReference<CompletableFuture<Void>>();
+        var lookupCount = new AtomicInteger();
         var created = new CompletableFuture<NavigationService>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
             var tree = new FileTreeView(app::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
+                    lookupCount.incrementAndGet();
                     var delayed = pending.getAndSet(null);
                     if (delayed != null) lookupStarted.get().complete(null);
                     return delayed == null ? CompletableFuture.completedFuture(true) : delayed;
@@ -266,15 +269,20 @@ class ProjectSwitchLifecycleTest {
         lookupStarted.get().get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> { });
         assertFalse(newTraversal.isDone());
+        int activeLookups = lookupCount.get();
+        var duplicate = new AtomicReference<CompletableFuture<Void>>();
         javax.swing.SwingUtilities.invokeAndWait(() -> {
             navigation.runtimeChanged();
-            assertTrue(navigation.goBack().isDone(), "A late refresh of the same runtime must not unlock its active traversal");
+            duplicate.set(navigation.goBack());
         });
+        duplicate.get().get(3, TimeUnit.SECONDS);
+        assertEquals(activeLookups, lookupCount.get(), "A late refresh of the same runtime must not unlock its active traversal");
         delayedA.complete(true);
         assertInstanceOf(CancellationException.class, assertThrows(ExecutionException.class,
                 () -> oldTraversal.get(3, TimeUnit.SECONDS)).getCause());
-        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.goBack().isDone(),
-                "Completion from A must not admit another traversal while B is still navigating"));
+        javax.swing.SwingUtilities.invokeAndWait(() -> duplicate.set(navigation.goBack()));
+        duplicate.get().get(3, TimeUnit.SECONDS);
+        assertEquals(activeLookups, lookupCount.get(), "Completion from A must not admit another traversal while B is still navigating");
         delayedB.complete(true);
         newTraversal.get(3, TimeUnit.SECONDS);
         javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));

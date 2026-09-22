@@ -102,7 +102,7 @@ class CompanionAutomaticConnectionTest {
             assertEquals(0, endpoint.hellos.get());
             endpoint.reject = true;
             endpoint.publish(profile());
-            await(() -> endpoint.hellos.get() == 1);
+            await(() -> endpoint.hellos.get() >= 1);
             Thread.sleep(1400);
             assertEquals(1, endpoint.hellos.get(), "Authentication rejection must not spin");
             endpoint.reject = false;
