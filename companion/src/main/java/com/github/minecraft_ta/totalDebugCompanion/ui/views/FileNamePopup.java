@@ -65,6 +65,7 @@ public final class FileNamePopup extends JDialog {
             }));
         });
         getRootPane().registerKeyboardAction(event -> dispose(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        // This undecorated popup has no window title bar; the heading is its only visible title.
         var heading = new JLabel(title, SwingConstants.CENTER);
         heading.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
         var header = new JPanel(new BorderLayout());

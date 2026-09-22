@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions.FileSelection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -7,7 +8,6 @@ import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.awt.event.ActionEvent;
 import java.util.List;
@@ -18,7 +18,7 @@ class FileDeleteDialogTest {
     @TempDir Path directory;
 
     @Test void fileConfirmationDefaultsToDeleteAndCancelDoesNothing() throws Exception {
-        Path file = Files.writeString(directory.resolve("Test.tdscript"), "");
+        var file = new FileSelection(directory.resolve("Test.tdscript"), false);
         SwingUtilities.invokeAndWait(() -> {
             int[] deletes = {0};
             JDialog dialog = ScriptFileActions.deleteDialog(null, List.of(file), true, () -> deletes[0]++);
@@ -57,8 +57,8 @@ class FileDeleteDialogTest {
     }
 
     @Test void foldersAndPermanentDeletionUseSpecificQuestions() throws Exception {
-        Path folder = Files.createDirectory(directory.resolve("Utilities"));
-        Path file = Files.writeString(directory.resolve("Test.tdscript"), "");
+        var folder = new FileSelection(directory.resolve("Utilities"), true);
+        var file = new FileSelection(directory.resolve("Test.tdscript"), false);
         SwingUtilities.invokeAndWait(() -> {
             JDialog dialog = ScriptFileActions.deleteDialog(null, List.of(folder), false, () -> fail("Deleted without confirmation"));
             try {

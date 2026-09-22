@@ -41,6 +41,32 @@ import java.util.concurrent.ExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @Test void contextMenuAndCreationUseLoadedFolderMetadata() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("metadata-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("metadata-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path folder = window.editorContext().project().scriptFiles().create(
+                    window.editorContext().project().scriptFiles().root(), "Folder.tdscript", true, "");
+            FileTreeView files = find(window, FileTreeView.class);
+            var item = files.tree().getItemFactory().createFileSystemDirectoryItem(folder, false);
+            edt(() -> { files.tree().setRootNodes(item); files.tree().setSelectionRow(0); return null; });
+            // A loaded row still describes its folder when the backing filesystem is unavailable.
+            Files.delete(folder);
+            edt(() -> {
+                JPopupMenu menu = files.createContextMenu(item);
+                assertTrue(labels(menu).contains("New Folder"));
+                assertTrue(labels(menu).contains("Delete folder"));
+                assertFalse(labels(menu).contains("Duplicate script"));
+                var parent = ScriptFileActions.class.getDeclaredMethod("creationParent");
+                parent.setAccessible(true);
+                assertEquals(folder, parent.invoke(window.scriptFileActions()));
+                return null;
+            });
+        }
+    }
+
     @Test void compactMiddleFolderActionsKeepTheirRealTargetAndRelocateOpenScripts() throws Exception {
         Path home = Files.createDirectories(directory.resolve("home"));
         GlobalConfig.getInstance().loadFrom(home);

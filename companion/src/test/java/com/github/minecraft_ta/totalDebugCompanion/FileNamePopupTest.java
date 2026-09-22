@@ -25,7 +25,7 @@ class FileNamePopupTest {
         var dialog = new AtomicReference<FileNamePopup>();
         int[] width = {0};
         SwingUtilities.invokeAndWait(() -> {
-            var popup = new FileNamePopup(null, "New Script", "Script", Icons.JAVA_FILE, "Test", name -> null, name -> work);
+            var popup = new FileNamePopup(null, "New Script", "Script", Icons.SCRIPT_FILE, "Test", name -> null, name -> work);
             dialog.set(popup);
             width[0] = popup.getWidth();
             find(popup, JTextField.class).postActionEvent();
@@ -52,13 +52,17 @@ class FileNamePopupTest {
         var dialog = new AtomicReference<FileNamePopup>();
         int[] width = {0};
         SwingUtilities.invokeAndWait(() -> {
-            var popup = new FileNamePopup(null, "New Script", "Script", Icons.JAVA_FILE, "", name -> {
+            var popup = new FileNamePopup(null, "New Script", "Script", Icons.SCRIPT_FILE, "", name -> {
                 try { ScriptFiles.validateName(name, true); return null; } catch (IOException failure) { return failure.getMessage(); }
             }, name -> work);
             dialog.set(popup);
             width[0] = popup.getWidth();
             var field = find(popup, JTextField.class);
             assertTrue(popup.isUndecorated());
+            assertEquals(JRootPane.NONE, popup.getRootPane().getWindowDecorationStyle());
+            String visibleLabels = labels(popup);
+            assertTrue(visibleLabels.contains("New Script"));
+            assertEquals(visibleLabels.indexOf("New Script"), visibleLabels.lastIndexOf("New Script"));
             assertNull(find(popup, JButton.class));
             field.setText("../invalid"); field.postActionEvent();
             assertFalse(work.isDone()); assertTrue(field.isEnabled());

@@ -54,6 +54,7 @@ public final class ScriptFileActions {
     private boolean busy;
     private record Change(Path from, Path to) { }
     private record Drag(ProjectScope project, List<Path> paths) { }
+    record FileSelection(Path path, boolean directory) { }
     private static final DataFlavor DRAG = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=" + Drag.class.getName(), "Scripts files");
     @FunctionalInterface private interface Work { void run(ScriptFiles files, List<Change> changes) throws IOException; }
 
@@ -65,11 +66,11 @@ public final class ScriptFileActions {
         var component = tree.tree();
         component.getInputMap().put(KeyStroke.getKeyStroke("F2"), "renameFile");
         component.getActionMap().put("renameFile", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent event) { var paths = selected(); if (paths.size() == 1) rename(paths.getFirst()); }
+            @Override public void actionPerformed(ActionEvent event) { var files = selectedFiles(); if (files.size() == 1) rename(files.getFirst()); }
         });
         component.getInputMap().put(KeyStroke.getKeyStroke("DELETE"), "deleteFiles");
         component.getActionMap().put("deleteFiles", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent event) { confirmDelete(selected()); }
+            @Override public void actionPerformed(ActionEvent event) { confirmDelete(selectedFiles()); }
         });
         component.setDragEnabled(true);
         component.setDropMode(DropMode.ON);
@@ -115,11 +116,21 @@ public final class ScriptFileActions {
         return scope != null && path != null && scope.scriptFiles().contains(path);
     }
     private List<Path> selected() {
+        return selectedFiles().stream().map(FileSelection::path).toList();
+    }
+    private List<FileSelection> selectedFiles() {
         var selection = tree.tree().getSelectionPaths();
         if (selection == null) return List.of();
-        var result = new ArrayList<Path>();
-        for (var selected : selection) { Path path = path(selected); if (!managed(path)) return List.of(); result.add(path); }
-        return topLevel(result);
+        var result = new ArrayList<FileSelection>();
+        for (var selected : selection) {
+            if (!(selected.getLastPathComponent() instanceof LazyTreeNode node)) return List.of();
+            TreeItem item = node.selectedItem();
+            Path path = path(item);
+            if (!managed(path)) return List.of();
+            result.add(new FileSelection(path.toAbsolutePath().normalize(), item.isDirectory()));
+        }
+        var roots = topLevel(result.stream().map(FileSelection::path).toList());
+        return result.stream().filter(file -> roots.contains(file.path)).distinct().toList();
     }
     static Path path(TreePath path) {
         if (path == null || !(path.getLastPathComponent() instanceof LazyTreeNode node)) return null;
@@ -133,19 +144,19 @@ public final class ScriptFileActions {
         var normalized = paths.stream().map(p -> p.toAbsolutePath().normalize()).distinct().toList();
         return normalized.stream().filter(p -> normalized.stream().noneMatch(parent -> !parent.equals(p) && p.startsWith(parent))).toList();
     }
-    public void addMenu(JPopupMenu menu, Path target) {
+    public void addMenu(JPopupMenu menu, Path target, boolean folder) {
         if (!managed(target)) return;
-        boolean folder = Files.isDirectory(target);
         boolean root = target.equals(context.get().project().scriptFiles().root());
-        List<Path> selection = selected();
-        List<Path> targets = selection.contains(target) ? selection : List.of(target);
+        var targetFile = new FileSelection(target, folder);
+        List<FileSelection> selection = selectedFiles();
+        List<FileSelection> targets = selection.stream().anyMatch(file -> file.path.equals(target)) ? selection : List.of(targetFile);
         if (folder && targets.size() == 1) {
             item(menu, "New Script", Icons.SCRIPT_FILE, () -> create(target, false));
             item(menu, "New Folder", Icons.NEW_FOLDER, () -> create(target, true));
         }
         if (!root) {
-            if (targets.size() == 1) item(menu, "Rename", Icons.RENAME, "F2", () -> rename(target));
-            item(menu, "Move to...", Icons.MOVE_TO_FOLDER, () -> chooseDestination(targets));
+            if (targets.size() == 1) item(menu, "Rename", Icons.RENAME, "F2", () -> rename(targetFile));
+            item(menu, "Move to...", Icons.MOVE_TO_FOLDER, () -> chooseDestination(targets.stream().map(FileSelection::path).toList()));
             if (targets.size() == 1 && !folder && target.toString().endsWith(ScriptFiles.EXTENSION))
                 item(menu, "Duplicate script", Icons.COPY, () -> duplicate(target));
         }
@@ -168,10 +179,11 @@ public final class ScriptFileActions {
         showName("Save as Script", "Script", Icons.SCRIPT_FILE, "", true, name -> create(parent, name, false, text));
     }
     private Path creationParent() {
-        var selected = selected();
+        var selected = selectedFiles();
         Path root = context.get().project().scriptFiles().root();
-        Path parent = selected.size() == 1 ? selected.getFirst() : root;
-        return !Files.isDirectory(parent) && !parent.equals(root) ? parent.getParent() : parent;
+        if (selected.size() != 1) return root;
+        var file = selected.getFirst();
+        return file.directory ? file.path : file.path.getParent();
     }
     public void newFolder() { if (context.get().project() != null && !busy) create(creationParent(), true); }
     public void newScript() {
@@ -201,9 +213,10 @@ public final class ScriptFileActions {
                             : context.get().navigation().navigate(new NavigationTarget.LocalFile(path), Activation.KEEP_CURRENT_WINDOW);
                 });
     }
-    private void rename(Path from) {
+    private void rename(FileSelection selected) {
+        Path from = selected.path;
         if (!managed(from) || from.equals(context.get().project().scriptFiles().root())) return;
-        boolean script = !Files.isDirectory(from) && from.toString().endsWith(ScriptFiles.EXTENSION);
+        boolean script = !selected.directory && from.toString().endsWith(ScriptFiles.EXTENSION);
         String initial = from.getFileName().toString();
         if (script) initial = initial.substring(0, initial.length() - ScriptFiles.EXTENSION.length());
         showName("Rename", null, Icons.RENAME, initial, script,
@@ -243,26 +256,25 @@ public final class ScriptFileActions {
         chooser.setDialogTitle("Move to folder"); chooser.setFileSelectionMode(SystemFileChooser.DIRECTORIES_ONLY);
         if (chooser.showDialog(owner, "Move") == SystemFileChooser.APPROVE_OPTION) report(move(paths, chooser.getSelectedFile().toPath()));
     }
-    private void confirmDelete(List<Path> paths) {
-        if (paths.isEmpty() || busy) return;
+    private void confirmDelete(List<FileSelection> files) {
+        if (files.isEmpty() || busy) return;
         boolean recycle = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH);
-        JDialog dialog = deleteDialog(owner, paths, recycle, () -> report(delete(paths, recycle)));
+        JDialog dialog = deleteDialog(owner, files, recycle, () -> report(delete(files.stream().map(FileSelection::path).toList(), recycle)));
         try { dialog.setVisible(true); }
         finally { dialog.dispose(); }
     }
-    static JDialog deleteDialog(Window owner, List<Path> paths, boolean recycle, Runnable delete) {
+    static JDialog deleteDialog(Window owner, List<FileSelection> files, boolean recycle, Runnable delete) {
         String verb = recycle ? "Delete" : "Permanently delete";
         String message;
-        if (paths.size() == 1) {
-            Path path = paths.getFirst();
-            boolean folder = Files.isDirectory(path);
-            message = verb + (folder ? " folder \"" : " file \"") + path.getFileName() + "\""
-                    + (folder ? " and its contents?" : "?");
+        if (files.size() == 1) {
+            var file = files.getFirst();
+            message = verb + (file.directory ? " folder \"" : " file \"") + file.path.getFileName() + "\""
+                    + (file.directory ? " and its contents?" : "?");
         } else {
-            message = verb + " these " + paths.size() + " items?\n\n"
-                    + String.join("\n", paths.stream().limit(5).map(path -> path.getFileName()
-                    + (Files.isDirectory(path) ? " (including contents)" : "")).toList());
-            if (paths.size() > 5) message += "\nand " + (paths.size() - 5) + " more";
+            message = verb + " these " + files.size() + " items?\n\n"
+                    + String.join("\n", files.stream().limit(5).map(file -> file.path.getFileName()
+                    + (file.directory ? " (including contents)" : "")).toList());
+            if (files.size() > 5) message += "\nand " + (files.size() - 5) + " more";
         }
         var remove = new JButton("Delete");
         var cancel = new JButton("Cancel");

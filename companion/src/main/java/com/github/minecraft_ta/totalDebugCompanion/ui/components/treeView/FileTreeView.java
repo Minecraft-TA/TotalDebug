@@ -134,7 +134,7 @@ public class FileTreeView extends JScrollPane {
         Path path = item instanceof FileSystemFileItem file ? file.getPath()
                 : item instanceof FileSystemDirectoryItem folder ? folder.getPath() : null;
         if (fileActions != null && fileActions.managed(path)) {
-            fileActions.addMenu(menu, path);
+            fileActions.addMenu(menu, path, item.isDirectory());
             return menu;
         }
         if (reference != null) menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy reference", reference)));
