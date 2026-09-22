@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import org.junit.jupiter.api.BeforeEach;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState.PersistedBreakpoint;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ScriptPanel;
@@ -22,14 +23,19 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
 import javax.swing.JComponent;
+import javax.swing.Icon;
+import javax.swing.JPanel;
 import javax.swing.TransferHandler;
 import javax.swing.DropMode;
 import java.awt.datatransfer.Transferable;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Toolkit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -38,9 +44,74 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void closeChecksRecheckOperationsStartedDuringSaveEvents(boolean switching) throws Exception {
+        Path home = Files.createDirectories(directory.resolve("reentrant-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("reentrant-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            var project = window.editorContext().project();
+            Path root = project.scriptFiles().root();
+            var operation = new AtomicReference<CompletableFuture<Void>>();
+            IEditorPanel saving = new IEditorPanel() {
+                private final JPanel panel = new JPanel();
+                @Override public String getTitle() { return "Saving"; }
+                @Override public String getTooltip() { return "Saving"; }
+                @Override public Icon getIcon() { return null; }
+                @Override public Component getComponent() { return panel; }
+                @Override public boolean canClose() {
+                    if (operation.get() == null) {
+                        var loop = Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+                        SwingUtilities.invokeLater(() -> {
+                            operation.set(window.scriptFileActions().create(root, "DuringSave", true, ""));
+                            loop.exit();
+                        });
+                        assertTrue(loop.enter());
+                    }
+                    return true;
+                }
+            };
+            edt(() -> window.getEditorTabs().openEditorTab(saving)).get(10, TimeUnit.SECONDS);
+            edt(() -> {
+                assertFalse(switching ? window.prepareProjectSwitch() : window.canExit());
+                assertTrue(window.isEnabled());
+                assertTrue(project.isActive());
+                return null;
+            });
+            operation.get().get(10, TimeUnit.SECONDS);
+            assertTrue(Files.isDirectory(root.resolve("DuringSave")));
+            assertTrue(edt(() -> switching ? window.prepareProjectSwitch() : window.canExit()));
+        }
+    }
+
+    @Test void busyCreationCommandsReportWhyTheyCannotRun() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("busy-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("busy-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            var actions = window.scriptFileActions();
+            var operation = edt(() -> {
+                var work = actions.create(window.editorContext().project().scriptFiles().root(), "First", true, "");
+                assertTrue(actions.isBusy());
+                actions.newScript(); actions.newFolder(); actions.saveAsScript("return 1;");
+                return work;
+            });
+            operation.get(10, TimeUnit.SECONDS);
+            edt(() -> {
+                var entries = app.notifications().snapshot().entries();
+                assertEquals(3, entries.size());
+                assertTrue(entries.stream().allMatch(entry -> entry.details().contains("Another file operation is in progress.")));
+                return null;
+            });
+        }
+    }
+
     @Test void contextMenuAndCreationUseLoadedFolderMetadata() throws Exception {
         Path home = Files.createDirectories(directory.resolve("metadata-home"));
         GlobalConfig.getInstance().loadFrom(home);

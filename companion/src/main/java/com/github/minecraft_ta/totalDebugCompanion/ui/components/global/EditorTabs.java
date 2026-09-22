@@ -205,6 +205,7 @@ public class EditorTabs extends JTabbedPane {
         var state = previous.captureNavigationViewState();
         editors.set(index, replacement);
         setComponentAt(index, replacement.getComponent());
+        setTabComponentAt(index, new EditorTabHeader(this, replacement.getIcon()));
         previous.dispose();
         refreshEditorTitles();
         return replacement.ready().thenRunAsync(() -> replacement.restoreNavigationViewState(state), SwingUtilities::invokeLater);

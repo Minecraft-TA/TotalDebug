@@ -254,7 +254,10 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         super.dispose();
     }
 
-    @Override public boolean canExit() { return !scriptFileActions.isBusy() && editorTabs.canCloseAll(); }
+    @Override public boolean canExit() {
+        // Saving can pump EDT events, including commands that start another file operation.
+        return !scriptFileActions.isBusy() && editorTabs.canCloseAll() && !scriptFileActions.isBusy();
+    }
     @Override public void setSwitching(boolean switching) {
         setEnabled(!switching);
         refreshActions();
@@ -529,7 +532,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     @Override public boolean prepareProjectSwitch() {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Project views must close on the EDT");
-        if (scriptFileActions.isBusy() || !this.editorTabs.canCloseAll()) return false;
+        if (!canExit()) return false;
         setEnabled(false);
         return true;
     }

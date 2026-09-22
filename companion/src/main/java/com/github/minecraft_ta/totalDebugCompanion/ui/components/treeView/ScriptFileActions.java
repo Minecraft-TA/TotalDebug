@@ -111,6 +111,17 @@ public final class ScriptFileActions {
     }
 
     public boolean isBusy() { return busy; }
+    private String unavailableReason() {
+        if (busy) return "Another file operation is in progress.";
+        var project = context.get().project();
+        return project == null || !project.isActive() ? "Open a project first." : null;
+    }
+    private boolean canStartCommand() {
+        String reason = unavailableReason();
+        if (reason == null) return true;
+        report(CompletableFuture.failedFuture(new IOException(reason)));
+        return false;
+    }
     public boolean managed(Path path) {
         var scope = context.get().project();
         return scope != null && path != null && scope.scriptFiles().contains(path);
@@ -174,7 +185,7 @@ public final class ScriptFileActions {
     }
 
     public void saveAsScript(String text) {
-        if (context.get().project() == null || busy) return;
+        if (!canStartCommand()) return;
         Path parent = creationParent();
         showName("Save as Script", "Script", Icons.SCRIPT_FILE, "", true, name -> create(parent, name, false, text));
     }
@@ -185,12 +196,13 @@ public final class ScriptFileActions {
         var file = selected.getFirst();
         return file.directory ? file.path : file.path.getParent();
     }
-    public void newFolder() { if (context.get().project() != null && !busy) create(creationParent(), true); }
+    public void newFolder() { if (canStartCommand()) create(creationParent(), true); }
     public void newScript() {
-        var scope = context.get().project(); if (scope == null || busy) return;
+        if (!canStartCommand()) return;
         create(creationParent(), false);
     }
     public void create(Path parent, boolean folder) {
+        if (!canStartCommand()) return;
         var popup = creationPopup(parent, folder);
         popup.setLocationRelativeTo(owner); popup.setVisible(true);
     }
@@ -257,7 +269,7 @@ public final class ScriptFileActions {
         if (chooser.showDialog(owner, "Move") == SystemFileChooser.APPROVE_OPTION) report(move(paths, chooser.getSelectedFile().toPath()));
     }
     private void confirmDelete(List<FileSelection> files) {
-        if (files.isEmpty() || busy) return;
+        if (files.isEmpty() || !canStartCommand()) return;
         boolean recycle = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH);
         JDialog dialog = deleteDialog(owner, files, recycle, () -> report(delete(files.stream().map(FileSelection::path).toList(), recycle)));
         try { dialog.setVisible(true); }
@@ -294,9 +306,9 @@ public final class ScriptFileActions {
 
     private CompletableFuture<Void> execute(List<Path> roots, boolean deleting, Work work) {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("File commands must start on the EDT");
-        if (busy) return CompletableFuture.failedFuture(new IOException("Another file operation is in progress."));
+        String reason = unavailableReason();
+        if (reason != null) return CompletableFuture.failedFuture(new IOException(reason));
         EditorContext ctx = context.get();
-        if (ctx.project() == null || !ctx.project().isActive()) return CompletableFuture.failedFuture(new IOException("Open a project first."));
         var views = tabs.editors().stream().filter(ScriptView.class::isInstance).map(ScriptView.class::cast)
                 .filter(view -> roots.stream().anyMatch(view.getPath()::startsWith)).toList();
         if (views.stream().anyMatch(ScriptView::fileOperation)) return CompletableFuture.failedFuture(new IOException("An affected editor is already saving or moving."));
@@ -401,7 +413,7 @@ public final class ScriptFileActions {
 
     private void showName(String title, String kind, Icon icon, String initial, boolean script,
                           Function<String, CompletableFuture<Void>> submit) {
-        if (busy) return;
+        if (!canStartCommand()) return;
         var popup = namePopup(title, kind, icon, initial, script, submit);
         popup.setLocationRelativeTo(owner); popup.setVisible(true);
     }

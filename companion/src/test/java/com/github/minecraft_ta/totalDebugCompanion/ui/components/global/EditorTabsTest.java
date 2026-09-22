@@ -33,6 +33,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorTabsTest {
 
+    @Test void replacingPreviewRefreshesItsIconWithoutChangingTheActiveTab() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var tabs = new EditorTabs();
+            var image = new TestEditor(); image.icon = Icons.IMAGE_FILE;
+            var active = new TestEditor();
+            var text = new TestEditor(); text.icon = Icons.TEXT_FILE;
+            try {
+                tabs.openEditorTab(image); tabs.openEditorTab(active);
+                assertSame(Icons.IMAGE_FILE, find((Container) tabs.getTabComponentAt(0), JLabel.class).getIcon());
+                tabs.replacePreview(image, text);
+                assertSame(Icons.TEXT_FILE, find((Container) tabs.getTabComponentAt(0), JLabel.class).getIcon());
+                assertSame(active, tabs.getSelectedEditor());
+                assertSame(text, tabs.editors().getFirst());
+                assertTrue(image.disposed);
+            } finally {
+                tabs.closeMatching(editor -> true);
+                tabs.analysisExecutor().shutdownNow();
+            }
+        });
+    }
+
     @Test
     void rightPressOnTabPaddingDoesNotSelectAnInactiveTabAndKeyboardOpensItsMenu() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
@@ -369,6 +390,7 @@ class EditorTabsTest {
         private final CompletableFuture<Void> ready = new CompletableFuture<>();
         private boolean disposed;
         private boolean canClose = true;
+        private Icon icon;
         private EditorLocation location = EditorLocation.empty();
 
         private Runnable beforeClose = () -> {};
@@ -387,7 +409,7 @@ class EditorTabsTest {
 
         @Override
         public Icon getIcon() {
-            return null;
+            return icon;
         }
 
         @Override
