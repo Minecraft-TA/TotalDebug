@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
 import javax.swing.LookAndFeel;
+import javax.swing.JFrame;
+import javax.swing.JDialog;
 import javax.swing.MenuSelectionManager;
 import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
@@ -48,6 +50,8 @@ public final class UiTestScope implements AutoCloseable {
     private final KeyboardFocusManager previousFocus = KeyboardFocusManager.getCurrentKeyboardFocusManager();
     private final CompanionTheme previousTheme = ThemeManager.current();
     private final LookAndFeel previousLookAndFeel = UIManager.getLookAndFeel();
+    private final boolean previousDecoratedFrames = JFrame.isDefaultLookAndFeelDecorated();
+    private final boolean previousDecoratedDialogs = JDialog.isDefaultLookAndFeelDecorated();
     private final Object previousPopupUi = UIManager.get("PopupMenuUI");
     private final OffscreenPopupFactory popups = new OffscreenPopupFactory();
     private final PropertyChangeListener lookAndFeelListener = event -> {
@@ -241,6 +245,8 @@ public final class UiTestScope implements AutoCloseable {
                             catch (Exception failure) { throw new IllegalStateException("Cannot restore the test look and feel", failure); }
                         }
                     } finally {
+                        JFrame.setDefaultLookAndFeelDecorated(previousDecoratedFrames);
+                        JDialog.setDefaultLookAndFeelDecorated(previousDecoratedDialogs);
                         PopupFactory.setSharedInstance(previousPopups);
                         UIManager.put("PopupMenuUI", previousPopupUi);
                         current = null;

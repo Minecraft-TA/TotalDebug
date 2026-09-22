@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JFrame;
+import javax.swing.JDialog;
 import javax.swing.PopupFactory;
 import javax.swing.UIManager;
 import javax.swing.plaf.metal.MetalLookAndFeel;
@@ -37,6 +38,28 @@ class UiTestSelectionTest {
                 PopupFactory.setSharedInstance(originalPopups);
                 UIManager.put("PopupMenuUI", originalPopupUi);
                 return null;
+            });
+        }
+    }
+
+    @Test void aScopeRestoresWindowDecorationDefaults() throws Exception {
+        boolean frames = onEdt(JFrame::isDefaultLookAndFeelDecorated);
+        boolean dialogs = onEdt(JDialog::isDefaultLookAndFeelDecorated);
+        try {
+            try (var ignored = UiTestScope.open()) {
+                onEdt(() -> {
+                    JFrame.setDefaultLookAndFeelDecorated(!frames);
+                    JDialog.setDefaultLookAndFeelDecorated(!dialogs);
+                });
+            }
+            onEdt(() -> {
+                assertEquals(frames, JFrame.isDefaultLookAndFeelDecorated());
+                assertEquals(dialogs, JDialog.isDefaultLookAndFeelDecorated());
+            });
+        } finally {
+            onEdt(() -> {
+                JFrame.setDefaultLookAndFeelDecorated(frames);
+                JDialog.setDefaultLookAndFeelDecorated(dialogs);
             });
         }
     }
