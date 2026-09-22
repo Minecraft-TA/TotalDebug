@@ -1,5 +1,15 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
+import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
+import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
+import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -18,6 +28,8 @@ import com.github.tth05.scnet.message.impl.DefaultMessageBus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import javax.swing.SwingUtilities;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -25,6 +37,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import java.util.function.Consumer;
@@ -33,6 +48,57 @@ import static org.junit.jupiter.api.Assertions.*;
 class EditorScriptRunServiceTest {
     @TempDir Path directory;
     private static final String CODE = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return 1; } }";
+
+    @Test void closedEditorDoesNotPermitMovingSourcesOfAnUnconfirmedRun() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("app"));
+        GlobalConfig.getInstance().loadFrom(home);
+        var configure = CompanionApp.class.getDeclaredMethod("configureLookAndFeel");
+        configure.setAccessible(true);
+        edt(() -> { configure.invoke(null); return null; });
+        try (var fixture = new Fixture(true);
+             var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            var project = app.requireProject();
+            var files = project.scriptFiles();
+            Path folder = files.create(files.root(), "Folder", true, "");
+            Path script = files.create(folder, "Test", false, "return 1;");
+            Path destination = files.create(files.root(), "Destination", true, "");
+            MainWindow window = edt(app::createWindow);
+            var context = window.editorContext();
+            var runContext = new EditorContext(context.astCache(), context.analysisExecutor(), window, project,
+                    context.insights(), context.debugger(), context.navigation(), context.scripts(),
+                    fixture.notifications, fixture.runs, context.inspectVariable());
+            var treeField = MainWindow.class.getDeclaredField("fileTreeView");
+            treeField.setAccessible(true);
+            var actions = edt(() -> new ScriptFileActions(window, window.getEditorTabs(),
+                    (FileTreeView) treeField.get(window), () -> runContext));
+            var view = edt(() -> new ScriptView(runContext, script));
+            edt(() -> window.getEditorTabs().openEditorTab(view)).get(10, TimeUnit.SECONDS);
+            var run = fixture.runs.start(project, Source.capture(project, "Test.tdscript", new NavigationTarget.LocalFile(script)),
+                    CODE, false, ScriptExecutionEnvironment.THREAD);
+            fixture.awaitSubmission(run);
+            run.stop();
+            assertFalse(run.state().terminal(), "A failed cancellation does not confirm that the run ended");
+            edt(() -> { window.getEditorTabs().closeMatching(editor -> editor == view); return null; });
+            assertTrue(edt(() -> window.getEditorTabs().editors().isEmpty()));
+            for (Path source : List.of(script, folder)) {
+                Path renamed = source.resolveSibling(source.equals(script) ? "Renamed.tdscript" : "RenamedFolder");
+                assertThrows(ExecutionException.class, () -> edt(() -> actions.rename(source, renamed)).get(10, TimeUnit.SECONDS));
+                assertThrows(ExecutionException.class, () -> edt(() -> actions.move(List.of(source), destination)).get(10, TimeUnit.SECONDS));
+                assertThrows(ExecutionException.class, () -> edt(() -> actions.delete(List.of(source), false)).get(10, TimeUnit.SECONDS));
+                assertTrue(Files.exists(source));
+            }
+            fixture.result(run, ExecutionStatus.RUN_COMPLETED);
+            edt(() -> actions.move(List.of(folder), destination)).get(10, TimeUnit.SECONDS);
+            assertTrue(Files.isRegularFile(destination.resolve("Folder/Test.tdscript")));
+        }
+    }
+
+    private static <T> T edt(Callable<T> action) throws Exception {
+        var task = new FutureTask<>(action);
+        SwingUtilities.invokeAndWait(task);
+        return task.get();
+    }
 
     @Test void cancellingAQueuedCompileIsInformationalAndCloseDuringProjectSwitchIsSilent() throws Exception {
         try (var fixture = new Fixture(true); var worker = Executors.newSingleThreadExecutor()) {
