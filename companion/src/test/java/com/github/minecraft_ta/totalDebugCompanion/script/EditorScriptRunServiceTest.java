@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -49,6 +50,7 @@ class EditorScriptRunServiceTest {
     @TempDir Path directory;
     private static final String CODE = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return 1; } }";
 
+    @UiTest
     @Test void closedEditorDoesNotPermitMovingSourcesOfAnUnconfirmedRun() throws Exception {
         Path home = Files.createDirectories(directory.resolve("app"));
         GlobalConfig.getInstance().loadFrom(home);
