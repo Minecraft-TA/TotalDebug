@@ -64,7 +64,7 @@ public final class FileNamePopup extends JDialog {
                 name.requestFocusInWindow();
             }));
         });
-        getRootPane().registerKeyboardAction(event -> dispose(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        getRootPane().registerKeyboardAction(event -> { if (!submitting) dispose(); }, KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         // This undecorated popup has no window title bar; the heading is its only visible title.
         var heading = new JLabel(title, SwingConstants.CENTER);
         heading.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
@@ -94,7 +94,10 @@ public final class FileNamePopup extends JDialog {
         content.setBorder(PopupChrome.border());
         content.add(body);
         setContentPane(content);
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent event) { if (!submitting) dispose(); }
+        });
         setResizable(false);
         setUndecorated(true);
         addWindowFocusListener(new WindowAdapter() {

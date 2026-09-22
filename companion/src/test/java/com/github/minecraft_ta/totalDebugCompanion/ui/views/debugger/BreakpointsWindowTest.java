@@ -6,6 +6,8 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.JavaExpressionField;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
@@ -45,6 +47,41 @@ class BreakpointsWindowTest {
         index = JavaAnalysisFixtures.index(); CompanionClassIndex.set(index);
     }
     @AfterAll static void closeIndex() { CompanionClassIndex.clear(); index.close(); }
+
+    @ParameterizedTest @ValueSource(strings = {"clean", "dirty", "unsaved"})
+    void movingScriptFoldersRebasesSelectionsWithoutDiscardingOtherDraftFields(String form) throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            SwingUtilities.invokeAndWait(() -> {
+                var hit = field(fixture.window, "hitCount", JTextField.class);
+                if (form.equals("unsaved")) hit.setText("bad");
+                field(fixture.window, "actionKind", JComboBox.class).setSelectedIndex(2);
+                field(fixture.window, "actionScript", JComboBox.class).setSelectedItem("nested/Debug.tdscript");
+                if (form.equals("dirty")) hit.setText("bad");
+                if (form.equals("unsaved")) assertNull(fixture.controller.breakpoint(fixture.source.uri(), 2).request().action());
+            });
+            Files.move(fixture.scriptsRoot.resolve("nested"), fixture.scriptsRoot.resolve("moved"));
+            SwingUtilities.invokeAndWait(() -> {
+                // An older enumeration may still be queued when the relocation is published.
+                field(fixture.window, "refreshScripts", FlatIconButton.class).doClick(0);
+                fixture.controller.remapScriptActions(name -> name.replace("nested/", "moved/"));
+                assertEquals("moved/Debug.tdscript", field(fixture.window, "actionScript", JComboBox.class).getSelectedItem());
+            });
+            fixture.awaitScripts();
+            SwingUtilities.invokeAndWait(() -> {
+                var scripts = field(fixture.window, "actionScript", JComboBox.class);
+                assertEquals("moved/Debug.tdscript", scripts.getSelectedItem());
+                assertEquals(1, scripts.getItemCount());
+                var hit = field(fixture.window, "hitCount", JTextField.class);
+                assertEquals(form.equals("clean") ? "" : "bad", hit.getText());
+                hit.setText("5");
+                hit.postActionEvent();
+                var request = fixture.controller.breakpoint(fixture.source.uri(), 2).request();
+                assertEquals("5", request.hitCondition());
+                assertEquals("moved/Debug.tdscript", request.action().script());
+                assertFalse(field(fixture.window, "actionError", JLabel.class).isVisible());
+            });
+        }
+    }
 
     @Test void conditionsAndInlineActionsCompleteInBreakpointScope() throws Exception {
         try (var fixture = new Fixture(directory)) {

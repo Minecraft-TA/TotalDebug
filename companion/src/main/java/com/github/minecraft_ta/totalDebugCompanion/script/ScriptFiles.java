@@ -22,7 +22,8 @@ import java.nio.file.FileVisitResult;
 /** Files owned by one project's Scripts root. Call filesystem operations off the EDT. */
 public final class ScriptFiles {
     public static final String EXTENSION = ".tdscript";
-    public record Version(Object key, FileTime modified, long size) { }
+    // Content participates in conflict detection even when an external editor preserves metadata.
+    public record Version(Object key, FileTime modified, long size, String text) { }
     public record Loaded(String text, Version version) { }
     private final Path root;
 
@@ -92,24 +93,27 @@ public final class ScriptFiles {
 
     public Loaded read(Path path) throws IOException {
         path = resolve(path);
-        Version before = version(path);
+        Version before = metadata(path);
         String text = Files.readString(path);
-        if (!before.equals(version(path))) throw new IOException("The file changed while it was being opened. Try again.");
-        return new Loaded(text, before);
+        if (!before.equals(metadata(path))) throw new IOException("The file changed while it was being opened. Try again.");
+        return new Loaded(text, new Version(before.key(), before.modified(), before.size(), text));
     }
 
     public Version save(Path path, String text, Version expected) throws IOException {
         path = resolve(path);
-        if (!Objects.equals(expected, version(path))) throw new IOException("The script changed outside this editor. Reopen it before saving.");
-        if (Files.readString(path).equals(text)) return expected;
+        var current = read(path);
+        if (!Objects.equals(expected, current.version())) throw new IOException("The script changed outside this editor. Reopen it before saving.");
+        if (current.text().equals(text)) return expected;
         AtomicFiles.writeString(path, text);
-        return version(path);
+        var saved = read(path);
+        if (!saved.text().equals(text)) throw new IOException("The script changed outside this editor while saving. Reopen it before saving again.");
+        return saved.version();
     }
 
-    public Version version(Path path) throws IOException {
+    private Version metadata(Path path) throws IOException {
         var attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!attributes.isRegularFile()) throw new IOException("The script was moved or deleted. Reopen it from Scripts.");
-        return new Version(attributes.fileKey(), attributes.lastModifiedTime(), attributes.size());
+        return new Version(attributes.fileKey(), attributes.lastModifiedTime(), attributes.size(), null);
     }
 
     public Path move(Path from, Path to) throws IOException {

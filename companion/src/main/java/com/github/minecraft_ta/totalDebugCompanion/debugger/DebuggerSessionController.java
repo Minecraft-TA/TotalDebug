@@ -123,6 +123,10 @@ public final class DebuggerSessionController implements AutoCloseable {
         default void breakpointsMutedChanged(boolean muted) {
         }
 
+        /** Successful file relocation also affects unsaved script selections in breakpoint forms. */
+        default void scriptActionsRemapped(UnaryOperator<String> remap) {
+        }
+
         default void paused(PausedState state) {
         }
     }
@@ -692,17 +696,31 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     public CompletableFuture<Void> remapScriptActions(UnaryOperator<String> remap) {
-        var previous = breakpointDefinitions();
-        var updated = previous.stream().map(definition -> {
-            var request = definition.request();
-            var action = request.action();
-            if (action == null || action.script() == null) return definition;
-            String script = remap.apply(action.script());
-            return script.equals(action.script()) ? definition : new BreakpointDefinition(definition.sourceUri(), definition.binaryName(),
-                    new DebugEngine.SourceBreakpoint(request.line(), request.debuggerLine(), request.method(), request.condition(), request.hitCondition(),
-                            new DebugEngine.BreakpointAction(null, script, action.continueOnSuccess())), definition.enabled());
-        }).toList();
-        return updated.equals(previous) ? CompletableFuture.completedFuture(null) : replaceBreakpointDefinitions(updated);
+        Objects.requireNonNull(remap, "remap");
+        Map<URI, List<Breakpoint>> changed = new HashMap<>();
+        synchronized (this.modelLock) {
+            for (var source : this.breakpoints.entrySet()) {
+                boolean modified = false;
+                for (var entry : source.getValue().entrySet()) {
+                    Breakpoint previous = entry.getValue();
+                    var action = previous.request().action();
+                    if (action == null || action.script() == null) continue;
+                    String script = remap.apply(action.script());
+                    if (script.equals(action.script())) continue;
+                    var request = previous.request().withAction(new DebugEngine.BreakpointAction(null, script, action.continueOnSuccess()));
+                    entry.setValue(new Breakpoint(request, previous.state(), previous.resolvedLine(), previous.detail()));
+                    modified = true;
+                }
+                if (modified) changed.put(source.getKey(), List.copyOf(source.getValue().values()));
+            }
+        }
+        for (Listener listener : this.listeners) listener.scriptActionsRemapped(remap);
+        changed.forEach(this::notifyBreakpointsChanged);
+        if (changed.isEmpty()) return CompletableFuture.completedFuture(null);
+        return submitFuture(() -> {
+            DebugEngine current = this.engine;
+            if (current != null) for (URI sourceUri : changed.keySet()) applyBreakpoints(current, sourceUri);
+        });
     }
 
     public CompletableFuture<Void> replaceBreakpointDefinitions(List<BreakpointDefinition> definitions) {

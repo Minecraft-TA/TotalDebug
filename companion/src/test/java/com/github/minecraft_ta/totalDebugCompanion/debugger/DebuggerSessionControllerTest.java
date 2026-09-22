@@ -27,6 +27,40 @@ class DebuggerSessionControllerTest {
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(2);
 
     @Test
+    void movingScriptActionsPreservesSourcesAndUnrelatedLiveBreakpoints() throws Exception {
+        var engine = new RecordingEngine();
+        try (var controller = new DebuggerSessionController(engine::proxy,
+                (target, timeout) -> DebugEngine.Target.local(50321, timeout))) {
+            var source = mappedSource(URI.create("decompiled:///sample/Target.java"), 12, 14);
+            var other = mappedSource(URI.create("decompiled:///sample/Other.java"), 20);
+            var action = new DebugEngine.BreakpointAction(null, "folder/Run.tdscript", true);
+            var method = DebugEngine.SourceBreakpoint.methodEntry(10, 12,
+                    new DebugEngine.MethodTarget("sample.Target", "run", "(I)V"), "value > 0", "3").withAction(action);
+            controller.toggleBreakpoint(source, method).join();
+            controller.toggleBreakpoint(source, new DebugEngine.SourceBreakpoint(14).withAction(action)).join();
+            controller.setBreakpointEnabled(source.uri(), 14, false).join();
+            controller.toggleBreakpoint(other, 20).join();
+            controller.acceptTarget(new DebugTargetDescriptor("game", "Minecraft", 42));
+            controller.attach().join();
+            int unrelatedWrites = engine.breakpointWrites.get(other.uri());
+            var unrelatedBinding = controller.breakpoint(other.uri(), 20);
+
+            controller.remapScriptActions(name -> name.replace("folder/", "moved/")).join();
+
+            assertEquals(source, controller.source(source.uri()));
+            assertEquals(other, controller.source(other.uri()));
+            assertEquals(unrelatedBinding, controller.breakpoint(other.uri(), 20));
+            assertEquals(unrelatedWrites, engine.breakpointWrites.get(other.uri()));
+            assertEquals(List.of(new DebugEngine.SourceBreakpoint(20)), engine.breakpoints.get(other.uri()));
+            var remapped = method.withAction(new DebugEngine.BreakpointAction(null, "moved/Run.tdscript", true));
+            assertEquals(remapped, controller.breakpoint(source.uri(), 10).request());
+            assertEquals("moved/Run.tdscript", engine.breakpoints.get(source.uri()).getFirst().action().script());
+            assertEquals(DebuggerSessionController.BreakpointState.DISABLED, controller.breakpoint(source.uri(), 14).state());
+            assertEquals("moved/Run.tdscript", controller.breakpoint(source.uri(), 14).request().action().script());
+        }
+    }
+
+    @Test
     void remoteHandlesExpireEvenWhenTheAdapterReusesFrameAndValueIds() throws Exception {
         RecordingEngine engine = new RecordingEngine();
         DebugEngine.StackFrame frame = new DebugEngine.StackFrame(1, "run", "example.Test",

@@ -8,7 +8,6 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService.Activation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -42,6 +41,7 @@ import java.util.function.Supplier;
 import java.util.function.Function;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CancellationException;
 import java.awt.event.ActionEvent;
 import java.util.function.UnaryOperator;
 
@@ -212,18 +212,27 @@ public final class ScriptFileActions {
     }
     public CompletableFuture<Void> create(Path parent, String name, boolean folder, String text) {
         var created = new ArrayList<Path>();
-        return execute(List.of(), false, (files, changes) -> created.add(files.create(parent, name, folder, text)))
-                .thenCompose(ignored -> revealCreated(created.getFirst(), folder));
+        return execute(List.of(), false, (files, changes) -> created.add(files.create(parent, name, folder, text)),
+                ctx -> revealCreated(ctx, created.getFirst(), folder));
     }
 
-    private CompletableFuture<Void> revealCreated(Path path, boolean folder) {
+    private CompletableFuture<Void> revealCreated(EditorContext ctx, Path path, boolean folder) {
+        requireOwner(ctx);
         return tree.refreshDirectory(path.getParent())
-                .thenCompose(ignored -> tree.revealLocalPath(path))
-                .thenCompose(found -> {
+                .thenComposeAsync(ignored -> {
+                    requireOwner(ctx);
+                    return tree.revealLocalPath(path);
+                }, SwingUtilities::invokeLater)
+                .thenComposeAsync(found -> {
+                    requireOwner(ctx);
                     if (!found) return CompletableFuture.failedFuture(new IOException("Created " + path.getFileName() + ", but could not reveal it in Files."));
                     return folder ? CompletableFuture.completedFuture(null)
-                            : context.get().navigation().navigate(new NavigationTarget.LocalFile(path), Activation.KEEP_CURRENT_WINDOW);
-                });
+                            : ctx.navigation().openCreatedScript(ctx.project(), path);
+                }, SwingUtilities::invokeLater);
+    }
+    private void requireOwner(EditorContext ctx) {
+        if (context.get().project() != ctx.project() || ctx.project().phase() == ProjectScope.Phase.RETIRED)
+            throw new CancellationException("Project changed during file operation");
     }
     private void rename(FileSelection selected) {
         Path from = selected.path;
@@ -244,8 +253,7 @@ public final class ScriptFileActions {
                 .filter(view -> view.getPath().equals(from)).map(ScriptView::currentText).findFirst().orElse(null);
         var created = new ArrayList<Path>();
         return execute(List.of(), false, (files, changes) -> created.add(files.create(from.getParent(), name, false,
-                draft == null ? files.read(from).text() : draft)))
-                .thenCompose(ignored -> revealCreated(created.getFirst(), false));
+                draft == null ? files.read(from).text() : draft)), ctx -> revealCreated(ctx, created.getFirst(), false));
     }
     public CompletableFuture<Void> rename(Path from, Path to) {
         return execute(List.of(from), false, (files, changes) -> { files.move(from, to); changes.add(new Change(from, to)); });
@@ -305,6 +313,11 @@ public final class ScriptFileActions {
     }
 
     private CompletableFuture<Void> execute(List<Path> roots, boolean deleting, Work work) {
+        return execute(roots, deleting, work, ctx -> CompletableFuture.completedFuture(null));
+    }
+
+    private CompletableFuture<Void> execute(List<Path> roots, boolean deleting, Work work,
+                                          Function<EditorContext, CompletableFuture<Void>> finish) {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("File commands must start on the EDT");
         String reason = unavailableReason();
         if (reason != null) return CompletableFuture.failedFuture(new IOException(reason));
@@ -328,6 +341,7 @@ public final class ScriptFileActions {
                 .filter(this::managed).toList();
         List<Path> selectionPaths = selected();
         busy = true; tree.tree().setEnabled(false);
+        ctx.navigation().cancelPendingNavigation();
         Map<ScriptView, String> drafts = new LinkedHashMap<>();
         views.forEach(view -> { view.setFileOperation(true); drafts.put(view, view.currentText()); });
         var previews = tabs.editors().stream().filter(view -> !(view instanceof ScriptView))
@@ -352,6 +366,7 @@ public final class ScriptFileActions {
             }
         }).whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() -> {
             try {
+            requireOwner(ctx);
             saved.forEach(view -> view.saved(drafts.get(view)));
             var refreshes = new ArrayList<CompletableFuture<Void>>();
             for (Change change : changes) {
@@ -373,7 +388,7 @@ public final class ScriptFileActions {
                         return file.startsWith(change.from) ? ctx.project().scriptFiles().root().relativize(ScriptFiles.relocated(file, change.from, change.to)).toString().replace('\\', '/') : value;
                     };
                     ctx.project().state().remapScriptActions(remap);
-                    report(ctx.debugger().remapScriptActions(remap));
+                    refreshes.add(ctx.debugger().remapScriptActions(remap));
                 }
                 refreshes.add(tree.refreshDirectory(change.from.getParent()));
                 if (change.to != null) refreshes.add(tree.refreshDirectory(change.to.getParent()));
@@ -383,11 +398,18 @@ public final class ScriptFileActions {
             tabs.closeMatching(view -> removed.contains(view) || removedPreviews.contains(view));
             tabs.refreshEditorTitles();
             roots.forEach(path -> refreshes.add(tree.refreshDirectory(path.getParent())));
-            CompletableFuture.allOf(refreshes.toArray(CompletableFuture[]::new)).handle((value, refreshFailure) -> null)
-                    .thenCompose(ready -> restoreTree(ctx.project().scriptFiles().root(), expandedPaths, selectionPaths, changes))
-                    .whenComplete((value, refreshFailure) -> SwingUtilities.invokeLater(() -> {
+            CompletableFuture.allOf(refreshes.toArray(CompletableFuture[]::new)).handle((value, refreshFailure) -> refreshFailure)
+                    .thenCompose(refreshFailure -> restoreTree(ctx.project().scriptFiles().root(), expandedPaths, selectionPaths, changes)
+                            .handle((value, restoreFailure) -> refreshFailure != null ? refreshFailure : restoreFailure))
+                    .thenComposeAsync(refreshFailure -> {
+                        if (failure != null) return CompletableFuture.failedFuture(failure);
+                        if (refreshFailure != null) return CompletableFuture.failedFuture(refreshFailure);
+                        requireOwner(ctx);
+                        return finish.apply(ctx);
+                    }, SwingUtilities::invokeLater)
+                    .whenComplete((value, completionFailure) -> SwingUtilities.invokeLater(() -> {
                         tree.tree().setEnabled(true); busy = false;
-                        if (failure == null) result.complete(null); else result.completeExceptionally(failure);
+                        if (completionFailure == null) result.complete(null); else result.completeExceptionally(completionFailure);
                     }));
             } catch (RuntimeException completionFailure) {
                 views.forEach(view -> view.setFileOperation(false));

@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 import java.nio.file.Path;
 import java.util.function.UnaryOperator;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
@@ -11,9 +12,14 @@ public final class NavigationState {
     final NavigationHistory history = new NavigationHistory(100);
     record Traversal(RuntimeBinding runtime) { }
     final AtomicReference<Traversal> traversal = new AtomicReference<>();
+    final AtomicLong revision = new AtomicLong();
     volatile NavigationEntry currentEntry;
-    public void relocateFiles(Path from, Path to) {
+    void invalidatePending() {
+        revision.incrementAndGet();
         traversal.set(null);
+    }
+    public void relocateFiles(Path from, Path to) {
+        invalidatePending();
         UnaryOperator<NavigationEntry> remap = entry -> {
             if (entry == null) return null;
             NavigationTarget target = entry.target();

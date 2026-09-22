@@ -68,6 +68,9 @@ class FileNamePopupTest {
             assertFalse(work.isDone()); assertTrue(field.isEnabled());
             field.setText("MyScript"); field.postActionEvent();
             assertFalse(field.isEnabled());
+            popup.getRootPane().getActionForKeyStroke(KeyStroke.getKeyStroke("ESCAPE")).actionPerformed(null);
+            popup.dispatchEvent(new WindowEvent(popup, WindowEvent.WINDOW_CLOSING));
+            assertTrue(popup.isDisplayable(), "Escape must not hide an in-flight operation's eventual error");
         });
         String detail = "Unable to create the file in " + "a long folder name/".repeat(30);
         work.completeExceptionally(new IOException(detail));
@@ -76,6 +79,9 @@ class FileNamePopupTest {
             assertTrue(find(popup, JTextField.class).isEnabled());
             assertTrue(labels(popup).contains(detail));
             assertEquals(width[0], popup.getWidth(), "A long error must not stretch the name popup");
+            assertTrue(popup.isDisplayable());
+            popup.getRootPane().getActionForKeyStroke(KeyStroke.getKeyStroke("ESCAPE")).actionPerformed(null);
+            assertFalse(popup.isDisplayable(), "Escape closes the popup after the failure is shown");
             for (var listener : popup.getWindowFocusListeners()) listener.windowLostFocus(new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS));
             assertFalse(popup.isDisplayable());
             popup.dispose();

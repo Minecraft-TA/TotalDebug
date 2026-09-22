@@ -46,11 +46,105 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.time.Duration;
+import java.io.IOException;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordingFile;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @ParameterizedTest @ValueSource(strings = {"script", "folder", "duplicate"})
+    void creationOwnsItsRevealUntilTheEditorIsOpen(String kind) throws Exception {
+        Path home = Files.createDirectories(directory.resolve("reveal-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("reveal-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            var project = window.editorContext().project();
+            Path root = Files.createDirectories(project.scriptFiles().root());
+            Path source = Files.writeString(root.resolve("Original.tdscript"), "return 1;");
+            var delegate = edt(() -> find(window, FileTreeView.class));
+            var held = edt(() -> new HeldRevealTree(window, delegate));
+            var treeField = ScriptFileActions.class.getDeclaredField("tree");
+            treeField.setAccessible(true);
+            edt(() -> { treeField.set(window.scriptFileActions(), held); return null; });
+            try {
+                var operation = edt(() -> kind.equals("duplicate") ? window.scriptFileActions().duplicate(source, "Created")
+                        : window.scriptFileActions().create(root, "Created", kind.equals("folder"), "return 2;"));
+                Path created = held.arrived.get(10, TimeUnit.SECONDS);
+                assertTrue(Files.exists(created));
+                edt(() -> {
+                    assertTrue(window.scriptFileActions().isBusy());
+                    assertFalse(window.canExit());
+                    assertFalse(window.prepareProjectSwitch());
+                    assertTrue(window.scriptFileActions().create(root, "TooEarly", true, "").isCompletedExceptionally());
+                    return null;
+                });
+                var other = CompanionProfile.forGame(Files.createDirectories(directory.resolve("other-game")));
+                assertThrows(ExecutionException.class, () -> app.openProject(other).get(10, TimeUnit.SECONDS));
+                assertSame(project, app.currentScope());
+                assertFalse(operation.isDone());
+                // A switch attempt marks the scope before the EDT gets to veto it.
+                project.beginSwitch();
+                try {
+                    held.release.complete(null);
+                    operation.get(10, TimeUnit.SECONDS);
+                } finally { project.cancelSwitch(); }
+                edt(() -> {
+                    assertFalse(window.scriptFileActions().isBusy());
+                    if (!kind.equals("folder")) assertEquals(created, ((ScriptView) window.getEditorTabs().getSelectedEditor()).getPath());
+                    return null;
+                });
+            } finally {
+                held.release.complete(null);
+                edt(() -> { treeField.set(window.scriptFileActions(), delegate); held.dispose(); return null; });
+            }
+        }
+    }
+
+    @Test void revealFailureIsReportedAndReleasesTheFileOperation() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("failed-reveal-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("failed-reveal-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path root = window.editorContext().project().scriptFiles().root();
+            var delegate = edt(() -> find(window, FileTreeView.class));
+            var held = edt(() -> new HeldRevealTree(window, delegate));
+            var treeField = ScriptFileActions.class.getDeclaredField("tree");
+            treeField.setAccessible(true);
+            edt(() -> { treeField.set(window.scriptFileActions(), held); return null; });
+            try {
+                var operation = edt(() -> window.scriptFileActions().create(root, "Created", true, ""));
+                Path created = held.arrived.get(10, TimeUnit.SECONDS);
+                held.release.completeExceptionally(new IOException("Reveal failed"));
+                assertThrows(ExecutionException.class, () -> operation.get(10, TimeUnit.SECONDS));
+                assertTrue(Files.isDirectory(created), "UI failure must not pretend the completed disk mutation was rolled back");
+                assertFalse(edt(() -> window.scriptFileActions().isBusy()));
+            } finally {
+                held.release.complete(null);
+                edt(() -> { treeField.set(window.scriptFileActions(), delegate); held.dispose(); return null; });
+            }
+            edt(() -> window.scriptFileActions().create(root, "Next", true, "")).get(10, TimeUnit.SECONDS);
+        }
+    }
+
+    private static final class HeldRevealTree extends FileTreeView {
+        private final FileTreeView delegate;
+        final CompletableFuture<Path> arrived = new CompletableFuture<>();
+        final CompletableFuture<Void> release = new CompletableFuture<>();
+        HeldRevealTree(MainWindow window, FileTreeView delegate) {
+            super(() -> window.editorContext().project(), ignored -> { });
+            this.delegate = delegate;
+        }
+        @Override public CompletableFuture<Void> refreshDirectory(Path parent) { return delegate.refreshDirectory(parent); }
+        @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
+            return delegate.revealLocalPath(path).thenCompose(found -> {
+                arrived.complete(path);
+                return release.thenApply(ignored -> found);
+            });
+        }
+    }
+
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void loadingReplacementDistinguishesSwitchPreparationFromRetirement(boolean retired) throws Exception {
         Path home = Files.createDirectories(directory.resolve("load-home"));

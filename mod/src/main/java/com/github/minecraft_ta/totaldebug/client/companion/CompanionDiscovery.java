@@ -9,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchService;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
@@ -18,14 +16,6 @@ import java.util.function.Supplier;
 /** Watches one application directory. Transport and handshake ownership remain in CompanionAppClient. */
 final class CompanionDiscovery implements AutoCloseable {
     enum Result { IDLE, CONNECTED, RETRY, REJECTED }
-    private record Stamp(FileTime modified, long size, Object key) {
-        static Stamp read(Path path) throws IOException {
-            if (!Files.exists(path)) return null;
-            var attributes = Files.readAttributes(path, BasicFileAttributes.class);
-            return new Stamp(attributes.lastModifiedTime(), attributes.size(), attributes.fileKey());
-        }
-    }
-    private record Publication(Stamp descriptor, Stamp key) { }
 
     private final Path directory;
     private final Supplier<Result> attempt;
@@ -74,8 +64,7 @@ final class CompanionDiscovery implements AutoCloseable {
         }
     }
 
-    private void watch(WatchService watching) throws IOException, InterruptedException {
-        var publication = publication();
+    private void watch(WatchService watching) throws InterruptedException {
         boolean check = true;
         boolean previouslyConnected = connected.getAsBoolean();
         boolean previouslyEnabled = false;
@@ -97,28 +86,18 @@ final class CompanionDiscovery implements AutoCloseable {
             var key = watching.poll(1, TimeUnit.SECONDS);
             if (key == null) continue;
             boolean relevant = false;
-            boolean overflow = false;
             for (var event : key.pollEvents()) {
-                if (event.kind() == StandardWatchEventKinds.OVERFLOW) { relevant = true; overflow = true; }
+                if (event.kind() == StandardWatchEventKinds.OVERFLOW) relevant = true;
                 else if (event.context() instanceof Path path && (path.toString().equals(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME)
                         || path.toString().equals(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME))) relevant = true;
             }
             if (!key.reset()) return;
             if (relevant) {
-                var latest = publication();
-                if (overflow || !latest.equals(publication)) {
-                    publication = latest;
-                    check = true;
-                    retryAt = Long.MAX_VALUE;
-                    delay = 1;
-                }
+                check = true;
+                retryAt = Long.MAX_VALUE;
+                delay = 1;
             }
         }
-    }
-
-    private Publication publication() throws IOException {
-        return new Publication(Stamp.read(directory.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME)),
-                Stamp.read(directory.resolve(CompanionLaunchContract.INSTANCE_KEY_FILE_NAME)));
     }
 
     @Override public void close() {

@@ -26,6 +26,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -75,6 +76,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 import javax.swing.Box;
 import javax.swing.JComboBox;
 
@@ -130,6 +132,11 @@ public final class BreakpointsWindow extends JDialog {
         @Override
         public void breakpointsMutedChanged(boolean muted) {
             SwingUtilities.invokeLater(() -> list.repaint());
+        }
+
+        @Override
+        public void scriptActionsRemapped(UnaryOperator<String> remap) {
+            UIUtils.onEdt(() -> remapScriptSelection(remap));
         }
     };
     private boolean loading;
@@ -349,6 +356,22 @@ public final class BreakpointsWindow extends JDialog {
     private String actionText() {
         return actionKind.getSelectedIndex() == 2
                 ? Objects.toString(actionScript.getSelectedItem(), "") : actionSource.getText().trim();
+    }
+
+    private void remapScriptSelection(UnaryOperator<String> remap) {
+        if (disposed) return;
+        Object selected = actionScript.getSelectedItem();
+        scriptNames = scriptNames.stream().map(remap).distinct().sorted().toList();
+        boolean previousLoading = loading;
+        loading = true;
+        try {
+            actionScript.setModel(new DefaultComboBoxModel<>(scriptNames.toArray(String[]::new)));
+            String mapped = selected instanceof String name ? remap.apply(name) : null;
+            if (mapped != null && !scriptNames.contains(mapped)) actionScript.addItem(mapped);
+            actionScript.setSelectedItem(mapped);
+        } finally { loading = previousLoading; }
+        // Invalidates an enumeration started before the move, preserving all other draft fields.
+        loadScripts();
     }
 
     private void loadScripts() {

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -53,6 +54,29 @@ class CompanionDiscoveryTest {
         AtomicFiles.writeString(directory.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME), "after close");
         Thread.sleep(200);
         assertEquals(stopped, attempts.get());
+    }
+
+    @Test void relevantWatchEventRechecksPublicationEvenWhenMetadataIsUnchanged() throws Exception {
+        Path descriptor = Files.writeString(root.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME), "old");
+        var modified = Files.getLastModifiedTime(descriptor);
+        var initial = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var attempts = new AtomicInteger();
+        try (var discovery = new CompanionDiscovery(root, () -> {
+            if (attempts.incrementAndGet() == 1) {
+                initial.countDown();
+                try { release.await(5, TimeUnit.SECONDS); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+            }
+            return CompanionDiscovery.Result.REJECTED;
+        }, () -> false, () -> true)) {
+            discovery.start();
+            assertTrue(initial.await(5, TimeUnit.SECONDS));
+            Files.writeString(descriptor, "new");
+            Files.setLastModifiedTime(descriptor, modified);
+            release.countDown();
+            await(() -> attempts.get() >= 2);
+        } finally { release.countDown(); }
     }
 
     @Test void connectionLostAsAnAttemptReturnsStillTriggersRecovery() throws Exception {

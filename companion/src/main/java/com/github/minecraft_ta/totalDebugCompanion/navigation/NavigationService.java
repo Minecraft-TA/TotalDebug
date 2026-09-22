@@ -46,20 +46,35 @@ public final class NavigationService {
     private final EditorTabs tabs;
     private final FileTreeView fileTree;
     private final Supplier<EditorContext> editors;
+    private final Runnable activateWindow;
     private volatile ProjectScope project;
     private final NavigationState emptyNavigation = new NavigationState();
     private NavigationState state() { var scope = project; return scope == null ? emptyNavigation : scope.navigation(); }
-    private record Context(ProjectScope project, RuntimeBinding runtime) { }
+    private record Context(ProjectScope project, RuntimeBinding runtime, long revision) { }
     private ProjectScope requireProject() {
         var scope = project;
         if (scope == null) throw new IllegalStateException("No Minecraft project is loaded");
         return scope;
     }
-    private Context captureContext() { var scope = project; return new Context(scope, scope == null ? null : scope.runtime()); }
+    private Context captureContext() {
+        var scope = project;
+        return new Context(scope, scope == null ? null : scope.runtime(), (scope == null ? emptyNavigation : scope.navigation()).revision.get());
+    }
     private boolean isCurrent(Context captured) {
         ProjectScope selected = project;
         return captured.project() == selected && (selected == null
                 || selected.isActive() && selected.runtime() == captured.runtime());
+    }
+    private boolean isCurrentNavigation(Context captured) {
+        return isCurrent(captured) && state().revision.get() == captured.revision();
+    }
+    private void requireNavigationAdmission(Context captured) {
+        if (!isCurrent(captured) || window.scriptFileActions().isBusy())
+            throw new CancellationException("Navigation superseded by a project or file operation");
+    }
+    public void cancelPendingNavigation() {
+        state().invalidatePending();
+        refreshHistoryActions();
     }
     private final Action backAction = new AbstractAction("Back") {
         @Override
@@ -75,8 +90,14 @@ public final class NavigationService {
     };
 
     public NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree, ProjectScope project, Supplier<EditorContext> editors) {
+        this(window, tabs, fileTree, project, editors, () -> UIUtils.focusWindow(window));
+    }
+
+    NavigationService(MainWindow window, EditorTabs tabs, FileTreeView fileTree, ProjectScope project, Supplier<EditorContext> editors,
+                      Runnable activateWindow) {
         this.project = project;
         this.editors = editors;
+        this.activateWindow = Objects.requireNonNull(activateWindow, "activateWindow");
         this.window = Objects.requireNonNull(window, "window");
         this.tabs = Objects.requireNonNull(tabs, "tabs");
         this.fileTree = Objects.requireNonNull(fileTree, "fileTree");
@@ -126,18 +147,23 @@ public final class NavigationService {
     public CompletableFuture<Void> navigate(NavigationTarget target, Activation activation) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
-        Context context = captureContext();
-        CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                (isCurrent(context) ? performNavigation(target, activation)
+        Context requested = captureContext();
+        CompletableFuture<Void> navigation = CompletableFuture.<Void>completedFuture(null).thenComposeAsync(ready -> {
+            requireNavigationAdmission(requested);
+            cancelPendingNavigation();
+            Context context = captureContext();
+            return captureCurrentEntry().thenCompose(origin ->
+                (isCurrentNavigation(context) ? performNavigation(target, activation)
                         : CompletableFuture.<Void>failedFuture(new CancellationException("Project changed")))
                         .thenCompose(ignored -> captureDestination(target))
                         .thenAccept(destination -> {
-                            if (!isCurrent(context)) return;
+                            if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
                             state().currentEntry = destination;
                             state().history.recordNewNavigation(origin);
                             refreshHistoryActions();
                         })
-        );
+            );
+        }, SwingUtilities::invokeLater);
         reportFailure(navigation, target);
         return navigation;
     }
@@ -253,8 +279,18 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> traverseHistory(NavigationHistory.Direction direction) {
-        Context context = captureContext();
+        Context requested = captureContext();
+        return CompletableFuture.<Void>completedFuture(null).thenComposeAsync(ignored -> {
+            requireNavigationAdmission(requested);
+            return traverseAdmittedHistory(direction);
+        }, SwingUtilities::invokeLater);
+    }
+
+    private CompletableFuture<Void> traverseAdmittedHistory(NavigationHistory.Direction direction) {
         NavigationState navigationState = state();
+        if (navigationState.traversal.get() != null) return CompletableFuture.completedFuture(null);
+        cancelPendingNavigation();
+        Context context = captureContext();
         var traversal = new NavigationState.Traversal(context.runtime());
         if (!navigationState.traversal.compareAndSet(null, traversal)) {
             return CompletableFuture.completedFuture(null);
@@ -270,17 +306,19 @@ public final class NavigationService {
         }
 
         CompletableFuture<Void> navigation = captureCurrentEntry().thenCompose(origin ->
-                (isCurrent(context) ? performNavigation(destination.target(), Activation.ACTIVATE_WINDOW)
+                (isCurrentNavigation(context) && navigationState.traversal.get() == traversal ? performNavigation(destination.target(), Activation.KEEP_CURRENT_WINDOW)
                         : CompletableFuture.<Void>failedFuture(new CancellationException("Project changed")))
                         .thenCompose(ignored -> restoreSelectedEntry(destination, context))
                         .thenRun(() -> {
-                            if (!isCurrent(context)) return;
-                            state().currentEntry = destination;
-                            state().history.complete(direction, destination, origin);
+                            if (!isCurrentNavigation(context) || navigationState.traversal.get() != traversal)
+                                throw new CancellationException("History traversal changed");
+                            navigationState.currentEntry = destination;
+                            navigationState.history.complete(direction, destination, origin);
                         })
         );
         navigation.whenComplete((ignored, failure) -> {
-            if (isCurrent(context) && failure != null && !(unwrap(failure) instanceof CancellationException)) {
+            if (isCurrentNavigation(context) && navigationState.traversal.get() == traversal
+                    && failure != null && !(unwrap(failure) instanceof CancellationException)) {
                 navigationState.history.discard(direction, destination);
             }
             // A reversible switch must not strand the old traversal; a new one has a different token.
@@ -337,7 +375,7 @@ public final class NavigationService {
 
     private CompletableFuture<Void> restoreSelectedEntry(NavigationEntry entry, Context context) {
         return dispatchNavigation(() -> {
-            if (!isCurrent(context)) return CompletableFuture.failedFuture(new CancellationException("Project changed"));
+            if (!isCurrentNavigation(context)) return CompletableFuture.failedFuture(new CancellationException("Navigation changed"));
             IEditorPanel editor = this.tabs.getSelectedEditor();
             if (!isEditorDestination(entry.target())) {
                 return CompletableFuture.completedFuture(null);
@@ -437,19 +475,20 @@ public final class NavigationService {
         return service.load(binaryName).thenCompose(source -> {
             int offset = offsetResolver.applyAsInt(source);
             return dispatchNavigation(() -> {
-                if (!isCurrent(context) || service != requireProject().requireRuntime().decompiler()) {
+                if (!isCurrentNavigation(context) || service != requireProject().requireRuntime().decompiler()) {
                     return CompletableFuture.failedFuture(new CancellationException("Runtime changed during source navigation"));
                 }
                 return openRuntimeEditor(installed,
                         CodeView.class,
                         view -> view.getPath().equals(source.path()),
                         () -> new CodeView(editors.get(), source, offset, source.location(), installed)
-                ).thenAccept(view -> {
+                ).thenAcceptAsync(view -> {
+                    if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
                     view.navigateToOffset(offset);
                     if (executionLine > 0) {
                         view.showExecutionLine(executionLine);
                     }
-                });
+                }, SwingUtilities::invokeLater);
             }, activation);
         });
     }
@@ -471,7 +510,32 @@ public final class NavigationService {
         return tabs.replacePreview(previous, replacement);
     }
 
+    /** Finishes the owning file operation while its busy guard still excludes other navigation. */
+    public CompletableFuture<Void> openCreatedScript(ProjectScope expected, Path path) {
+        EditorContext context = editors.get();
+        if (context.project() != expected || project != expected || expected.phase() == ProjectScope.Phase.RETIRED)
+            return CompletableFuture.failedFuture(new CancellationException("Project changed while creating the script"));
+        return captureCurrentEntry().thenCompose(origin -> CompletableFuture.supplyAsync(() -> new ScriptView(context, path))
+                .thenComposeAsync(script -> {
+                    if (project != expected || expected.phase() == ProjectScope.Phase.RETIRED) {
+                        script.dispose();
+                        return CompletableFuture.failedFuture(new CancellationException("Project changed while opening the created script"));
+                    }
+                    if (tabs.editors().stream().anyMatch(view -> view instanceof ScriptView existing && existing.getPath().equals(path)))
+                        script.dispose();
+                    return tabs.focusOrCreateIfAbsent(ScriptView.class, view -> view.getPath().equals(path), () -> script)
+                            .thenAcceptAsync(view -> {
+                                if (project != expected || expected.phase() == ProjectScope.Phase.RETIRED)
+                                    throw new CancellationException("Project changed while opening the created script");
+                                expected.navigation().currentEntry = entryForEditor(view);
+                                expected.navigation().history.recordNewNavigation(origin);
+                                refreshHistoryActions();
+                            }, SwingUtilities::invokeLater);
+                }, SwingUtilities::invokeLater));
+    }
+
     private CompletableFuture<Void> openLocalFile(NavigationTarget.LocalFile target, Activation activation) {
+        Context context = captureContext();
         Path path = target.path();
         if (!Files.isRegularFile(path)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("File does not exist: " + path));
@@ -485,14 +549,20 @@ public final class NavigationService {
                     ScriptView.class,
                     view -> view.getPath().equals(path),
                     () -> new ScriptView(editors.get(), path)
-            ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
+            ).thenAcceptAsync(view -> {
+                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+                view.navigateToOffset(target.offset());
+            }, SwingUtilities::invokeLater), activation);
         }
         if (fileName.endsWith(".java")) {
             return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                     CodeView.class,
                     view -> view.getPath().equals(path),
                     () -> new CodeView(editors.get(), path, target.offset())
-            ).thenAccept(view -> view.navigateToOffset(target.offset())), activation);
+            ).thenAcceptAsync(view -> {
+                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+                view.navigateToOffset(target.offset());
+            }, SwingUtilities::invokeLater), activation);
         }
         return openResource(new LocalFileSource(path), activation);
     }
@@ -528,7 +598,7 @@ public final class NavigationService {
         editors.get().insights().locateClass(ownerClassName, new CodeInsightService.Listener<>() {
             @Override
             public void onCompleted(RuntimeSnapshotBytecodeSource.Source source) {
-                if (!isCurrent(context)) { result.cancel(false); return; }
+                if (!isCurrentNavigation(context)) { result.cancel(false); return; }
                 if (source == null) {
                     result.completeExceptionally(new IllegalStateException(
                             "Class " + ownerClassName + " is not present in the runtime index"
@@ -562,6 +632,7 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> revealLocalPath(NavigationTarget.LocalDirectory target) {
+        requireNavigationAdmission(captureContext());
         return this.fileTree.revealLocalPath(target.path()).thenCompose(revealed -> revealed
                 ? CompletableFuture.completedFuture(null)
                 : CompletableFuture.failedFuture(new IllegalStateException(
@@ -570,6 +641,7 @@ public final class NavigationService {
     }
 
     private CompletableFuture<Void> revealArchivePath(NavigationTarget.ArchiveDirectory target) {
+        requireNavigationAdmission(captureContext());
         return this.fileTree.revealArchivePath(target.archive(), target.entryName()).thenCompose(revealed ->
                 revealed
                         ? CompletableFuture.completedFuture(null)
@@ -584,34 +656,15 @@ public final class NavigationService {
             Supplier<CompletableFuture<Void>> operation,
             Activation activation
     ) {
-        var result = new CompletableFuture<Void>();
         Context context = captureContext();
-        SwingUtilities.invokeLater(() -> {
-            try {
-                if (!isCurrent(context)) {
-                    result.completeExceptionally(new CancellationException("Project changed"));
-                    return;
-                }
-                if (window.scriptFileActions().isBusy()) {
-                    result.completeExceptionally(new IllegalStateException("Wait for the file operation to finish before navigating."));
-                    return;
-                }
-                operation.get().whenComplete((ignored, failure) -> {
-                    if (!isCurrent(context)) { result.cancel(false); return; }
-                    if (failure != null) {
-                        result.completeExceptionally(failure);
-                        return;
-                    }
-                    if (activation == Activation.ACTIVATE_WINDOW) {
-                        UIUtils.focusWindow(this.window);
-                    }
-                    result.complete(null);
-                });
-            } catch (RuntimeException failure) {
-                result.completeExceptionally(failure);
-            }
-        });
-        return result;
+        return CompletableFuture.<Void>completedFuture(null).thenComposeAsync(ignored -> {
+            if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+            requireNavigationAdmission(context);
+            return operation.get();
+        }, SwingUtilities::invokeLater).thenRunAsync(() -> {
+            if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+            if (activation == Activation.ACTIVATE_WINDOW) activateWindow.run();
+        }, SwingUtilities::invokeLater);
     }
 
     private void showFailure(NavigationTarget target, Throwable failure) {

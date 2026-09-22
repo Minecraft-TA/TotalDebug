@@ -81,6 +81,21 @@ class ScriptFilesTest {
         assertThrows(IOException.class, () -> files.save(path, "stale", version));
         assertEquals("replacement", Files.readString(path));
     }
+    @Test void sameSizeExternalEditWithPreservedTimestampCannotBeOverwritten() throws Exception {
+        var files = new ScriptFiles(directory.resolve("scripts"));
+        Path path = files.create(files.root(), "Test", false, "return 1;");
+        var loaded = files.read(path);
+        Files.writeString(path, "return 2;");
+        Files.setLastModifiedTime(path, loaded.version().modified());
+        var edited = files.read(path);
+        assertEquals(loaded.version().key(), edited.version().key());
+        assertEquals(loaded.version().modified(), edited.version().modified());
+        assertEquals(loaded.version().size(), edited.version().size());
+        assertThrows(IOException.class, () -> files.save(path, "return 3;", loaded.version()));
+        assertEquals("return 2;", Files.readString(path));
+        var saved = files.save(path, "return 3;", edited.version());
+        assertEquals(saved, files.save(path, "return 3;", saved));
+    }
     @Test void caseOnlyRenameAndFilesystemNames() throws Exception {
         var files = new ScriptFiles(directory.resolve("scripts"));
         Path path = files.create(files.root(), "MyScript", false, "");
