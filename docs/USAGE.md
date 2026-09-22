@@ -20,6 +20,10 @@ F6 or an explicit source-open request from another game selects its project befo
 
 The Game popup provides an icon-only Reconnect action for the selected project. It republishes discovery information and resets the active connection while keeping indexed browsing available. Pending means the authenticated connection has not completed; after 30 seconds without a matching game, the popup reports that timeout and permits another attempt. It does not claim Minecraft crashed. A stale action from another project is rejected. If discovery publication fails before disconnecting, the existing connection remains usable and the failure appears in notifications.
 
+The top-bar Play button launches the selected Prism instance using its existing account, Java, and instance settings. Companion identifies the owning Prism data directory and launches by instance folder name. Installed and running Prism executables, portable layouts, and PATH are checked automatically; if Prism cannot be found, open Prism and try again. Unsupported projects keep Play disabled with an explanatory tooltip.
+
+Starting remains pending until that instance authenticates with Companion. Prism's command process may exit after forwarding the request to an existing launcher; that does not complete the launch. Duplicate clicks are disabled. After ten minutes without a connection, Companion reports that no connection arrived and allows another attempt; check Prism for sign-in or launch errors. Switching projects or closing Companion cancels the pending intent without terminating Prism or Minecraft. Play does not attach the debugger.
+
 Switching saves and closes project editors; a failed save prevents the switch. It detaches the debugger, requests cancellation of owned execution jobs, clears project views and pending results, and restores the selected instance's state. Minecraft processes remain running, and the existing MCP endpoint stays available. Disconnection does not prove arbitrary target code has stopped. See [ownership](../companion/README.md#ownership) for the switch phases and resource lifetimes.
 
 If remembering the selection fails, the new project remains open and Companion reports the save error. Selecting it again retries persistence; until then, restarting reopens the last successfully remembered project.
@@ -38,7 +42,7 @@ The Notifications button retains the last 100 operation outcomes for the current
 
 Script activity is separate from notification history. Its popup lists active scripts and their Stop buttons; closing an editor requests cancellation. Game, MCP, index, and debugger status popups expose selectable details and Copy. Index status remains accessible while indexing, with Retry available after failure. A listening MCP server's copied detail is its endpoint URL.
 
-The header uses the project name and the shared dropdown SVG. Project rows use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Selecting a project advertises it to an already-running matching game. Launcher controls and restoring open tabs remain subsequent work.
+The header uses the project name and the shared dropdown SVG. Project rows use readable names and muted paths without logos or initials. Right-click a project for rename, reset and removal actions. The MCP tools `project_list` and `project_open` use the same project selection backend. Selecting a project advertises it to an already-running matching game. Other launcher integrations and restoring open tabs remain subsequent work.
 
 ## Scripts and evaluation
 

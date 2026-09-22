@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <mask id="breakpoint-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
+      <rect width="32" height="32" fill="white"/>
+      <circle cx="24.5" cy="24.5" r="6" fill="black"/>
+    </mask>
+  </defs>
+  <g mask="url(#breakpoint-gap)">
+    <path d="M16 1.5 29 8.75v14.5L16 30.5 3 23.25V8.75Z" fill="#238491"/>
+    <path d="m16 1.5 13 7.25L16 16 3 8.75Z" fill="#67D5BD"/>
+    <path d="m16 16 13-7.25v14.5l-13 7.25Z" fill="#3BA3C0"/>
+    <path d="m7.5 14.5 4.3 6.2-4.3 1" stroke="#EDFFF9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="24.5" cy="24.5" r="4" fill="#F16D76"/>
+</svg>

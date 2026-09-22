@@ -1,6 +1,6 @@
 # Automatic connection to Companion
 
-Status: implemented, with startup and reconnect regressions covered by automated tests. Isolated live development-client acceptance passed on 2026-09-21. The live test used a development NeoForge client with the packaged Companion; paired-JAR packaging was verified separately. Starting Minecraft from Companion remains a later change. The sections below retain the implementation contract; the Game popup's explicit Reconnect operation is described at the end.
+Status: implemented, with startup and reconnect regressions covered by automated tests. Isolated live development-client acceptance passed on 2026-09-21. The live test used a development NeoForge client with the packaged Companion; paired-JAR packaging was verified separately. Prism Play launching is covered in [Usage](USAGE.md#projects). The sections below retain the implementation contract; the Game popup's explicit Reconnect operation is described at the end.
 
 ## Expected behavior
 

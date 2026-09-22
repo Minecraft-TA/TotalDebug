@@ -17,6 +17,8 @@ public interface ProjectControls {
     IndexIdentity.Kind indexSourceKind();
     CompletableFuture<Void> retryIndex();
     CompletableFuture<Void> reconnectGame(ProjectScope expectedProject);
+    CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject);
+    CompletableFuture<Void> launchGame(ProjectScope expectedProject);
     CompletableFuture<Void> openProject(CompanionProfile profile, String nameOverride);
     CompletableFuture<Void> renameProject(String id, String nameOverride);
     CompletableFuture<Void> forgetProject(String id);

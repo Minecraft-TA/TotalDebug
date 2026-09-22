@@ -95,7 +95,7 @@ public class ScriptView implements IEditorPanel {
 
     @Override
     public Icon getIcon() {
-        return Icons.JAVA_FILE;
+        return Icons.SCRIPT_FILE;
     }
 
     @Override

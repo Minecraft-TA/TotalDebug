@@ -27,6 +27,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -161,7 +162,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         more.setToolTipText("History and script actions");
         more.addActionListener(event -> {
             javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
-            javax.swing.JMenuItem saveItem = new javax.swing.JMenuItem("Save as Script", Icons.JAVA_FILE);
+            JMenuItem saveItem = new JMenuItem("Save as Script", Icons.SCRIPT_FILE);
             saveItem.setEnabled(!this.evaluationRunning && !this.expression.getText().isBlank());
             saveItem.addActionListener(ignored -> saveAsScript());
             menu.add(saveItem);

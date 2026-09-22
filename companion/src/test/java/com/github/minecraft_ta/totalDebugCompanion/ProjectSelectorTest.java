@@ -48,6 +48,8 @@ class ProjectSelectorTest {
                     public IndexIdentity.Kind indexSourceKind() { return null; }
                     public CompletableFuture<Void> retryIndex() { throw new AssertionError(); }
                     public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) { throw new AssertionError(); }
+                    public CompletableFuture<Void> launchGame(ProjectScope expectedProject) { throw new AssertionError(); }
+                    public CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject) { throw new AssertionError(); }
                     public RuntimeIndexService.Status getRuntimeIndexStatus() { throw new AssertionError(); }
                     public CompletableFuture<Void> openProject(CompanionProfile selected, String name) {
                         opened.incrementAndGet();

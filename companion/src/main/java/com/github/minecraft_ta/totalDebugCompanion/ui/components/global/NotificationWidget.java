@@ -292,7 +292,8 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             links.setOpaque(false);
             links.setAlignmentX(LEFT_ALIGNMENT);
             boolean script = entry.source().target() instanceof NavigationTarget.LocalFile file && file.path().toString().endsWith(".tdscript");
-            openSource = PopupElements.link(script ? "Open script" : "Open source", Icons.JUMP_TO_SOURCE, () -> checkSource(true));
+            openSource = PopupElements.link(script ? "Open script" : "Open source",
+                    script ? Icons.SCRIPT_FILE : Icons.JUMP_TO_SOURCE, () -> checkSource(true));
             links.add(openSource);
             links.add(sourceGap);
             links.add(PopupElements.link("Copy details", Icons.COPY, () -> PopupElements.copy(this.entry.copyText())));

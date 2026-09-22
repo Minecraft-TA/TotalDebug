@@ -205,7 +205,7 @@ public final class BreakpointsWindow extends JDialog {
         actionScript.setRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value == null ? "Select a script" : value, index, selected, focus);
-                setIcon(value == null ? null : Icons.JAVA_FILE);
+                setIcon(value == null ? null : Icons.SCRIPT_FILE);
                 return this;
             }
         });

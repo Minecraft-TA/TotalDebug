@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -71,6 +72,20 @@ class IconThemeSwitchTest {
         long dark = checksum(render(Icons.createWindowIconImages(CompanionTheme.ISLANDS_DARK).getFirst()));
 
         assertNotEquals(light, dark, "window icon factory rendered the light asset for both themes");
+    }
+
+    @Test
+    void windowIconBreakpointGapIsTransparentOnAnyBackground() {
+        for (CompanionTheme theme : CompanionTheme.available()) {
+            var image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+            var graphics = image.createGraphics();
+            graphics.drawImage(Icons.createWindowIconImages(theme).getFirst(), 0, 0, 32, 32, null);
+            graphics.dispose();
+            assertEquals(0, image.getRGB(24, 19) >>> 24,
+                    "The breakpoint gap must show the taskbar background, not a painted theme color");
+            assertEquals(255, image.getRGB(24, 24) >>> 24, "The breakpoint itself must remain opaque");
+            assertEquals(255, image.getRGB(16, 10) >>> 24, "The cube must remain opaque");
+        }
     }
 
     @Test

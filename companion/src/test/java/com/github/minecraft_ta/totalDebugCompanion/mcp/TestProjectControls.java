@@ -13,6 +13,8 @@ import java.util.concurrent.CompletableFuture;
 final class TestProjectControls implements ProjectControls {
     public CompletableFuture<Void> retryIndex() { throw new AssertionError(); }
     public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) { throw new AssertionError(); }
+    public CompletableFuture<Void> launchGame(ProjectScope expectedProject) { throw new AssertionError(); }
+    public CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject) { throw new AssertionError(); }
     public List<ProjectRegistry.Project> projects() { return List.of(); }
     public CompanionProfile currentProject() { return null; }
     public boolean isSwitching() { return false; }

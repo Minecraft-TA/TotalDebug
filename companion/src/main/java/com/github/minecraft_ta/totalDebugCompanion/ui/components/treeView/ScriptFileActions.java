@@ -140,7 +140,7 @@ public final class ScriptFileActions {
         List<Path> selection = selected();
         List<Path> targets = selection.contains(target) ? selection : List.of(target);
         if (folder && targets.size() == 1) {
-            item(menu, "New Script", Icons.JAVA_FILE, () -> create(target, false));
+            item(menu, "New Script", Icons.SCRIPT_FILE, () -> create(target, false));
             item(menu, "New Folder", Icons.NEW_FOLDER, () -> create(target, true));
         }
         if (!root) {
@@ -165,7 +165,7 @@ public final class ScriptFileActions {
     public void saveAsScript(String text) {
         if (context.get().project() == null || busy) return;
         Path parent = creationParent();
-        showName("Save as Script", "Script", Icons.JAVA_FILE, "", true, name -> create(parent, name, false, text));
+        showName("Save as Script", "Script", Icons.SCRIPT_FILE, "", true, name -> create(parent, name, false, text));
     }
     private Path creationParent() {
         var selected = selected();
@@ -183,7 +183,7 @@ public final class ScriptFileActions {
         popup.setLocationRelativeTo(owner); popup.setVisible(true);
     }
     public FileNamePopup creationPopup(Path parent, boolean folder) {
-        return namePopup(folder ? "New Folder" : "New Script", folder ? "Folder" : "Script", folder ? Icons.FOLDER : Icons.JAVA_FILE,
+        return namePopup(folder ? "New Folder" : "New Script", folder ? "Folder" : "Script", folder ? Icons.FOLDER : Icons.SCRIPT_FILE,
                 "", !folder, name -> create(parent, name, folder, ""));
     }
     public CompletableFuture<Void> create(Path parent, String name, boolean folder, String text) {

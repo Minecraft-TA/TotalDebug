@@ -9,7 +9,7 @@ import java.util.List;
 
 public class Icons {
 
-    private static final String WINDOW_ICON = "/icons/javaFile";
+    private static final String WINDOW_ICON = "/icons/companion";
 
     /** Window icons are raster images, so they must be rebuilt when the theme changes. */
     public static List<Image> createWindowIconImages(CompanionTheme theme) {
@@ -43,6 +43,7 @@ public class Icons {
     public static final FlatSVGIcon ERROR = new FlatSVGIcon("icons/error.svg");
 
     public static final FlatSVGIcon JAVA_FILE = new FlatSVGIcon("icons/javaFile.svg");
+    public static final FlatSVGIcon SCRIPT_FILE = new FlatSVGIcon("icons/script.svg");
     public static final FlatSVGIcon TEXT_FILE = new FlatSVGIcon("icons/text.svg");
     public static final FlatSVGIcon JAR_FILE = new FlatSVGIcon("icons/jar.svg");
     public static final FlatSVGIcon NEW_FOLDER = new FlatSVGIcon("icons/newFolder.svg");

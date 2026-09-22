@@ -102,6 +102,15 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         Reconnect(ProjectScope project) { this.project = project; }
     }
     private volatile Reconnect reconnect;
+    private static final class Launch {
+        final ProjectScope project;
+        final CompletableFuture<Void> result = new CompletableFuture<>();
+        boolean dispatched;
+
+        Launch(ProjectScope project) { this.project = project; }
+    }
+    private volatile Launch launch;
+    private final PrismGameLauncher gameLauncher;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
     // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
@@ -113,6 +122,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     public CompanionApplication(CompanionLaunchConfiguration configuration, String token, CompanionUi ui) throws IOException {
+        this(configuration, token, ui, new PrismGameLauncher());
+    }
+
+    CompanionApplication(CompanionLaunchConfiguration configuration, String token, CompanionUi ui, PrismGameLauncher gameLauncher) throws IOException {
+        this.gameLauncher = Objects.requireNonNull(gameLauncher);
         launchConfiguration = Objects.requireNonNull(configuration);
         this.ui = ui;
         try {
@@ -157,6 +171,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     synchronized (lifecycleLock) {
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
+                        else if (launch != null)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
                         else if (gameStatus == null || gameStatus.state() != ServiceStatus.State.FAILED)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
                     }
@@ -166,6 +182,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         current.runtimeDisconnected();
                     }
                     restoreOfflineAfterDisconnect();
+                    Launch pendingLaunch = launch;
+                    if (pendingLaunch != null) queueLaunch(pendingLaunch);
                 }
 
                 @Override
@@ -178,6 +196,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (closed || switching) return;
                         if (hello != null && (current == null || !current.profile().id().equals(hello.profileId()))) return;
                         if (reconnect != null) failReconnect(reconnect, detail);
+                        else if (launch != null) failLaunch(launch, detail);
                         else updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", detail));
                     }
                 }
@@ -229,6 +248,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (closed) return;
         closed = true;
         cancelReconnect("Companion is closing");
+        cancelLaunch("Companion is closing");
         notifications.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
@@ -391,11 +411,98 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         }, projectWorker);
     }
 
+    @Override public CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject) {
+        if (closed || expectedProject == null) return CompletableFuture.completedFuture("Select a Prism instance to launch");
+        try { return CompletableFuture.supplyAsync(() -> {
+            synchronized (lifecycleLock) {
+                if (closed || switching || current != expectedProject || !expectedProject.isActive()) return "The selected project changed";
+            }
+            try { gameLauncher.target(expectedProject.profile()); return null; }
+            catch (IOException failure) { return failure.getMessage(); }
+        }, projectWorker); } catch (RejectedExecutionException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    @Override public CompletableFuture<Void> launchGame(ProjectScope expectedProject) {
+        Launch request;
+        synchronized (lifecycleLock) {
+            if (closed || switching || expectedProject == null || current != expectedProject || !expectedProject.isActive())
+                return CompletableFuture.failedFuture(new IllegalStateException("The selected project changed before launch"));
+            if (launch != null) return launch.result;
+            if (session.hasClient() || reconnect != null)
+                return CompletableFuture.failedFuture(new IllegalStateException("Minecraft is already connected or connecting"));
+            request = new Launch(expectedProject);
+            launch = request;
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
+        }
+        queueLaunch(request);
+        CompletableFuture.delayedExecutor(10, TimeUnit.MINUTES).execute(() ->
+                failLaunch(request, "Minecraft has not connected after 10 minutes. Check Prism for launch or sign-in errors."));
+        return request.result;
+    }
+
+    private void queueLaunch(Launch request) {
+        try {
+            projectWorker.execute(() -> {
+                try {
+                    synchronized (lifecycleLock) {
+                        if (!canDispatchLaunch(request)) return;
+                    }
+                    List<String> command = gameLauncher.command(request.project.profile());
+                    publishConnectionTarget();
+                    Process process;
+                    synchronized (lifecycleLock) {
+                        if (!canDispatchLaunch(request)) return;
+                        process = gameLauncher.start(command);
+                        request.dispatched = true;
+                    }
+                    // A secondary Prism process exits after forwarding the request. Only the
+                    // authenticated game connection completes launch successfully.
+                    process.onExit().whenComplete((exited, failure) -> {
+                        if (failure != null) failLaunch(request, "Unable to observe Prism: " + failure.getMessage());
+                        else if (exited.exitValue() != 0) failLaunch(request, "Prism exited with code " + exited.exitValue() + ". Check Prism for launch errors.");
+                    });
+                } catch (IOException | RuntimeException failure) { failLaunch(request, failure.getMessage()); }
+            });
+        } catch (RejectedExecutionException failure) { failLaunch(request, "Companion is closing"); }
+    }
+
+    /** Called under lifecycleLock before discovery and again before the process is started. */
+    private boolean canDispatchLaunch(Launch request) {
+        return !closed && !switching && launch == request && current == request.project && request.project.isActive()
+                && !request.dispatched && !session.hasClient();
+    }
+
+    private void failLaunch(Launch request, String detail) {
+        synchronized (lifecycleLock) {
+            if (launch != request) return;
+            launch = null;
+            String message = detail == null || detail.isBlank() ? "Unable to launch Minecraft" : detail;
+            if (!closed && !switching && current == request.project && request.project.isActive()) {
+                updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Launch failed", message));
+                notifications.publish(Severity.ERROR, "Unable to launch Minecraft", message, Source.capture(request.project, "Minecraft", null));
+            }
+            request.result.completeExceptionally(new IOException(message));
+        }
+    }
+
+    private void cancelLaunch(String reason) {
+        synchronized (lifecycleLock) {
+            if (launch == null) return;
+            var cancelled = launch;
+            launch = null;
+            if (!closed) updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+            cancelled.result.completeExceptionally(new IOException(reason));
+        }
+    }
+
     @Override public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) {
         Reconnect request;
         synchronized (lifecycleLock) {
             if (closed || switching || expectedProject == null || current != expectedProject || !expectedProject.isActive())
                 return CompletableFuture.failedFuture(new IllegalStateException("The selected project changed before reconnect"));
+            if (launch != null) return CompletableFuture.failedFuture(new IllegalStateException("Minecraft is already starting"));
             if (reconnect != null) return reconnect.result;
             request = new Reconnect(expectedProject);
             reconnect = request;
@@ -439,6 +546,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;
                 reconnect = null;
+                completed.result.complete(null);
+            }
+            if (launch != null && launch.project == current) {
+                var completed = launch;
+                launch = null;
                 completed.result.complete(null);
             }
         }
@@ -500,6 +612,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         Throwable switchFailure = null;
         try {
             cancelReconnect("Project changed during reconnect");
+            cancelLaunch("Project changed during launch");
             if (session != null) session.publishProfile(null);
             if (ui != null) {
                 boolean[] canSwitch = {false};

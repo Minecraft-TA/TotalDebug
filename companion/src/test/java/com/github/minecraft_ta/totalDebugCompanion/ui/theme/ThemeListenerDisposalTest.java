@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.EvaluateExpressionWindow;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.SettingsWindow;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
@@ -25,6 +26,7 @@ class ThemeListenerDisposalTest {
                 SwingUtilities.invokeAndWait(() -> {
                     var window = app.createWindow();
                     new EvaluateExpressionWindow(window, null, window.editorContext(), window.scriptFileActions());
+                    new SettingsWindow(window, app.requireProject().state(), app.getDebuggerController());
                 });
             }
             SwingUtilities.invokeAndWait(() -> assertEquals(baseline.get(), ThemeManager.listenerCount(),

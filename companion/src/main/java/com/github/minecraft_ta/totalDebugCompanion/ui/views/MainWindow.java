@@ -18,6 +18,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -66,6 +67,11 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final JLabel debuggerDetails = PopupElements.label("");
     private JPopupMenu debuggerPopup;
     private final JButton debuggerState = new JButton(Icons.DEBUG);
+    private final JButton gameLaunch = new FlatIconButton(Icons.RUN, false);
+    private CompletableFuture<Void> launchAttempt;
+    private ProjectScope launchScope;
+    private String launchUnavailableReason = "Select a Prism instance to launch";
+    private ServiceStatus.State gameState = ServiceStatus.State.INACTIVE;
     private final ApplicationStatusBar statusBar;
     private final Action evaluateExpressionAction;
     private final Action newScriptAction;
@@ -153,7 +159,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.scriptMenu.add(evaluateExpression);
         this.scriptMenu.addSeparator();
 
-        this.newScriptAction = new AbstractAction("New Script", Icons.JAVA_FILE) {
+        this.newScriptAction = new AbstractAction("New Script", Icons.SCRIPT_FILE) {
             @Override
             public void actionPerformed(ActionEvent e) {
                 scriptFileActions.newScript();
@@ -187,9 +193,27 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         };
         debugger.addListener(this.debuggerListener);
         configureDebuggerButton(debugger);
+        gameLaunch.getAccessibleContext().setAccessibleName("Launch Minecraft");
+        gameLaunch.addActionListener(event -> {
+            ProjectScope selected = project.get();
+            if (selected == null || launchAttempt != null) return;
+            var attempt = projects.launchGame(selected);
+            launchAttempt = attempt;
+            refreshActions();
+            attempt.whenComplete((ignored, failure) -> UIUtils.onEdt(() -> {
+                if (disposed || launchAttempt != attempt) return;
+                launchAttempt = null;
+                refreshActions();
+            }));
+        });
+        menuBar.add(gameLaunch);
         menuBar.add(this.debuggerState);
-        menuBar.add(PopupElements.icon(Icons.SETTINGS, "Settings", () ->
-                new SettingsWindow(MainWindow.this, project.get() == null ? InstanceState.inMemory() : project.get().state(), debugger).setVisible(true)));
+        var settings = new FlatIconButton(Icons.SETTINGS, false);
+        settings.setToolTipText("Settings");
+        settings.getAccessibleContext().setAccessibleName("Settings");
+        settings.addActionListener(event -> new SettingsWindow(MainWindow.this,
+                project.get() == null ? InstanceState.inMemory() : project.get().state(), debugger).setVisible(true));
+        menuBar.add(settings);
 
         setJMenuBar(menuBar);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -261,7 +285,6 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     private void configureDebuggerButton(DebuggerSessionController debugger) {
         FlatIconButton.configure(this.debuggerState);
-        this.debuggerState.setMargin(new Insets(0, 8, 0, 8));
 
         this.debuggerState.addActionListener(event -> showDebuggerMenu(debugger));
     }
@@ -485,7 +508,21 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         setDebuggerState(debugger.status());
         this.navigationService.projectChanged(project.get());
         this.fileTreeView.reloadProfile();
+        refreshLaunchAvailability();
         refreshActions();
+    }
+
+    private void refreshLaunchAvailability() {
+        ProjectScope selected = project.get();
+        launchScope = null;
+        launchUnavailableReason = selected == null ? "Select a Prism instance to launch" : "Checking Prism instance";
+        if (selected == null) return;
+        projects.gameLaunchUnavailableReason(selected).whenComplete((reason, failure) -> UIUtils.onEdt(() -> {
+            if (disposed || project.get() != selected) return;
+            launchScope = selected;
+            launchUnavailableReason = failure == null ? reason : "Unable to check this Prism instance";
+            refreshActions();
+        }));
     }
 
     @Override public void refreshProjects() { this.projectSelector.refresh(); refreshGameIdentity(); }
@@ -535,9 +572,15 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.evaluateExpressionAction.setEnabled(scripts.isReady());
         this.newScriptAction.setEnabled(hasProfile);
         this.debuggerState.setVisible(hasProfile);
+        boolean starting = launchAttempt != null || gameState == ServiceStatus.State.PENDING;
+        gameLaunch.setEnabled(hasProfile && scope.isActive() && !projects.isSwitching() && !projects.isConnected()
+                && !starting && launchScope == scope && launchUnavailableReason == null);
+        gameLaunch.setToolTipText(projects.isConnected() ? "Minecraft is already connected"
+                : starting ? "Waiting for Minecraft to connect" : launchUnavailableReason != null ? launchUnavailableReason : "Launch Minecraft in Prism");
     }
 
     @Override public void setGameStatus(ServiceStatus status) {
+        gameState = status.state();
         gameConnected = status.state() == ServiceStatus.State.AVAILABLE;
         this.statusBar.setGameStatus(status);
         refreshGameIdentity();

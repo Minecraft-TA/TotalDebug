@@ -100,6 +100,8 @@ class OfflineProjectIntegrationTest {
             Files.writeString(paths.index().resolve("blocker"), "prevents replacing the index");
             app.openProject(profile).get(10, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            // The service publishes its status before the application listener finishes retiring the index.
+            await(() -> app.requireProject().runtime() == null && previous.isDestroyed());
             assertNull(app.requireProject().runtime(), "A failed local refresh must retire stale code sources");
             assertTrue(previous.isDestroyed());
             assertEquals(List.of("new.jar"), app.requireProject().sources().modules().stream()
