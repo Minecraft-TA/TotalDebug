@@ -4,7 +4,7 @@ TotalDebug is a Minecraft 1.21.1 NeoForge mod for inspecting and debugging a run
 
 Press **F6** while looking at a block or entity, or hovering an item, to open its runtime class in Companion. You can also use `/decompile block`.
 
-![TotalDebug Companion running a Java script against an ATM10 instance](companion/images/main.png)
+![TotalDebug Companion collage showing decompiled source, paused debugger frames and variables, and expanded expression results](companion/images/main.png)
 
 - Browse decompiled classes, search members, find usages and follow type hierarchies.
 - Write Java scripts with completion, postfix templates, complete-statement editing and inline diagnostics. Run them on the client or server.

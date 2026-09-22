@@ -2,9 +2,9 @@
 
 A desktop source browser, Java scratchpad and debugger for [TotalDebug](https://github.com/Minecraft-TA/TotalDebug). Inspect the classes in your Minecraft instance, follow their references and experiment with the running game.
 
-![Companion Java editor and expanded script results connected to an ATM10 instance](images/main.png)
+![Companion collage showing decompiled source, paused debugger frames and variables, and expanded expression results](images/main.png)
 
-The script above reads the Minecraft version and loaded mods from a running ATM10 instance. Its result can be expanded without rerunning the script.
+The collage uses the current UI to illustrate a breakpoint in FurnaceBlock, its paused stack and local variables, and an evaluation result expanded into nested maps and lists.
 
 ## Explore the runtime
 
