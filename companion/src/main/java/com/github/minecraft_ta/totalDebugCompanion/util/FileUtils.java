@@ -13,6 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /** Shares one watcher thread across materialized directories; subscriptions own their registrations. */
@@ -20,37 +22,70 @@ public final class FileUtils {
     private static WatchService service;
     private static final Map<Path, Registration> registrations = new HashMap<>();
     private static final Map<Path, Integer> pausedRoots = new HashMap<>();
+    // Native registration/cancellation can block. Never hold the state monitor while doing it.
+    private static final Object registrationLock = new Object();
+
+    @FunctionalInterface interface DirectoryRegistration {
+        WatchKey register(Path path, WatchService service) throws IOException;
+    }
 
     private static final class Registration {
         final Set<Runnable> listeners = new HashSet<>();
+        final DirectoryRegistration registrar;
         WatchKey key;
+        Registration(DirectoryRegistration registrar) { this.registrar = registrar; }
     }
 
-    public static synchronized Runnable startNewDirectoryWatcher(Path directory, Runnable onChange) {
+    public static Runnable startNewDirectoryWatcher(Path directory, Runnable onChange) {
+        return startNewDirectoryWatcher(directory, onChange,
+                (path, watching) -> path.register(watching, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE));
+    }
+
+    static Runnable startNewDirectoryWatcher(Path directory, Runnable onChange, DirectoryRegistration register) {
         Path path;
         try { path = directory.toRealPath(); }
         catch (IOException failure) { throw new IllegalStateException("Unable to watch directory " + directory, failure); }
-        var registration = registrations.computeIfAbsent(path, ignored -> new Registration());
+        Registration registration;
+        boolean added;
+        synchronized (FileUtils.class) {
+            registration = registrations.computeIfAbsent(path, ignored -> new Registration(register));
+            added = registration.listeners.add(onChange);
+        }
         try { register(path, registration); }
-        catch (IOException failure) {
-            if (registration.listeners.isEmpty()) registrations.remove(path);
+        catch (IOException | RuntimeException failure) {
+            if (added) unsubscribe(path, onChange);
             throw new IllegalStateException("Unable to watch directory " + path, failure);
         }
-        registration.listeners.add(onChange);
         return () -> unsubscribe(path, onChange);
     }
 
-    private static void register(Path path, Registration registration) throws IOException {
-        if (registration.key != null && registration.key.isValid() || pausedRoots.keySet().stream().anyMatch(path::startsWith)) return;
-        if (service == null) {
-            service = FileSystems.getDefault().newWatchService();
-            WatchService current = service;
-            Thread thread = new Thread(() -> watch(current), "directory-watcher");
-            thread.setDaemon(true);
-            thread.start();
+    private static boolean register(Path path, Registration registration) throws IOException {
+        synchronized (registrationLock) {
+            WatchService current;
+            synchronized (FileUtils.class) {
+                if (registrations.get(path) != registration || registration.listeners.isEmpty()
+                        || registration.key != null && registration.key.isValid() || paused(path)) return false;
+                current = service;
+            }
+            if (current == null) {
+                current = FileSystems.getDefault().newWatchService();
+                synchronized (FileUtils.class) { service = current; }
+                WatchService watching = current;
+                Thread.ofPlatform().daemon().name("directory-watcher").start(() -> watch(watching));
+            }
+            WatchKey key = registration.registrar.register(path, current);
+            synchronized (FileUtils.class) {
+                if (registrations.get(path) == registration && !registration.listeners.isEmpty() && !paused(path)) {
+                    registration.key = key;
+                    return true;
+                }
+            }
+            key.cancel();
+            return false;
         }
-        registration.key = path.register(service, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE);
     }
+
+    private static boolean paused(Path path) { return pausedRoots.keySet().stream().anyMatch(path::startsWith); }
 
     @FunctionalInterface public interface FileOperation { void run() throws IOException; }
 
@@ -60,27 +95,40 @@ public final class FileUtils {
         for (Path root : roots) paths.add(root.toRealPath());
         synchronized (FileUtils.class) {
             paths.forEach(path -> pausedRoots.merge(path, 1, Integer::sum));
-            registrations.forEach((path, registration) -> {
-                if (paths.stream().anyMatch(path::startsWith) && registration.key != null) {
-                    registration.key.cancel();
-                    registration.key = null;
-                }
-            });
         }
-        try { operation.run(); }
+        try {
+            // Drain in-flight registration before moving; it sees the pause and cancels its result.
+            synchronized (registrationLock) {
+                var keys = new ArrayList<WatchKey>();
+                synchronized (FileUtils.class) {
+                    registrations.forEach((path, registration) -> {
+                        if (paths.stream().anyMatch(path::startsWith) && registration.key != null) {
+                            keys.add(registration.key);
+                            registration.key = null;
+                        }
+                    });
+                }
+                keys.forEach(WatchKey::cancel);
+            }
+            operation.run();
+        }
         finally {
             Set<Runnable> callbacks = new HashSet<>();
+            Map<Path, Registration> affected = new HashMap<>();
             synchronized (FileUtils.class) {
                 paths.forEach(path -> pausedRoots.computeIfPresent(path, (ignored, count) -> count == 1 ? null : count - 1));
                 registrations.forEach((path, registration) -> {
                     if (!paths.stream().anyMatch(path::startsWith)) return;
                     callbacks.addAll(registration.listeners);
-                    if (Files.isDirectory(path)) {
-                        try { register(path, registration); }
-                        catch (IOException failure) { logFailure(failure); }
-                    }
+                    affected.put(path, registration);
                 });
             }
+            affected.forEach((path, registration) -> {
+                if (Files.isDirectory(path)) {
+                    try { register(path, registration); }
+                    catch (IOException failure) { logFailure(failure); }
+                }
+            });
             // The operation may have changed contents while events were paused, including on failure.
             callbacks.forEach(FileUtils::notifyListener);
         }
@@ -101,18 +149,18 @@ public final class FileUtils {
                         });
                     }
                 }
+                Map<Path, Registration> pending;
                 synchronized (FileUtils.class) {
                     if (service != current) return;
-                    registrations.forEach((path, registration) -> {
-                        if (registration.key != null) return;
-                        try {
-                            register(path, registration);
-                            if (registration.key != null) callbacks.addAll(registration.listeners);
-                        } catch (IOException unavailable) {
-                            // Keep the subscription while an externally removed directory is unavailable.
-                        }
-                    });
+                    pending = new HashMap<>(registrations);
                 }
+                pending.forEach((path, registration) -> {
+                    try {
+                        if (register(path, registration)) synchronized (FileUtils.class) { callbacks.addAll(registration.listeners); }
+                    } catch (IOException unavailable) {
+                        // Keep the subscription while an externally removed directory is unavailable.
+                    }
+                });
                 callbacks.forEach(FileUtils::notifyListener);
             }
         } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
@@ -127,16 +175,31 @@ public final class FileUtils {
         System.getLogger(FileUtils.class.getName()).log(System.Logger.Level.WARNING, "Directory refresh failed", failure);
     }
 
-    private static synchronized void unsubscribe(Path path, Runnable callback) {
-        var registration = registrations.get(path);
-        if (registration == null) return;
-        registration.listeners.remove(callback);
-        if (!registration.listeners.isEmpty()) return;
-        registrations.remove(path);
-        if (registration.key != null) registration.key.cancel();
-        if (registrations.isEmpty() && service != null) {
-            try { service.close(); } catch (IOException ignored) { }
-            service = null;
+    private static void unsubscribe(Path path, Runnable callback) {
+        synchronized (FileUtils.class) {
+            var registration = registrations.get(path);
+            if (registration == null) return;
+            registration.listeners.remove(callback);
+            if (!registration.listeners.isEmpty()) return;
+            // Keep empty registrations visible to a concurrent rename pause until cleanup drains them.
+        }
+        CompletableFuture.runAsync(FileUtils::closeUnusedRegistrations);
+    }
+
+    private static void closeUnusedRegistrations() {
+        synchronized (registrationLock) {
+            var keys = new ArrayList<WatchKey>();
+            WatchService unused = null;
+            synchronized (FileUtils.class) {
+                registrations.values().removeIf(registration -> {
+                    if (!registration.listeners.isEmpty()) return false;
+                    if (registration.key != null) keys.add(registration.key);
+                    return true;
+                });
+                if (registrations.isEmpty()) { unused = service; service = null; }
+            }
+            keys.forEach(WatchKey::cancel);
+            if (unused != null) try { unused.close(); } catch (IOException failure) { logFailure(failure); }
         }
     }
 }

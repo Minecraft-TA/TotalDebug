@@ -23,7 +23,7 @@ class CompanionDiscoveryTest {
         try (var discovery = new CompanionDiscovery(root, () -> {
             attempts.incrementAndGet();
             return CompanionDiscovery.Result.IDLE;
-        }, () -> false, () -> true)) {
+        }, () -> false, () -> true, () -> { })) {
             discovery.start();
             await(() -> attempts.get() == 1);
             Files.writeString(root.resolve("mcp-endpoint.json"), "unrelated");
@@ -42,7 +42,7 @@ class CompanionDiscoveryTest {
         var discovery = new CompanionDiscovery(directory, () -> {
             attempts.incrementAndGet();
             return CompanionDiscovery.Result.IDLE;
-        }, () -> false, () -> true);
+        }, () -> false, () -> true, () -> { });
         try {
             discovery.start();
             await(() -> attempts.get() == 1);
@@ -69,7 +69,7 @@ class CompanionDiscoveryTest {
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
             }
             return CompanionDiscovery.Result.REJECTED;
-        }, () -> false, () -> true)) {
+        }, () -> false, () -> true, () -> { })) {
             discovery.start();
             assertTrue(initial.await(5, TimeUnit.SECONDS));
             Files.writeString(descriptor, "new");
@@ -85,9 +85,35 @@ class CompanionDiscoveryTest {
         try (var discovery = new CompanionDiscovery(root, () -> {
             if (attempts.incrementAndGet() > 1) connected.set(true);
             return CompanionDiscovery.Result.CONNECTED;
-        }, connected::get, () -> true)) {
+        }, connected::get, () -> true, () -> { })) {
             discovery.start();
             await(() -> attempts.get() >= 2);
+            assertTrue(connected.get());
+        }
+    }
+
+    @Test void disablingDuringWatchReplacementCleansUpAndReenablingResumesDiscovery() throws Exception {
+        Path watched = Files.createDirectory(root.resolve("replace"));
+        var enabled = new AtomicBoolean(true);
+        var connected = new AtomicBoolean(true);
+        var attempts = new AtomicInteger();
+        var cleanups = new AtomicInteger();
+        try (var discovery = new CompanionDiscovery(watched, () -> {
+            attempts.incrementAndGet();
+            connected.set(true);
+            return CompanionDiscovery.Result.CONNECTED;
+        }, connected::get, enabled::get, () -> {
+            if (connected.getAndSet(false)) cleanups.incrementAndGet();
+        })) {
+            discovery.start();
+            await(() -> attempts.get() == 1);
+            enabled.set(false);
+            Files.delete(watched);
+            await(() -> cleanups.get() == 1 && Files.isDirectory(watched));
+            assertEquals(1, attempts.get());
+            assertFalse(connected.get());
+            enabled.set(true);
+            await(() -> attempts.get() == 2);
             assertTrue(connected.get());
         }
     }

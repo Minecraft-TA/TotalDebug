@@ -53,6 +53,11 @@ public final class ScriptFiles {
     public Path resolve(Path path) throws IOException {
         Path result = (path.isAbsolute() ? path : root.resolve(path)).toAbsolutePath().normalize();
         if (!result.startsWith(root)) throw new IOException("Choose a location inside Scripts.");
+        if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+            var attributes = Files.readAttributes(root, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (attributes.isSymbolicLink() || attributes.isOther())
+                throw new IOException("The Scripts root is linked to another location and cannot be modified.");
+        }
         Path existing = result;
         while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) existing = existing.getParent();
         Path realRoot = Files.exists(root) ? root.toRealPath() : root.getParent().toRealPath().resolve(root.getFileName());

@@ -5,14 +5,95 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.WatchKey;
+import java.nio.file.StandardWatchEventKinds;
+import javax.swing.SwingUtilities;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DirectoryWatcherTest {
     @TempDir Path directory;
+
+    @Test void lastSubscriberCanLeaveOnEdtWhileRebindingAndTheStaleKeyIsCancelled() throws Exception {
+        try (var held = new HeldRebind(Files.createDirectory(directory.resolve("held")))) {
+            WatchKey key = held.registered.get(5, TimeUnit.SECONDS);
+            var left = new CompletableFuture<Void>();
+            SwingUtilities.invokeLater(() -> {
+                try { held.stop.run(); left.complete(null); }
+                catch (Throwable failure) { left.completeExceptionally(failure); }
+            });
+            left.get(2, TimeUnit.SECONDS);
+            assertFalse(held.release.isDone(), "Unsubscribe must finish before native registration is released");
+            held.release.complete(null);
+            FileUtils.withPausedDirectoryWatchers(List.of(directory), () -> assertFalse(key.isValid(),
+                    "A registration whose final subscriber left must not install a live key"));
+        }
+    }
+
+    @Test void renamePauseDrainsAnInFlightRebindBeforeMutatingTheDirectory() throws Exception {
+        Path folder = Files.createDirectory(directory.resolve("held"));
+        try (var held = new HeldRebind(folder)) {
+            WatchKey key = held.registered.get(5, TimeUnit.SECONDS);
+            var moved = new AtomicBoolean();
+            var pause = CompletableFuture.runAsync(() -> {
+                try {
+                    FileUtils.withPausedDirectoryWatchers(List.of(folder), () -> {
+                        assertFalse(key.isValid());
+                        Files.move(folder, directory.resolve("moved"));
+                        moved.set(true);
+                    });
+                } catch (IOException failure) { throw new AssertionError(failure); }
+            });
+            var pausedField = FileUtils.class.getDeclaredField("pausedRoots");
+            pausedField.setAccessible(true);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            boolean paused;
+            do {
+                synchronized (FileUtils.class) { paused = ((Map<?, ?>) pausedField.get(null)).containsKey(folder); }
+                if (!paused) Thread.sleep(5);
+            } while (!paused && System.nanoTime() < deadline);
+            assertTrue(paused);
+            assertFalse(moved.get(), "The mutation must await cancellation of the in-flight watch handle");
+            held.release.complete(null);
+            pause.get(5, TimeUnit.SECONDS);
+            assertTrue(Files.isDirectory(directory.resolve("moved")));
+        }
+    }
+
+    /** Hold the provider's second successful register call with a real native key already allocated. */
+    private static final class HeldRebind implements AutoCloseable {
+        final CompletableFuture<WatchKey> registered = new CompletableFuture<>();
+        final CompletableFuture<Void> release = new CompletableFuture<>();
+        final Runnable stop;
+
+        HeldRebind(Path folder) throws Exception {
+            Path real = folder.toRealPath();
+            var calls = new AtomicInteger();
+            stop = FileUtils.startNewDirectoryWatcher(real, () -> { }, (path, service) -> {
+                WatchKey key = path.register(service, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE);
+                if (calls.incrementAndGet() > 1) {
+                    registered.complete(key);
+                    try { release.get(10, TimeUnit.SECONDS); }
+                    catch (Exception failure) { key.cancel(); throw new IOException(failure); }
+                }
+                return key;
+            });
+            Files.delete(real);
+            Files.createDirectory(real);
+        }
+
+        @Override public void close() {
+            release.complete(null);
+            stop.run();
+        }
+    }
 
     @Test void existingSubscriberRecoversAfterItsDirectoryIsDeletedAndRecreated() throws Exception {
         Path folder = Files.createDirectory(directory.resolve("scripts"));

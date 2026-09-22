@@ -33,15 +33,17 @@ final class CompanionDiscovery implements AutoCloseable {
     private final Supplier<Result> attempt;
     private final BooleanSupplier connected;
     private final BooleanSupplier enabled;
+    private final Runnable disconnect;
     private final Thread worker;
     private volatile boolean closed;
     private volatile WatchService watcher;
 
-    CompanionDiscovery(Path directory, Supplier<Result> attempt, BooleanSupplier connected, BooleanSupplier enabled) {
+    CompanionDiscovery(Path directory, Supplier<Result> attempt, BooleanSupplier connected, BooleanSupplier enabled, Runnable disconnect) {
         this.directory = directory;
         this.attempt = attempt;
         this.connected = connected;
         this.enabled = enabled;
+        this.disconnect = disconnect;
         worker = Thread.ofPlatform().daemon().name("TotalDebug Companion discovery").unstarted(this::run);
     }
 
@@ -51,6 +53,7 @@ final class CompanionDiscovery implements AutoCloseable {
         String lastFailure = null;
         while (!closed) {
             try {
+                checkEnabled();
                 Files.createDirectories(directory);
                 try (var watching = directory.getFileSystem().newWatchService()) {
                     watcher = watching;
@@ -84,7 +87,7 @@ final class CompanionDiscovery implements AutoCloseable {
         long retryAt = Long.MAX_VALUE;
         int delay = 1;
         while (!closed) {
-            boolean allowed = enabled.getAsBoolean();
+            boolean allowed = checkEnabled();
             boolean nowConnected = connected.getAsBoolean();
             if (allowed && !previouslyEnabled || previouslyConnected && !nowConnected) check = true;
             previouslyEnabled = allowed;
@@ -117,6 +120,12 @@ final class CompanionDiscovery implements AutoCloseable {
                 }
             }
         }
+    }
+
+    private boolean checkEnabled() {
+        boolean allowed = enabled.getAsBoolean();
+        if (!allowed) disconnect.run();
+        return allowed;
     }
 
     private Publication publication() throws IOException {

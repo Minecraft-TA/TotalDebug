@@ -109,6 +109,29 @@ class ScriptFilesTest {
         assertThrows(IOException.class, () -> ScriptFiles.validateName("My folder", true));
     }
     @Test @EnabledOnOs(OS.WINDOWS)
+    void linkedScriptsRootCannotModifyTheExternalTarget() throws Exception {
+        Path outside = Files.createDirectory(directory.resolve("outside"));
+        Path folder = Files.createDirectory(outside.resolve("Folder"));
+        Path kept = Files.writeString(folder.resolve("Keep.tdscript"), "return 1;");
+        var version = new ScriptFiles(outside).read(kept).version();
+        Path root = directory.resolve("scripts");
+        var process = new ProcessBuilder("cmd", "/c", "mklink", "/J", root.toString(), outside.toString()).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes());
+        assertEquals(0, process.waitFor(), output);
+        try {
+            var files = new ScriptFiles(root);
+            Path alias = root.resolve("Folder/Keep.tdscript");
+            assertThrows(IOException.class, () -> files.create(root, "New", false, "new"));
+            assertThrows(IOException.class, () -> files.create(root, "NewFolder", true, ""));
+            assertThrows(IOException.class, () -> files.move(alias, root.resolve("Moved.tdscript")));
+            assertThrows(IOException.class, () -> files.save(alias, "changed", version));
+            assertThrows(IOException.class, () -> files.delete(root.resolve("Folder"), false));
+            assertEquals("return 1;", Files.readString(kept));
+            try (var entries = Files.list(outside)) { assertEquals(List.of(folder), entries.toList()); }
+        } finally { Files.delete(root); }
+    }
+
+    @Test @EnabledOnOs(OS.WINDOWS)
     void permanentDeleteDoesNotFollowJunctionIntoSiblingFolder() throws Exception {
         var files = new ScriptFiles(directory.resolve("scripts"));
         Path selected = files.create(files.root(), "Selected", true, "");

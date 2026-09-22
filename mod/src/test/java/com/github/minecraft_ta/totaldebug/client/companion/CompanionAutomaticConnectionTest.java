@@ -34,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -204,6 +205,50 @@ class CompanionAutomaticConnectionTest {
             client.startDiscovery(() -> false);
             Thread.sleep(300);
             assertEquals(0, endpoint.hellos.get());
+        }
+    }
+
+    @Test void disablingCompanionClosesTheSessionAndReenablingReconnectsWithoutRepublishing() throws Exception {
+        var enabled = new AtomicBoolean(true);
+        var closedSessions = new AtomicInteger();
+        try (var endpoint = new Endpoint(); var client = client()) {
+            client.setSessionClosedHandler(closedSessions::incrementAndGet);
+            endpoint.publish(profile());
+            client.startDiscovery(enabled::get);
+            await(client::isConnected);
+            enabled.set(false);
+            await(() -> !client.isConnected() && closedSessions.get() == 1);
+            endpoint.publish(profile());
+            Thread.sleep(1200);
+            assertFalse(client.isConnected());
+            assertEquals(1, endpoint.hellos.get());
+            assertEquals(1, closedSessions.get(), "Disabled polling must not repeat session cleanup");
+            enabled.set(true);
+            await(client::isConnected);
+            assertEquals(2, endpoint.hellos.get());
+            assertEquals(0, endpoint.selections.get());
+            assertEquals(0, focus.get());
+        }
+    }
+
+    @Test void disablingCompanionCancelsAnUnansweredHandshakeBeforeItsTimeout() throws Exception {
+        var enabled = new AtomicBoolean(true);
+        var closedSessions = new AtomicInteger();
+        var timeouts = new CompanionTimeouts(Duration.ofSeconds(3), Duration.ofSeconds(30), Duration.ofSeconds(30), Duration.ofMillis(20));
+        try (var endpoint = new Endpoint(); var client = new CompanionAppClient(game.resolve("total-debug"), timeouts,
+                new CompanionForegroundHandoff(pid -> focus.incrementAndGet()))) {
+            client.setSessionClosedHandler(closedSessions::incrementAndGet);
+            endpoint.hold = true;
+            endpoint.publish(profile());
+            client.startDiscovery(enabled::get);
+            await(() -> endpoint.hellos.get() == 1);
+            enabled.set(false);
+            await(() -> closedSessions.get() == 1);
+            assertFalse(client.isConnected());
+            endpoint.hold = false;
+            enabled.set(true);
+            await(client::isConnected);
+            assertEquals(2, endpoint.hellos.get());
         }
     }
 

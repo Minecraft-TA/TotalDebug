@@ -95,6 +95,7 @@ public final class CompanionAppClient implements AutoCloseable {
     private final Object connectionLock = new Object();
     private volatile Connection connection;
     private volatile CompanionDiscovery discovery;
+    private volatile BooleanSupplier companionEnabled = () -> true;
 
     private volatile Consumer<RunScriptMessage> scriptRequestHandler = message -> TotalDebug.LOGGER.warn(
             "Ignoring companion script request {} because no handler is installed",
@@ -176,7 +177,9 @@ public final class CompanionAppClient implements AutoCloseable {
     public void startDiscovery(BooleanSupplier enabled) {
         synchronized (connectionLock) {
             if (closing || discovery != null) return;
-            discovery = new CompanionDiscovery(instanceDescriptorFile.getParent(), this::tryAutomaticConnection, this::isConnected, enabled);
+            companionEnabled = Objects.requireNonNull(enabled, "enabled");
+            discovery = new CompanionDiscovery(instanceDescriptorFile.getParent(), this::tryAutomaticConnection, this::isConnected,
+                    companionEnabled, this::resetConnection);
             discovery.start();
         }
     }
@@ -438,6 +441,7 @@ public final class CompanionAppClient implements AutoCloseable {
         try {
             synchronized (connectionLock) {
                 if (closing) throw new IOException("Companion client is closed");
+                if (!companionEnabled.getAsBoolean()) throw new IOException("Companion use is disabled");
                 connection = attempt;
                 if (!attempt.client.connect(sessionAddress(descriptor.port()))) throw new IOException("Unable to connect to Companion");
             }
@@ -651,9 +655,24 @@ public final class CompanionAppClient implements AutoCloseable {
         );
     }
 
-    private static void await(CompletableFuture<Void> future, Duration timeout, String operation) throws IOException {
+    private void await(CompletableFuture<Void> future, Duration timeout, String operation) throws IOException {
+        long deadline = System.nanoTime() + timeout.toNanos();
         try {
-            future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+            while (true) {
+                if (!companionEnabled.getAsBoolean()) {
+                    resetConnection();
+                    throw new IOException("Companion use is disabled");
+                }
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new TimeoutException();
+                try {
+                    // Observe configuration at the same cadence as discovery while its worker awaits the handshake.
+                    future.get(Math.min(remaining, TimeUnit.SECONDS.toNanos(1)), TimeUnit.NANOSECONDS);
+                    return;
+                } catch (TimeoutException polling) {
+                    if (System.nanoTime() >= deadline) throw polling;
+                }
+            }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for " + operation, exception);
