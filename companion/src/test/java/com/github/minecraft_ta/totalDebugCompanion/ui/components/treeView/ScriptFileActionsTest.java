@@ -45,9 +45,75 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
+import jdk.jfr.Recording;
+import jdk.jfr.consumer.RecordingFile;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void loadingReplacementDistinguishesSwitchPreparationFromRetirement(boolean retired) throws Exception {
+        Path home = Files.createDirectories(directory.resolve("load-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("load-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            var project = window.editorContext().project();
+            Path root = Files.createDirectories(project.scriptFiles().root());
+            Path original = Files.writeString(root.resolve("Preview.txt"), "return 42;");
+            edt(() -> window.navigation().navigate(new NavigationTarget.LocalFile(original), Activation.KEEP_CURRENT_WINDOW)).get(10, TimeUnit.SECONDS);
+            var previous = edt(() -> window.getEditorTabs().getSelectedEditor());
+            Path script = Files.move(original, root.resolve("Converted.tdscript"));
+            var loaded = edt(() -> {
+                var pending = window.navigation().relocatePreview(previous, script);
+                // The loader cannot install until this EDT turn finishes.
+                project.beginSwitch();
+                if (retired) project.retire();
+                return pending;
+            });
+            if (retired) {
+                assertThrows(ExecutionException.class, () -> loaded.get(10, TimeUnit.SECONDS));
+                assertSame(previous, edt(() -> window.getEditorTabs().getSelectedEditor()));
+            } else {
+                try {
+                    loaded.get(10, TimeUnit.SECONDS);
+                    var replacement = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
+                    assertEquals(script, replacement.getPath());
+                } finally { project.cancelSwitch(); }
+            }
+        }
+    }
+
+    @Test void convertingAPreviewToAScriptReadsItsContentsOffTheEdt() throws Exception {
+        Path home = Files.createDirectories(directory.resolve("preview-home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("preview-game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path root = Files.createDirectories(window.editorContext().project().scriptFiles().root());
+            Path original = Files.writeString(root.resolve("Preview.txt"), "return 42;");
+            edt(() -> window.navigation().navigate(new NavigationTarget.LocalFile(original), Activation.KEEP_CURRENT_WINDOW)).get(10, TimeUnit.SECONDS);
+            Path script = root.resolve("Converted.tdscript");
+            Path capture = directory.resolve("script-load.jfr");
+            try (var recording = new Recording()) {
+                recording.enable("jdk.FileRead").withThreshold(Duration.ZERO);
+                recording.start();
+                edt(() -> window.scriptFileActions().rename(original, script)).get(10, TimeUnit.SECONDS);
+                recording.stop();
+                recording.dump(capture);
+            }
+            var reads = RecordingFile.readAllEvents(capture).stream()
+                    .filter(event -> event.getEventType().getName().equals("jdk.FileRead"))
+                    .filter(event -> script.toString().equals(event.getString("path"))).toList();
+            assertFalse(reads.isEmpty(), "The probe must observe the actual script content read");
+            assertTrue(reads.stream().noneMatch(event -> event.getThread().getJavaName().startsWith("AWT-EventQueue")),
+                    "Replacing a preview must not read script contents on the EDT");
+            var replacement = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
+            assertEquals("return 42;", replacement.getSourceText());
+            assertEquals(script, replacement.getPath());
+        }
+    }
+
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void closeChecksRecheckOperationsStartedDuringSaveEvents(boolean switching) throws Exception {
         Path home = Files.createDirectories(directory.resolve("reentrant-home"));

@@ -455,9 +455,18 @@ public final class NavigationService {
     }
 
     public CompletableFuture<Void> relocatePreview(IEditorPanel previous, Path path) {
-        IEditorPanel replacement = path.getFileName().toString().endsWith(ScriptView.FILE_EXTENSION)
-                ? new ScriptView(editors.get(), path)
-                : path.getFileName().toString().endsWith(".java") ? new CodeView(editors.get(), path, 0)
+        if (path.getFileName().toString().endsWith(ScriptView.FILE_EXTENSION)) {
+            EditorContext context = editors.get();
+            return CompletableFuture.supplyAsync(() -> new ScriptView(context, path)).thenComposeAsync(replacement -> {
+                // A pending switch may still be vetoed by this active file operation.
+                if (project != context.project() || context.project().phase() == ProjectScope.Phase.RETIRED) {
+                    replacement.dispose();
+                    return CompletableFuture.failedFuture(new CancellationException("Project changed while loading the moved script"));
+                }
+                return tabs.replacePreview(previous, replacement);
+            }, SwingUtilities::invokeLater);
+        }
+        IEditorPanel replacement = path.getFileName().toString().endsWith(".java") ? new CodeView(editors.get(), path, 0)
                 : new ResourceView(editors.get(), new LocalFileSource(path), null);
         return tabs.replacePreview(previous, replacement);
     }

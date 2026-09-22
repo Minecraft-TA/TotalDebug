@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /** Shares one watcher thread across materialized directories; subscriptions own their registrations. */
 public final class FileUtils {
@@ -88,17 +89,31 @@ public final class FileUtils {
     private static void watch(WatchService current) {
         try {
             while (true) {
-                WatchKey key = current.take();
-                boolean changed = !key.pollEvents().isEmpty();
-                boolean valid = key.reset();
+                WatchKey key = current.poll(1, TimeUnit.SECONDS);
                 Set<Runnable> callbacks = new HashSet<>();
+                if (key != null) {
+                    boolean changed = !key.pollEvents().isEmpty();
+                    boolean valid = key.reset();
+                    synchronized (FileUtils.class) {
+                        registrations.values().stream().filter(registration -> registration.key == key).forEach(registration -> {
+                            if (changed || !valid) callbacks.addAll(registration.listeners);
+                            if (!valid) registration.key = null;
+                        });
+                    }
+                }
                 synchronized (FileUtils.class) {
-                    registrations.values().stream().filter(registration -> registration.key == key).forEach(registration -> {
-                        callbacks.addAll(registration.listeners);
-                        if (!valid) registration.key = null;
+                    if (service != current) return;
+                    registrations.forEach((path, registration) -> {
+                        if (registration.key != null) return;
+                        try {
+                            register(path, registration);
+                            if (registration.key != null) callbacks.addAll(registration.listeners);
+                        } catch (IOException unavailable) {
+                            // Keep the subscription while an externally removed directory is unavailable.
+                        }
                     });
                 }
-                if (changed || !valid) callbacks.forEach(FileUtils::notifyListener);
+                callbacks.forEach(FileUtils::notifyListener);
             }
         } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
         catch (ClosedWatchServiceException ignored) { }

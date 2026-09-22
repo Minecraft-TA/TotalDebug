@@ -828,8 +828,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (closed || selected == null) return;
         try { projectWorker.execute(() -> {
             synchronized (lifecycleLock) {
+                var status = runtimeIndexService.status();
                 if (closed || switching || current != selected || !selected.isActive() || session.hasClient() || selected.runtime() != null
-                        || runtimeIndexService.status().phase() != RuntimeIndexService.Phase.WAITING) return;
+                        || status.phase() != RuntimeIndexService.Phase.WAITING
+                        && !(status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.RUNTIME)) return;
                 // Live admission retired an offline load. Resume browsing only if no newer
                 // client or inventory load has taken ownership in the meantime.
                 runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());

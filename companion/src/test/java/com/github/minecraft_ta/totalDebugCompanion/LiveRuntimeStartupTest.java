@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 
@@ -129,8 +130,8 @@ class LiveRuntimeStartupTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void disconnectBeforeLiveInventoryResumesInterruptedOfflineIndexing(boolean localFallback) throws Exception {
+    @CsvSource({"false,false", "true,false", "false,true", "true,true"})
+    void disconnectBeforeLiveInventoryResumesInterruptedOfflineIndexing(boolean localFallback, boolean failedInventory) throws Exception {
         var profile = CompanionProfile.forGame(Files.createDirectories(root.resolve("game")));
         var paths = new InstancePaths(profile.dataDirectory());
         if (localFallback) {
@@ -151,6 +152,10 @@ class LiveRuntimeStartupTest {
             var executions = field(app, "scriptExecutions", ScriptExecutionService.class);
             try (var game = new Game(app, profile, config)) {
                 game.inventory(RuntimeInventoryMessage.preparing("Live runtime is still preparing"));
+                if (failedInventory) {
+                    game.inventory(RuntimeInventoryMessage.failed("Runtime export failed"));
+                    assertEquals(RuntimeIndexService.Phase.FAILED, app.getRuntimeIndexStatus().phase());
+                }
                 assertNull(app.requireProject().runtime(), "The held offline index must not have installed yet");
                 assertFalse(executions.isReady());
             }

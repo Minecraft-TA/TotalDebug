@@ -14,6 +14,28 @@ import static org.junit.jupiter.api.Assertions.*;
 class DirectoryWatcherTest {
     @TempDir Path directory;
 
+    @Test void existingSubscriberRecoversAfterItsDirectoryIsDeletedAndRecreated() throws Exception {
+        Path folder = Files.createDirectory(directory.resolve("scripts"));
+        var changed = new AtomicReference<>(new CountDownLatch(1));
+        Runnable stop = FileUtils.startNewDirectoryWatcher(folder, () -> changed.get().countDown());
+        try {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                changed.set(new CountDownLatch(1));
+                Files.delete(folder);
+                assertTrue(changed.get().await(5, TimeUnit.SECONDS), "Deletion must invalidate the old watch");
+                changed.set(new CountDownLatch(1));
+                Files.createDirectory(folder);
+                assertTrue(changed.get().await(5, TimeUnit.SECONDS), "The existing subscriber must be notified when watching resumes");
+                changed.set(new CountDownLatch(1));
+                Path created = Files.writeString(folder.resolve("new.tdscript"), "return 1;");
+                assertTrue(changed.get().await(5, TimeUnit.SECONDS), "The replacement directory must deliver subsequent changes");
+                changed.set(new CountDownLatch(1));
+                Files.delete(created);
+                assertTrue(changed.get().await(5, TimeUnit.SECONDS));
+            }
+        } finally { stop.run(); }
+    }
+
     @Test void aFailedOperationRestoresWatchingAndRefreshesChangesMadeWhilePaused() throws Exception {
         Path folder = Files.createDirectory(directory.resolve("folder"));
         var changed = new AtomicReference<>(new CountDownLatch(1));

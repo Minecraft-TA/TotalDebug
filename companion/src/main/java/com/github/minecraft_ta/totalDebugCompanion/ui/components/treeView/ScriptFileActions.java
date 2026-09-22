@@ -359,7 +359,11 @@ public final class ScriptFileActions {
                     views.forEach(view -> view.relocated(change.from, change.to));
                     for (var preview : previews) {
                         var target = (NavigationTarget.LocalFile) preview.getNavigationTarget();
-                        if (target.path().startsWith(change.from)) report(ctx.navigation().relocatePreview(preview, ScriptFiles.relocated(target.path(), change.from, change.to)));
+                        if (target.path().startsWith(change.from)) {
+                            var relocated = ctx.navigation().relocatePreview(preview, ScriptFiles.relocated(target.path(), change.from, change.to));
+                            report(relocated);
+                            refreshes.add(relocated);
+                        }
                     }
                 }
                 ctx.project().navigation().relocateFiles(change.from, change.to);
