@@ -49,7 +49,7 @@ class ScriptFilesTest {
         assertNotEquals(files.read(two).text(), loaded.text());
         Path renamed = files.move(first, directory.resolve("scripts/Renamed"));
         Path moved = renamed.resolve("Test.tdscript");
-        files.save(moved, "return 3;", loaded.version());
+        files.save(moved, "return 3;", loaded);
         assertEquals("return 3;", Files.readString(moved));
         assertFalse(Files.exists(first));
         assertEquals("return 2;", Files.readString(two));
@@ -72,7 +72,7 @@ class ScriptFilesTest {
         var files = new ScriptFiles(directory.resolve("scripts"));
         Path parent = files.create(files.root(), "Folder", true, "");
         Path path = files.create(parent, "Test", false, "old");
-        var version = files.read(path).version();
+        var version = files.read(path);
         files.delete(parent, false);
         assertThrows(IOException.class, () -> files.save(path, "stale", version));
         assertFalse(Files.exists(parent));
@@ -86,14 +86,14 @@ class ScriptFilesTest {
         Path path = files.create(files.root(), "Test", false, "return 1;");
         var loaded = files.read(path);
         Files.writeString(path, "return 2;");
-        Files.setLastModifiedTime(path, loaded.version().modified());
+        Files.setLastModifiedTime(path, loaded.modified());
         var edited = files.read(path);
-        assertEquals(loaded.version().key(), edited.version().key());
-        assertEquals(loaded.version().modified(), edited.version().modified());
-        assertEquals(loaded.version().size(), edited.version().size());
-        assertThrows(IOException.class, () -> files.save(path, "return 3;", loaded.version()));
+        assertEquals(loaded.key(), edited.key());
+        assertEquals(loaded.modified(), edited.modified());
+        assertEquals(loaded.size(), edited.size());
+        assertThrows(IOException.class, () -> files.save(path, "return 3;", loaded));
         assertEquals("return 2;", Files.readString(path));
-        var saved = files.save(path, "return 3;", edited.version());
+        var saved = files.save(path, "return 3;", edited);
         assertEquals(saved, files.save(path, "return 3;", saved));
     }
     @Test void caseOnlyRenameAndFilesystemNames() throws Exception {
@@ -113,7 +113,7 @@ class ScriptFilesTest {
         Path outside = Files.createDirectory(directory.resolve("outside"));
         Path folder = Files.createDirectory(outside.resolve("Folder"));
         Path kept = Files.writeString(folder.resolve("Keep.tdscript"), "return 1;");
-        var version = new ScriptFiles(outside).read(kept).version();
+        var version = new ScriptFiles(outside).read(kept);
         Path root = directory.resolve("scripts");
         var process = new ProcessBuilder("cmd", "/c", "mklink", "/J", root.toString(), outside.toString()).redirectErrorStream(true).start();
         String output = new String(process.getInputStream().readAllBytes());

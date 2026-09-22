@@ -38,7 +38,8 @@ class DirectoryWatcherTest {
     }
 
     @Test void renamePauseDrainsAnInFlightRebindBeforeMutatingTheDirectory() throws Exception {
-        Path folder = Files.createDirectory(directory.resolve("held"));
+        Path folder = Files.createDirectory(directory.resolve("./held"));
+        Path watched = folder.toRealPath();
         try (var held = new HeldRebind(folder)) {
             WatchKey key = held.registered.get(5, TimeUnit.SECONDS);
             var moved = new AtomicBoolean();
@@ -56,7 +57,7 @@ class DirectoryWatcherTest {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             boolean paused;
             do {
-                synchronized (FileUtils.class) { paused = ((Map<?, ?>) pausedField.get(null)).containsKey(folder); }
+                synchronized (FileUtils.class) { paused = ((Map<?, ?>) pausedField.get(null)).containsKey(watched); }
                 if (!paused) Thread.sleep(5);
             } while (!paused && System.nanoTime() < deadline);
             assertTrue(paused);

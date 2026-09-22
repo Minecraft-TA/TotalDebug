@@ -23,8 +23,7 @@ import java.nio.file.FileVisitResult;
 public final class ScriptFiles {
     public static final String EXTENSION = ".tdscript";
     // Content participates in conflict detection even when an external editor preserves metadata.
-    public record Version(Object key, FileTime modified, long size, String text) { }
-    public record Loaded(String text, Version version) { }
+    public record Snapshot(Object key, FileTime modified, long size, String text) { }
     private final Path root;
 
     public ScriptFiles(Path root) { this.root = root.toAbsolutePath().normalize(); }
@@ -96,29 +95,31 @@ public final class ScriptFiles {
         return destination;
     }
 
-    public Loaded read(Path path) throws IOException {
+    public Snapshot read(Path path) throws IOException {
         path = resolve(path);
-        Version before = metadata(path);
+        var before = metadata(path);
         String text = Files.readString(path);
-        if (!before.equals(metadata(path))) throw new IOException("The file changed while it was being opened. Try again.");
-        return new Loaded(text, new Version(before.key(), before.modified(), before.size(), text));
+        var after = metadata(path);
+        if (!Objects.equals(before.fileKey(), after.fileKey()) || !before.lastModifiedTime().equals(after.lastModifiedTime()) || before.size() != after.size())
+            throw new IOException("The file changed while it was being opened. Try again.");
+        return new Snapshot(before.fileKey(), before.lastModifiedTime(), before.size(), text);
     }
 
-    public Version save(Path path, String text, Version expected) throws IOException {
+    public Snapshot save(Path path, String text, Snapshot expected) throws IOException {
         path = resolve(path);
         var current = read(path);
-        if (!Objects.equals(expected, current.version())) throw new IOException("The script changed outside this editor. Reopen it before saving.");
+        if (!Objects.equals(expected, current)) throw new IOException("The script changed outside this editor. Reopen it before saving.");
         if (current.text().equals(text)) return expected;
         AtomicFiles.writeString(path, text);
         var saved = read(path);
         if (!saved.text().equals(text)) throw new IOException("The script changed outside this editor while saving. Reopen it before saving again.");
-        return saved.version();
+        return saved;
     }
 
-    private Version metadata(Path path) throws IOException {
+    private BasicFileAttributes metadata(Path path) throws IOException {
         var attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!attributes.isRegularFile()) throw new IOException("The script was moved or deleted. Reopen it from Scripts.");
-        return new Version(attributes.fileKey(), attributes.lastModifiedTime(), attributes.size(), null);
+        return attributes;
     }
 
     public Path move(Path from, Path to) throws IOException {

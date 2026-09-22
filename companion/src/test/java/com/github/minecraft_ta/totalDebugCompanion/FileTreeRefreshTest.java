@@ -35,8 +35,8 @@ class FileTreeRefreshTest {
             assertTrue(tree.revealItemPath("scripts", List.of("nested", "Selected.tdscript")).get(3, TimeUnit.SECONDS));
             var selection = tree.getSelectionPath();
             Files.writeString(scripts.resolve("NewScript.tdscript"), "");
+            view[0].refreshDirectory(scripts).get(3, TimeUnit.SECONDS);
             SwingUtilities.invokeAndWait(() -> {
-                view[0].refreshScripts();
                 assertTrue(tree.isExpanded(selection.getParentPath()));
                 assertEquals(selection, tree.getSelectionPath());
                 view[0].reloadProfile();

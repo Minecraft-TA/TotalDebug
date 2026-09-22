@@ -250,11 +250,6 @@ public class FileTreeView extends JScrollPane {
         this.displayedProject = scope;
     }
 
-    public CompletableFuture<Void> refreshScripts() {
-        var scope = project.get();
-        return refreshDirectory(scope == null ? null : scope.paths().scripts());
-    }
-
     static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {
         List<TreeItem> modules = new ArrayList<>();
         catalog.modules().stream()

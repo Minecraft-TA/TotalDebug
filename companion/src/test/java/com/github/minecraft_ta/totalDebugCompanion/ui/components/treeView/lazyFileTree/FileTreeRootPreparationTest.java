@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -25,8 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class FileTreeRootPreparationTest {
     @TempDir Path directory;
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
-    void firstScriptsRootIsPreparedOffEdtWithoutRefreshingOtherRoots(boolean refreshScripts) throws Exception {
+    @Test void firstScriptsRootIsPreparedOffEdtWithoutRefreshingOtherRoots() throws Exception {
         var scope = scope("game");
         var selected = new AtomicReference<>(scope);
         var view = edt(() -> new FileTreeView(selected::get, ignored -> { }));
@@ -46,7 +46,7 @@ class FileTreeRootPreparationTest {
             var existingNode = edt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0));
             Path scripts = Files.createDirectories(scope.paths().scripts());
             Files.writeString(scripts.resolve("First.tdscript"), "return 1;");
-            var first = edt(() -> refreshScripts ? view.refreshScripts() : view.refreshDirectory(scripts));
+            var first = edt(() -> view.refreshDirectory(scripts));
             factory.prepared.get(5, TimeUnit.SECONDS);
             assertEquals(42, edt(() -> 42), "The EDT must remain responsive while directory registration is held");
             var second = edt(() -> view.refreshDirectory(scripts));

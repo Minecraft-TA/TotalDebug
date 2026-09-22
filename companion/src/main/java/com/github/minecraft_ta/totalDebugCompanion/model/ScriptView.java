@@ -21,7 +21,7 @@ public class ScriptView implements IEditorPanel {
     private final EditorContext context;
     private final String text;
     private Path path;
-    private ScriptFiles.Version version;
+    private ScriptFiles.Snapshot savedSnapshot;
     private final String compilationName;
     private final String editorKey = "script-editor-" + UUID.randomUUID();
     private boolean fileOperation;
@@ -38,7 +38,7 @@ public class ScriptView implements IEditorPanel {
     public CompletableFuture<Void> pendingSave() { return scriptPanel == null ? CompletableFuture.completedFuture(null) : scriptPanel.pendingSave(); }
     public boolean isRunning() { return scriptPanel != null && scriptPanel.isRunning(); }
     public void persist(String contents) throws IOException {
-        version = context.project().scriptFiles().save(path, contents, version);
+        savedSnapshot = context.project().scriptFiles().save(path, contents, savedSnapshot);
     }
     public void relocated(Path from, Path to) { path = ScriptFiles.relocated(path, from, to); }
     public void deleted() { deleted = true; }
@@ -57,7 +57,7 @@ public class ScriptView implements IEditorPanel {
             if (!JavaSnippetSource.isValidClassName(compilationName)) throw new IOException("Invalid script name: " + compilationName);
             var loaded = context.project().scriptFiles().read(this.path);
             this.text = loaded.text();
-            this.version = loaded.version();
+            this.savedSnapshot = loaded;
         } catch (IOException failure) { throw new IllegalStateException(failure.getMessage(), failure); }
     }
 
