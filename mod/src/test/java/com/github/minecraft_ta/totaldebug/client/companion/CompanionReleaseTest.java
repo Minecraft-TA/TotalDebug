@@ -12,11 +12,11 @@ class CompanionReleaseTest {
     void loadsTheBundledPublishedReleaseMetadata() {
         CompanionRelease release = CompanionRelease.loadBundled();
 
-        assertEquals("2.0.0", release.version());
+        assertEquals("3.0.0", release.version());
         assertEquals("TotalDebugCompanion.jar", release.artifactFileName());
         assertEquals(
                 URI.create(
-                        "https://github.com/Minecraft-TA/TotalDebugCompanion/releases/download/v2.0.0/"
+                        "https://github.com/Minecraft-TA/TotalDebug/releases/download/v3.0.0/"
                                 + "TotalDebugCompanion.jar"
                 ),
                 release.downloadUri()

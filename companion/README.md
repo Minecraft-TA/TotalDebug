@@ -2,15 +2,17 @@
 
 A desktop source browser, Java scratchpad and debugger for [TotalDebug](https://github.com/Minecraft-TA/TotalDebug). Inspect the classes in your Minecraft instance, follow their references and experiment with the running game.
 
-![Companion source editor with breakpoints, debugger frames and expanded evaluation results](images/main.png)
+![Companion Java editor and expanded script results connected to an ATM10 instance](images/main.png)
 
-Minecraft source with an illustrated debugger pause and a nested Java evaluation result.
+The script above reads the Minecraft version and loaded mods from a running ATM10 instance. Its result can be expanded without rerunning the script.
 
 ## Explore the runtime
 
 Open a block, entity or item from Minecraft with F6, then navigate its decompiled source. Companion includes class and member search, Find Usages, type hierarchies, editor completion and archive resource previews.
 
-The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. TotalDebug watches Companion's application endpoint and connects when its project is selected, in either startup order and after Companion restarts. The Game popup can request Reconnect; it waits for authentication and reports failure after 30 seconds without a matching game. Local indexes do not enable execution.
+The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives and build a local index automatically. Execution requires a connected game.
+
+Choose a Prism instance from the project selector and use Play to launch it. Minecraft and Companion connect in either startup order and after Companion restarts. The Game status popup also offers Reconnect. The bottom bar shows connection and indexing state; the notification center keeps errors and completed actions with their relevant controls.
 
 ## Evaluate and debug
 
@@ -20,7 +22,7 @@ In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the sele
 
 Ctrl+Shift+Enter completes the statement containing the caret, without opening autocomplete. It adds missing call delimiters and semicolons, opens ordinary conditional/loop blocks, and moves to the next editing position. Missing or empty lambda bodies become multiline blocks, with the caret inside and the enclosing statement's semicolon completed. Missing expressions remain input positions. An open suggestion popup closes without accepting a suggestion. The command is one undoable edit and works without a connected runtime.
 
-Organize scripts in ordinary folders. Right-click a folder to create a script or folder inside it. File and folder menus offer Rename, Move to and Delete; scripts also offer Duplicate. F2 renames the selection. Drag files or folders onto a folder to move them; Move to is also available in the menu. Moves preserve open scripts, undo and running state. Deletion uses the recycle bin where available and requires stopping affected running scripts first. Duplicate copies the current draft, and external file changes are reported instead of silently overwritten.
+Organize scripts in ordinary folders. Right-click a folder to create a script or folder inside it. File and folder menus offer Rename, Move to and Delete; scripts also offer Duplicate. F2 renames the selection. Drag files or folders onto a folder to move them. Moves preserve open editors, drafts and undo history. Stop affected scripts before renaming, moving or deleting them. Deletion uses the recycle bin where available. Duplicate copies the current draft, and external file changes are reported instead of silently overwritten. Single-child folder and package chains share one row in the tree.
 
 At the start of a statement, `if`, `for` and `fori` insert condition, foreach and indexed-loop templates. Enter accepts the template; Tab moves through its fields and into the body.
 
@@ -39,13 +41,13 @@ Postfix templates transform the expression before the dot:
 Accept with Enter or Tab, edit the selected variable name, then Tab into the body. Loop index references are linked, generated names avoid existing identifiers, and an expansion is one undoable edit. Statement templates are offered at statement boundaries inside blocks; `.not` also works within expressions. `.forr` visits array/list indices from the last to zero, or counts a numeric bound down to one. A computed forward-loop bound is evaluated once.
 
 
-After at least two characters of a member name, completion also offers matching instance members from indexed subtypes, labelled with the required cast. Accepting one inserts the cast and imports in the same undo step. These are possible types, not observations of the live object. Searches skip `Object`, inspect at most 256 subtypes with the receiver's package first, and resolve at most six matching cast targets. No game code runs during completion.
+After at least two characters of a member name, completion also offers matching members from indexed subtypes, labelled with the required cast. Accepting one inserts the cast and imports in the same undo step. These suggestions describe possible types; completion does not run game code or inspect the live object.
 
-Compiler errors appear as Problems rows with severity and script locations. Click a row or press Enter/F4 to select its source; the context menu also offers copying. Editing marks the previous compilation's problems outdated and disables navigation until the submitted text is restored or the script is compiled again. Live editor markers refresh separately against the current source. Analysis coalesces edits without an idle deadline. Errors in the construct being written stay hidden while it is unfinished, including when pausing or browsing completion. Completing the edited part, leaving it, or running the script releases its diagnostics; completed errors on the same line remain visible. Unaffected markers keep their positions, incomplete member expressions retain receiver colors where recovery permits, and source navigation uses only current analysis.
+Live diagnostics appear beside the affected line and as underlines. Diagnostics for the construct being written stay hidden until it is completed, left or run; errors elsewhere remain visible. Compilation errors also appear in the Problems tab. Click a row or press Enter/F4 to navigate to its source. Editing marks old compilation results outdated so they cannot navigate to the wrong text.
 
-The debugger provides breakpoints, stepping, stack frames, variables, watches and breakpoint actions. Paused evaluation uses the selected frame. Code that invokes methods or changes fields can affect Minecraft, and cancellation does not undo those effects.
+The debugger provides breakpoints, stepping, stack frames, variables, watches and breakpoint actions. Breakpoints can use conditions with completion or run a selected script. Paused evaluation uses the selected frame. Code that invokes methods or changes fields can affect Minecraft, and cancellation does not undo those effects.
 
-See [usage and limitations](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior.
+See [usage and limitations](../docs/USAGE.md) for debugger attachment, supported evaluation contexts and cancellation behavior. Install and update Companion with the matching mod using the [paired installation instructions](../README.md#install).
 
 ## Build and run
 
@@ -72,7 +74,7 @@ Contact sheets and individual captures are written under `companion/build/ui-scr
 
 ## Integrations and storage
 
-The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](https://github.com/Minecraft-TA/TotalDebug/blob/1.21.1/docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
+The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](../docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
 
 ## Ownership
 

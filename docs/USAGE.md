@@ -2,7 +2,7 @@
 
 ## Environment
 
-TotalDebug and Companion support Minecraft 1.21.1, NeoForge 21.1, Windows x64 and Java 21. Companion uses the Java compiler and debugger modules, so install a full JDK. TotalDebug launches Companion with Minecraft's Java runtime.
+TotalDebug and Companion support Minecraft 1.21.1, NeoForge 21.1.250 or newer, Windows x64 and Java 21. Companion uses the Java compiler and debugger modules, so install a full JDK. TotalDebug launches Companion with Minecraft's Java runtime.
 
 ## Source navigation
 
