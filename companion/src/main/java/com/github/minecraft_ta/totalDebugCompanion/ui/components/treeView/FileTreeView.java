@@ -21,26 +21,66 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
 public class FileTreeView extends JScrollPane {
     private final LazyFileJTree tree;
     private ScriptFileActions fileActions;
+    private boolean disposed;
+    private ProjectScope pendingScriptsProject;
+    private CompletableFuture<Void> pendingScriptsRoot;
     LazyFileJTree tree() { return tree; }
     public void setFileActions(ScriptFileActions actions) { fileActions = actions; }
     public CompletableFuture<Void> refreshDirectory(Path parent) {
         if (parent == null) return CompletableFuture.completedFuture(null);
-        var scope = project.get();
+        return CompletableFuture.<Void>completedFuture(null).thenComposeAsync(ignored ->
+                ensureScriptsRoot().thenCompose(ready -> tree.refreshDirectory(parent)), SwingUtilities::invokeLater);
+    }
+
+    private boolean hasScriptsRoot(ProjectScope scope) {
+        if (scope == null) return false;
         var root = (LazyTreeNode) tree.getModel().getRoot();
-        boolean scriptsPresent = false;
         for (int i = 0; i < root.getChildCount(); i++) {
             var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
-            if (scope != null && item instanceof FileSystemDirectoryItem folder && folder.getPath().equals(scope.paths().scripts())) scriptsPresent = true;
+            if (item instanceof FileSystemDirectoryItem folder && folder.getPath().equals(scope.paths().scripts())) return true;
         }
-        if (!scriptsPresent) reloadProfile();
-        return tree.refreshDirectory(parent);
+        return false;
     }
-    public void dispose() { tree.setRootNodes(); }
+
+    /** Creation can introduce Scripts after profile loading; prepare only that new root off the EDT. */
+    private CompletableFuture<Void> ensureScriptsRoot() {
+        var scope = project.get();
+        if (disposed || scope == null || scope.phase() == ProjectScope.Phase.RETIRED)
+            return CompletableFuture.failedFuture(new CancellationException("Files view is no longer active"));
+        if (hasScriptsRoot(scope)) return CompletableFuture.completedFuture(null);
+        if (pendingScriptsProject == scope && pendingScriptsRoot != null) return pendingScriptsRoot;
+        var factory = tree.getItemFactory();
+        var loading = CompletableFuture.supplyAsync(() -> {
+            if (!Files.isDirectory(scope.paths().scripts())) return null;
+            var scripts = factory.createFileSystemDirectoryItem(scope.paths().scripts(), true);
+            scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
+            return scripts;
+        }).thenAcceptAsync(scripts -> {
+            if (disposed || project.get() != scope || scope.phase() == ProjectScope.Phase.RETIRED) {
+                if (scripts != null) scripts.dispose();
+                throw new CancellationException("Project changed while preparing Scripts");
+            }
+            if (scripts == null) return;
+            if (hasScriptsRoot(scope)) scripts.dispose();
+            else tree.insertRootNode(scripts, 0);
+        }, SwingUtilities::invokeLater);
+        pendingScriptsProject = scope;
+        pendingScriptsRoot = loading;
+        loading.whenCompleteAsync((ignored, failure) -> {
+            if (pendingScriptsRoot == loading) {
+                pendingScriptsProject = null;
+                pendingScriptsRoot = null;
+            }
+        }, SwingUtilities::invokeLater);
+        return loading;
+    }
+    public void dispose() { disposed = true; tree.setRootNodes(); }
 
 
     private final Supplier<ProjectScope> project;
@@ -210,17 +250,9 @@ public class FileTreeView extends JScrollPane {
         this.displayedProject = scope;
     }
 
-    public void refreshScripts() {
-        var root = (LazyTreeNode) this.tree.getModel().getRoot();
-        for (int i = 0; i < root.getChildCount(); i++) {
-            var item = ((LazyTreeNode) root.getChildAt(i)).getUserObject();
-            if (item instanceof FileSystemDirectoryItem && item.getName().equals("scripts")) {
-                this.tree.loadItemsForTopLevelItem(item);
-                return;
-            }
-        }
-        // The first script can create a directory that did not exist when the project opened.
-        reloadProfile();
+    public CompletableFuture<Void> refreshScripts() {
+        var scope = project.get();
+        return refreshDirectory(scope == null ? null : scope.paths().scripts());
     }
 
     static List<TreeItem> runtimeItems(RuntimeSourceCatalog catalog) {

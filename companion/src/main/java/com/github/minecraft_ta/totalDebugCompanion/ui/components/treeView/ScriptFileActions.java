@@ -212,8 +212,22 @@ public final class ScriptFileActions {
     }
     public CompletableFuture<Void> create(Path parent, String name, boolean folder, String text) {
         var created = new ArrayList<Path>();
-        return execute(List.of(), false, (files, changes) -> created.add(files.create(parent, name, folder, text)),
-                ctx -> revealCreated(ctx, created.getFirst(), folder));
+        var openPaths = openScriptPaths();
+        return execute(List.of(), false, (files, changes) -> {
+            requireClosedDestination(files.root().resolve(parent), name, folder, openPaths);
+            created.add(files.create(parent, name, folder, text));
+        }, ctx -> revealCreated(ctx, created.getFirst(), folder));
+    }
+
+    private List<Path> openScriptPaths() {
+        return tabs.editors().stream().filter(ScriptView.class::isInstance).map(ScriptView.class::cast).map(ScriptView::getPath).toList();
+    }
+
+    private static void requireClosedDestination(Path parent, String name, boolean folder, List<Path> openPaths) throws IOException {
+        ScriptFiles.validateName(name, !folder);
+        Path destination = parent.resolve(name + (folder ? "" : ScriptFiles.EXTENSION)).normalize();
+        if (openPaths.contains(destination))
+            throw new IOException("An editor for \"" + destination.getFileName() + "\" is already open. Close it or choose another name.");
     }
 
     private CompletableFuture<Void> revealCreated(EditorContext ctx, Path path, boolean folder) {
@@ -252,8 +266,11 @@ public final class ScriptFileActions {
         String draft = tabs.editors().stream().filter(ScriptView.class::isInstance).map(ScriptView.class::cast)
                 .filter(view -> view.getPath().equals(from)).map(ScriptView::currentText).findFirst().orElse(null);
         var created = new ArrayList<Path>();
-        return execute(List.of(), false, (files, changes) -> created.add(files.create(from.getParent(), name, false,
-                draft == null ? files.read(from).text() : draft)), ctx -> revealCreated(ctx, created.getFirst(), false));
+        var openPaths = openScriptPaths();
+        return execute(List.of(), false, (files, changes) -> {
+            requireClosedDestination(files.root().resolve(from.getParent()), name, false, openPaths);
+            created.add(files.create(from.getParent(), name, false, draft == null ? files.read(from).text() : draft));
+        }, ctx -> revealCreated(ctx, created.getFirst(), false));
     }
     public CompletableFuture<Void> rename(Path from, Path to) {
         return execute(List.of(from), false, (files, changes) -> { files.move(from, to); changes.add(new Change(from, to)); });

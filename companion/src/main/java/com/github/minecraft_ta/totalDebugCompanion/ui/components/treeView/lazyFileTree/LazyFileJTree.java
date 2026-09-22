@@ -518,6 +518,12 @@ public class LazyFileJTree extends JTree {
         updateChildren((LazyTreeNode) getModel().getRoot(), List.of(roots), true);
     }
 
+    /** Installs one prepared root without refreshing the other roots or their loaded children. */
+    public void insertRootNode(DirectoryTreeItem item, int index) {
+        if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Tree roots must be installed on the Swing event thread");
+        getModel().insertNodeInto(new LazyTreeNode(item), (LazyTreeNode) getModel().getRoot(), index);
+    }
+
     private record ItemKey(Class<?> type, String name) {
         ItemKey(TreeItem item) { this(DirectoryChain.first(item).getClass(), item.getName()); }
     }

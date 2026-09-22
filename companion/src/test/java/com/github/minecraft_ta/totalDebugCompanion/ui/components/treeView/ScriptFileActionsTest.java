@@ -52,6 +52,40 @@ import jdk.jfr.consumer.RecordingFile;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptFileActionsTest {
+    @ParameterizedTest @ValueSource(strings = {"create", "duplicate"})
+    void recreatingAnExternallyDeletedOpenScriptPreservesItsDraft(String command) throws Exception {
+        Path home = Files.createDirectories(directory.resolve("home"));
+        GlobalConfig.getInstance().loadFrom(home);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
+            app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
+            MainWindow window = edt(app::createWindow);
+            Path root = window.editorContext().project().scriptFiles().root();
+            Path original = root.resolve("Original.tdscript");
+            edt(() -> window.scriptFileActions().create(root, "Original", false, "return 1;")).get(10, TimeUnit.SECONDS);
+            var view = edt(() -> (ScriptView) window.getEditorTabs().getSelectedEditor());
+            edt(() -> {
+                view.setFileOperation(true);
+                find(view.getComponent(), RSyntaxTextArea.class).append("\n// unsaved draft");
+                return null;
+            });
+            try {
+                Files.delete(original);
+                var recreate = edt(() -> command.equals("create")
+                        ? window.scriptFileActions().create(root, "Original", false, "return 2;")
+                        : window.scriptFileActions().duplicate(original, "Original"));
+                var failure = assertThrows(ExecutionException.class, () -> recreate.get(10, TimeUnit.SECONDS));
+                assertTrue(failure.getCause().getMessage().contains("Close it or choose another name"));
+                assertFalse(Files.exists(original));
+                assertSame(view, edt(() -> window.getEditorTabs().getSelectedEditor()));
+                assertEquals("return 1;\n// unsaved draft", edt(view::currentText));
+                edt(() -> window.scriptFileActions().duplicate(original, "Recovered")).get(10, TimeUnit.SECONDS);
+                assertEquals("return 1;\n// unsaved draft", Files.readString(root.resolve("Recovered.tdscript")));
+            } finally {
+                edt(() -> { view.discardOnClose(); view.setFileOperation(false); window.dispose(); return null; });
+            }
+        }
+    }
+
     @ParameterizedTest @ValueSource(strings = {"script", "folder", "duplicate"})
     void creationOwnsItsRevealUntilTheEditorIsOpen(String kind) throws Exception {
         Path home = Files.createDirectories(directory.resolve("reveal-home"));
