@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import javax.swing.JMenuItem;
 import javax.swing.Action;
 import javax.swing.JPopupMenu;
@@ -51,6 +52,7 @@ import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordingFile;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class ScriptFileActionsTest {
     @ParameterizedTest @ValueSource(strings = {"create", "duplicate"})
     void recreatingAnExternallyDeletedOpenScriptPreservesItsDraft(String command) throws Exception {

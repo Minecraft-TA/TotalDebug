@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
@@ -48,6 +49,7 @@ import java.util.concurrent.RejectedExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real controller, JDT and key handlers; only worker delivery and native window/focus are controlled. */
+@UiTest
 public class ScriptCompletionPopupTest {
     public static class Values { public Map<String, List<Path>> entries; }
     private final ArrayDeque<Runnable> completionWork = new ArrayDeque<>(), analysisWork = new ArrayDeque<>();

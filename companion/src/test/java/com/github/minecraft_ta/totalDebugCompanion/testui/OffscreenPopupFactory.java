@@ -1,24 +1,44 @@
-package com.github.minecraft_ta.totalDebugCompanion;
+package com.github.minecraft_ta.totalDebugCompanion.testui;
 
 import javax.swing.JLayeredPane;
+import javax.swing.JPopupMenu;
 import javax.swing.Popup;
 import javax.swing.PopupFactory;
 import javax.swing.RootPaneContainer;
 import javax.swing.SwingUtilities;
+
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
 
 /** Keeps harness popups inside the off-screen owner instead of creating desktop windows. */
-final class OffscreenPopupFactory extends PopupFactory {
+public final class OffscreenPopupFactory extends PopupFactory {
     private Placement nextPlacement;
     private final List<ActivePopup> activePopups = new ArrayList<>();
 
-    static void paintActivePopups(Graphics2D graphics, Component target) {
+    public static JPopupMenu showingMenuOrNull() {
+        if (PopupFactory.getSharedInstance() instanceof OffscreenPopupFactory factory) {
+            for (var popup : factory.activePopups.reversed()) {
+                if (popup.contents() instanceof JPopupMenu menu) return menu;
+            }
+        }
+        return null;
+    }
+
+    public static JPopupMenu showingMenu() {
+        var menu = showingMenuOrNull();
+        if (menu == null) throw new AssertionError("No offscreen menu is showing");
+        return menu;
+    }
+
+    public static void paintActivePopups(Graphics2D graphics, Component target) {
         if (!(PopupFactory.getSharedInstance() instanceof OffscreenPopupFactory factory)) {
             return;
         }
@@ -35,19 +55,19 @@ final class OffscreenPopupFactory extends PopupFactory {
         }
     }
 
-    static void expectAt(Component owner, Point location) {
+    public static void expectAt(Component owner, Point location) {
         if (PopupFactory.getSharedInstance() instanceof OffscreenPopupFactory factory) {
             factory.nextPlacement = new Placement(owner, Alignment.AT, new Point(location));
         }
     }
 
-    static void expectBelowEnd(Component owner) {
+    public static void expectBelowEnd(Component owner) {
         if (PopupFactory.getSharedInstance() instanceof OffscreenPopupFactory factory) {
             factory.nextPlacement = new Placement(owner, Alignment.BELOW_END, null);
         }
     }
 
-    static void expectAboveEnd(Component owner) {
+    public static void expectAboveEnd(Component owner) {
         if (PopupFactory.getSharedInstance() instanceof OffscreenPopupFactory factory) {
             factory.nextPlacement = new Placement(owner, Alignment.ABOVE_END, null);
         }
@@ -55,7 +75,9 @@ final class OffscreenPopupFactory extends PopupFactory {
 
     @Override
     public Popup getPopup(Component owner, Component contents, int x, int y) {
-        java.awt.Window window = owner instanceof java.awt.Window candidate
+        if (owner == null && contents instanceof JPopupMenu menu) owner = menu.getInvoker();
+        if (owner == null) throw new IllegalStateException("Offscreen popup requires an owner");
+        Window window = owner instanceof Window candidate
                 ? candidate
                 : SwingUtilities.getWindowAncestor(owner);
         if (!(window instanceof RootPaneContainer rootPaneContainer)) {
@@ -65,15 +87,26 @@ final class OffscreenPopupFactory extends PopupFactory {
         Dimension size = contents.getPreferredSize();
         Placement placement = this.nextPlacement;
         this.nextPlacement = null;
-        if (placement == null || placement.owner() != owner) {
-            throw new IllegalStateException("UI harness popup was opened without an explicit off-screen placement");
+        if (placement != null && placement.owner() != owner) {
+            throw new IllegalStateException("The expected popup owner does not match the actual owner");
         }
-        Point ownerLocation = switch (placement.alignment()) {
+        Point ownerLocation = placement == null
+                ? new Point(x - owner.getLocationOnScreen().x, y - owner.getLocationOnScreen().y)
+                : switch (placement.alignment()) {
             case AT -> placement.location();
             case BELOW_END -> new Point(owner.getWidth() - size.width, owner.getHeight());
             case ABOVE_END -> new Point(Math.min(0, owner.getWidth() - size.width), -size.height);
         };
         Point location = SwingUtilities.convertPoint(owner, ownerLocation, layeredPane);
+        Point screenLocation = new Point(location);
+        SwingUtilities.convertPointToScreen(screenLocation, layeredPane);
+        for (var device : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+            if (device.getDefaultConfiguration().getBounds().intersects(new Rectangle(screenLocation, size))) {
+                throw new IllegalStateException("Popup placement overlaps the desktop: requested " + x + "," + y
+                        + ", owner " + owner.getLocationOnScreen() + ", window " + window.getBounds()
+                        + ", resolved " + screenLocation);
+            }
+        }
         ActivePopup activePopup = new ActivePopup(contents, layeredPane);
 
         return new Popup() {
@@ -89,6 +122,7 @@ final class OffscreenPopupFactory extends PopupFactory {
                     activePopups.add(activePopup);
                 }
                 layeredPane.revalidate();
+                contents.validate();
                 layeredPane.repaint(contents.getBounds());
             }
 

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -10,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfig
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.testui.RequiresDesktop;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
@@ -56,11 +58,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class ApplicationNavigationTest {
     @TempDir Path directory;
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
+    @RequiresDesktop
     void headerUsesSettingsGearAndInitialFocusBelongsToTheWorkArea(boolean resource) throws Exception {
         CompanionApp.configureTokenMakers();
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(directory), "test-token")) {

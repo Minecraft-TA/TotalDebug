@@ -82,6 +82,7 @@ class SearchEverywherePopupProcessTest {
         ).toString();
         java.util.ArrayList<String> command = new java.util.ArrayList<>();
         command.add(javaExecutable);
+        command.add("-Djavax.swing.adjustPopupLocationToFit=false");
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
         command.add(mainClass);

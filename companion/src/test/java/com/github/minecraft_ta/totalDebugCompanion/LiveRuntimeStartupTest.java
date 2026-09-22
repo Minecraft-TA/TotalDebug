@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
@@ -52,6 +53,7 @@ class LiveRuntimeStartupTest {
     private static final String TOKEN = "live-runtime-startup-test-token-abcdefghijklmnopqrstuvwxyz";
     @TempDir Path root;
 
+    @UiTest
     @Test void restoredInventoryCannotCompileDuringLiveStartupAndTheNewInventoryBecomesUsable() throws Exception {
         var cachedA = cache("A", "oldOnly");
         var cachedB = cache("B", "newOnly");

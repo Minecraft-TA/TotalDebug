@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class SpeedSearchPopupTest {
     @Test
     void usesTheOwningRootLayerWithoutTakingFocus() throws Exception {

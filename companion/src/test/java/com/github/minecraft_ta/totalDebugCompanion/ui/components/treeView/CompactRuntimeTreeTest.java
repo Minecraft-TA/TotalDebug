@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryChain;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
@@ -26,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.Callable;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class CompactRuntimeTreeTest {
     @TempDir Path directory;
 

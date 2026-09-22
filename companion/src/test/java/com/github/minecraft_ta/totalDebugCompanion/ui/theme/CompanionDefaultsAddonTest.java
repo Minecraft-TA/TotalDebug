@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is missing or misspelled the addon silently never runs and the app quietly loses its styling, so
  * this asserts the defaults actually land - and keep landing across a look and feel switch.
  */
+@UiTest
 class CompanionDefaultsAddonTest {
 
     @Test

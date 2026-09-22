@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -28,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class NotificationPresentationTest extends StatusBarTestFixture {
     @TempDir Path directory;
 
@@ -137,7 +140,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
                 body.add(widget.historyPanel(), BorderLayout.EAST);
                 frame.setContentPane(body);
                 frame.setSize(700, 400);
-                frame.setVisible(true);
+                UiTestScope.show(frame);
                 var balloon = field(widget, "balloon", NotificationBalloon.class);
                 notifications.publish(Severity.SUCCESS, "Formatted", "", Source.application("Test"));
                 assertEquals(0, balloon.entryId());

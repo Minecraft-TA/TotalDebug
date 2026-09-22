@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.FileNamePopup;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class FileNamePopupTest {
     @Test void duplicateNameKeepsTheFriendlyMessageAndPopupWidth(@TempDir Path directory) throws Exception {
         var files = new ScriptFiles(directory.resolve("scripts"));

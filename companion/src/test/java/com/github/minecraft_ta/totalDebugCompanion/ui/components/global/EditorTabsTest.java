@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
@@ -55,6 +58,7 @@ class EditorTabsTest {
     }
 
     @Test
+    @UiTest
     void rightPressOnTabPaddingDoesNotSelectAnInactiveTabAndKeyboardOpensItsMenu() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             EditorTabs tabs = new EditorTabs();
@@ -62,23 +66,10 @@ class EditorTabsTest {
             TestEditor active = new TestEditor();
             tabs.openEditorTab(active);
             JFrame window = new JFrame();
-            PopupFactory previous = PopupFactory.getSharedInstance();
-            AtomicReference<JPopupMenu> popup = new AtomicReference<>();
-            PopupFactory.setSharedInstance(new PopupFactory() {
-                @Override public Popup getPopup(Component owner, Component contents, int x, int y) {
-                    popup.set((JPopupMenu) contents);
-                    return new Popup() {
-                        @Override public void show() { }
-                        @Override public void hide() { }
-                    };
-                }
-            });
             try {
-                window.setAutoRequestFocus(false);
-                window.setFocusableWindowState(false);
                 window.setContentPane(tabs);
-                window.setBounds(-20000, -20000, 600, 300);
-                window.setVisible(true);
+                window.setSize(600, 300);
+                UiTestScope.show(window);
                 var bounds = tabs.getBoundsAt(0);
                 tabs.dispatchEvent(mouseEvent(tabs, MouseEvent.MOUSE_PRESSED, bounds.x + 1, bounds.y + 1, MouseEvent.BUTTON3));
                 assertSame(active, tabs.getSelectedEditor());
@@ -86,14 +77,13 @@ class EditorTabsTest {
                     KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(tabs,
                             new KeyEvent(tabs, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
                                     key.getModifiers(), key.getKeyCode(), KeyEvent.CHAR_UNDEFINED));
-                    assertTrue(item(popup.get(), "Close").isEnabled());
+                    assertTrue(item(OffscreenPopupFactory.showingMenuOrNull(), "Close").isEnabled());
                     assertSame(active, tabs.getSelectedEditor());
-                    popup.getAndSet(null).setVisible(false);
+                    OffscreenPopupFactory.showingMenu().setVisible(false);
                 }
             } finally {
                 window.dispose();
                 tabs.closeMatching(editor -> true);
-                PopupFactory.setSharedInstance(previous);
             }
         });
     }
@@ -165,6 +155,7 @@ class EditorTabsTest {
     }
 
     @Test
+    @UiTest
     void tabHeightIsCompactInBothThemesWithoutClippingTheHeader() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             for (CompanionTheme theme : CompanionTheme.available()) {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApp;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -17,6 +18,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysisF
 import javax.swing.SwingUtilities;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class ScriptDiagnosticRefreshTest {
     @TempDir Path directory;
 

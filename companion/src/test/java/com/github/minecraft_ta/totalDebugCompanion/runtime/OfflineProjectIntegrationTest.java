@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import javax.swing.JButton;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -53,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class OfflineProjectIntegrationTest {
     @TempDir Path root;
 
+    @UiTest
     @Test void anUnwritableCacheDoesNotPreventOpeningTheModCatalog() throws Exception {
         Path game = Files.createDirectories(root.resolve("instance"));
         Path jar = Files.createDirectory(game.resolve("mods")).resolve("demo.jar");
@@ -109,6 +112,7 @@ class OfflineProjectIntegrationTest {
         }
     }
 
+    @UiTest
     @Test void emptyProjectSearchShowsNoSourcesInsteadOfBuildingForever() throws Exception {
         Path game = Files.createDirectories(root.resolve("empty"));
         Files.createDirectory(game.resolve("mods"));
@@ -120,9 +124,8 @@ class OfflineProjectIntegrationTest {
             SwingUtilities.invokeAndWait(() -> {
                 ThemeManager.installTheme(CompanionTheme.ISLANDS_DARK);
                 var view = app.createWindow();
-                view.setFocusableWindowState(false);
-                view.setBounds(-20000, -20000, 1280, 720);
-                view.setVisible(true);
+                view.setSize(1280, 720);
+                UiTestScope.show(view);
                 view.openSearchEverywhere();
                 popup.set(Arrays.stream(Window.getWindows()).filter(SearchEverywherePopup.class::isInstance)
                         .map(SearchEverywherePopup.class::cast).filter(Window::isShowing).findFirst().orElseThrow());
@@ -227,6 +230,7 @@ class OfflineProjectIntegrationTest {
         }
     }
 
+    @UiTest
     @Test void browsesBeforeIndexingThenRescansChangedSources() throws Exception {
         Path game = Files.createDirectories(root.resolve("Demo instance/minecraft"));
         Path jar = Files.createDirectory(game.resolve("mods")).resolve("demo.jar");
@@ -254,9 +258,8 @@ class OfflineProjectIntegrationTest {
                 ((AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance()).putMapping(
                         RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
                 var view = app.createWindow();
-                view.setFocusableWindowState(false);
-                view.setBounds(-20000, -20000, 1280, 720);
-                view.setVisible(true);
+                view.setSize(1280, 720);
+                UiTestScope.show(view);
                 window.set(view);
             });
             var view = window.get();

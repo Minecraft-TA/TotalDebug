@@ -50,6 +50,7 @@ public class UIUtils {
     public static void centerJFrame(JFrame frame, Window reference) {
         var gc = reference.getGraphicsConfiguration();
         var dim = gc.getBounds();
+        if (reference != frame && !dim.intersects(reference.getBounds())) dim = reference.getBounds();
         frame.setLocation(PopupChrome.centeredLocation(dim, frame.getSize()));
     }
 

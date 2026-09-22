@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
@@ -22,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class SearchEverywhereLayoutTest {
     @Test void longResultsStayWithinTheViewportWhenNavigatingAndResizing() throws Exception {
         try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import javax.swing.JLabel;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import javax.swing.Timer;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
@@ -74,6 +75,7 @@ import javax.tools.ToolProvider;
  * <p>Press F9 for FlatLaf's component inspector, F10 for the UI defaults inspector.
  */
 public final class UiDevHarness {
+    private static UiTestScope uiScope;
     private static CompanionApplication application;
     private static MainWindow mainWindow;
     private static final AtomicBoolean finishing = new AtomicBoolean();
@@ -81,8 +83,14 @@ public final class UiDevHarness {
     private static void finishHarness(int result) {
         if (!finishing.compareAndSet(false, true)) return;
         Thread.ofPlatform().name("UI harness shutdown").start(() -> {
-            try { if (application != null) application.close(); }
-            finally { System.exit(result); }
+            int exitCode = result;
+            try {
+                if (application != null) application.close();
+                if (uiScope != null) uiScope.close();
+            } catch (Exception | AssertionError failure) {
+                failure.printStackTrace();
+                exitCode = 2;
+            } finally { System.exit(exitCode); }
         });
     }
 
@@ -101,7 +109,6 @@ public final class UiDevHarness {
         try { application.installRuntimeSnapshot(snapshot, RuntimeSnapshotBytecodeSource.fromIndexedSources(sources, index)); }
         catch (RuntimeException failure) { snapshot.close(); throw failure; }
     }
-
 
     /** Exercises every token type the editor palette maps, so theming regressions are visible. */
     private static Path writeSampleSource(Path target) throws java.io.IOException {
@@ -891,6 +898,17 @@ public final class UiDevHarness {
             }
             return;
         }
+        Path screenshot = Arrays.stream(args)
+                .filter(argument -> argument.startsWith("--screenshot="))
+                .map(argument -> Path.of(argument.substring("--screenshot=".length())))
+                .findFirst()
+                .orElse(null);
+        boolean interactionVerification = Arrays.stream(args).anyMatch(argument -> argument.startsWith("--verify-"));
+        boolean backgroundMode = screenshot != null || interactionVerification;
+        if (backgroundMode) {
+            System.setProperty("javax.swing.adjustPopupLocationToFit", "false");
+            uiScope = UiTestScope.open();
+        }
         Path root = Files.createTempDirectory("companion-ui-harness");
         Files.createDirectories(root.resolve("scripts"));
         Files.createDirectories(root.resolve("decompiled-files"));
@@ -951,23 +969,7 @@ public final class UiDevHarness {
                     ""
             ).join();
         }
-        Path screenshot = Arrays.stream(args)
-                .filter(argument -> argument.startsWith("--screenshot="))
-                .map(argument -> Path.of(argument.substring("--screenshot=".length())))
-                .findFirst()
-                .orElse(null);
-        boolean backgroundMode = screenshot != null
-                || Arrays.asList(args).contains("--verify-code-vision-click")
-                || Arrays.asList(args).contains("--verify-gutter-click")
-                || Arrays.asList(args).contains("--verify-gutter-direct")
-                || Arrays.asList(args).contains("--verify-gutter-hover")
-                || Arrays.asList(args).contains("--verify-hierarchy-row-layout")
-                || Arrays.asList(args).contains("--verify-search-everywhere-interactions")
-                || Arrays.asList(args).contains("--verify-method-navigation");
         CompanionApp.configureLookAndFeel();
-        if (backgroundMode) {
-            javax.swing.PopupFactory.setSharedInstance(new OffscreenPopupFactory());
-        }
 
         System.out.println("UI dev harness data directory: " + root);
         System.out.println("theme: " + com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current().id());
@@ -998,8 +1000,6 @@ public final class UiDevHarness {
             mainWindow.getEditorTabs().openEditorTab(new ResourceView(mainWindow.editorContext(), 
                     new ArchiveEntrySource(sampleArchive, "assets/sample/textures/gui/debug.png", -1), mainWindow.editorContext().project().runtime()
             ));
-            boolean interactionVerification = Arrays.asList(args).stream()
-                    .anyMatch(argument -> argument.startsWith("--verify-"));
             if (interactionVerification) {
                 SwingUtilities.invokeLater(() -> mainWindow.getEditorTabs().setSelectedIndex(0));
             }
@@ -1044,10 +1044,7 @@ public final class UiDevHarness {
                 scheduleMethodNavigationVerification();
             }
             if (backgroundMode) {
-                mainWindow.setAutoRequestFocus(false);
-                mainWindow.setFocusableWindowState(false);
-                mainWindow.setLocation(-20_000, -20_000);
-                mainWindow.setVisible(true);
+                UiTestScope.show(mainWindow);
             } else {
                 mainWindow.setVisible(true);
                 UIUtils.centerJFrame(mainWindow, mainWindow);

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -17,6 +18,7 @@ import java.util.Arrays;
 import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class FlatIconButtonTest {
     @Test void popupActionsPaintDistinctHoverAndPressedStates() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

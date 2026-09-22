@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceLocation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
@@ -108,26 +111,15 @@ class UsagesViewPanelTest {
     }
 
     @Test
+    @UiTest
     void mouseAndKeyboardMenusTargetTheIntendedRowAndIgnoreEmptySpace() throws Exception {
         onEdt(() -> {
-            PopupFactory previous = PopupFactory.getSharedInstance();
-            var shown = new java.util.concurrent.atomic.AtomicReference<JPopupMenu>();
-            PopupFactory.setSharedInstance(new PopupFactory() {
-                @Override public Popup getPopup(Component owner, Component contents, int x, int y) {
-                    shown.set((JPopupMenu) contents);
-                    return new Popup() {
-                        @Override public void show() { }
-                        @Override public void hide() { }
-                    };
-                }
-            });
             JFrame window = new JFrame();
-            window.setAutoRequestFocus(false);
-            window.setFocusableWindowState(false);
+
             try (Fixture fixture = new Fixture()) {
                 window.setContentPane(fixture.panel);
-                window.setBounds(-20000, -20000, 900, 600);
-                window.setVisible(true);
+                window.setSize(900, 600);
+                UiTestScope.show(window);
                 TreePath first = fixture.usagePath("applyFirst");
                 TreePath second = fixture.usagePath("applySecond");
                 Rectangle row = fixture.tree.getPathBounds(second);
@@ -136,21 +128,20 @@ class UsagesViewPanelTest {
                     fixture.tree.dispatchEvent(new MouseEvent(fixture.tree, eventId, System.currentTimeMillis(),
                             0, row.x + 4, row.y + row.height / 2, 1, true, MouseEvent.BUTTON3));
                     assertEquals(second, fixture.tree.getSelectionPath());
-                    assertEquals(List.of("Open source", "Copy reference"), menuLabels(shown.get()));
-                    shown.getAndSet(null).setVisible(false);
+                    assertEquals(List.of("Open source", "Copy reference"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
+                    OffscreenPopupFactory.showingMenu().setVisible(false);
                 }
                 fixture.tree.dispatchEvent(new MouseEvent(fixture.tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
                         0, 4, fixture.tree.getHeight() - 1, 1, true, MouseEvent.BUTTON3));
-                assertNull(shown.get());
+                assertNull(OffscreenPopupFactory.showingMenuOrNull());
                 fixture.tree.setSelectionPath(first.getParentPath());
                 KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(fixture.tree,
                         new KeyEvent(fixture.tree, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
                                 KeyEvent.SHIFT_DOWN_MASK, KeyEvent.VK_F10, KeyEvent.CHAR_UNDEFINED));
-                assertEquals(List.of("Copy results", "Expand branch", "Collapse branch"), menuLabels(shown.get()));
-                shown.getAndSet(null).setVisible(false);
+                assertEquals(List.of("Copy results", "Expand branch", "Collapse branch"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
+                OffscreenPopupFactory.showingMenu().setVisible(false);
             } finally {
                 window.dispose();
-                PopupFactory.setSharedInstance(previous);
             }
         });
     }

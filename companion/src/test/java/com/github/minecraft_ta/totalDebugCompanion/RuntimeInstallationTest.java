@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
@@ -24,6 +25,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class RuntimeInstallationTest {
     @TempDir Path directory;
 

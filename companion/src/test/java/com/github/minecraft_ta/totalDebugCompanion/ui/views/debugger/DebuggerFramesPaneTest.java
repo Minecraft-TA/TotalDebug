@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class DebuggerFramesPaneTest {
     private static final DebugEngine.StackFrame TOP = new DebugEngine.StackFrame(
             1, "Example.run(int)", "example.Example", URI.create("file:///Example.java"), 42, 1);
@@ -80,7 +83,7 @@ class DebuggerFramesPaneTest {
             try {
                 window.setContentPane(pane);
                 window.setSize(500, 300);
-                window.setVisible(true);
+                UiTestScope.show(window);
                 pane.setFrames(List.of(TOP, CALLER));
                 pane.selectFirst();
                 JList<?> list = list(pane);

@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions.FileSelection;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,6 +16,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class FileDeleteDialogTest {
     @TempDir Path directory;
 
@@ -51,9 +54,8 @@ class FileDeleteDialogTest {
 
     private static void showOffscreen(JDialog dialog) {
         dialog.setModal(false);
-        dialog.setLocation(-20000, -20000);
-        dialog.setFocusableWindowState(false);
-        dialog.setVisible(true);
+
+        UiTestScope.show(dialog);
     }
 
     @Test void foldersAndPermanentDeletionUseSpecificQuestions() throws Exception {

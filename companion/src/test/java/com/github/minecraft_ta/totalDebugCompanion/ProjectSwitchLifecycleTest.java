@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
 import javax.swing.SwingUtilities;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
@@ -120,6 +121,7 @@ class ProjectSwitchLifecycleTest {
         }
     }
 
+    @UiTest
     @Test void editorVetoAndStaleNavigationKeepTheRightProject() throws Exception {
         AppPaths paths = new AppPaths(directory.resolve("app"));
         GlobalConfig.getInstance().loadFrom(paths.home());

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * look and feel changes - if it cached the first one, every icon would stay stuck on whichever theme
  * happened to load first.
  */
+@UiTest
 class IconThemeSwitchTest {
 
     private static BufferedImage render(FlatSVGIcon icon) {

@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
@@ -18,7 +21,6 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.MenuElement;
 import javax.swing.MenuSelectionManager;
-import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
 import java.awt.Point;
 import java.awt.event.MouseEvent;
@@ -32,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class ProjectSelectorTest {
     @Test void rightClickShowsManagementWithoutOpeningTheProject() throws Exception {
         for (var theme : List.of(CompanionTheme.ISLANDS_DARK, CompanionTheme.ISLANDS_LIGHT)) {
@@ -63,15 +66,12 @@ class ProjectSelectorTest {
                 };
                 var owner = new JFrame();
                 var selector = new ProjectSelector(controls, new NotificationCenter());
-                var previousFactory = PopupFactory.getSharedInstance();
                 try {
-                    PopupFactory.setSharedInstance(new OffscreenPopupFactory());
-                    owner.setFocusableWindowState(false);
-                    owner.setBounds(-20000, -20000, 800, 600);
+                    owner.setSize(800, 600);
                     var bar = new JMenuBar();
                     bar.add(selector);
                     owner.setJMenuBar(bar);
-                    owner.setVisible(true);
+                    UiTestScope.show(owner);
                     OffscreenPopupFactory.expectAt(selector, new Point(0, selector.getHeight()));
                     selector.doClick(0);
                     var row = selector.getItem(selector.getItemCount() - 1);
@@ -100,7 +100,6 @@ class ProjectSelectorTest {
                     MenuSelectionManager.defaultManager().clearSelectedPath();
                     selector.dispose();
                     owner.dispose();
-                    PopupFactory.setSharedInstance(previousFactory);
                 }
             });
         }
