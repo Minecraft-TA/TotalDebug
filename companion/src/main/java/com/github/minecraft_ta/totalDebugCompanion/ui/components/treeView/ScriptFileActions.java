@@ -288,7 +288,10 @@ public final class ScriptFileActions {
         var views = tabs.editors().stream().filter(ScriptView.class::isInstance).map(ScriptView.class::cast)
                 .filter(view -> roots.stream().anyMatch(view.getPath()::startsWith)).toList();
         if (views.stream().anyMatch(ScriptView::fileOperation)) return CompletableFuture.failedFuture(new IOException("An affected editor is already saving or moving."));
-        if (deleting && views.stream().anyMatch(ScriptView::isRunning)) return CompletableFuture.failedFuture(new IOException("Stop the running scripts before deleting them."));
+        boolean running = views.stream().anyMatch(ScriptView::isRunning)
+                || ctx.editorRuns().activeRuns().stream().anyMatch(run -> run.source().target() instanceof NavigationTarget.LocalFile file
+                        && roots.stream().anyMatch(file.path()::startsWith));
+        if (running) return CompletableFuture.failedFuture(new IOException("Stop the running scripts before moving, renaming, or deleting them."));
         if (deleting) {
             var references = new ArrayList<>(ctx.project().state().savedScriptReferences());
             ctx.debugger().breakpointDefinitions().forEach(d -> { var a = d.request().action(); if (a != null && a.script() != null) references.add(a.script()); });

@@ -3,6 +3,9 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,6 +17,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,6 +30,53 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompanionStaleDescriptorTest {
     @TempDir
     Path temporaryDirectory;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"old-protocol", "dead-process", "malformed", "already-published", "first-launch"})
+    void startupWaitsForAReplacementInsteadOfReadingTheStalePublication(String kind) throws Exception {
+        Path appHome = Files.createDirectories(temporaryDirectory.resolve("replacement"));
+        var paths = new AppPaths(appHome);
+        Files.createDirectories(paths.run());
+        String stale = switch (kind) {
+            case "old-protocol" -> "protocol=1\nport=41731\npid=" + ProcessHandle.current().pid() + "\n";
+            case "dead-process" -> "protocol=" + CompanionProtocol.VERSION + "\nport=41731\npid=9223372036854775807\nprojectPort=41732\n";
+            default -> "incomplete descriptor";
+        };
+        byte[] previous = kind.equals("first-launch") ? null : stale.getBytes(StandardCharsets.UTF_8);
+        if (previous != null) Files.write(paths.instanceDescriptor(), previous);
+        var replacement = new CompanionSessionDescriptor(CompanionProtocol.VERSION, 41731, ProcessHandle.current().pid(), 41732, null);
+        String previousHome = System.getProperty(CompanionLaunchContract.APP_HOME_PROPERTY);
+        System.setProperty(CompanionLaunchContract.APP_HOME_PROPERTY, appHome.toString());
+        var timeouts = new CompanionTimeouts(Duration.ofSeconds(3), Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofMillis(10));
+        try (var client = new CompanionAppClient(temporaryDirectory.resolve("game/total-debug"), timeouts);
+             var worker = Executors.newSingleThreadExecutor();
+             var channel = FileChannel.open(paths.instanceLock(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             var lock = channel.lock()) {
+            if (kind.equals("already-published")) replacement.writeAtomically(paths.instanceDescriptor());
+            var waiting = new CountDownLatch(1);
+            var result = worker.submit(() -> {
+                waiting.countDown();
+                return invokeAwaitDescriptor(client, paths.instanceDescriptor(), previous);
+            });
+            assertTrue(waiting.await(1, TimeUnit.SECONDS));
+            if (!kind.equals("already-published")) {
+                assertThrows(TimeoutException.class, () -> result.get(150, TimeUnit.MILLISECONDS));
+                if (previous != null) assertEquals(stale, Files.readString(paths.instanceDescriptor()), "Startup must not delete another process's publication");
+                replacement.writeAtomically(paths.instanceDescriptor());
+            }
+            assertEquals(replacement, result.get(2, TimeUnit.SECONDS));
+        } finally {
+            if (previousHome == null) System.clearProperty(CompanionLaunchContract.APP_HOME_PROPERTY);
+            else System.setProperty(CompanionLaunchContract.APP_HOME_PROPERTY, previousHome);
+        }
+    }
+
+    private static Object invokeAwaitDescriptor(CompanionAppClient client, Path file, byte[] previous) throws Exception {
+        Method method = CompanionAppClient.class.getDeclaredMethod("awaitDescriptor", Path.class, byte[].class);
+        method.setAccessible(true);
+        try { return method.invoke(client, file, previous); }
+        catch (InvocationTargetException failure) { throw (Exception) failure.getCause(); }
+    }
 
     @Test
     void ignoresAStaleDescriptorWithoutDeletingCompanionOwnedFiles() throws Exception {

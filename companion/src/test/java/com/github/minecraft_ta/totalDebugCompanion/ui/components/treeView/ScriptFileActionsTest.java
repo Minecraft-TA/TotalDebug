@@ -228,7 +228,7 @@ class ScriptFileActionsTest {
             edt(() -> { window.dispose(); return null; });
         }
     }
-    @Test void referencesFollowMovesAndRunningScriptsCannotBeDeleted() throws Exception {
+    @Test void referencesFollowMovesAndRunningScriptsCannotBeMovedOrDeleted() throws Exception {
         Path home = Files.createDirectories(directory.resolve("home")); GlobalConfig.getInstance().loadFrom(home);
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(home), "test-token")) {
             app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
@@ -243,7 +243,13 @@ class ScriptFileActionsTest {
             scope.state().setDebuggerBreakpoints("two", List.of(persisted));
             var state = ScriptPanel.class.getDeclaredMethod("setRunButtonsState", boolean.class); state.setAccessible(true);
             edt(() -> { state.invoke(view.getComponent(), false); return null; });
+            assertThrows(ExecutionException.class, () -> edt(() -> window.scriptFileActions().rename(view.getPath(), root.resolve("Renamed.tdscript"))).get(10, TimeUnit.SECONDS));
+            Path destination = Files.createDirectory(root.resolve("destination"));
+            assertThrows(ExecutionException.class, () -> edt(() -> window.scriptFileActions().move(List.of(view.getPath()), destination)).get(10, TimeUnit.SECONDS));
+            assertTrue(Files.exists(root.resolve("Original.tdscript")));
+            edt(() -> { state.invoke(view.getComponent(), true); return null; });
             edt(() -> window.scriptFileActions().rename(root.resolve("Original.tdscript"), root.resolve("Renamed.tdscript"))).get(10, TimeUnit.SECONDS);
+            edt(() -> { state.invoke(view.getComponent(), false); return null; });
             assertTrue(edt(view::isRunning));
             assertEquals("Renamed.tdscript", scope.state().debuggerBreakpoints("one").getFirst().action().script());
             assertEquals("Renamed.tdscript", scope.state().debuggerBreakpoints("two").getFirst().action().script());

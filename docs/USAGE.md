@@ -48,6 +48,8 @@ The header uses the project name and the shared dropdown SVG. Project rows use r
 
 Saved scripts contain imports and Java statements. Use `return` to produce a structured value, and `log` or `logln` for output. Companion compiles scripts using its existing runtime index and sends the generated classes to Minecraft for execution. Wait for the current runtime index to become ready before running a script.
 
+Stop an active script before renaming, moving, or deleting it or a containing folder. This keeps Script Activity and completion notifications linked to its existing file.
+
 The client and server execution choices target their respective game contexts. Integrated and dedicated servers publish an ordered archive baseline after joining. Companion compares archive hashes using the existing client files and index. Matching archives need only local class entry names. Companion requests declaration fingerprints for differing or unmatched server sources, one source at a time, then compares the actual winning class definitions in source order. Directories use the detailed path.
 
 The server hashes its archives in the background once per server lifetime. Requested source details are calculated lazily and cached once for all players as compressed metadata. Each player connection has a fresh handshake identity. Minecraft relays the comparison messages and retains only the baseline for opening Companion later. Each Companion retains its own unsupported-class names, bound to the current server session and client inventory; temporary class fingerprints are discarded. There is no second index or automatic download of server class files.

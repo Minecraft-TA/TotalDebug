@@ -40,10 +40,12 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.FileSystemException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -501,6 +503,7 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private CompanionSessionDescriptor discoverOrStartCompanion() throws IOException {
         Files.createDirectories(this.appHome);
+        byte[] previousDescriptor = readDescriptorPublication(this.instanceDescriptorFile);
         CompanionSessionDescriptor existing = readLiveDescriptor();
         if (existing != null) {
             TotalDebug.LOGGER.info("Connecting to TotalDebugCompanion process {}", existing.processId());
@@ -551,7 +554,7 @@ public final class CompanionAppClient implements AutoCloseable {
         TotalDebug.LOGGER.info("Started TotalDebugCompanion from {}; output is written to {}",
                 launch.path(), this.processLog);
 
-        return awaitDescriptor(this.instanceDescriptorFile);
+        return awaitDescriptor(this.instanceDescriptorFile, previousDescriptor);
     }
 
     private CompanionSessionDescriptor readLiveDescriptor() throws IOException {
@@ -614,11 +617,17 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener.accept(progress);
     }
 
-    private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile) throws IOException {
+    private static byte[] readDescriptorPublication(Path descriptorFile) throws IOException {
+        try { return Files.readAllBytes(descriptorFile); }
+        catch (NoSuchFileException missing) { return null; }
+    }
+
+    private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile, byte[] previousDescriptor) throws IOException {
         long startedAt = System.nanoTime();
         long timeoutNanos = this.timeouts.processStart().toNanos();
         while (System.nanoTime() - startedAt < timeoutNanos) {
-            if (Files.isRegularFile(descriptorFile)) {
+            byte[] publication = readDescriptorPublication(descriptorFile);
+            if (publication != null && !Arrays.equals(publication, previousDescriptor)) {
                 CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile, CompanionProtocol.VERSION);
                 if (!ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
                     throw new IOException("Companion descriptor names a stopped process");
