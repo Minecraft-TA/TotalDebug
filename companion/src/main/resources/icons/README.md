@@ -36,7 +36,7 @@ Companion's own name for the icon; the second column is the upstream `expui` pat
 | enum | `nodes/enum` | | close | `general/closeSmall` |
 | interface | `nodes/interface` | | closeHovered | `general/closeSmallHovered` |
 | constructor | `nodes/constructor` | | delete | `general/delete` |
-| constant | `nodes/constant` | | | |
+| constant | `nodes/constant` | | template | `nodes/template` |
 | property | `nodes/property` | | copy | `general/copy` |
 | variable | `nodes/variable` | | information | `status/info` |
 | javaFile | `fileTypes/java` | | success | `status/success` |
@@ -78,3 +78,5 @@ File-tree and navigation assets:
 
 `process/step_1..8.svg` is the spinner driven by `AnimatedFlatSVGIcon`. It is still the older
 JetBrains asset and has no dark variant.
+
+Folder actions use JetBrains `expui/actions/newFolder`, `expui/actions/moveToButton`, and `expui/general/edit` for rename, with their matching dark variants.

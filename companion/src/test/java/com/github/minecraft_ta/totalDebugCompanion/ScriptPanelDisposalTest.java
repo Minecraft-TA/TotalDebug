@@ -32,10 +32,14 @@ class ScriptPanelDisposalTest {
             app.openProject(CompanionProfile.forGame(Files.createDirectories(directory.resolve("game")))).get(10, TimeUnit.SECONDS);
             var bus = new TrackingBus();
             app.session().server().setMessageBus(bus);
+            Files.createDirectories(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts"));
+            Files.writeString(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts/First.tdscript"), "");
+            Files.createDirectories(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts"));
+            Files.writeString(CompanionProfile.forGame(directory.resolve("game")).dataDirectory().resolve("scripts/Second.tdscript"), "");
             SwingUtilities.invokeAndWait(() -> {
                 MainWindow window = app.createWindow();
-                var first = (ScriptPanel) new ScriptView(window.editorContext(), "First").getComponent();
-                var second = (ScriptPanel) new ScriptView(window.editorContext(), "Second").getComponent();
+                var first = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("First.tdscript")).getComponent();
+                var second = (ScriptPanel) new ScriptView(window.editorContext(), window.editorContext().project().paths().scripts().resolve("Second.tdscript")).getComponent();
                 Window firstCompletion = popup(first, "codeCompletionPopup");
                 Window firstSignature = popup(first, "signatureHelpPopup");
                 Window secondCompletion = popup(second, "codeCompletionPopup");
@@ -43,13 +47,13 @@ class ScriptPanelDisposalTest {
                 firstCompletion.pack();
                 firstSignature.pack();
                 secondCompletion.pack();
-                assertEquals(2, bus.owners.size());
+                assertTrue(bus.owners.isEmpty(), "Editors no longer subscribe to transport results");
                 first.dispose();
                 first.dispose();
                 assertFalse(firstCompletion.isDisplayable());
                 assertFalse(firstSignature.isDisplayable());
                 assertTrue(secondCompletion.isDisplayable());
-                assertEquals(1, bus.owners.size());
+                assertTrue(bus.owners.isEmpty());
                 second.dispose();
                 assertTrue(bus.owners.isEmpty());
             });

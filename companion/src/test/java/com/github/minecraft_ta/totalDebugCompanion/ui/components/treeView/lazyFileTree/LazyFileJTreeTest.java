@@ -1,10 +1,17 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.SwingUtilities;
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutionException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -22,6 +29,7 @@ import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 import javax.swing.tree.TreePath;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -29,6 +37,60 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class LazyFileJTreeTest {
+
+    @Test void aChangeBeforeAttachmentInvalidatesAnEmptyFolderSnapshot(@TempDir Path directory) throws Exception {
+        Path folder = Files.createDirectory(directory.resolve("Empty"));
+        var tree = new LazyFileJTree();
+        var root = tree.getItemFactory().createFileSystemDirectoryItem(directory, true);
+        var child = (FileSystemDirectoryItem) root.loadChildren().getFirst();
+        try {
+            assertTrue(child.isInitiallyEmpty());
+            Files.writeString(folder.resolve("First.tdscript"), "");
+            awaitOnEdt(() -> !child.isInitiallyEmpty());
+            SwingUtilities.invokeAndWait(() -> {
+                var node = new LazyTreeNode(child);
+                assertFalse(node.areChildrenLoaded(), "The detached snapshot must not hide a newly created file");
+                assertFalse(node.isLeaf());
+            });
+        } finally { child.dispose(); root.dispose(); }
+    }
+
+    @Test void newEmptyFolderIsALeafFromItsFirstModelEvent(@TempDir Path directory) throws Exception {
+        Path scripts = Files.createDirectory(directory.resolve("scripts"));
+        Files.writeString(scripts.resolve("Existing.tdscript"), "");
+        var tree = new LazyFileJTree();
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts, true)));
+        try {
+            assertTrue(tree.revealItemPath("scripts", List.of("Existing.tdscript")).get(3, TimeUnit.SECONDS));
+            var observations = new ArrayList<Boolean>();
+            SwingUtilities.invokeAndWait(() -> tree.getModel().addTreeModelListener(new TreeModelListener() {
+                private void observe() {
+                    var nodes = ((LazyTreeNode) tree.getModel().getRoot()).depthFirstEnumeration();
+                    while (nodes.hasMoreElements()) {
+                        if (nodes.nextElement() instanceof LazyTreeNode node && node.getUserObject().getName().equals("New"))
+                            observations.add(node.isLeaf());
+                    }
+                }
+                public void treeNodesChanged(TreeModelEvent event) { observe(); }
+                public void treeNodesInserted(TreeModelEvent event) { observe(); }
+                public void treeNodesRemoved(TreeModelEvent event) { observe(); }
+                public void treeStructureChanged(TreeModelEvent event) { observe(); }
+            }));
+            Path folder = Files.createDirectory(scripts.resolve("New"));
+            tree.refreshDirectory(scripts).get(3, TimeUnit.SECONDS);
+            SwingUtilities.invokeAndWait(() -> {
+                assertFalse(observations.isEmpty());
+                assertTrue(observations.stream().allMatch(Boolean::booleanValue), "Empty folder briefly advertised children: " + observations);
+            });
+            Files.writeString(folder.resolve("First.tdscript"), "");
+            awaitOnEdt(() -> {
+                var root = (LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0);
+                var child = (LazyTreeNode) root.getChildAt(0);
+                return child.getChildCount() == 1 && child.getChildAt(0) instanceof LazyTreeNode;
+            });
+            assertTrue(tree.revealItemPath("scripts", List.of("New", "First.tdscript")).get(3, TimeUnit.SECONDS));
+        } finally { SwingUtilities.invokeAndWait(tree::setRootNodes); }
+    }
 
     @Test
     void unchangedLargeDirectoriesDoNotEmitRowUpdates() throws Exception {
@@ -186,9 +248,7 @@ class LazyFileJTreeTest {
         LazyFileJTree tree = new LazyFileJTree();
         var contents = new AtomicReference<List<TreeItem>>();
         DirectoryTreeItem nested = directory("nested", List.of(new TreeItem("kept")));
-        TreeItem removed = new TreeItem("remove.tdscript") {
-            @Override public void delete() { contents.set(List.of(nested)); }
-        };
+        TreeItem removed = new TreeItem("remove.tdscript");
         contents.set(List.of(nested, removed));
         DirectoryTreeItem scripts = new DirectoryTreeItem("scripts") {
             @Override public List<TreeItem> loadChildren() { return contents.get(); }
@@ -197,7 +257,7 @@ class LazyFileJTreeTest {
         assertTrue(tree.revealItemPath("scripts", List.of("nested", "kept")).get(3, TimeUnit.SECONDS));
         var expanded = tree.getSelectionPath().getParentPath();
         assertTrue(tree.revealItemPath("scripts", List.of("remove.tdscript")).get(3, TimeUnit.SECONDS));
-        SwingUtilities.invokeAndWait(tree::deleteSelectedItems);
+        SwingUtilities.invokeAndWait(() -> { contents.set(List.of(nested)); tree.loadItemsForTopLevelItem(scripts); });
         awaitOnEdt(() -> ((LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0)).getChildCount() == 1);
         SwingUtilities.invokeAndWait(() -> assertTrue(tree.isExpanded(expanded)));
     }
@@ -283,6 +343,41 @@ class LazyFileJTreeTest {
         libraries.setSortPriority(20);
 
         assertTrue(LazyFileJTree.compareTreeItems(libraries, javaRuntime) < 0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void backgroundFailuresAreReportedOnlyForTheCurrentRuntime(boolean retired) throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var errors = new ByteArrayOutputStream();
+        var previousError = System.err;
+        LazyFileJTree tree = new LazyFileJTree();
+        DirectoryTreeItem oldRuntime = new DirectoryTreeItem("decompiled-files") {
+            @Override public List<TreeItem> loadChildren() {
+                entered.countDown();
+                try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
+                catch (InterruptedException failure) { throw new AssertionError(failure); }
+                throw new UncheckedIOException(new IOException("Decompiled cache belongs to a different runtime"));
+            }
+        };
+        try (var capture = new PrintStream(errors, true, StandardCharsets.UTF_8)) {
+            System.setErr(capture);
+            SwingUtilities.invokeAndWait(() -> tree.setRootNodes(oldRuntime));
+            var reveal = tree.revealItemPath("decompiled-files", List.of("Old.java"));
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            if (retired) SwingUtilities.invokeAndWait(() -> tree.setRootNodes(emptyDirectory("current-runtime")));
+            release.countDown();
+            assertThrows(ExecutionException.class, () -> reveal.get(5, TimeUnit.SECONDS));
+            SwingUtilities.invokeAndWait(() -> { });
+            SwingUtilities.invokeAndWait(() -> { });
+            assertEquals(!retired, errors.toString(StandardCharsets.UTF_8).contains("Decompiled cache belongs to a different runtime"),
+                    "A retired runtime's failed background load is not a current tree error");
+        } finally {
+            release.countDown();
+            System.setErr(previousError);
+            SwingUtilities.invokeAndWait(() -> tree.setRootNodes());
+        }
     }
 
     @Test
@@ -376,6 +471,60 @@ class LazyFileJTreeTest {
         assertEquals("example", selection.getUserObject().getName());
         assertEquals("second.jar", ((LazyTreeNode) selection.getParent().getParent()).getUserObject().getName());
         assertTrue(tree.isExpanded(tree.getSelectionPath()));
+    }
+
+    @Test void externalChangesRefreshCollapsedButLoadedNestedFolder(@TempDir Path directory) throws Exception {
+        Path scripts = Files.createDirectories(directory.resolve("scripts"));
+        Path nested = Files.createDirectories(scripts.resolve("nested"));
+        Files.writeString(nested.resolve("First.tdscript"), "");
+        var tree = new LazyFileJTree();
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(tree.getItemFactory().createFileSystemDirectoryItem(scripts, true)));
+        try {
+            assertTrue(tree.revealItemPath("scripts", List.of("nested", "First.tdscript")).get(3, TimeUnit.SECONDS));
+            TreePath folder = tree.getSelectionPath().getParentPath();
+            SwingUtilities.invokeAndWait(() -> tree.collapsePath(folder));
+            Files.writeString(nested.resolve("Second.tdscript"), "");
+            awaitOnEdt(() -> ((LazyTreeNode) folder.getLastPathComponent()).getChildCount() == 2);
+            SwingUtilities.invokeAndWait(() -> assertFalse(tree.isExpanded(folder)));
+            Files.delete(nested.resolve("First.tdscript"));
+            awaitOnEdt(() -> ((LazyTreeNode) folder.getLastPathComponent()).getChildCount() == 1);
+        } finally { SwingUtilities.invokeAndWait(tree::setRootNodes); }
+    }
+
+    @Test void failedEnumerationDisposesAlreadyConstructedWatchedChildren(@TempDir Path directory) throws Exception {
+        Files.createDirectories(directory.resolve("a")); Files.createDirectories(directory.resolve("b"));
+        var tree = new LazyFileJTree();
+        var count = new AtomicInteger(); var disposed = new AtomicInteger();
+        tree.setItemFactory(new FileTreeItemFactory() {
+            @Override public FileSystemDirectoryItem createFileSystemDirectoryItem(Path path, boolean watch) {
+                if (count.incrementAndGet() == 2) throw new IllegalStateException("Simulated registration failure");
+                return new FileSystemDirectoryItem(tree, path, watch) {
+                    @Override public void dispose() { super.dispose(); disposed.incrementAndGet(); }
+                };
+            }
+        });
+        var root = new FileSystemDirectoryItem(tree, directory, true);
+        try {
+            assertThrows(IllegalStateException.class, root::loadChildren);
+            assertEquals(1, disposed.get());
+        } finally { root.dispose(); }
+    }
+
+    @Test void failedRefreshDisposesCachedDescendants() throws Exception {
+        var tree = new LazyFileJTree(); var disposed = new AtomicInteger(); var fail = new AtomicBoolean();
+        var child = new TreeItem("child") { @Override public void dispose() { disposed.incrementAndGet(); } };
+        var root = new DirectoryTreeItem("scripts") {
+            @Override public List<TreeItem> loadChildren() {
+                if (fail.get()) throw new IllegalStateException("Simulated load failure");
+                return List.of(child);
+            }
+        };
+        SwingUtilities.invokeAndWait(() -> tree.setRootNodes(root));
+        tree.revealItemPath("scripts", List.of("child")).get(3, TimeUnit.SECONDS);
+        fail.set(true);
+        SwingUtilities.invokeAndWait(() -> tree.loadItemsForTopLevelItem(root));
+        awaitOnEdt(() -> disposed.get() == 1);
+        SwingUtilities.invokeAndWait(tree::setRootNodes);
     }
 
     private static DirectoryTreeItem emptyDirectory(String name) {

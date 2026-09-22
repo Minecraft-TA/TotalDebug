@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Consumer;
 
 /** Owns analysis admission, freshness and presentation for one Java document. All state lives on the EDT. */
 final class JavaEditorAnalysis implements AutoCloseable {
@@ -34,6 +35,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
     private boolean initialized;
     private final DocumentChangeListener documentListener = this::edited;
     private final CaretListener caretListener = this::caretChanged;
+    private Consumer<List<JavaAnalysis.Problem>> problemListener;
     private List<JavaAnalysis.Problem> displayed = List.of();
     private JavaAnalysis current;
     private long revision;
@@ -171,10 +173,17 @@ final class JavaEditorAnalysis implements AutoCloseable {
         if (request.revision() != revision || request.environment() != CompanionClassIndex.identity()) requestNow();
     }
 
+    void setProblemListener(Consumer<List<JavaAnalysis.Problem>> listener) {
+        problemListener = listener;
+        paintProblems();
+    }
+
     private void paintProblems() {
         if (parser == null) return;
-        parser.setProblems(displayed.stream().filter(problem -> !editing.hides(problem)).toList());
+        var visible = displayed.stream().filter(problem -> !editing.hides(problem)).toList();
+        parser.setProblems(visible);
         editor.forceReparsing(parser);
+        if (problemListener != null) problemListener.accept(visible);
     }
 
     private void showProblems(JavaAnalysis result) {
@@ -204,6 +213,7 @@ final class JavaEditorAnalysis implements AutoCloseable {
     @Override public void close() {
         if (closed) return;
         closed = true;
+        problemListener = null;
         editor.getDocument().removeDocumentListener(documentListener);
         editor.removeCaretListener(caretListener);
         if (parser != null) editor.removeParser(parser);

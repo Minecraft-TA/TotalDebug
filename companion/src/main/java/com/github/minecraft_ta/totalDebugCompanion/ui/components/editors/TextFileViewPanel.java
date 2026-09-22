@@ -2,7 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.BottomInformationBar;
+import java.util.function.Consumer;
 
 /** Read-only syntax-highlighted text without JDT parsing or Java navigation actions. */
 public final class TextFileViewPanel extends AbstractTextViewPanel {
@@ -10,15 +10,15 @@ public final class TextFileViewPanel extends AbstractTextViewPanel {
     TextFileViewPanel(
             LoadedResource.Text content,
             ResourceFileType fileType,
-            BottomInformationBar informationBar
+            Consumer<String> metadata
     ) {
-        super(informationBar);
+        super();
         this.editorPane.setEditable(false);
         setSyntaxStyle(content.syntaxStyle());
         this.editorPane.setText(content.value());
         this.editorPane.setCaretPosition(0);
         enableSearch();
-        this.bottomInformationBar.setMutedInfoText(
+        metadata.accept(
                 fileType.description() + "  |  " + content.charsetName() + "  |  " + formatBytes(content.byteCount())
         );
     }

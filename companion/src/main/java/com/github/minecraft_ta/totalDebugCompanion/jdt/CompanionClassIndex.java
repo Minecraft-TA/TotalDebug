@@ -16,6 +16,12 @@ public final class CompanionClassIndex {
         runtime = new RuntimeIndex(Objects.requireNonNull(replacement, "replacement"), new IndexedParameterNames(replacement));
     }
 
+    /** JIndex only accepts ASCII queries; unsupported names have no indexed match. */
+    public static boolean supportsQuery(String name) {
+        for (int i = 0; i < name.length(); i++) if (name.charAt(i) > 0x7f) return false;
+        return true;
+    }
+
     public static boolean isOpen() {
         return runtime != null;
     }

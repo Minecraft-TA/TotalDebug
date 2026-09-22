@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -97,6 +98,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         );
     }
 
+    private final NotificationCenter notifications;
     private final DebuggerSessionController controller;
     private final RuntimeAccess runtime;
     private final Consumer<NavigationTarget> navigation;
@@ -121,11 +123,11 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
     private Object pendingExpression;
     private boolean watchSequenceStopped;
 
-    DebuggerInspector(
+    DebuggerInspector(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             Consumer<NavigationTarget> navigation
     ) {
-        this(state, controller, navigation, new RuntimeAccess() {
+        this(notifications, state, controller, navigation, new RuntimeAccess() {
             @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
                 return controller.retainValue(pauseId, reference);
             }
@@ -165,13 +167,14 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         });
     }
 
-    DebuggerInspector(
+    DebuggerInspector(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             Consumer<NavigationTarget> navigation,
             RuntimeAccess runtime
     ) {
         super(new BorderLayout());
         this.expressions = new DebuggerExpressionModel(state);
+        this.notifications = notifications;
         this.controller = Objects.requireNonNull(controller, "controller");
         this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.runtime = Objects.requireNonNull(runtime, "runtime");
@@ -762,15 +765,13 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         CompletableFuture.supplyAsync(() ->
                 DebuggerVariableNavigation.declarationTarget(source, frame, variable, parent)
         ).whenComplete((target, failure) -> UIUtils.onEdt(() -> {
+            if (disposed || !Objects.equals(frame, this.frame)) return;
             if (failure != null) {
-                showOperationFailure("Unable to Jump to Source", failure);
+                if (!isCancellation(failure)) notifications.publish(NotificationCenter.Severity.ERROR, "Unable to Jump to Source",
+                        failureMessage(failure, "Navigation failed"), NotificationCenter.Source.application("Debugger"));
             } else if (target.isEmpty()) {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "No source declaration was found for " + variable.name(),
-                        "Unable to Jump to Source",
-                        JOptionPane.INFORMATION_MESSAGE
-                );
+                notifications.publish(NotificationCenter.Severity.INFORMATION, "No source declaration was found for " + variable.name(),
+                        "", NotificationCenter.Source.application("Debugger"));
             } else {
                 this.navigation.accept(target.get());
             }

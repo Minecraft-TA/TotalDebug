@@ -23,6 +23,7 @@ class GlobalConfigPersistenceTest {
         config.setDebuggerWindowBounds(new Rectangle(120, 80, 1100, 620));
         config.setDebuggerInlineValues(false);
         config.setAutomaticDebuggerPreviews(false);
+        config.setInlineDiagnostics(false);
         config.saveNow();
 
         GlobalConfig restored = new GlobalConfig();
@@ -33,6 +34,7 @@ class GlobalConfigPersistenceTest {
         assertEquals(new Rectangle(120, 80, 1100, 620), restored.debuggerWindowBounds());
         assertFalse(restored.debuggerInlineValues());
         assertFalse(restored.automaticDebuggerPreviews());
+        assertFalse(restored.inlineDiagnostics());
         var json = JsonFiles.read(new AppPaths(this.home).settings());
         assertFalse(json.has("debuggerWatches"));
         assertFalse(json.has("debuggerBreakpoints"));
@@ -55,6 +57,7 @@ class GlobalConfigPersistenceTest {
         config.loadFrom(this.home);
         assertEquals("islands-dark", config.themeId());
         assertEquals(14, config.editorFontSize());
+        assertTrue(config.inlineDiagnostics());
         assertFalse(Files.exists(new AppPaths(this.home).settings()));
         config.setEditorFontSize(9999);
         config.setUiFontSize(-4);

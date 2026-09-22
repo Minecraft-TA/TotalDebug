@@ -12,6 +12,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class CompanionSessionDescriptorTest {
     @TempDir
@@ -20,7 +21,7 @@ class CompanionSessionDescriptorTest {
     @Test
     void atomicallyPublishesPortsAndIdentityWithoutSecrets() throws Exception {
         Path descriptorFile = this.temporaryDirectory.resolve(CompanionLaunchContract.INSTANCE_DESCRIPTOR_FILE_NAME);
-        CompanionSessionDescriptor expected = new CompanionSessionDescriptor(3, 41731, 9912, 41732);
+        CompanionSessionDescriptor expected = new CompanionSessionDescriptor(3, 41731, 9912, 41732, null);
 
         expected.writeAtomically(descriptorFile);
 
@@ -31,5 +32,16 @@ class CompanionSessionDescriptorTest {
         try (var files = Files.list(this.temporaryDirectory)) {
             assertEquals(1, files.count());
         }
+    }
+
+    @Test void selectionCanBePublishedWithdrawnAndRepublishedWithoutChangingTheEndpoint() throws Exception {
+        Path file = temporaryDirectory.resolve("instance.properties");
+        var selected = new CompanionSessionDescriptor(16, 41731, 9912, 41732, "project-a");
+        selected.writeAtomically(file);
+        assertEquals(selected, CompanionSessionDescriptor.read(file, 16));
+        new CompanionSessionDescriptor(16, selected.port(), selected.processId(), selected.projectPort(), null).writeAtomically(file);
+        assertNull(CompanionSessionDescriptor.read(file, 16).selectedProfileId());
+        selected.writeAtomically(file);
+        assertEquals(selected, CompanionSessionDescriptor.read(file, 16));
     }
 }

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
 import com.formdev.flatlaf.FlatDefaultsAddon;
+import com.formdev.flatlaf.FlatLaf;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 
@@ -29,6 +30,16 @@ public class CompanionDefaultsAddon extends FlatDefaultsAddon {
         defaults.put("SplitPaneDivider.style", "plain");
         defaults.put("ToolBar.focusableButtons", true);
         defaults.put("ToolBar.arrowKeysOnlyNavigation", false);
+        // FlatLaf derives these from Islands' transparent button background, losing the overlays.
+        // Use the Islands toolbar hover/pressed overlays, including their intended alpha.
+        boolean dark = lookAndFeel instanceof FlatLaf flat && flat.isDark();
+        int rgb = dark ? 0xFFFFFF : 0;
+        Color hover = new ColorUIResource(new Color(rgb | ((dark ? 0x17 : 0x12) << 24), true));
+        Color pressed = new ColorUIResource(new Color(rgb | ((dark ? 0x29 : 0x20) << 24), true));
+        for (String prefix : new String[]{"Button", "ToggleButton"}) {
+            defaults.put(prefix + ".toolbar.hoverBackground", hover);
+            defaults.put(prefix + ".toolbar.pressedBackground", pressed);
+        }
         // Derived colors inherit Islands' transparent button background; selected tools need an opaque fill.
         Color toolbarSelection = defaults.getColor("Button.toolbar.selectedBackground");
         if (toolbarSelection != null) {

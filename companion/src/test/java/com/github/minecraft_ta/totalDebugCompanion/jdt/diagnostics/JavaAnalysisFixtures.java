@@ -26,6 +26,10 @@ public final class JavaAnalysisFixtures {
         writer.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_ABSTRACT, "run", "()Ljava/lang/Object;", null, new String[]{"java/lang/Throwable"}).visitEnd();
         var method = writer.visitMethod(Opcodes.ACC_PROTECTED, "noResult", "()Ljava/lang/Object;", null, null);
         method.visitCode(); method.visitInsn(Opcodes.ACONST_NULL); method.visitInsn(Opcodes.ARETURN); method.visitMaxs(1, 1); method.visitEnd();
+        for (String name : List.of("log", "logln")) {
+            var log = writer.visitMethod(Opcodes.ACC_PUBLIC, name, "(Ljava/lang/Object;)V", null, null);
+            log.visitCode(); log.visitInsn(Opcodes.RETURN); log.visitMaxs(0, 2); log.visitEnd();
+        }
         writer.visitEnd(); bytes.add(writer.toByteArray());
         return ClassIndex.fromBytes(bytes);
     }

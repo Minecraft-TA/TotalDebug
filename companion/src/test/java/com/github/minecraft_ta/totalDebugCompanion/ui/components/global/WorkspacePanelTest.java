@@ -22,14 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-class WorkspacePanelTest {
+class WorkspacePanelTest extends StatusBarTestFixture {
 
     @Test
     void workspaceOwnsEveryStructuralRule() throws Exception {
         AtomicReference<WorkspaceFixture> result = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {
             FileTreeViewHeader header = new FileTreeViewHeader();
-            ApplicationStatusBar statusBar = new ApplicationStatusBar(target -> {}, () -> {});
+            ApplicationStatusBar statusBar = statusBar(target -> {});
             assertEquals(0, header.getBorder().getBorderInsets(header).bottom);
             assertEquals(1, statusBar.getBorder().getBorderInsets(statusBar).top);
 
@@ -65,7 +65,7 @@ class WorkspacePanelTest {
                     new FileTreeViewHeader(),
                     new JPanel(),
                     new JPanel(),
-                    new ApplicationStatusBar(target -> {}, () -> {})
+                    statusBar(target -> {})
             );
             workspace.setSize(500, 300);
             layoutRecursively(workspace);

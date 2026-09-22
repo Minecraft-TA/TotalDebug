@@ -98,16 +98,15 @@ public final class ExpressionScopeAnalyzer {
                     .collect(java.util.stream.Collectors.toSet());
             IndexedTypeCompletion.types(unit, range, occupiedNames).forEach(proposal ->
                     proposals.putIfAbsent("type\0" + proposal.insertionText(), proposal));
-            return sorted(proposals);
+            return sorted(proposals).stream().limit(64).toList();
         }
         String owner = range.ownerExpression(expression).trim();
         ASTNode selected = NodeFinder.perform(unit, sourceOffset, 0);
         AbstractTypeDeclaration type = ancestor(selected, AbstractTypeDeclaration.class);
         Map<String, DebuggerCompletionProposal> members = new LinkedHashMap<>();
         if (type != null) addMemberProposals(members, type, owner, sourceOffset, range);
-        return sorted(members).stream()
-                .filter(proposal -> startsWith(proposal.label(), range.prefix()))
-                .toList();
+        members.values().removeIf(proposal -> !startsWith(proposal.label(), range.prefix()));
+        return sorted(members).stream().limit(64).toList();
     }
 
     private static void addMemberProposals(Map<String, DebuggerCompletionProposal> result,
@@ -415,7 +414,6 @@ public final class ExpressionScopeAnalyzer {
         return proposals.values().stream()
                 .sorted(Comparator.comparingInt(DebuggerCompletionProposal::rank)
                         .thenComparing(DebuggerCompletionProposal::label, String.CASE_INSENSITIVE_ORDER))
-                .limit(64)
                 .toList();
     }
 

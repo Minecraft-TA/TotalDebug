@@ -9,3 +9,11 @@ License: Creative Commons Attribution-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-sa/4.0/
 
 The original attribution metadata is preserved in the SVG.
+
+prism.svg and prism_dark.svg are the unmodified Prism Launcher application logo,
+copied unchanged for both themes.
+Source: https://github.com/PrismLauncher/PrismLauncher/blob/a846a1a408eebe1cd06d9286b624ba1cd65090a6/program_info/org.prismlauncher.PrismLauncher.svg
+Creator: Prism Launcher
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+Displayed at 16 x 16 logical pixels in the project menu.

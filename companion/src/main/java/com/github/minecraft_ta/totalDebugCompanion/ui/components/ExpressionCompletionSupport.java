@@ -53,6 +53,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private final FocusAdapter focusListener = new FocusAdapter() {
         @Override
         public void focusLost(FocusEvent event) {
+            completionRevision.incrementAndGet();
             hidePopup();
         }
     };
@@ -190,7 +191,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     }
 
     private void updatePopup(boolean explicit) {
-        if (!this.field.isShowing() || !this.field.isEnabled()) {
+        if (!this.field.isShowing() || !this.field.isEnabled() || !this.field.isFocusOwner()) {
             hidePopup();
             return;
         }
@@ -219,7 +220,8 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         request.whenComplete((matches, failure) -> SwingUtilities.invokeLater(() -> {
             if (revision != this.completionRevision.get()
                     || !text.equals(this.field.getText())
-                    || caret != this.field.getCaretPosition()) {
+                    || caret != this.field.getCaretPosition()
+                    || !this.field.isShowing() || !this.field.isEnabled() || !this.field.isFocusOwner()) {
                 return;
             }
             if (failure != null || matches == null) {

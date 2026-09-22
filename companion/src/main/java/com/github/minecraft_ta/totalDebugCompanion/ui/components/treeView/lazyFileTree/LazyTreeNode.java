@@ -8,11 +8,33 @@ public class LazyTreeNode extends DefaultMutableTreeNode {
     private boolean childrenLoaded;
     private int revision;
     private boolean refreshDescendants;
+    private int selectedSegment = -1;
+
+    public TreeItem selectedItem() {
+        var parts = DirectoryChain.segments(getUserObject());
+        return parts.get(selectedSegment < 0 ? parts.size() - 1 : Math.min(selectedSegment, parts.size() - 1));
+    }
+
+    int selectedSegment() {
+        return selectedSegment < 0 ? DirectoryChain.segments(getUserObject()).size() - 1 : selectedSegment;
+    }
+
+    void selectSegment(int index) {
+        selectedSegment = getUserObject() instanceof DirectoryChain chain && chain.supportsSegmentSelection() ? index : -1;
+    }
+
+    void resetChildren() {
+        removeAllChildren();
+        childrenLoaded = getUserObject() instanceof DirectoryTreeItem directory && directory.isInitiallyEmpty();
+        if (!childrenLoaded) add(new DefaultMutableTreeNode("Loading..."));
+        revision++;
+    }
 
     LazyTreeNode(TreeItem treeItem) {
         super(treeItem);
 
-        this.childrenLoaded = !treeItem.isDirectory() || treeItem.isHiddenRoot();
+        this.childrenLoaded = !treeItem.isDirectory() || treeItem.isHiddenRoot()
+                || treeItem instanceof DirectoryTreeItem directory && directory.isInitiallyEmpty();
         if (!this.childrenLoaded)
             add(new DefaultMutableTreeNode("Loading..."));
     }

@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.runtime;
 
+import javax.swing.JButton;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectDirectories;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyFileJTree;
@@ -14,12 +16,15 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopu
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ApplicationStatusBar;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RuntimeInventoryMessage;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
@@ -68,9 +73,9 @@ class OfflineProjectIntegrationTest {
                 var view = app.createWindow();
                 var bar = find(view, ApplicationStatusBar.class);
                 try {
-                    var retry = ApplicationStatusBar.class.getDeclaredField("retryIndex");
+                    var retry = ApplicationStatusBar.class.getDeclaredField("retry");
                     retry.setAccessible(true);
-                    ((Runnable) retry.get(bar)).run();
+                    ((JButton) retry.get(bar)).doClick();
                 } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
             });
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
@@ -95,6 +100,8 @@ class OfflineProjectIntegrationTest {
             Files.writeString(paths.index().resolve("blocker"), "prevents replacing the index");
             app.openProject(profile).get(10, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            // The service publishes its status before the application listener finishes retiring the index.
+            await(() -> app.requireProject().runtime() == null && previous.isDestroyed());
             assertNull(app.requireProject().runtime(), "A failed local refresh must retire stale code sources");
             assertTrue(previous.isDestroyed());
             assertEquals(List.of("new.jar"), app.requireProject().sources().modules().stream()
@@ -130,6 +137,68 @@ class OfflineProjectIntegrationTest {
             });
             captureThemes(popup.get(), "offline-empty-search");
         } finally { SwingUtilities.invokeAndWait(() -> { if (popup.get() != null) popup.get().dispose(); }); }
+    }
+
+    @Test void emptyIndexCanBeRescannedAfterAddingAMod() throws Exception {
+        Path game = Files.createDirectories(root.resolve("empty-refresh"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.EMPTY);
+            writeProjectJar(mods.resolve("demo.jar"), 42);
+            app.retryIndex().get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            assertNotNull(app.requireProject().requireRuntime().snapshot().index().findClass("demo", "Example"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedRebuildKeepsTheInstalledRuntimeUsable(boolean runtime) throws Exception {
+        Path game = Files.createDirectories(root.resolve("failed-refresh"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        Path jar = (runtime ? root : mods).resolve("demo.jar");
+        writeProjectJar(jar, 42);
+        if (runtime) {
+            var module = new RuntimeInventory.RuntimeModule("demo", "Demo", RuntimeInventory.ModuleKind.MOD);
+            new RuntimeInventory("runtime-refresh", "21", System.getProperty("java.home"), true,
+                    List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
+                    .write(InstancePaths.forGame(game).inventory());
+        }
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var previous = app.requireProject().requireRuntime();
+            assertEquals(runtime, previous.snapshot().isRuntime());
+            Path index = previous.snapshot().indexFile();
+            Files.move(index, index.resolveSibling("previous.jindex"));
+            Files.createDirectory(index);
+            Files.writeString(index.resolve("blocker"), "Prevent atomic cache replacement");
+            app.retryIndex().get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.FAILED);
+            assertSame(previous, app.requireProject().runtime());
+            assertNotNull(previous.snapshot().index().findClass("demo", "Example"));
+        }
+    }
+
+    @Test void readyIndexRefreshReplacesTheRuntimeAndRebuildsItsCache() throws Exception {
+        Path game = Files.createDirectories(root.resolve("refresh"));
+        Path mods = Files.createDirectory(game.resolve("mods"));
+        writeProjectJar(mods.resolve("demo.jar"), 42);
+        try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
+            app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var previous = app.requireProject().requireRuntime();
+            var directorySource = Source.capture(app.requireProject(), "Scripts", new NavigationTarget.LocalDirectory(game));
+            assertNull(directorySource.runtimeSignature());
+            app.retryIndex().get(10, TimeUnit.SECONDS);
+            await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
+            var replacement = app.requireProject().requireRuntime();
+            assertNotSame(previous, replacement);
+            assertEquals(previous.snapshot().identity(), replacement.snapshot().identity());
+            assertTrue(app.getRuntimeIndexStatus().metrics().rebuilt());
+            assertNotNull(replacement.snapshot().index().findClass("demo", "Example"));
+        }
     }
 
     @Test void failedRuntimeHandoverPreservesLocalBrowsingAndCanBeRetriedOffline() throws Exception {

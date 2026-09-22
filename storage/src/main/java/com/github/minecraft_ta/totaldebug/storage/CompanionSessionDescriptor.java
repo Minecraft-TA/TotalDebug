@@ -1,7 +1,5 @@
 package com.github.minecraft_ta.totaldebug.storage;
 
-import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -9,7 +7,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-public record CompanionSessionDescriptor(int protocolVersion, int port, long processId, int projectPort) {
+public record CompanionSessionDescriptor(int protocolVersion, int port, long processId, int projectPort, String selectedProfileId) {
     public CompanionSessionDescriptor {
         if (protocolVersion < 1) {
             throw new IllegalArgumentException("protocolVersion must be positive");
@@ -21,13 +19,16 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
             throw new IllegalArgumentException("processId must be positive");
         }
         if (projectPort < 1 || projectPort > 65_535) throw new IllegalArgumentException("Invalid project port");
+        if (selectedProfileId != null && (selectedProfileId.isBlank() || selectedProfileId.contains("\n") || selectedProfileId.contains("\r")))
+            throw new IllegalArgumentException("Invalid selected profile id");
     }
 
     public void writeAtomically(Path descriptorFile) throws IOException {
         String contents = CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY + "=" + this.protocolVersion + "\n"
                 + CompanionLaunchContract.DESCRIPTOR_PORT_KEY + "=" + this.port + "\n"
                 + CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY + "=" + this.processId + "\n"
-                + "projectPort=" + this.projectPort + "\n";
+                + "projectPort=" + this.projectPort + "\n"
+                + (selectedProfileId == null ? "" : "selectedProfileId=" + selectedProfileId + "\n");
         AtomicFiles.writeString(descriptorFile, contents);
     }
 
@@ -45,7 +46,8 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
             String value = line.substring(separator + 1);
             if (!key.equals(CompanionLaunchContract.DESCRIPTOR_PROTOCOL_KEY)
                     && !key.equals(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)
-                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY) && !key.equals("projectPort")) {
+                    && !key.equals(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY) && !key.equals("projectPort")
+                    && !key.equals("selectedProfileId")) {
                 throw new IOException("Unknown companion session descriptor field: " + key);
             }
             if (values.putIfAbsent(key, value) != null) {
@@ -62,7 +64,7 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
             throw new IOException("Close the running Companion before using protocol " + expectedProtocol
                     + "; its descriptor uses protocol " + protocol);
         }
-        if (values.size() != 4) {
+        if (values.size() != (values.containsKey("selectedProfileId") ? 5 : 4)) {
             throw new IOException("Companion session descriptor must contain protocol, port, pid and projectPort");
         }
         try {
@@ -70,7 +72,7 @@ public record CompanionSessionDescriptor(int protocolVersion, int port, long pro
                     protocol,
                     Integer.parseInt(values.get(CompanionLaunchContract.DESCRIPTOR_PORT_KEY)),
                     Long.parseLong(values.get(CompanionLaunchContract.DESCRIPTOR_PROCESS_ID_KEY)),
-                    Integer.parseInt(values.get("projectPort"))
+                    Integer.parseInt(values.get("projectPort")), values.get("selectedProfileId")
             );
         } catch (IllegalArgumentException exception) {
             throw new IOException("Companion session descriptor contains an invalid value", exception);

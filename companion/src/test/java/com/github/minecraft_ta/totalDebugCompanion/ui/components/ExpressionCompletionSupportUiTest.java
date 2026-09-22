@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -77,6 +78,7 @@ final class ExpressionCompletionSupportUiTest {
     void opensCompletionForAnEvaluateField() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 onEdt(() -> fixture.field().setText("f"));
                 await(fixture.completion()::isCompletionVisible);
@@ -94,10 +96,44 @@ final class ExpressionCompletionSupportUiTest {
         });
     }
 
+    @Test void aLateCompletionCannotReopenAfterTheFieldLosesFocus() throws Exception {
+        withPopupFactory(ignored -> {
+            Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
+            var pending = new CompletableFuture<List<DebuggerCompletionProposal>>();
+            var requested = new CompletableFuture<Void>();
+            try {
+                onEdt(() -> {
+                    fixture.completion().setCompletionProvider((text, caret, explicit) -> { requested.complete(null); return pending; });
+                    fixture.field().setText("f");
+                    fixture.field().setCaretPosition(1);
+                    assertTrue(fixture.field().getCaret().isVisible());
+                });
+                requested.get(5, TimeUnit.SECONDS);
+                var other = onEdt(() -> {
+                    var button = new JButton("Other control");
+                    fixture.frame().add(button, BorderLayout.SOUTH);
+                    fixture.frame().pack();
+                    button.requestFocusInWindow();
+                    return button;
+                });
+                await(other::isFocusOwner);
+                onEdt(() -> {
+                    assertFalse(fixture.field().getCaret().isVisible());
+                    pending.complete(List.of(new DebuggerCompletionProposal("false", "false", DebuggerCompletionProposal.Kind.KEYWORD, "", 0, 1, 5, 1)));
+                    fixture.field().setText("loaded value");
+                    assertFalse(fixture.field().getCaret().isVisible());
+                });
+                onEdt(() -> assertFalse(fixture.completion().isCompletionVisible()));
+            } finally { onEdt(fixture::close); }
+        });
+    }
+
     @Test
     void preservesRequiredImportsWhenACompletionIsAccepted() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 AtomicReference<DebuggerCompletionProposal> accepted = new AtomicReference<>();
                 DebuggerCompletionProposal proposal = new DebuggerCompletionProposal(
@@ -133,6 +169,7 @@ final class ExpressionCompletionSupportUiTest {
     void opensMemberCompletionAtTheFinalDotOfACompoundExpression() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 String expression = "pos.y + pos.";
                 onEdt(() -> fixture.completion().setCompletionProvider((text, caret, explicit) ->
@@ -159,6 +196,7 @@ final class ExpressionCompletionSupportUiTest {
     void givesOneLongCompletionEnoughWidthWithoutHorizontalScrolling() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 onEdt(() -> fixture.completion().setCompletionProvider((text, caret, explicit) ->
                         CompletableFuture.completedFuture(List.of(new DebuggerCompletionProposal(
@@ -191,6 +229,7 @@ final class ExpressionCompletionSupportUiTest {
     void keepsBreakpointEditorOpenWhenCompletionAppears() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::breakpointFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 onEdt(() -> fixture.field().setText("f"));
                 await(() -> fixture.completion().isCompletionVisible() || !fixture.parentPopup().isVisible());
@@ -221,6 +260,7 @@ final class ExpressionCompletionSupportUiTest {
     void ignoresAStaleAsynchronousCompletionResponse() throws Exception {
         withPopupFactory(ignored -> {
             Fixture fixture = onEdt(ExpressionCompletionSupportUiTest::evaluateFixture);
+            await(fixture.field()::isFocusOwner);
             try {
                 List<CompletableFuture<List<DebuggerCompletionProposal>>> requests = new java.util.ArrayList<>();
                 List<String> requestTexts = new java.util.ArrayList<>();
@@ -267,6 +307,7 @@ final class ExpressionCompletionSupportUiTest {
         frame.pack();
         frame.setVisible(true);
         ExpressionCompletionSupport completion = completion(field);
+        field.requestFocusInWindow();
         return new Fixture(frame, null, field, completion);
     }
 
@@ -282,6 +323,7 @@ final class ExpressionCompletionSupportUiTest {
         editor.add(field.component());
         editor.show(invoker, 0, invoker.getHeight());
         ExpressionCompletionSupport completion = completion(field);
+        field.requestFocusInWindow();
         return new Fixture(frame, editor, field, completion);
     }
 

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
+import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -29,6 +30,8 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.tth05.scnet.Client;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
+import com.github.tth05.scnet.message.impl.DefaultMessageBus;
+import com.github.tth05.scnet.message.AbstractMessage;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.FileChannel;
@@ -36,10 +39,13 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.FileSystemException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -52,9 +58,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CompanionAppClient implements AutoCloseable {
-    private static final String SWING_TEXT_ANTIALIASING_JVM_OPTION = "-Dawt.useSystemAAFontSettings=on";
 
     private final Path workspaceDirectory;
     private final Path dataDirectory;
@@ -73,9 +80,22 @@ public final class CompanionAppClient implements AutoCloseable {
     });
     private final CompanionTimeouts timeouts;
     private final CompanionForegroundHandoff foregroundHandoff;
-    private final Client client = new Client();
-    private volatile CompletableFuture<Void> authenticated = new CompletableFuture<>();
-    private volatile CompletableFuture<Void> ready = new CompletableFuture<>();
+    private static final class Connection {
+        final Client client = new Client();
+        final CompanionSessionDescriptor descriptor;
+        final CompletableFuture<Void> authenticated = new CompletableFuture<>();
+        final CompletableFuture<Void> ready = new CompletableFuture<>();
+        final AtomicBoolean finished = new AtomicBoolean();
+        volatile String token;
+        volatile boolean rejected;
+
+        Connection(CompanionSessionDescriptor descriptor, String token) { this.descriptor = descriptor; this.token = token; }
+        boolean authenticated() { return authenticated.isDone() && !authenticated.isCompletedExceptionally(); }
+    }
+    private final Object connectionLock = new Object();
+    private volatile Connection connection;
+    private volatile CompanionDiscovery discovery;
+    private volatile BooleanSupplier companionEnabled = () -> true;
 
     private volatile Consumer<RunScriptMessage> scriptRequestHandler = message -> TotalDebug.LOGGER.warn(
             "Ignoring companion script request {} because no handler is installed",
@@ -87,16 +107,13 @@ public final class CompanionAppClient implements AutoCloseable {
     );
     private volatile Runnable sessionClosedHandler = () -> { };
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
-    private volatile String sessionToken;
     private volatile boolean closing;
-    private volatile boolean transportExpected;
     private volatile RuntimeInventoryMessage runtimeInventoryState = RuntimeInventoryMessage.preparing(
             "Waiting for the Minecraft session"
     );
 
     private Process launchedProcess;
     private Path processLog;
-    private CompanionSessionDescriptor activeDescriptor;
     private Future<?> runtimeInventoryTask;
 
     public CompanionAppClient(Path totalDebugDirectory) {
@@ -142,9 +159,9 @@ public final class CompanionAppClient implements AutoCloseable {
         }
 
         this.workspaceDirectory = workspace;
-        this.dataDirectory = com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(workspace).home();
-        this.appDirectory = com.github.minecraft_ta.totaldebug.storage.InstancePaths.installationDirectory(this.workspaceDirectory);
-        var appPaths = com.github.minecraft_ta.totaldebug.storage.AppPaths.defaults(System.getenv());
+        this.dataDirectory = InstancePaths.forGame(workspace).home();
+        this.appDirectory = InstancePaths.installationDirectory(this.workspaceDirectory);
+        var appPaths = AppPaths.defaults(System.getenv());
         this.appHome = appPaths.home();
         this.instanceDescriptorFile = appPaths.instanceDescriptor();
         this.instanceKeyFile = appPaths.instanceKey();
@@ -154,9 +171,48 @@ public final class CompanionAppClient implements AutoCloseable {
         this.timeouts = Objects.requireNonNull(timeouts, "timeouts");
         this.foregroundHandoff = Objects.requireNonNull(foregroundHandoff, "foregroundHandoff");
 
-        configureTransport();
-        registerProtocol();
         Runtime.getRuntime().addShutdownHook(new Thread(this::close, "TotalDebug companion shutdown"));
+    }
+
+    public void startDiscovery(BooleanSupplier enabled) {
+        synchronized (connectionLock) {
+            if (closing || discovery != null) return;
+            companionEnabled = Objects.requireNonNull(enabled, "enabled");
+            discovery = new CompanionDiscovery(instanceDescriptorFile.getParent(), this::tryAutomaticConnection, this::isConnected,
+                    companionEnabled, this::resetConnection);
+            discovery.start();
+        }
+    }
+
+    public boolean isConnected() {
+        var current = connection;
+        return current != null && !current.finished.get() && current.client.isConnected() && current.ready.isDone() && !current.ready.isCompletedExceptionally();
+    }
+
+    private synchronized CompanionDiscovery.Result tryAutomaticConnection() {
+        if (closing) return CompanionDiscovery.Result.IDLE;
+        if (isConnected()) return CompanionDiscovery.Result.CONNECTED;
+        CompanionSessionDescriptor descriptor;
+        String token;
+        try {
+            descriptor = readLiveDescriptor();
+            if (descriptor == null || !profileId.equals(descriptor.selectedProfileId())) return CompanionDiscovery.Result.IDLE;
+            token = readInstanceKey();
+        } catch (FileSystemException failure) {
+            TotalDebug.LOGGER.debug("Companion discovery files are temporarily unavailable: {}", failure.getMessage());
+            return CompanionDiscovery.Result.RETRY;
+        } catch (IOException failure) {
+            TotalDebug.LOGGER.warn("Companion discovery unavailable: {}", failure.getMessage());
+            return CompanionDiscovery.Result.REJECTED;
+        }
+        try {
+            connectAndAwait(descriptor, token);
+            return CompanionDiscovery.Result.CONNECTED;
+        } catch (IOException failure) {
+            var attempt = connection;
+            TotalDebug.LOGGER.debug("Companion connection unavailable: {}", failure.getMessage());
+            return attempt != null && attempt.rejected ? CompanionDiscovery.Result.REJECTED : CompanionDiscovery.Result.RETRY;
+        }
     }
 
     public void setScriptRequestHandler(Consumer<RunScriptMessage> handler) {
@@ -176,7 +232,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private Consumer<ServerSourceRequestMessage> serverSourceRequestHandler = message ->
-            enqueueServerManifest(new ServerManifestMessage(message.sessionId(), message.requestId(), message.source(),
+            send(new ServerManifestMessage(message.sessionId(), message.requestId(), message.source(),
                     "Server source request handler is not installed", 0, 0, new byte[0]));
 
     public void setServerSourceRequestHandler(Consumer<ServerSourceRequestMessage> handler) {
@@ -189,7 +245,7 @@ public final class CompanionAppClient implements AutoCloseable {
     public void acceptServerManifest(ServerManifestMessage message) {
         synchronized (this.serverManifestLock) {
             if (!message.baseline()) {
-                enqueueServerManifest(message);
+                send(message);
                 return;
             }
             if (message.offset() == 0) this.serverManifest.clear();
@@ -199,27 +255,18 @@ public final class CompanionAppClient implements AutoCloseable {
                 message = ServerManifestMessage.unavailable("Invalid server manifest transfer");
             }
             this.serverManifest.add(message);
-            enqueueServerManifest(message);
+            send(message);
         }
     }
 
     private void sendServerManifest() {
         synchronized (this.serverManifestLock) {
             if (this.serverManifest.isEmpty()) {
-                enqueueServerManifest(ServerManifestMessage.unavailable(
+                send(ServerManifestMessage.unavailable(
                         "No server handshake is available. Join a server running matching TotalDebug."));
             } else {
-                for (var message : this.serverManifest) enqueueServerManifest(message);
+                for (var message : this.serverManifest) send(message);
             }
-        }
-    }
-
-    private void enqueueServerManifest(ServerManifestMessage message) {
-        if (!isAuthenticated() || !this.client.isConnected()) return;
-        try {
-            this.client.getMessageProcessor().enqueueMessage(message);
-        } catch (RejectedExecutionException exception) {
-            TotalDebug.LOGGER.debug("Companion disconnected during server manifest delivery", exception);
         }
     }
 
@@ -232,12 +279,7 @@ public final class CompanionAppClient implements AutoCloseable {
             );
             return;
         }
-        try {
-            this.client.getMessageProcessor().enqueueMessage(new ExecutionResultMessage(scriptId, result));
-        } catch (java.util.concurrent.RejectedExecutionException rejected) {
-            TotalDebug.LOGGER.debug("Companion transport rejected execution result {} for script {}",
-                    result.status(), scriptId, rejected);
-        }
+        send(new ExecutionResultMessage(scriptId, result));
     }
 
     public synchronized void openClassAndFocus(
@@ -257,13 +299,13 @@ public final class CompanionAppClient implements AutoCloseable {
         ensureConnectedAndReady();
         transferForeground(
                 beforeFocus,
-                () -> this.client.getMessageProcessor().enqueueMessage(new FocusWindowMessage())
+                () -> send(new FocusWindowMessage())
         );
     }
 
     private void enqueueOpenClass(String binaryName, SourceTarget sourceTarget) {
         CompanionSourceTargetCodec.WireTarget wireTarget = CompanionSourceTargetCodec.encode(sourceTarget);
-        this.client.getMessageProcessor().enqueueMessage(new OpenClassMessage(
+        send(new OpenClassMessage(
                 binaryName,
                 wireTarget.javaElementType(),
                 wireTarget.identifier()
@@ -271,7 +313,8 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void transferForeground(Runnable beforeTransfer, Runnable sendRequest) throws IOException {
-        CompanionSessionDescriptor descriptor = this.activeDescriptor;
+        var current = connection;
+        CompanionSessionDescriptor descriptor = current == null ? null : current.descriptor;
         if (descriptor == null
                 || !ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
             throw new IOException("Companion is no longer running");
@@ -279,167 +322,145 @@ public final class CompanionAppClient implements AutoCloseable {
         this.foregroundHandoff.transfer(descriptor.processId(), beforeTransfer, sendRequest);
     }
 
-    private void configureTransport() {
-        this.client.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE);
-        this.client.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH);
-    }
-
-    private void registerProtocol() {
-        ProtocolBindings.registerMod(this.client.getMessageProcessor());
-        this.client.getMessageBus().listenAlways(ServerHelloMessage.class, this::handleServerHello);
-        this.client.getMessageBus().listenAlways(
-                RetryRuntimeInventoryMessage.class,
-                message -> startRuntimeInventoryPreparation(true)
-        );
-        this.client.getMessageBus().listenAlways(ReadyMessage.class, message -> {
-            CompletableFuture<Void> authentication = this.authenticated;
-            if (!authentication.isDone() || authentication.isCompletedExceptionally()) {
-                failSession("Companion sent Ready before the session handshake completed", null);
+    private void registerProtocol(Connection attempt) {
+        var transport = attempt.client;
+        transport.setMessageBus(new DefaultMessageBus() {
+            @Override public void post(AbstractMessage message) {
+                if (!closing && connection == attempt) super.post(message);
+            }
+        });
+        transport.getMessageProcessor().setMaxFrameSize(DefaultMessageProcessor.DEFAULT_MAX_FRAME_SIZE);
+        transport.getMessageProcessor().setMaxStringLength(DefaultMessageProcessor.DEFAULT_MAX_STRING_LENGTH);
+        ProtocolBindings.registerMod(transport.getMessageProcessor());
+        transport.getMessageBus().listenAlways(ServerHelloMessage.class, message -> handleServerHello(attempt, message));
+        transport.getMessageBus().listenAlways(RetryRuntimeInventoryMessage.class, message -> startRuntimeInventoryPreparation(true));
+        transport.getMessageBus().listenAlways(ReadyMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent Ready before the session handshake completed", null);
                 return;
             }
-            this.ready.complete(null);
+            attempt.ready.complete(null);
         });
-        this.client.getMessageBus().listenAlways(ServerSourceRequestMessage.class, message -> {
-            if (!isAuthenticated()) {
-                failSession("Companion requested server details before authentication", null);
+        transport.getMessageBus().listenAlways(ServerSourceRequestMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion requested server details before authentication", null);
                 return;
             }
             this.serverSourceRequestHandler.accept(message);
         });
-        this.client.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
-            if (!isAuthenticated()) {
-                failSession("Companion sent a script request before authentication", null);
+        transport.getMessageBus().listenAlways(RunScriptMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a script request before authentication", null);
                 return;
             }
-            RuntimeInventoryMessage inventory = this.runtimeInventoryState;
-            if (inventory.state() != RuntimeInventoryMessage.AVAILABLE
-                    || !inventory.inventoryId().equals(message.inventoryId())) {
+            var inventory = this.runtimeInventoryState;
+            if (inventory.state() != RuntimeInventoryMessage.AVAILABLE || !inventory.inventoryId().equals(message.inventoryId())) {
                 sendExecutionResult(message.scriptId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
                         "The script was compiled against a different runtime inventory. Wait for Companion to load the current index."));
                 return;
             }
             this.scriptRequestHandler.accept(message);
         });
-        this.client.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
-            if (!isAuthenticated()) {
-                failSession("Companion sent a stop-script request before authentication", null);
+        transport.getMessageBus().listenAlways(StopScriptMessage.class, message -> {
+            if (!attempt.authenticated()) {
+                failSession(attempt, "Companion sent a stop-script request before authentication", null);
                 return;
             }
             this.stopScriptHandler.accept(message.scriptId());
         });
-        this.client.addConnectionListener(new IConnectionListener() {
-            @Override
-            public void onConnected() {
-                CompanionAppClient.this.transportExpected = true;
-                String token = CompanionAppClient.this.sessionToken;
-                if (token == null) {
-                    failSession("Companion transport connected without an active session token", null);
-                    return;
-                }
-                CompanionAppClient.this.client.getMessageProcessor().enqueueMessage(new ClientHelloMessage(
-                        CompanionProtocol.VERSION,
-                        token,
-                        CompanionAppClient.this.profileId,
-                        CompanionAppClient.this.dataDirectory.toString(),
-                        CompanionAppClient.this.workspaceDirectory.toString()
-                ));
+        transport.addConnectionListener(new IConnectionListener() {
+            @Override public void onConnected() {
+                if (closing || connection != attempt) { transport.close(); return; }
+                transport.getMessageProcessor().enqueueMessage(new ClientHelloMessage(CompanionProtocol.VERSION,
+                        attempt.token, profileId, dataDirectory.toString(), workspaceDirectory.toString()));
             }
-
-            @Override
-            public void onDisconnected() {
-                notifySessionClosed();
-                CompletableFuture<Void> readiness = CompanionAppClient.this.ready;
-                if (!CompanionAppClient.this.closing
-                        && CompanionAppClient.this.transportExpected
-                        && !readiness.isDone()) {
-                    failSession("Companion disconnected before the session became ready", null);
-                }
+            @Override public void onDisconnected() {
+                if (connection == attempt) finishConnection(attempt, new IOException("Companion disconnected"));
             }
-
-            @Override
-            public void onConnectionError(Throwable cause) {
-                if (!CompanionAppClient.this.closing && CompanionAppClient.this.transportExpected) {
-                    failSession("Companion transport failed", cause);
-                }
+            @Override public void onConnectionError(Throwable cause) {
+                if (connection == attempt) failSession(attempt, "Companion transport failed", cause);
             }
         });
     }
 
-    private void handleServerHello(ServerHelloMessage message) {
-        CompletableFuture<Void> authentication = this.authenticated;
-        if (authentication.isDone()) {
-            failSession("Companion sent more than one session handshake response", null);
+    private void handleServerHello(Connection attempt, ServerHelloMessage message) {
+        if (closing || connection != attempt) return;
+        if (attempt.authenticated.isDone()) {
+            failSession(attempt, "Companion sent more than one session handshake response", null);
             return;
         }
-        if (message.protocolVersion() != CompanionProtocol.VERSION) {
-            failSession(
-                    "Companion protocol mismatch: expected " + CompanionProtocol.VERSION
-                            + ", got " + message.protocolVersion(),
-                    null
-            );
+        if (message.protocolVersion() != CompanionProtocol.VERSION || !message.accepted()) {
+            attempt.rejected = true;
+            failSession(attempt, message.protocolVersion() != CompanionProtocol.VERSION
+                    ? "Companion protocol mismatch: expected " + CompanionProtocol.VERSION + ", got " + message.protocolVersion()
+                    : "Companion rejected the session handshake: " + message.rejectionReason(), null);
             return;
         }
-        if (!message.accepted()) {
-            failSession("Companion rejected the session handshake: " + message.rejectionReason(), null);
-            return;
-        }
-        this.sessionToken = null;
-        authentication.complete(null);
-        sendDebugTarget();
+        attempt.token = null;
+        attempt.authenticated.complete(null);
+        send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
         sendServerManifest();
         startRuntimeInventoryPreparation(false);
     }
 
-    private void sendDebugTarget() {
-        if (!isAuthenticated() || !this.client.isConnected()) {
-            return;
-        }
-        this.client.getMessageProcessor().enqueueMessage(new DebugTargetMessage(
-                "minecraft-client",
-                "Minecraft Client",
-                DebugTargetMessage.LOCAL_JVM,
-                ProcessHandle.current().pid()
-        ));
+    private boolean isAuthenticated() {
+        var current = connection;
+        return current != null && current.authenticated() && !current.finished.get();
     }
 
-    private boolean isAuthenticated() {
-        CompletableFuture<Void> authentication = this.authenticated;
-        return authentication.isDone()
-                && !authentication.isCompletedExceptionally();
+    private void send(AbstractMessage message) {
+        var current = connection;
+        if (current == null || !current.authenticated() || !current.client.isConnected() || closing) return;
+        try { current.client.getMessageProcessor().enqueueMessage(message); }
+        catch (RejectedExecutionException rejected) { TotalDebug.LOGGER.debug("Companion disconnected before message delivery", rejected); }
     }
 
     private void ensureConnectedAndReady() throws IOException {
+        if (closing) throw new IOException("Companion client is closed");
         try {
             CompanionSessionDescriptor descriptor = discoverOrStartCompanion();
             String token = readInstanceKey();
-            boolean connectionRetained = com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest.send(descriptor.projectPort(),
-                    new ClientHelloMessage(CompanionProtocol.VERSION, token, this.profileId,
-                            this.dataDirectory.toString(), this.workspaceDirectory.toString()));
-            CompletableFuture<Void> readiness = this.ready;
-            if (connectionRetained && descriptor.equals(this.activeDescriptor)
-                    && this.client.isConnected() && readiness.isDone() && !readiness.isCompletedExceptionally()) {
-                return;
-            }
-            resetConnection();
-            this.activeDescriptor = descriptor;
-            this.sessionToken = token;
-            InetSocketAddress address = sessionAddress(descriptor.port());
+            boolean retained = ProjectSelectionRequest.send(descriptor.projectPort(), new ClientHelloMessage(
+                    CompanionProtocol.VERSION, token, profileId, dataDirectory.toString(), workspaceDirectory.toString()));
+            if (!retained) resetConnection();
             reportProgress(CompanionStartupProgress.connecting());
-            if (!this.client.connect(address)) {
-                throw new IOException("Unable to connect to Companion at " + address);
-            }
-            CompletableFuture<Void> authentication = this.authenticated;
-            readiness = this.ready;
-            await(authentication, this.timeouts.handshake(), "Companion session handshake");
-            await(readiness, this.timeouts.readiness(), "Companion UI readiness");
+            connectAndAwait(descriptor, token);
             reportProgress(CompanionStartupProgress.ready());
-        } catch (IOException exception) {
-            reportProgress(CompanionStartupProgress.failed(exception.getMessage()));
-            this.client.close();
-            throw exception;
+        } catch (IOException failure) {
+            reportProgress(CompanionStartupProgress.failed(failure.getMessage()));
+            throw failure;
         }
     }
 
+    private void connectAndAwait(CompanionSessionDescriptor descriptor, String token) throws IOException {
+        var previous = connection;
+        if (isConnected() && sameEndpoint(previous.descriptor, descriptor)) return;
+        resetConnection();
+        var attempt = new Connection(descriptor, token);
+        registerProtocol(attempt);
+        try {
+            synchronized (connectionLock) {
+                if (closing) throw new IOException("Companion client is closed");
+                if (!companionEnabled.getAsBoolean()) throw new IOException("Companion use is disabled");
+                connection = attempt;
+                if (!attempt.client.connect(sessionAddress(descriptor.port()))) throw new IOException("Unable to connect to Companion");
+            }
+            if (closing || connection != attempt) throw new IOException("Companion connection attempt was cancelled");
+            await(attempt.authenticated, timeouts.handshake(), "Companion session handshake");
+            await(attempt.ready, timeouts.readiness(), "Companion readiness");
+            if (closing || connection != attempt || attempt.finished.get() || !attempt.client.isConnected())
+                throw new IOException("Companion connection attempt was cancelled");
+        } catch (IOException failure) {
+            finishConnection(attempt, failure);
+            attempt.client.close();
+            throw failure;
+        }
+    }
+
+    private static boolean sameEndpoint(CompanionSessionDescriptor first, CompanionSessionDescriptor second) {
+        return first.protocolVersion() == second.protocolVersion() && first.processId() == second.processId()
+                && first.port() == second.port() && first.projectPort() == second.projectPort();
+    }
     private void startRuntimeInventoryPreparation(boolean force) {
         synchronized (this.runtimeInventoryLock) {
             if (this.closing || !isAuthenticated()) {
@@ -477,9 +498,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void sendRuntimeInventoryState() {
-        if (isAuthenticated() && this.client.isConnected()) {
-            this.client.getMessageProcessor().enqueueMessage(this.runtimeInventoryState);
-        }
+        send(this.runtimeInventoryState);
     }
 
     static InetSocketAddress sessionAddress(int port) {
@@ -488,6 +507,7 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private CompanionSessionDescriptor discoverOrStartCompanion() throws IOException {
         Files.createDirectories(this.appHome);
+        byte[] previousDescriptor = readDescriptorPublication(this.instanceDescriptorFile);
         CompanionSessionDescriptor existing = readLiveDescriptor();
         if (existing != null) {
             TotalDebug.LOGGER.info("Connecting to TotalDebugCompanion process {}", existing.processId());
@@ -513,13 +533,16 @@ public final class CompanionAppClient implements AutoCloseable {
         this.processLog = log.log();
         Path javaExecutable = CompanionJavaRuntime.resolveCurrentExecutable();
         try {
-            var command = new java.util.ArrayList<>(buildLaunchCommand(javaExecutable, launch.path(), this.appHome));
+            var command = new ArrayList<>(buildLaunchCommand(javaExecutable, launch.path(), this.appHome));
             command.add(1, "-D" + DiagnosticLogs.LOG_PROPERTY + "=" + this.processLog);
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.redirectErrorStream(true);
             processBuilder.redirectOutput(this.processLog.toFile());
             reportProgress(CompanionStartupProgress.starting());
-            this.launchedProcess = processBuilder.start();
+            synchronized (connectionLock) {
+                if (closing) throw new IOException("Companion client is closed");
+                this.launchedProcess = processBuilder.start();
+            }
         } catch (IOException | RuntimeException exception) {
             log.close();
             launch.close();
@@ -535,7 +558,7 @@ public final class CompanionAppClient implements AutoCloseable {
         TotalDebug.LOGGER.info("Started TotalDebugCompanion from {}; output is written to {}",
                 launch.path(), this.processLog);
 
-        return awaitDescriptor(this.instanceDescriptorFile);
+        return awaitDescriptor(this.instanceDescriptorFile, previousDescriptor);
     }
 
     private CompanionSessionDescriptor readLiveDescriptor() throws IOException {
@@ -543,9 +566,6 @@ public final class CompanionAppClient implements AutoCloseable {
             return null;
         }
         if (!isInstanceLockHeld()) {
-            TotalDebug.LOGGER.info("Discarding stale TotalDebugCompanion descriptor without an instance lock");
-            Files.deleteIfExists(this.instanceDescriptorFile);
-            Files.deleteIfExists(this.instanceKeyFile);
             return null;
         }
         CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(this.instanceDescriptorFile, CompanionProtocol.VERSION);
@@ -559,12 +579,10 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private boolean isInstanceLockHeld() throws IOException {
-        Path lockFile = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.appHome).instanceLock();
-        Files.createDirectories(lockFile.getParent());
-        Files.createDirectories(this.appHome);
+        Path lockFile = new AppPaths(this.appHome).instanceLock();
+        if (!Files.isRegularFile(lockFile)) return false;
         try (FileChannel channel = FileChannel.open(
                 lockFile,
-                StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE
         )) {
             FileLock lock = null;
@@ -592,7 +610,6 @@ public final class CompanionAppClient implements AutoCloseable {
     static List<String> buildLaunchCommand(Path javaExecutable, Path launchJar, Path appHome) {
         return List.of(
                 javaExecutable.toString(),
-                SWING_TEXT_ANTIALIASING_JVM_OPTION,
                 "-jar",
                 launchJar.toString(),
                 CompanionLaunchContract.APP_HOME_ARGUMENT,
@@ -604,11 +621,17 @@ public final class CompanionAppClient implements AutoCloseable {
         this.progressListener.accept(progress);
     }
 
-    private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile) throws IOException {
+    private static byte[] readDescriptorPublication(Path descriptorFile) throws IOException {
+        try { return Files.readAllBytes(descriptorFile); }
+        catch (NoSuchFileException missing) { return null; }
+    }
+
+    private CompanionSessionDescriptor awaitDescriptor(Path descriptorFile, byte[] previousDescriptor) throws IOException {
         long startedAt = System.nanoTime();
         long timeoutNanos = this.timeouts.processStart().toNanos();
         while (System.nanoTime() - startedAt < timeoutNanos) {
-            if (Files.isRegularFile(descriptorFile)) {
+            byte[] publication = readDescriptorPublication(descriptorFile);
+            if (publication != null && !Arrays.equals(publication, previousDescriptor)) {
                 CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(descriptorFile, CompanionProtocol.VERSION);
                 if (!ProcessHandle.of(descriptor.processId()).map(ProcessHandle::isAlive).orElse(false)) {
                     throw new IOException("Companion descriptor names a stopped process");
@@ -632,9 +655,24 @@ public final class CompanionAppClient implements AutoCloseable {
         );
     }
 
-    private static void await(CompletableFuture<Void> future, Duration timeout, String operation) throws IOException {
+    private void await(CompletableFuture<Void> future, Duration timeout, String operation) throws IOException {
+        long deadline = System.nanoTime() + timeout.toNanos();
         try {
-            future.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+            while (true) {
+                if (!companionEnabled.getAsBoolean()) {
+                    resetConnection();
+                    throw new IOException("Companion use is disabled");
+                }
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new TimeoutException();
+                try {
+                    // Observe configuration at the same cadence as discovery while its worker awaits the handshake.
+                    future.get(Math.min(remaining, TimeUnit.SECONDS.toNanos(1)), TimeUnit.NANOSECONDS);
+                    return;
+                } catch (TimeoutException polling) {
+                    if (System.nanoTime() >= deadline) throw polling;
+                }
+            }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for " + operation, exception);
@@ -649,11 +687,18 @@ public final class CompanionAppClient implements AutoCloseable {
         }
     }
 
-    private void failSession(String message, Throwable cause) {
+    private void failSession(Connection attempt, String message, Throwable cause) {
         IOException exception = cause == null ? new IOException(message) : new IOException(message, cause);
-        this.authenticated.completeExceptionally(exception);
-        this.ready.completeExceptionally(exception);
-        this.client.close();
+        finishConnection(attempt, exception);
+        attempt.client.close();
+    }
+
+    private void finishConnection(Connection attempt, IOException failure) {
+        synchronized (attempt) {
+            attempt.authenticated.completeExceptionally(failure);
+            attempt.ready.completeExceptionally(failure);
+            if (attempt.finished.compareAndSet(false, true)) notifySessionClosed();
+        }
     }
 
     private void notifySessionClosed() {
@@ -665,18 +710,23 @@ public final class CompanionAppClient implements AutoCloseable {
     }
 
     private void resetConnection() {
-        this.transportExpected = false;
-        this.client.close();
-        this.authenticated = new CompletableFuture<>();
-        this.ready = new CompletableFuture<>();
-        this.sessionToken = null;
+        Connection previous;
+        synchronized (connectionLock) { previous = connection; connection = null; }
+        if (previous != null) {
+            finishConnection(previous, new IOException("Companion connection was replaced"));
+            previous.client.close();
+        }
     }
 
     @Override
-    public synchronized void close() {
-        this.closing = true;
-        notifySessionClosed();
-        this.client.close();
+    public void close() {
+        synchronized (connectionLock) {
+            if (closing) return;
+            closing = true;
+        }
+        var watching = discovery;
+        if (watching != null) watching.close();
+        resetConnection();
         synchronized (this.runtimeInventoryLock) {
             this.runtimeInventoryWorker.shutdownNow();
         }

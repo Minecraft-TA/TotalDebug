@@ -59,6 +59,17 @@ class ExpressionScopeAnalyzerTest {
         CompanionClassIndex.clear();
     }
 
+    @Test void filtersNamesBeforeApplyingTheResultLimit() {
+        var source = new StringBuilder("class Sample { void run() { ");
+        for (int i = 0; i < 100; i++) source.append("int variable").append(i).append(" = 0; ");
+        int offset = source.length();
+        source.append("System.out.println(1); } }");
+        var unit = JavaAst.parse("Sample", source.toString());
+        var matches = ExpressionScopeAnalyzer.complete(unit, offset, "variable99", 10);
+        assertTrue(matches.stream().anyMatch(proposal -> proposal.label().equals("variable99")));
+        assertTrue(ExpressionScopeAnalyzer.complete(unit, offset, "", 0).size() <= 64);
+    }
+
     @Test
     void keepsOnlyNamesVisibleInTheSelectedLexicalScope() {
         var unit = JavaAst.parse("Sample", SOURCE);

@@ -11,6 +11,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.UnaryOperator;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction;
 
 /** One instance's debugger intent and evaluator input recall. */
 public final class InstanceState implements AutoCloseable {
@@ -117,6 +119,25 @@ public final class InstanceState implements AutoCloseable {
         }
         this.debuggerBreakpoints = immutable;
         scheduleSave();
+    }
+
+    public synchronized List<String> savedScriptReferences() {
+        return debuggerBreakpoints.values().stream().flatMap(List::stream)
+                .map(PersistedBreakpoint::action).filter(Objects::nonNull).map(BreakpointAction::script)
+                .filter(Objects::nonNull).distinct().toList();
+    }
+
+    public synchronized void remapScriptActions(UnaryOperator<String> remap) {
+        var updated = new HashMap<String, List<PersistedBreakpoint>>();
+        debuggerBreakpoints.forEach((runtime, entries) -> updated.put(runtime, entries.stream().map(entry -> {
+            var action = entry.action();
+            if (action == null || action.script() == null) return entry;
+            String script = remap.apply(action.script());
+            return script.equals(action.script()) ? entry : new PersistedBreakpoint(entry.sourceUri(), entry.binaryName(),
+                    entry.line(), entry.debuggerLine(), entry.methodOwner(), entry.methodName(), entry.methodDescriptor(),
+                    entry.condition(), entry.hitCondition(), entry.enabled(), new BreakpointAction(null, script, action.continueOnSuccess()));
+        }).toList()));
+        if (!updated.equals(debuggerBreakpoints)) { debuggerBreakpoints = Map.copyOf(updated); scheduleSave(); }
     }
 
     public synchronized boolean debuggerBreakpointsMuted() {

@@ -30,6 +30,7 @@ public final class GlobalConfig {
     private static final int SETTINGS_VERSION = 1;
     private static final String EDITOR_FONT_SIZE_PROPERTY = "editorFontSize";
     private static final String DEBUGGER_INLINE_VALUES_PROPERTY = "debuggerInlineValues";
+    private static final String INLINE_DIAGNOSTICS_PROPERTY = "inlineDiagnostics";
     private static final String DEBUGGER_PREVIEWS_PROPERTY = "automaticDebuggerPreviews";
 
     private static final Gson GSON = JsonFiles.GSON;
@@ -41,6 +42,7 @@ public final class GlobalConfig {
     private volatile float uiFontSize = 13f;
     private volatile Rectangle debuggerWindowBounds;
     private volatile boolean debuggerInlineValues = true;
+    private volatile boolean inlineDiagnostics = true;
     private volatile boolean automaticDebuggerPreviews = true;
     private JsonStateWriter writer;
 
@@ -116,6 +118,24 @@ public final class GlobalConfig {
         scheduleSave();
     }
 
+    public boolean inlineDiagnostics() { return inlineDiagnostics; }
+
+    public synchronized void setInlineDiagnostics(boolean enabled) {
+        boolean previous = inlineDiagnostics;
+        if (previous == enabled) return;
+        inlineDiagnostics = enabled;
+        pcs.firePropertyChange(INLINE_DIAGNOSTICS_PROPERTY, previous, enabled);
+        scheduleSave();
+    }
+
+    public void addInlineDiagnosticsListener(PropertyChangeListener listener) {
+        pcs.addPropertyChangeListener(INLINE_DIAGNOSTICS_PROPERTY, listener);
+    }
+
+    public void removeInlineDiagnosticsListener(PropertyChangeListener listener) {
+        pcs.removePropertyChangeListener(INLINE_DIAGNOSTICS_PROPERTY, listener);
+    }
+
     public boolean automaticDebuggerPreviews() {
         return this.automaticDebuggerPreviews;
     }
@@ -173,6 +193,7 @@ public final class GlobalConfig {
                 JsonFiles.string(json, "theme");
                 JsonFiles.bool(json, "debuggerInlineValues");
                 JsonFiles.bool(json, "automaticDebuggerPreviews");
+                if (json.has("inlineDiagnostics")) JsonFiles.bool(json, "inlineDiagnostics");
                 for (String font : java.util.List.of("editorFontSize", "uiFontSize")) {
                     var value = json.get(font);
                     if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
@@ -205,6 +226,7 @@ public final class GlobalConfig {
         this.uiFontSize = clampFontSize(persisted.uiFontSize);
         this.debuggerInlineValues = persisted.debuggerInlineValues;
         this.automaticDebuggerPreviews = persisted.automaticDebuggerPreviews;
+        this.inlineDiagnostics = persisted.inlineDiagnostics == null || persisted.inlineDiagnostics;
         this.debuggerWindowBounds = persisted.debuggerWindowX == null ? null : new Rectangle(
                 persisted.debuggerWindowX, persisted.debuggerWindowY,
                 persisted.debuggerWindowWidth, persisted.debuggerWindowHeight);
@@ -232,7 +254,8 @@ public final class GlobalConfig {
                 debuggerBounds == null ? null : debuggerBounds.width,
                 debuggerBounds == null ? null : debuggerBounds.height,
                 this.debuggerInlineValues,
-                this.automaticDebuggerPreviews
+                this.automaticDebuggerPreviews,
+                this.inlineDiagnostics
         );
 
         this.writer.schedule(GSON.toJsonTree(snapshot));
@@ -256,7 +279,8 @@ public final class GlobalConfig {
             Integer debuggerWindowWidth,
             Integer debuggerWindowHeight,
             Boolean debuggerInlineValues,
-            Boolean automaticDebuggerPreviews
+            Boolean automaticDebuggerPreviews,
+            Boolean inlineDiagnostics
     ) {
     }
 

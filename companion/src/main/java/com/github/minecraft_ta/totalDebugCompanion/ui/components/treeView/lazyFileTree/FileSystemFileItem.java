@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -14,13 +13,6 @@ public class FileSystemFileItem extends TreeItem {
             throw new IllegalArgumentException("File does not exist");
 
         this.path = path;
-    }
-
-    @Override
-    public void delete() {
-        try {
-            Files.deleteIfExists(this.path);
-        } catch (IOException ignored) {}
     }
 
     public Path getPath() {

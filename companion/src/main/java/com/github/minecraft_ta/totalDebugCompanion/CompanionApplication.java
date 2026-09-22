@@ -1,5 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -61,11 +65,15 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.LinkedHashMap;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public final class CompanionApplication implements AutoCloseable, ProjectControls {
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
+    private final NotificationCenter notifications = new NotificationCenter();
+    private EditorScriptRunService editorRuns;
+    public NotificationCenter notifications() { return notifications; }
     private ScriptExecutionService scriptExecutions;
     private CompanionSession session;
     private final CompanionLaunchConfiguration launchConfiguration;
@@ -76,7 +84,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
-    private CompanionMcpServer mcpServer;
+    private volatile CompanionMcpServer mcpServer;
+    // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
+    private volatile CodeModeJobService mcpJobs;
     private volatile DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
@@ -84,14 +94,39 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private volatile boolean closed;
     private ProjectRegistry projects;
     private volatile boolean switching;
+    private static final class Reconnect {
+        final ProjectScope project;
+        final CompletableFuture<Void> result = new CompletableFuture<>();
+        boolean resetComplete;
+
+        Reconnect(ProjectScope project) { this.project = project; }
+    }
+    private volatile Reconnect reconnect;
+    private static final class Launch {
+        final ProjectScope project;
+        final CompletableFuture<Void> result = new CompletableFuture<>();
+        boolean dispatched;
+
+        Launch(ProjectScope project) { this.project = project; }
+    }
+    private volatile Launch launch;
+    private final PrismGameLauncher gameLauncher;
     private final ExecutorService projectWorker = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().daemon().name("companion-projects").unstarted(runnable));
+    // HTTP shutdown may await handlers using projectWorker; it cannot run on that worker.
+    private final ExecutorService mcpWorker = Executors.newSingleThreadExecutor(
+            runnable -> Thread.ofPlatform().daemon().name("companion-mcp-lifecycle").unstarted(runnable));
 
     public CompanionApplication(CompanionLaunchConfiguration configuration, String token) throws IOException {
         this(configuration, token, null);
     }
 
     public CompanionApplication(CompanionLaunchConfiguration configuration, String token, CompanionUi ui) throws IOException {
+        this(configuration, token, ui, new PrismGameLauncher());
+    }
+
+    CompanionApplication(CompanionLaunchConfiguration configuration, String token, CompanionUi ui, PrismGameLauncher gameLauncher) throws IOException {
+        this.gameLauncher = Objects.requireNonNull(gameLauncher);
         launchConfiguration = Objects.requireNonNull(configuration);
         this.ui = ui;
         try {
@@ -99,6 +134,16 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             runtimeIndexService = new RuntimeIndexService(lifecycleLock, this::installRuntimeSnapshot);
             runtimeIndexService.addStatusListener(this::updateRuntimeIndexUi);
             debuggerController = createDebuggerController();
+            debuggerController.addListener(new DebuggerSessionController.Listener() {
+                private Throwable lastFailure;
+                @Override public void statusChanged(DebuggerSessionController.Status status) {
+                    if (!closed && !switching && status.failure() != null && status.failure() != lastFailure) {
+                        notifications.publish(Severity.ERROR, "Debugger operation failed", status.detail() + "\n" + status.failure(),
+                                Source.capture(current, "Debugger", null));
+                    }
+                    lastFailure = status.failure();
+                }
+            });
             restoreProfile();
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
                 @Override public void openClass(OpenClassMessage message) {
@@ -116,31 +161,44 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void connected() {
-                    updateGameStatus(new ServiceStatus(
-                            ServiceStatus.State.AVAILABLE,
-                            "Connected",
-                            "Minecraft is connected and authenticated."
-                    ));
+                    connectionEstablished();
                 }
 
                 @Override
                 public void disconnected() {
+                    if (editorRuns != null) editorRuns.disconnected(closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                     scriptCompiler.runtimeDisconnected();
-                    updateGameStatus(new ServiceStatus(
-                            ServiceStatus.State.INACTIVE,
-                            "Offline",
-                            "Minecraft is not connected."
-                    ));
+                    synchronized (lifecycleLock) {
+                        if (reconnect != null)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
+                        else if (launch != null)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
+                        else if (gameStatus == null || gameStatus.state() != ServiceStatus.State.FAILED)
+                            updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+                    }
                     debuggerController.clearTarget();
-                    CompanionMcpServer current = mcpServer;
+                    CodeModeJobService current = mcpJobs;
                     if (current != null) {
                         current.runtimeDisconnected();
                     }
+                    restoreOfflineAfterDisconnect();
+                    Launch pendingLaunch = launch;
+                    if (pendingLaunch != null) queueLaunch(pendingLaunch);
                 }
 
                 @Override
                 public void runtimeInventory(RuntimeInventoryMessage message) {
                     handleRuntimeInventory(message);
+                }
+
+                @Override public void failed(String detail, ClientHelloMessage hello) {
+                    synchronized (lifecycleLock) {
+                        if (closed || switching) return;
+                        if (hello != null && (current == null || !current.profile().id().equals(hello.profileId()))) return;
+                        if (reconnect != null) failReconnect(reconnect, detail);
+                        else if (launch != null) failLaunch(launch, detail);
+                        else updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", detail));
+                    }
                 }
 
                 @Override
@@ -154,6 +212,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
             });
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
+            editorRuns = new EditorScriptRunService(scriptExecutions, session, notifications);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (CompletionException failure) {
@@ -167,9 +226,20 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     public void start() throws IOException {
+        if (SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Start Companion outside the event dispatch thread");
         updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
-        session.bindAndPublish(launchConfiguration);
-        startOptionalMcpServer();
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    session.bindAndPublish(launchConfiguration);
+                    publishConnectionTarget();
+                } catch (IOException failure) { throw new CompletionException(failure); }
+            }, projectWorker).join();
+        } catch (CompletionException failure) {
+            if (failure.getCause() instanceof IOException io) throw io;
+            throw failure;
+        }
+        setMcpEnabled(true).join();
     }
 
     public void awaitExit() throws InterruptedException { exitRequested.await(); }
@@ -177,14 +247,20 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     @Override public void close() {
         if (closed) return;
         closed = true;
+        cancelReconnect("Companion is closing");
+        cancelLaunch("Companion is closing");
+        notifications.close();
+        if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
+            mcpWorker.close();
+            runCleanup("Close MCP", this::closeMcpServer);
             projectWorker.close();
+            if (mcpJobs != null) runCleanup("Close MCP jobs", mcpJobs::close);
             synchronized (lifecycleLock) {
                 if (current != null && current.isActive()) current.beginSwitch();
                 switching = true;
             }
             if (runtimeIndexService != null) runCleanup("Close runtime loader", runtimeIndexService::close);
-            runCleanup("Close MCP", this::closeMcpServer);
             if (session != null) runCleanup("Close session", session::close);
             if (debuggerController != null) runCleanup("Close debugger", debuggerController::close);
             CompanionUi view = ui;
@@ -227,6 +303,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (switching || !requested.equals(currentProject())) {
                 throw new IOException("Select this project explicitly before connecting");
             }
+            runtimeInventoryPending("Waiting for Minecraft to announce its current runtime inventory");
         }
     }
 
@@ -307,33 +384,219 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         ProjectScope selected = current;
         if (selected == null) return CompletableFuture.failedFuture(new IllegalStateException("No project is open"));
         return CompletableFuture.runAsync(() -> {
+            if (runtimeIndexService.status().active()) return;
+            boolean rebuild = selected.admit(() -> {
+                if (runtimeIndexService.status().phase() != RuntimeIndexService.Phase.READY) return false;
+                if (selected.runtime() == null) return false;
+                runtimeIndexService.rebuild(selected.profile().dataDirectory(),
+                        selected.runtime().snapshot().isRuntime() ? null : selected.profile().workspaceDirectory());
+                return true;
+            });
+            if (rebuild) {
+                onUi(CompanionUi::runtimeChanged);
+                return;
+            }
             boolean requestedRuntime = selected.admit(() -> {
                 if (!isConnected() || runtimeIndexService.status().sourceKind() == IndexIdentity.Kind.LOCAL) return false;
                 if (!session.send(new RetryRuntimeInventoryMessage()))
                     throw new IllegalStateException("Minecraft disconnected before runtime inventory could be requested");
-                runtimeIndexService.waiting("Requesting runtime inventory again");
+                runtimeInventoryPending("Requesting runtime inventory again");
                 return true;
             });
             if (requestedRuntime) return;
-            try { selected.refreshLocalSources(); }
+            try {
+                if (restoreOfflineRuntime(selected)) onUi(CompanionUi::runtimeChanged);
+            }
             catch (IOException failure) { throw new CompletionException(failure); }
-            selected.admit(() -> {
-                runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
-                return null;
-            });
-            onUi(CompanionUi::runtimeChanged);
         }, projectWorker);
+    }
+
+    @Override public CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject) {
+        if (closed || expectedProject == null) return CompletableFuture.completedFuture("Select a Prism instance to launch");
+        try { return CompletableFuture.supplyAsync(() -> {
+            synchronized (lifecycleLock) {
+                if (closed || switching || current != expectedProject || !expectedProject.isActive()) return "The selected project changed";
+            }
+            try { gameLauncher.target(expectedProject.profile()); return null; }
+            catch (IOException failure) { return failure.getMessage(); }
+        }, projectWorker); } catch (RejectedExecutionException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    @Override public CompletableFuture<Void> launchGame(ProjectScope expectedProject) {
+        Launch request;
+        synchronized (lifecycleLock) {
+            if (closed || switching || expectedProject == null || current != expectedProject || !expectedProject.isActive())
+                return CompletableFuture.failedFuture(new IllegalStateException("The selected project changed before launch"));
+            if (launch != null) return launch.result;
+            if (session.hasClient() || reconnect != null)
+                return CompletableFuture.failedFuture(new IllegalStateException("Minecraft is already connected or connecting"));
+            request = new Launch(expectedProject);
+            launch = request;
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Starting", "Waiting for Minecraft to connect from Prism."));
+        }
+        queueLaunch(request);
+        CompletableFuture.delayedExecutor(10, TimeUnit.MINUTES).execute(() ->
+                failLaunch(request, "Minecraft has not connected after 10 minutes. Check Prism for launch or sign-in errors."));
+        return request.result;
+    }
+
+    private void queueLaunch(Launch request) {
+        try {
+            projectWorker.execute(() -> {
+                try {
+                    synchronized (lifecycleLock) {
+                        if (!canDispatchLaunch(request)) return;
+                    }
+                    List<String> command = gameLauncher.command(request.project.profile());
+                    publishConnectionTarget();
+                    Process process;
+                    synchronized (lifecycleLock) {
+                        if (!canDispatchLaunch(request)) return;
+                        process = gameLauncher.start(command);
+                        request.dispatched = true;
+                    }
+                    // A secondary Prism process exits after forwarding the request. Only the
+                    // authenticated game connection completes launch successfully.
+                    process.onExit().whenComplete((exited, failure) -> {
+                        if (failure != null) failLaunch(request, "Unable to observe Prism: " + failure.getMessage());
+                        else if (exited.exitValue() != 0) failLaunch(request, "Prism exited with code " + exited.exitValue() + ". Check Prism for launch errors.");
+                    });
+                } catch (IOException | RuntimeException failure) { failLaunch(request, failure.getMessage()); }
+            });
+        } catch (RejectedExecutionException failure) { failLaunch(request, "Companion is closing"); }
+    }
+
+    /** Called under lifecycleLock before discovery and again before the process is started. */
+    private boolean canDispatchLaunch(Launch request) {
+        return !closed && !switching && launch == request && current == request.project && request.project.isActive()
+                && !request.dispatched && !session.hasClient();
+    }
+
+    private void failLaunch(Launch request, String detail) {
+        synchronized (lifecycleLock) {
+            if (launch != request) return;
+            launch = null;
+            String message = detail == null || detail.isBlank() ? "Unable to launch Minecraft" : detail;
+            if (!closed && !switching && current == request.project && request.project.isActive()) {
+                updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Launch failed", message));
+                notifications.publish(Severity.ERROR, "Unable to launch Minecraft", message, Source.capture(request.project, "Minecraft", null));
+            }
+            request.result.completeExceptionally(new IOException(message));
+        }
+    }
+
+    private void cancelLaunch(String reason) {
+        synchronized (lifecycleLock) {
+            if (launch == null) return;
+            var cancelled = launch;
+            launch = null;
+            if (!closed) updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+            cancelled.result.completeExceptionally(new IOException(reason));
+        }
+    }
+
+    @Override public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) {
+        Reconnect request;
+        synchronized (lifecycleLock) {
+            if (closed || switching || expectedProject == null || current != expectedProject || !expectedProject.isActive())
+                return CompletableFuture.failedFuture(new IllegalStateException("The selected project changed before reconnect"));
+            if (launch != null) return CompletableFuture.failedFuture(new IllegalStateException("Minecraft is already starting"));
+            if (reconnect != null) return reconnect.result;
+            request = new Reconnect(expectedProject);
+            reconnect = request;
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
+        }
+        try {
+            projectWorker.execute(() -> {
+                try {
+                    synchronized (lifecycleLock) {
+                        if (closed || reconnect != request || current != request.project || !request.project.isActive()) return;
+                    }
+                    session.publishProfile(null);
+                    try {
+                        synchronized (lifecycleLock) {
+                            if (closed || reconnect != request) return;
+                        }
+                        if (mcpJobs != null) mcpJobs.prepareProjectSwitch();
+                        session.disconnect();
+                    } finally {
+                        if (!closed) publishConnectionTarget();
+                    }
+                    synchronized (lifecycleLock) {
+                        if (reconnect != request) return;
+                        request.resetComplete = true;
+                        // A replacement may have authenticated while its advertisement was
+                        // being published. It becomes eligible only after teardown finishes.
+                        connectionEstablished();
+                    }
+                } catch (IOException | RuntimeException failure) { failReconnect(request, failure.getMessage()); }
+            });
+            CompletableFuture.delayedExecutor(30, TimeUnit.SECONDS).execute(() ->
+                    failReconnect(request, "No matching Minecraft connected within 30 seconds."));
+        } catch (RejectedExecutionException failure) { failReconnect(request, "Companion is closing"); }
+        return request.result;
+    }
+
+    private void connectionEstablished() {
+        synchronized (lifecycleLock) {
+            if (closed || switching || !session.isConnected() || reconnect != null && !reconnect.resetComplete) return;
+            updateGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
+            if (reconnect != null && reconnect.project == current) {
+                var completed = reconnect;
+                reconnect = null;
+                completed.result.complete(null);
+            }
+            if (launch != null && launch.project == current) {
+                var completed = launch;
+                launch = null;
+                completed.result.complete(null);
+            }
+        }
+    }
+
+    private void failReconnect(Reconnect request, String detail) {
+        synchronized (lifecycleLock) {
+            if (reconnect != request) return;
+            reconnect = null;
+            String message = detail == null || detail.isBlank() ? "Minecraft reconnect failed" : detail;
+            if (!closed && !switching && current == request.project && request.project.isActive()) {
+                updateGameStatus(session != null && session.isConnected()
+                        ? new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft remains connected; reconnect failed: " + message)
+                        : new ServiceStatus(ServiceStatus.State.FAILED, "Connection failed", message));
+                notifications.publish(Severity.ERROR, "Minecraft reconnect failed", message, Source.capture(request.project, "Minecraft", null));
+            }
+            request.result.completeExceptionally(new IOException(message));
+        }
+    }
+
+    private void cancelReconnect(String reason) {
+        synchronized (lifecycleLock) {
+            if (reconnect == null) return;
+            var cancelled = reconnect;
+            reconnect = null;
+            if (!closed) updateGameStatus(session != null && session.isConnected()
+                    ? new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated.")
+                    : new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
+            cancelled.result.completeExceptionally(new IOException(reason));
+        }
+    }
+
+    private void publishConnectionTarget() throws IOException {
+        String profile;
+        synchronized (lifecycleLock) {
+            profile = closed || switching || current == null || !current.isActive() ? null : current.profile().id();
+        }
+        if (session != null) session.publishProfile(profile);
     }
 
     private void switchProject(CompanionProfile requested) throws IOException {
         validateProfile(requested);
         if (requested.equals(currentProject())) {
             projects.select(requested);
-            if (!isConnected()) {
-                requireProject().refreshLocalSources();
-                runtimeIndexService.restore(requested.dataDirectory(), requested.workspaceDirectory());
-                onUi(CompanionUi::runtimeChanged);
-            }
+            publishConnectionTarget();
+            if (restoreOfflineRuntime(requireProject())) onUi(CompanionUi::runtimeChanged);
             return;
         }
         // Prepare the actual replacement before disturbing the current project.
@@ -346,7 +609,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             if (old != null) old.beginSwitch();
         }
         boolean installed = false;
+        Throwable switchFailure = null;
         try {
+            cancelReconnect("Project changed during reconnect");
+            cancelLaunch("Project changed during launch");
+            if (session != null) session.publishProfile(null);
             if (ui != null) {
                 boolean[] canSwitch = {false};
                 SwingUtilities.invokeAndWait(() -> canSwitch[0] = ui.prepareProjectSwitch());
@@ -365,7 +632,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             // Retirement is terminal. Attempt every detach and install the prepared replacement even if
             // a broken debugger/connection cannot detach cleanly.
-            if (mcpServer != null) runCleanup("Disconnect execution jobs", mcpServer::prepareProjectSwitch);
+            CodeModeJobService jobs = mcpJobs;
+            if (jobs != null) runCleanup("Disconnect execution jobs", jobs::prepareProjectSwitch);
+            if (editorRuns != null) editorRuns.disconnected(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
             runCleanup("Clear debugger target", () -> getDebuggerController().clearTarget().join());
@@ -384,11 +653,18 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             catch (IOException failure) {
                 throw new IOException("Project opened, but its selection could not be saved: " + failure.getMessage(), failure);
             }
+        } catch (IOException | RuntimeException failure) {
+            switchFailure = failure;
+            throw failure;
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            throw new IOException("Project switch interrupted", failure);
+            var interrupted = new IOException("Project switch interrupted", failure);
+            switchFailure = interrupted;
+            throw interrupted;
         } catch (InvocationTargetException failure) {
-            throw new IOException("Unable to close project editors", failure.getCause());
+            var rejected = new IOException("Unable to close project editors", failure.getCause());
+            switchFailure = rejected;
+            throw rejected;
         } finally {
             try {
                 if (!installed) { replacement.retire(); replacement.close(); }
@@ -403,6 +679,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     }
                 }
                 onUi(view -> view.setSwitching(isSwitching()));
+                try { publishConnectionTarget(); }
+                catch (IOException failure) {
+                    updateGameStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Connection unavailable", "Unable to publish Companion endpoint: " + failure.getMessage()));
+                    if (switchFailure != null) switchFailure.addSuppressed(failure);
+                    else throw failure;
+                }
             }
         }
     }
@@ -439,6 +721,11 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (Files.exists(scripts) && !Files.isDirectory(scripts)) throw new IOException("Scripts path is not a directory: " + scripts);
     }
 
+    private void runtimeInventoryPending(String detail) {
+        scriptCompiler.suspendRuntime();
+        runtimeIndexService.waiting(detail);
+    }
+
     private void handleRuntimeInventory(RuntimeInventoryMessage message) {
         synchronized (lifecycleLock) {
             if (switching) return;
@@ -448,7 +735,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             }
             switch (message.state()) {
                 case RuntimeInventoryMessage.PREPARING -> {
-                    runtimeIndexService.waiting(
+                    runtimeInventoryPending(
                             message.detail().isBlank() ? "Minecraft is preparing runtime sources" : message.detail());
                 }
                 case RuntimeInventoryMessage.AVAILABLE -> runtimeIndexService.accept(
@@ -476,8 +763,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             ProjectScope scope = requireProject();
             CompanionProfile current = scope.profile();
             var previous = scope.runtime();
-            if (previous != null && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
+            if (previous != null && !snapshot.rebuilt() && (previous.snapshot().localGuard() == null || previous.snapshot().localGuard().isValid())
                     && previous.snapshot().signature().equals(snapshot.signature())) {
+                scriptCompiler.bind(previous.snapshot().isRuntime() ? previous.snapshot() : null);
                 bytecodeSource.close();
                 if (previous.snapshot() != snapshot) snapshot.close();
                 return;
@@ -513,10 +801,40 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 closeRuntime();
             }
             try {
-                scope.refreshLocalSources();
-                runtimeIndexService.restore(scope.profile().dataDirectory(), scope.profile().workspaceDirectory());
+                restoreOfflineRuntime(scope);
             } catch (IOException failure) {
                 runtimeIndexService.failedBeforeBuild("Unable to rescan mods: " + failure.getMessage());
+            }
+            onUi(CompanionUi::runtimeChanged);
+        }); } catch (RejectedExecutionException failure) {
+            if (!closed) throw failure;
+        }
+    }
+
+    private boolean restoreOfflineRuntime(ProjectScope scope) throws IOException {
+        if (scope.admit(session::hasClient)) return false;
+        scope.refreshLocalSources();
+        return scope.admit(() -> {
+            // Admission can begin during filesystem discovery. Check again under the same
+            // lock as live admission so no offline restore can undo compiler suspension.
+            if (session.hasClient()) return false;
+            runtimeIndexService.restore(scope.profile().dataDirectory(), scope.profile().workspaceDirectory());
+            return true;
+        });
+    }
+
+    private void restoreOfflineAfterDisconnect() {
+        ProjectScope selected = current;
+        if (closed || selected == null) return;
+        try { projectWorker.execute(() -> {
+            synchronized (lifecycleLock) {
+                var status = runtimeIndexService.status();
+                if (closed || switching || current != selected || !selected.isActive() || session.hasClient() || selected.runtime() != null
+                        || status.phase() != RuntimeIndexService.Phase.WAITING
+                        && !(status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.RUNTIME)) return;
+                // Live admission retired an offline load. Resume browsing only if no newer
+                // client or inventory load has taken ownership in the meantime.
+                runtimeIndexService.restore(selected.profile().dataDirectory(), selected.profile().workspaceDirectory());
             }
             onUi(CompanionUi::runtimeChanged);
         }); } catch (RejectedExecutionException failure) {
@@ -571,18 +889,22 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     }
 
     private void startMcpServer() throws Exception {
-        var jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
+        CodeModeJobService jobs = mcpJobs;
+        if (jobs == null) jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
                 this::isConnected, this::runtimeContext);
         startMcpServer(jobs, CompanionMcpServer.MCP_PORT);
     }
 
     CompanionMcpServer startMcpServer(CodeModeJobService jobs, int port) throws Exception {
+        if (mcpServer != null) throw new IllegalStateException("MCP server is already running");
+        if (mcpJobs != null && mcpJobs != jobs) throw new IllegalStateException("MCP jobs belong to the application");
+        mcpJobs = jobs;
         CompanionMcpServer server = new CompanionMcpServer(this, jobs, port);
         try {
             server.start();
             mcpServer = server;
             updateMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening",
-                    "MCP is listening at " + server.endpointUrl()));
+                    server.endpointUrl()));
             System.err.println("TotalDebug Companion MCP listening at " + server.endpointUrl());
             return server;
         } catch (Exception failure) { server.close(); throw failure; }
@@ -604,8 +926,26 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     "MCP startup failed: " + exception
             ));
             System.err.println("TotalDebug Companion MCP is unavailable: " + exception.getMessage());
+            notifications.publish(Severity.ERROR, "MCP startup failed", exception.toString(), Source.application("MCP"));
             exception.printStackTrace(System.err);
         }
+    }
+
+    public CompletableFuture<Void> setMcpEnabled(boolean enabled) {
+        if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Application is closed"));
+        return CompletableFuture.runAsync(() -> {
+            if (closed) return;
+            if (enabled) {
+                if (mcpServer == null) startOptionalMcpServer();
+            } else {
+                updateMcpStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Stopping", "Stopping the MCP server"));
+                try { closeMcpServer(); }
+                catch (RuntimeException failure) {
+                    updateMcpStatus(new ServiceStatus(ServiceStatus.State.FAILED, "Unavailable", failure.toString()));
+                    notifications.publish(Severity.ERROR, "Unable to stop MCP", failure.toString(), Source.application("MCP"));
+                }
+            }
+        }, mcpWorker);
     }
 
     private void closeMcpServer() {
@@ -641,7 +981,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, runtimeIndexService, this::openDebugFrame, this::exit, this);
+                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {
@@ -695,13 +1035,22 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             onUi(view -> view.setMcpStatus(status));
         }
     }
+    private RuntimeIndexService.Status lastIndexStatus;
     private void updateRuntimeIndexUi(RuntimeIndexService.Status status) {
+        if (!closed && !switching && status.phase() == RuntimeIndexService.Phase.FAILED && !status.equals(lastIndexStatus)) {
+            notifications.publish(Severity.ERROR, "Class indexing failed", status.detail() + (status.failure() == null ? "" : "\n" + status.failure()),
+                    Source.capture(current, "Index", null));
+        }
+        lastIndexStatus = status;
         synchronized (lifecycleLock) {
             var installed = current == null ? null : current.runtime();
-            boolean failedLocalRefresh = status.phase() == RuntimeIndexService.Phase.FAILED
-                    && status.sourceKind() == IndexIdentity.Kind.LOCAL
-                    && installed != null && !installed.snapshot().isRuntime();
-            if (status.phase() == RuntimeIndexService.Phase.EMPTY || failedLocalRefresh) {
+            boolean staleLocalIndex = false;
+            if (status.phase() == RuntimeIndexService.Phase.FAILED && status.sourceKind() == IndexIdentity.Kind.LOCAL
+                    && installed != null && installed.snapshot().localGuard() != null) {
+                try { installed.snapshot().localGuard().checkAll(); }
+                catch (IOException failure) { staleLocalIndex = true; }
+            }
+            if (status.phase() == RuntimeIndexService.Phase.EMPTY || staleLocalIndex) {
                 closeRuntime();
                 onUi(CompanionUi::runtimeChanged);
             }

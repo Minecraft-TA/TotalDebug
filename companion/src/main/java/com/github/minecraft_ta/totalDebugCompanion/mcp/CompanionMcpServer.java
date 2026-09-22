@@ -38,6 +38,7 @@ public final class CompanionMcpServer implements AutoCloseable {
 
     private final Path dataDirectory;
     private final Path endpointDescriptor;
+    // Borrowed from the application; closing HTTP must not discard running-job tracking.
     private final CodeModeJobService jobs;
     private final CompanionMcpRuntimeSource runtimeSource;
     private final CompanionMcpSearchService search;
@@ -151,12 +152,6 @@ public final class CompanionMcpServer implements AutoCloseable {
     Path endpointDescriptor() {
         return this.endpointDescriptor;
     }
-
-    public void runtimeDisconnected() {
-        this.jobs.runtimeDisconnected();
-    }
-
-    public void prepareProjectSwitch() { this.jobs.prepareProjectSwitch(); }
 
     private McpSchema.CallToolResult callTool(McpSchema.CallToolRequest request) {
         try {
@@ -387,7 +382,6 @@ public final class CompanionMcpServer implements AutoCloseable {
             this.tomcat = null;
         }
         closeMcpServer();
-        this.jobs.close();
     }
 
     private void closeMcpServer() {

@@ -13,7 +13,7 @@ public class FlatIconButton extends JButton {
 
     public static void configure(AbstractButton button) {
         button.putClientProperty("JButton.buttonType", "toolBarButton");
-        button.setMargin(new Insets(4, 6, 4, 6));
+        button.setMargin(new Insets(6, 6, 6, 6));
         // Mouse commands keep the editor's focus; Tab and Space still operate the button.
         button.setRequestFocusEnabled(false);
         InputMap keys = button.getInputMap(WHEN_FOCUSED);

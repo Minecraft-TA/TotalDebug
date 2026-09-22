@@ -2,7 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 
 final class NavigationHistory {
     enum Direction {
@@ -27,6 +29,14 @@ final class NavigationHistory {
             trim(this.back);
         }
         this.forward.clear();
+    }
+
+    synchronized void remap(UnaryOperator<NavigationEntry> remap) {
+        for (var entries : List.of(back, forward)) {
+            var updated = entries.stream().map(remap).filter(Objects::nonNull).toList();
+            entries.clear();
+            entries.addAll(updated);
+        }
     }
 
     synchronized void clear() {

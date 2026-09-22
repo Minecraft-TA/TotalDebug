@@ -34,7 +34,7 @@ Every tool advertises an `outputSchema` covering its exact success result and th
 
 - `status` reports Companion, Minecraft, and debugger connectivity, selected project identity/name/directories, switching state and source index state/detail.
 - `project_list(include_prism=false)` lists remembered projects and optionally local instances in the default Prism directory. Discovery does not modify them.
-- `project_open(project_id | directory, name?)` opens exactly one remembered ID or game/Prism instance directory. The optional name overrides the automatic folder name. It returns the status shape before indexing finishes. It saves/closes editors, but does not launch Minecraft or ask another running game to attach.
+- `project_open(project_id | directory, name?)` opens exactly one remembered ID or game/Prism instance directory. The optional name overrides the automatic folder name. It returns the status shape before indexing finishes. It saves/closes editors and advertises the selected project so an already-running matching TotalDebug game can connect automatically. It does not launch Minecraft.
 - Directory selection also accepts an instance's `mods/` or `total-debug/` child. Unsupported folders are rejected without creating files. Saved runtime data takes priority; otherwise Companion browses and indexes the installed top-level mod JARs locally. Source-query tools work once that index is ready. Execution still requires a runtime index and the existing connection/permission checks.
 - Both execution tools accept `expected_project_id` to reject execution against an unintended project. This check runs inside the captured scope's admission gate.
 - `client_code_execute` runs a value-returning Java body in the Minecraft client JVM.

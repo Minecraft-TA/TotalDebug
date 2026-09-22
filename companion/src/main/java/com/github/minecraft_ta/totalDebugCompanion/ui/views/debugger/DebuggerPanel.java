@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
+
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -78,17 +81,17 @@ public final class DebuggerPanel extends JPanel {
     private DebuggerSessionController.PausedState currentPause;
     private boolean disposed;
 
-    DebuggerPanel(
+    DebuggerPanel(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation
     ) {
-        this(state, controller, debuggerActions, frameNavigation, () -> {
+        this(notifications, state, controller, debuggerActions, frameNavigation, () -> {
         }, target -> {
         });
     }
 
-    DebuggerPanel(
+    DebuggerPanel(NotificationCenter notifications,
             InstanceState state, DebuggerSessionController controller,
             DebuggerActions debuggerActions,
             FrameNavigation frameNavigation,
@@ -100,7 +103,7 @@ public final class DebuggerPanel extends JPanel {
         this.debuggerActions = Objects.requireNonNull(debuggerActions, "debuggerActions");
         this.frameNavigation = Objects.requireNonNull(frameNavigation, "frameNavigation");
         this.frames = new DebuggerFramesPane(this::selectFrame, frameNavigation);
-        this.inspector = new DebuggerInspector(state, controller, navigation);
+        this.inspector = new DebuggerInspector(notifications, state, controller, navigation);
 
         this.attach = toolbarButton(debuggerActions.attach());
         this.resume = toolbarButton(debuggerActions.resume());
@@ -121,10 +124,7 @@ public final class DebuggerPanel extends JPanel {
         add(createToolbar(), BorderLayout.NORTH);
 
         JSplitPane split = new InitialProportionSplitPane(0.42, this.frames, this.inspector);
-        split.setBorder(BorderFactory.createEmptyBorder());
-        split.setDividerSize(1);
         split.setResizeWeight(0.42);
-        split.setContinuousLayout(true);
         add(split, BorderLayout.CENTER);
 
         this.controller.addListener(this.listener);
@@ -353,7 +353,7 @@ public final class DebuggerPanel extends JPanel {
         }
     }
 
-    private static final class InitialProportionSplitPane extends JSplitPane {
+    private static final class InitialProportionSplitPane extends ThinSplitPane {
         private final double initialProportion;
         private boolean initialized;
 
@@ -362,7 +362,7 @@ public final class DebuggerPanel extends JPanel {
                 Component leftComponent,
                 Component rightComponent
         ) {
-            super(JSplitPane.HORIZONTAL_SPLIT, leftComponent, rightComponent);
+            super(leftComponent, rightComponent);
             this.initialProportion = initialProportion;
         }
 

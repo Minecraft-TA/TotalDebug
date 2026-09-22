@@ -15,6 +15,8 @@ import javax.swing.event.CaretListener;
 import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.nio.file.Path;
 
 /** Java-specific parsing and navigation layered on top of the shared text editor. */
 public class AbstractCodeViewPanel extends AbstractTextViewPanel implements JavaEditorContext {
@@ -23,6 +25,7 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
     protected final String identifier;
     private boolean astDisposed;
     protected final JavaEditorAnalysis analysis;
+    private final InlineDiagnostics inlineDiagnostics;
 
     public AbstractCodeViewPanel(EditorContext context, String identifier, String className) {
         this(context, identifier, className, JavaEditorSource::identity, false);
@@ -33,15 +36,25 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
             String className,
             Function<String, JavaEditorSource> sourceFactory, boolean diagnostics
     ) {
+        this(context, identifier, className, sourceFactory, diagnostics, () -> Path.of(identifier));
+    }
+
+    protected AbstractCodeViewPanel(EditorContext context, String identifier, String className,
+                                    Function<String, JavaEditorSource> sourceFactory, boolean diagnostics, Supplier<Path> sourcePath) {
         super();
         this.context = context;
         installNavigationHistoryMenu(context.navigation());
         this.identifier = identifier;
 
-        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
+        this.editorPane.setLinkGenerator(new CustomJavaLinkGenerator(context.astCache(), identifier, sourcePath, context.navigation()::revealPackage, target -> context.navigation().navigate(target)));
         setSyntaxStyle(RSyntaxTextArea.SYNTAX_STYLE_JAVA);
         this.analysis = new JavaEditorAnalysis(editorPane, context.astCache(), identifier, className,
                 sourceFactory, context.analysisExecutor(), diagnostics);
+        this.inlineDiagnostics = diagnostics ? new InlineDiagnostics(editorPane, editorLayer) : null;
+        if (inlineDiagnostics != null) {
+            editorChromeLayerUI.setInlineDiagnostics(inlineDiagnostics);
+            analysis.setProblemListener(inlineDiagnostics::setProblems);
+        }
     }
 
     @Override
@@ -76,6 +89,8 @@ public class AbstractCodeViewPanel extends AbstractTextViewPanel implements Java
         if (!this.astDisposed) {
             this.astDisposed = true;
             this.analysis.close();
+            if (inlineDiagnostics != null) inlineDiagnostics.close();
+            editorChromeLayerUI.setInlineDiagnostics(null);
         }
         super.dispose();
     }

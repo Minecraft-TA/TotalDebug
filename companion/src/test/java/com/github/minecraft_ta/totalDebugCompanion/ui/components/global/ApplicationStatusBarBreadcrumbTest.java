@@ -24,7 +24,7 @@ import java.util.function.IntConsumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ApplicationStatusBarBreadcrumbTest {
+class ApplicationStatusBarBreadcrumbTest extends StatusBarTestFixture {
     @Test void scriptBreadcrumbsExcludeGeneratedMembersAndMapRealDeclarations() throws Exception {
         try (var index = JavaAnalysisFixtures.index()) {
             CompanionClassIndex.set(index);
@@ -49,7 +49,7 @@ class ApplicationStatusBarBreadcrumbTest {
         } finally { CompanionClassIndex.clear(); }
     }
 
-    private static void check(String text, JavaEditorSource source, int caret, NavigationTarget target,
+    private void check(String text, JavaEditorSource source, int caret, NavigationTarget target,
                               String label, NavigationTarget expected) throws Exception {
         var snapshot = JavaAnalysis.parse("Proof", text, source, 0, CompanionClassIndex.identity());
         var context = new JavaEditorContext() {
@@ -62,7 +62,7 @@ class ApplicationStatusBarBreadcrumbTest {
         };
         var navigated = new AtomicReference<NavigationTarget>();
         SwingUtilities.invokeAndWait(() -> {
-            var bar = new ApplicationStatusBar(navigated::set, () -> {});
+            var bar = statusBar(navigated::set);
             try {
                 bar.setEditor(new IEditorPanel() {
                     @Override public String getTitle() { return "Proof"; }

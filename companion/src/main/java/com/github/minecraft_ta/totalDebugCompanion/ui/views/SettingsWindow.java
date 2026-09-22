@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 
@@ -38,6 +39,7 @@ public class SettingsWindow extends JDialog {
 
     private final InstanceState state;
     private final DebuggerSessionController debugger;
+    private final Consumer<CompanionTheme> themeListener = theme -> setIconImages(Icons.createWindowIconImages(theme));
 
     public SettingsWindow(Window owner, InstanceState state, DebuggerSessionController debugger) {
         super(owner, "Settings", ModalityType.MODELESS);
@@ -62,6 +64,7 @@ public class SettingsWindow extends JDialog {
                 config::setUiFontSize,
                 ThemeManager::reapply
         ));
+        addWideRow(form, row++, createToggle("Show inline diagnostics", config.inlineDiagnostics(), config::setInlineDiagnostics));
         addSection(form, row++, "Debugger");
         addWideRow(form, row++, createExceptionBreakpointToggle(
                 "Pause on caught exceptions",
@@ -89,9 +92,17 @@ public class SettingsWindow extends JDialog {
 
         setContentPane(content);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        themeListener.accept(ThemeManager.current());
         pack();
         setMinimumSize(getPreferredSize());
         setLocationRelativeTo(owner);
+        ThemeManager.addThemeChangeListener(themeListener);
+    }
+
+    @Override
+    public void dispose() {
+        ThemeManager.removeThemeChangeListener(themeListener);
+        super.dispose();
     }
 
     private JComponent createThemeChooser() {

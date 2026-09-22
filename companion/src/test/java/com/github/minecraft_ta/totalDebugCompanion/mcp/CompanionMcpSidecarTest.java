@@ -5,6 +5,9 @@ import java.util.function.Consumer;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import java.util.ArrayList;
+import java.util.List;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
@@ -32,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompanionMcpSidecarTest {
     @TempDir
     Path temporaryDirectory;
+    private final List<CodeModeJobService> jobServices = new ArrayList<>();
+
+    @AfterEach void closeJobs() { jobServices.forEach(CodeModeJobService::close); }
 
     @Test
     void initializesOfflineForwardsConcurrentWaitsAndReconnects() throws Exception {
@@ -173,6 +179,7 @@ class CompanionMcpSidecarTest {
                 transport,
                 Clock.systemUTC()
         );
+        jobServices.add(jobs);
         var scope = new ProjectScope(new Object(), new CompanionProfile(instance, temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
         return new CompanionMcpServer(
                 this.temporaryDirectory.resolve(instance).resolve("data"),

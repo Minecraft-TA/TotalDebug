@@ -10,13 +10,34 @@ Minecraft source with an illustrated debugger pause and a nested Java evaluation
 
 Open a block, entity or item from Minecraft with F6, then navigate its decompiled source. Companion includes class and member search, Find Usages, type hierarchies, editor completion and archive resource previews.
 
-The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. Live tools reconnect when TotalDebug starts again; local indexes do not enable execution.
+The workspace remains open when Minecraft exits. Source browsing and indexed navigation work offline while the runtime archives and Java installation remain available. Instances without a saved runtime expose their mod archives immediately and build a local index automatically. TotalDebug watches Companion's application endpoint and connects when its project is selected, in either startup order and after Companion restarts. The Game popup can request Reconnect; it waits for authentication and reports failure after 30 seconds without a matching game. Local indexes do not enable execution.
 
 ## Evaluate and debug
 
 Evaluate expressions or Java statement bodies, inspect their results, and save reusable code as scripts. Run scripts on the client or server according to the server's execution policy.
 
 In the script editor, Ctrl+Space opens completion; Enter or Tab accepts the selected suggestion. Selection survives result updates. Ctrl+P shows call parameters and emphasizes the current argument; Escape closes the popup. Field and method icons show visibility, static and final modifiers. Private members remain available through the script linker.
+
+Ctrl+Shift+Enter completes the statement containing the caret, without opening autocomplete. It adds missing call delimiters and semicolons, opens ordinary conditional/loop blocks, and moves to the next editing position. Missing or empty lambda bodies become multiline blocks, with the caret inside and the enclosing statement's semicolon completed. Missing expressions remain input positions. An open suggestion popup closes without accepting a suggestion. The command is one undoable edit and works without a connected runtime.
+
+Organize scripts in ordinary folders. Right-click a folder to create a script or folder inside it. File and folder menus offer Rename, Move to and Delete; scripts also offer Duplicate. F2 renames the selection. Drag files or folders onto a folder to move them; Move to is also available in the menu. Moves preserve open scripts, undo and running state. Deletion uses the recycle bin where available and requires stopping affected running scripts first. Duplicate copies the current draft, and external file changes are reported instead of silently overwritten.
+
+At the start of a statement, `if`, `for` and `fori` insert condition, foreach and indexed-loop templates. Enter accepts the template; Tab moves through its fields and into the body.
+
+Postfix templates transform the expression before the dot:
+
+| Suffix | Available for | Expansion |
+| --- | --- | --- |
+| `.for` | Arrays and `Iterable` values | Enhanced loop with an inferred element type |
+| `.fori` / `.forr` | Arrays, lists and integral bounds | Forward / reverse indexed loop |
+| `.if` / `.else` | Boolean expressions | Positive / negated condition |
+| `.nn` / `.null` | Reference values | Non-null / null check |
+| `.not` | Boolean expressions | Negated expression |
+| `.logln` / `.sout` | Non-void values | Script logging call |
+| `.var` | Non-void values | Local variable with inferred type and imports |
+
+Accept with Enter or Tab, edit the selected variable name, then Tab into the body. Loop index references are linked, generated names avoid existing identifiers, and an expansion is one undoable edit. Statement templates are offered at statement boundaries inside blocks; `.not` also works within expressions. `.forr` visits array/list indices from the last to zero, or counts a numeric bound down to one. A computed forward-loop bound is evaluated once.
+
 
 After at least two characters of a member name, completion also offers matching instance members from indexed subtypes, labelled with the required cast. Accepting one inserts the cast and imports in the same undo step. These are possible types, not observations of the live object. Searches skip `Object`, inspect at most 256 subtypes with the receiver's package first, and resolve at most six matching cast targets. No game code runs during completion.
 

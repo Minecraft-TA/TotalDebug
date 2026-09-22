@@ -9,7 +9,7 @@ import java.util.List;
 
 public class Icons {
 
-    private static final String WINDOW_ICON = "/icons/javaFile";
+    private static final String WINDOW_ICON = "/icons/companion";
 
     /** Window icons are raster images, so they must be rebuilt when the theme changes. */
     public static List<Image> createWindowIconImages(CompanionTheme theme) {
@@ -26,6 +26,7 @@ public class Icons {
     public static final FlatSVGIcon JAVA_CLASS = new FlatSVGIcon("icons/class.svg");
     public static final FlatSVGIcon JAVA_CONSTANT = new FlatSVGIcon("icons/constant.svg");
     public static final FlatSVGIcon JAVA_PROPERTY = new FlatSVGIcon("icons/property.svg");
+    public static final FlatSVGIcon TEMPLATE = new FlatSVGIcon("icons/template.svg");
     public static final FlatSVGIcon JAVA_VARIABLE = new FlatSVGIcon("icons/variable.svg");
     public static final FlatSVGIcon JAVA_PARAMETER = new FlatSVGIcon("icons/parameter.svg");
     public static final FlatSVGIcon JAVA_INTERFACE = new FlatSVGIcon("icons/interface.svg");
@@ -42,8 +43,12 @@ public class Icons {
     public static final FlatSVGIcon ERROR = new FlatSVGIcon("icons/error.svg");
 
     public static final FlatSVGIcon JAVA_FILE = new FlatSVGIcon("icons/javaFile.svg");
+    public static final FlatSVGIcon SCRIPT_FILE = new FlatSVGIcon("icons/script.svg");
     public static final FlatSVGIcon TEXT_FILE = new FlatSVGIcon("icons/text.svg");
     public static final FlatSVGIcon JAR_FILE = new FlatSVGIcon("icons/jar.svg");
+    public static final FlatSVGIcon NEW_FOLDER = new FlatSVGIcon("icons/newFolder.svg");
+    public static final FlatSVGIcon RENAME = new FlatSVGIcon("icons/rename.svg");
+    public static final FlatSVGIcon MOVE_TO_FOLDER = new FlatSVGIcon("icons/moveToFolder.svg");
     public static final FlatSVGIcon FOLDER = new FlatSVGIcon("icons/folder.svg");
     public static final FlatSVGIcon PACKAGE = new FlatSVGIcon("icons/package.svg");
     public static final FlatSVGIcon SOURCE_ROOT = new FlatSVGIcon("icons/sourceRoot.svg");
@@ -51,6 +56,7 @@ public class Icons {
     public static final FlatSVGIcon LIBRARY = new FlatSVGIcon("icons/library.svg");
     public static final FlatSVGIcon RESOURCE_BUNDLE = new FlatSVGIcon("icons/resourceBundle.svg");
     public static final FlatSVGIcon MODULE = new FlatSVGIcon("icons/module.svg");
+    public static final FlatSVGIcon PRISM = new FlatSVGIcon("icons/prism.svg", 16, 16);
     public static final FlatSVGIcon PRISM_INSTANCE = new FlatSVGIcon("icons/prism-instance.svg");
 
     public static final FlatSVGIcon IMAGE_FILE = new FlatSVGIcon("icons/image.svg");
@@ -70,6 +76,8 @@ public class Icons {
     public static final FlatSVGIcon CLOSE_ICON = new FlatSVGIcon("icons/close.svg");
     public static final FlatSVGIcon CLOSE_HOVERED_ICON = new FlatSVGIcon("icons/closeHovered.svg");
     public static final FlatSVGIcon DELETE = new FlatSVGIcon("icons/delete.svg");
+    public static final FlatSVGIcon REFRESH = new FlatSVGIcon("icons/refresh.svg");
+    public static final FlatSVGIcon NOTIFICATIONS = new FlatSVGIcon("icons/notifications.svg");
     public static final FlatSVGIcon SETTINGS = new FlatSVGIcon("icons/settings.svg");
 
     public static final FlatSVGIcon RUN = new FlatSVGIcon("icons/run.svg");
@@ -124,4 +132,5 @@ public class Icons {
     public static final FlatSVGIcon EXPAND_EDITOR = new FlatSVGIcon("icons/expand_editor.svg");
     public static final FlatSVGIcon COLLAPSE_EDITOR = new FlatSVGIcon("icons/collapse_editor.svg");
     public static final FlatSVGIcon DOWN_ARROW = new FlatSVGIcon("icons/arrow_down.svg");
+    public static final FlatSVGIcon RIGHT_ARROW = new FlatSVGIcon("icons/arrow_right.svg");
 }

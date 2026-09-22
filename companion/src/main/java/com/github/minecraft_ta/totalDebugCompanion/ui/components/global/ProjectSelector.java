@@ -1,5 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
+import com.formdev.flatlaf.util.SystemFileChooser;
+
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.PrismInstancePicker;
 import com.formdev.flatlaf.util.UIScale;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -28,8 +33,10 @@ public final class ProjectSelector extends JMenu {
     private boolean disposed;
     private PrismInstancePicker prismPicker;
     private final ProjectControls projects;
+    private final NotificationCenter notifications;
 
-    public ProjectSelector(ProjectControls projects) {
+    public ProjectSelector(ProjectControls projects, NotificationCenter notifications) {
+        this.notifications = notifications;
         this.projects = Objects.requireNonNull(projects);
         setMargin(new Insets(4, 8, 4, 8));
         setIcon(Icons.DOWN_ARROW);
@@ -65,7 +72,7 @@ public final class ProjectSelector extends JMenu {
     private void loadMenu() {
         removeAll();
         action("Open…", Icons.FOLDER, this::chooseDirectory);
-        action("Prism instances…", Icons.LIBRARY, this::choosePrism);
+        action("Prism instances…", Icons.PRISM, this::choosePrism);
         var known = projects.projects();
         var current = projects.currentProject();
         var selected = known.stream().filter(project -> project.profile().equals(current)).findFirst();
@@ -153,10 +160,10 @@ public final class ProjectSelector extends JMenu {
     }
 
     private void chooseDirectory() {
-        var chooser = new JFileChooser();
+        var chooser = new SystemFileChooser();
         chooser.setDialogTitle("Open Minecraft instance");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (chooser.showOpenDialog(getTopLevelAncestor()) == JFileChooser.APPROVE_OPTION) {
+        chooser.setFileSelectionMode(SystemFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showOpenDialog(getTopLevelAncestor()) == SystemFileChooser.APPROVE_OPTION) {
             Path selected = chooser.getSelectedFile().toPath();
             openDirectory(selected);
         }
@@ -189,7 +196,7 @@ public final class ProjectSelector extends JMenu {
 
     private void showFailure(Throwable failure) {
         while (failure.getCause() != null) failure = failure.getCause();
-        JOptionPane.showMessageDialog(getTopLevelAncestor(), failure.getMessage(), "Project operation failed", JOptionPane.ERROR_MESSAGE);
+        notifications.publish(Severity.ERROR, "Project operation failed", failure.toString(), Source.application("Projects"));
     }
 
     private static String shortenPath(Path path) {

@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
 import com.github.minecraft_ta.totaldebug.evaluation.ServerManifest;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
-import java.util.HashMap;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -370,6 +369,7 @@ class ScriptCompilationServiceTest {
             int middle = bytes.length / 2;
             compiler.acceptServerManifest(new ServerManifestMessage("session", "", 0, bytes.length,
                     Arrays.copyOfRange(bytes, 0, middle)));
+            compiler.suspendRuntime();
             compiler.bind(snapshot);
             compiler.acceptServerManifest(new ServerManifestMessage("session", "", middle, bytes.length,
                     Arrays.copyOfRange(bytes, middle, bytes.length)));
@@ -476,14 +476,16 @@ class ScriptCompilationServiceTest {
         return writer;
     }
 
-    private ReadySnapshot fixture() throws Exception {
+    private ReadySnapshot fixture() throws Exception { return fixture(directory); }
+
+    static ReadySnapshot fixture(Path directory) throws Exception {
         Path dependency;
         Path api;
         Path program;
         try (var compiler = new InMemoryJavaCompiler()) {
-            dependency = jar("dependency.jar", compiler.compile(
+            dependency = jar(directory, "dependency.jar", compiler.compile(
                     "package fixture; public interface QuadView {}", "fixture.QuadView", ""));
-            api = jar("api.jar", compiler.compile("""
+            api = jar(directory, "api.jar", compiler.compile("""
                     package fixture;
                     class Base<T> { public T value(T value) { return value; } }
                     public class Api extends Base<String> {
@@ -492,19 +494,21 @@ class ScriptCompilationServiceTest {
                         public static int pick(int[] first, QuadView second) { return 8; }
                     }
                     """, "fixture.Api", dependency.toString()));
-            program = jar("program.jar", compiler.compile(
+            program = jar(directory, "program.jar", compiler.compile(
                     "package fixture; public abstract class ScriptProgram { public abstract Object run(); }",
                     "fixture.ScriptProgram", ""));
         }
-        Files.writeString(this.directory.resolve("inventory.json"), "{\"id\":\"inventory\"}");
+        Files.writeString(directory.resolve("inventory.json"), "{\"id\":\"inventory\"}");
         ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.archive(0, api.toString()),
                 IndexSource.archive(1, dependency.toString()), IndexSource.archive(2, program.toString())));
-        return new ReadySnapshot("inventory", "signature", this.directory.resolve("index.jindex"),
+        return new ReadySnapshot("inventory", "signature", directory.resolve("index.jindex"),
                 List.of(librarySource(0, api), librarySource(1, dependency), librarySource(2, program)), index);
     }
 
-    private Path jar(String name, Map<String, byte[]> classes) throws IOException {
-        Path path = this.directory.resolve(name);
+    private Path jar(String name, Map<String, byte[]> classes) throws IOException { return jar(directory, name, classes); }
+
+    private static Path jar(Path directory, String name, Map<String, byte[]> classes) throws IOException {
+        Path path = directory.resolve(name);
         try (var output = new JarOutputStream(Files.newOutputStream(path))) {
             for (var entry : classes.entrySet()) {
                 output.putNextEntry(new JarEntry(entry.getKey().replace('.', '/') + ".class"));

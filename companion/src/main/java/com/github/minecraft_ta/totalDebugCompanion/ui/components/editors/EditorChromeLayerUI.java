@@ -28,6 +28,7 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
     private Color gutterBackground;
     private Color currentLine;
     private BreakpointGutterMarkers breakpointMarkers;
+    private InlineDiagnostics inlineDiagnostics;
 
     EditorChromeLayerUI(RSyntaxTextArea editor, Gutter gutter) {
         this.editor = Objects.requireNonNull(editor, "editor");
@@ -38,6 +39,11 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
         this.gutterBackground = palette.background();
         this.currentLine = palette.currentLine();
         layer.repaint();
+    }
+
+    void setInlineDiagnostics(InlineDiagnostics diagnostics) {
+        this.inlineDiagnostics = diagnostics;
+        if (layer != null) layer.repaint();
     }
 
     void setBreakpointMarkers(BreakpointGutterMarkers breakpointMarkers) {
@@ -79,24 +85,31 @@ final class EditorChromeLayerUI extends LayerUI<RTextScrollPane> implements Care
             draw.fillRect(gutterBounds.x, gutterBounds.y, gutterBounds.width, gutterBounds.height);
 
             Rectangle2D caretLine = this.editor.modelToView2D(this.editor.getCaretPosition());
-            Point linePoint = SwingUtilities.convertPoint(
-                    this.editor,
-                    0,
-                    (int) Math.floor(caretLine.getY()),
-                    component
-            );
-            draw.setColor(this.currentLine == null ? this.editor.getCurrentLineHighlightColor() : this.currentLine);
-            draw.fillRect(
-                    gutterBounds.x,
-                    linePoint.y,
-                    gutterBounds.width,
-                    (int) Math.ceil(caretLine.getHeight())
-            );
+            if (caretLine != null) {
+                Point linePoint = SwingUtilities.convertPoint(
+                        this.editor,
+                        0,
+                        (int) Math.floor(caretLine.getY()),
+                        component
+                );
+                draw.setColor(this.currentLine == null ? this.editor.getCurrentLineHighlightColor() : this.currentLine);
+                draw.fillRect(
+                        gutterBounds.x,
+                        linePoint.y,
+                        gutterBounds.width,
+                        (int) Math.ceil(caretLine.getHeight())
+                );
+            }
         } catch (BadLocationException ignored) {
         } finally {
             draw.dispose();
         }
         super.paint(graphics, component);
+        if (inlineDiagnostics != null) {
+            Graphics2D overlay = (Graphics2D) graphics.create();
+            try { inlineDiagnostics.paint(overlay); }
+            finally { overlay.dispose(); }
+        }
         if (this.breakpointMarkers != null) {
             Graphics2D overlay = (Graphics2D) graphics.create();
             try {

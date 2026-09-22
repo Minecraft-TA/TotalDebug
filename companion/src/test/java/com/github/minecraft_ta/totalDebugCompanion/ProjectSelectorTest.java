@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -45,6 +47,9 @@ class ProjectSelectorTest {
                     public boolean isConnected() { return false; }
                     public IndexIdentity.Kind indexSourceKind() { return null; }
                     public CompletableFuture<Void> retryIndex() { throw new AssertionError(); }
+                    public CompletableFuture<Void> reconnectGame(ProjectScope expectedProject) { throw new AssertionError(); }
+                    public CompletableFuture<Void> launchGame(ProjectScope expectedProject) { throw new AssertionError(); }
+                    public CompletableFuture<String> gameLaunchUnavailableReason(ProjectScope expectedProject) { throw new AssertionError(); }
                     public RuntimeIndexService.Status getRuntimeIndexStatus() { throw new AssertionError(); }
                     public CompletableFuture<Void> openProject(CompanionProfile selected, String name) {
                         opened.incrementAndGet();
@@ -57,7 +62,7 @@ class ProjectSelectorTest {
                     }
                 };
                 var owner = new JFrame();
-                var selector = new ProjectSelector(controls);
+                var selector = new ProjectSelector(controls, new NotificationCenter());
                 var previousFactory = PopupFactory.getSharedInstance();
                 try {
                     PopupFactory.setSharedInstance(new OffscreenPopupFactory());

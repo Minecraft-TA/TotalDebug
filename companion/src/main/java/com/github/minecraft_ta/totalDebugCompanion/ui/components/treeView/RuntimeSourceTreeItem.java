@@ -139,12 +139,8 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
             return "JDK modules";
         }
         String logical = source.logicalUri();
-        int nested = logical.lastIndexOf("!/");
-        if (nested >= 0) {
-            String entry = logical.substring(nested + 2);
-            int separator = entry.lastIndexOf('/');
-            return separator < 0 ? entry : entry.substring(separator + 1);
-        }
+        // A trailing archive-root delimiter identifies the archive itself, not an empty entry.
+        while (logical.endsWith("!/")) logical = logical.substring(0, logical.length() - 2);
         URI uri = URI.create(logical);
         if ("file".equalsIgnoreCase(uri.getScheme())) {
             Path fileName = Path.of(uri).getFileName();
@@ -153,12 +149,18 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
             }
             return fileName.toString();
         }
-        String path = uri.getPath();
+        String path = uri.isOpaque() ? uri.getSchemeSpecificPart() : uri.getPath();
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("Runtime source URI has no display path: " + logical);
         }
-        int separator = path.lastIndexOf('/');
-        return separator < 0 ? path : path.substring(separator + 1);
+        while (path.endsWith("/") && path.length() > 1) path = path.substring(0, path.length() - 1);
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        if ("union".equalsIgnoreCase(uri.getScheme()) && !logical.contains("!/")) {
+            // Union filesystem instance ids are not part of the backing archive's filename.
+            name = name.replaceFirst("#\\d+$", "");
+        }
+        if (name.isBlank()) throw new IllegalArgumentException("Runtime source URI has no file name: " + source.logicalUri());
+        return name;
     }
 
     private static List<Path> directories(Path directory) {
@@ -172,12 +174,35 @@ final class RuntimeSourceTreeItem extends DirectoryTreeItem {
     static final class RuntimeDirectoryEntry extends DirectoryTreeItem {
         private final Path classRoot;
         private final Path directory;
+        private boolean empty;
 
         RuntimeDirectoryEntry(Path classRoot, Path directory) {
             super(directory.getFileName().toString());
             this.classRoot = classRoot;
             this.directory = directory;
-            setIcon(Icons.PACKAGE);
+            setIcon(resourceDirectory() ? Icons.FOLDER : Icons.PACKAGE);
+        }
+
+        private boolean resourceDirectory() {
+            if (classRoot.equals(directory)) return false;
+            String first = classRoot.relativize(directory).getName(0).toString();
+            return first.equalsIgnoreCase("assets") || first.equalsIgnoreCase("data") || first.equalsIgnoreCase("META-INF");
+        }
+
+        @Override public String compactSeparator() {
+            if (classRoot.equals(directory)) return null;
+            return resourceDirectory() ? "/" : ".";
+        }
+
+        @Override protected boolean isInitiallyEmpty() { return empty; }
+        @Override public Object compactIdentity() throws IOException { return directory.toRealPath(); }
+
+        @Override public DirectoryTreeItem singleDirectoryChild() throws IOException {
+            if (!ordinaryDirectory(directory)) return null;
+            var entries = firstChildren(directory);
+            empty = entries.isEmpty();
+            return entries.size() == 1 && ordinaryDirectory(entries.getFirst())
+                    ? new RuntimeDirectoryEntry(classRoot, entries.getFirst()) : null;
         }
 
         @Override

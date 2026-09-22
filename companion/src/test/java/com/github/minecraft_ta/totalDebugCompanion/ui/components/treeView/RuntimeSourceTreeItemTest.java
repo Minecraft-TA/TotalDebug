@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
@@ -15,6 +17,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 final class RuntimeSourceTreeItemTest {
+    @ParameterizedTest
+    @CsvSource({
+            "union:/C:/libraries/loader-4.0.44.jar%23161!/, loader-4.0.44.jar",
+            "union:/libraries/loader.jar%23161, loader.jar",
+            "union:/libraries/loader.jar%23161!/META-INF/jarjar/nested.jar!/, nested.jar",
+            "jar:file:/libraries/example.jar!/, example.jar",
+            "jar:file:/libraries/example.jar!/META-INF/jarjar/nested.jar, nested.jar",
+            "jar:file:/libraries/example.jar!/META-INF/jarjar/nested.jar!/, nested.jar",
+            "jar:file:/libraries/example.jar!/folder%20name/, folder name",
+            "file:/C:/libraries/example%20mod.jar, example mod.jar",
+            "jrt:/, JDK modules"
+    })
+    void labelsArchiveRootsAndNestedSourcesWithoutLosingTheirLogicalLocation(String logicalUri, String label, @TempDir Path directory) {
+        var module = new RuntimeInventory.RuntimeModule("neoforge", "NeoForge", RuntimeInventory.ModuleKind.PLATFORM);
+        var source = new RuntimeSnapshotBytecodeSource.Source(1, directory.resolve("cached-source.jar"), logicalUri, module);
+        var item = new RuntimeSourceTreeItem(source);
+        assertEquals(label, item.getPresentation().primary());
+        assertEquals(label + " [source 1]", item.getName());
+        assertEquals(logicalUri, item.getTooltip());
+    }
+
     @Test
     void exposesDirectoryClassesAsRuntimeBinaryNames(@TempDir Path directory) throws Exception {
         Path packageDirectory = Files.createDirectories(directory.resolve("example/inner"));

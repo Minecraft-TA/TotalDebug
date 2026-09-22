@@ -30,7 +30,7 @@ class RuntimeBindingTest {
              var runtime = snapshot()) {
             var identity = IndexIdentity.local(Map.of());
             var local = new RuntimeIndexService.ReadySnapshot(identity, identity.signature(), runtime.indexFile(),
-                    runtime.sources(), runtime.index(), null);
+                    runtime.sources(), runtime.index(), null, false);
             try (var binding = new RuntimeBinding(local, directory,
                     RuntimeSnapshotBytecodeSource.fromIndexedSources(local.sources(), local.index()), compiler, insights)) {
                 binding.attach();

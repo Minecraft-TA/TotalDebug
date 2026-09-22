@@ -134,17 +134,17 @@ public class EditorTabs extends JTabbedPane {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("Editor close checks must run on the EDT");
         }
-        return List.copyOf(this.editors).stream().allMatch(IEditorPanel::canClose);
+        return List.copyOf(this.editors).stream().allMatch(editor -> !editors.contains(editor) || editor.canClose());
     }
 
     public void closeMatching(Predicate<IEditorPanel> predicate) {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("Editor tabs must be closed on the EDT");
         }
-        for (int i = this.editors.size() - 1; i >= 0; i--) {
-            if (predicate.test(this.editors.get(i))) {
-                removeTabAt(i);
-            }
+        var matching = this.editors.stream().filter(predicate).toList();
+        for (int i = matching.size() - 1; i >= 0; i--) {
+            int index = editors.indexOf(matching.get(i));
+            if (index >= 0) removeTabAt(index);
         }
     }
 
@@ -153,8 +153,10 @@ public class EditorTabs extends JTabbedPane {
         IEditorPanel editor = this.editors.get(index);
         if (!editor.canClose())
             return;
-        editors.remove(index);
-        super.removeTabAt(index);
+        int currentIndex = editors.indexOf(editor);
+        if (currentIndex < 0) return;
+        editors.remove(currentIndex);
+        super.removeTabAt(currentIndex);
         refreshTabHeaders();
         editor.dispose();
         notifySelectedEditorChanged();
@@ -195,6 +197,29 @@ public class EditorTabs extends JTabbedPane {
         return openEditorTab(tab)
                 .thenCompose(ignored -> tab.ready())
                 .thenApply(ignored -> tab);
+    }
+
+    public CompletableFuture<Void> replacePreview(IEditorPanel previous, IEditorPanel replacement) {
+        int index = editors.indexOf(previous);
+        if (index < 0) { replacement.dispose(); return CompletableFuture.completedFuture(null); }
+        var state = previous.captureNavigationViewState();
+        editors.set(index, replacement);
+        setComponentAt(index, replacement.getComponent());
+        setTabComponentAt(index, new EditorTabHeader(this, replacement.getIcon()));
+        previous.dispose();
+        refreshEditorTitles();
+        return replacement.ready().thenRunAsync(() -> replacement.restoreNavigationViewState(state), SwingUtilities::invokeLater);
+    }
+
+    public List<IEditorPanel> editors() { return List.copyOf(editors); }
+
+    public void refreshEditorTitles() {
+        for (int i = 0; i < editors.size(); i++) {
+            setTitleAt(i, editors.get(i).getTitle());
+            setToolTipTextAt(i, editors.get(i).getTooltip());
+        }
+        refreshTabHeaders();
+        notifySelectedEditorChanged();
     }
 
     public IEditorPanel getSelectedEditor() {

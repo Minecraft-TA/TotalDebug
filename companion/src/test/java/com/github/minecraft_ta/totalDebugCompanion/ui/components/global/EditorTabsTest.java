@@ -25,12 +25,34 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorTabsTest {
+
+    @Test void replacingPreviewRefreshesItsIconWithoutChangingTheActiveTab() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var tabs = new EditorTabs();
+            var image = new TestEditor(); image.icon = Icons.IMAGE_FILE;
+            var active = new TestEditor();
+            var text = new TestEditor(); text.icon = Icons.TEXT_FILE;
+            try {
+                tabs.openEditorTab(image); tabs.openEditorTab(active);
+                assertSame(Icons.IMAGE_FILE, find((Container) tabs.getTabComponentAt(0), JLabel.class).getIcon());
+                tabs.replacePreview(image, text);
+                assertSame(Icons.TEXT_FILE, find((Container) tabs.getTabComponentAt(0), JLabel.class).getIcon());
+                assertSame(active, tabs.getSelectedEditor());
+                assertSame(text, tabs.editors().getFirst());
+                assertTrue(image.disposed);
+            } finally {
+                tabs.closeMatching(editor -> true);
+                tabs.analysisExecutor().shutdownNow();
+            }
+        });
+    }
 
     @Test
     void rightPressOnTabPaddingDoesNotSelectAnInactiveTabAndKeyboardOpensItsMenu() throws Exception {
@@ -349,14 +371,30 @@ class EditorTabsTest {
         return null;
     }
 
+    @Test void closeResolvesEditorIdentityAfterReentrantSaveCompletion() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var tabs = new EditorTabs();
+            var first = new TestEditor(); var closing = new TestEditor(); var kept = new TestEditor();
+            tabs.openEditorTab(first); tabs.openEditorTab(closing); tabs.openEditorTab(kept);
+            closing.beforeClose = () -> tabs.closeMatching(view -> view == first);
+            tabs.removeTabAt(1);
+            assertEquals(List.of(kept), tabs.editors());
+            assertTrue(first.disposed); assertTrue(closing.disposed); assertFalse(kept.disposed);
+            tabs.closeMatching(view -> true);
+            tabs.analysisExecutor().shutdownNow();
+        });
+    }
+
     private static final class TestEditor implements IEditorPanel {
         private final JPanel panel = new JPanel();
         private final CompletableFuture<Void> ready = new CompletableFuture<>();
         private boolean disposed;
         private boolean canClose = true;
+        private Icon icon;
         private EditorLocation location = EditorLocation.empty();
 
-        @Override public boolean canClose() { return this.canClose; }
+        private Runnable beforeClose = () -> {};
+        @Override public boolean canClose() { var action = beforeClose; beforeClose = () -> {}; action.run(); return this.canClose; }
         @Override public EditorLocation getLocation() { return this.location; }
 
         @Override
@@ -371,7 +409,7 @@ class EditorTabsTest {
 
         @Override
         public Icon getIcon() {
-            return null;
+            return icon;
         }
 
         @Override

@@ -33,6 +33,10 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class CompanionApp {
+    static {
+        // AWT caches desktop font hints. Set the default before initializing Swing, fonts, or the toolkit.
+        System.getProperties().putIfAbsent("awt.useSystemAAFontSettings", "on");
+    }
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
     private CompanionApp() { }
 

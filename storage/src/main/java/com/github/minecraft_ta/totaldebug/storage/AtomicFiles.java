@@ -1,13 +1,25 @@
 package com.github.minecraft_ta.totaldebug.storage;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /** Publication and cleanup mechanics; callers own formats and retention decisions. */
@@ -48,21 +60,21 @@ public final class AtomicFiles {
     /** Restrict access before writing credentials, including on Windows ACL filesystems. */
     public static void writeSecret(Path target, String value) throws IOException {
         replace(target, staged -> {
-            var acl = Files.getFileAttributeView(staged, java.nio.file.attribute.AclFileAttributeView.class);
+            var acl = Files.getFileAttributeView(staged, AclFileAttributeView.class);
             if (acl != null) {
                 String user = System.getProperty("user.name");
                 String domain = System.getenv("USERDOMAIN");
                 String account = domain == null || domain.isBlank() ? user : domain + "\\" + user;
                 var principal = staged.getFileSystem().getUserPrincipalLookupService().lookupPrincipalByName(account);
-                acl.setAcl(java.util.List.of(java.nio.file.attribute.AclEntry.newBuilder()
-                        .setType(java.nio.file.attribute.AclEntryType.ALLOW)
+                acl.setAcl(List.of(AclEntry.newBuilder()
+                        .setType(AclEntryType.ALLOW)
                         .setPrincipal(principal)
-                        .setPermissions(java.util.EnumSet.allOf(java.nio.file.attribute.AclEntryPermission.class))
+                        .setPermissions(EnumSet.allOf(AclEntryPermission.class))
                         .build()));
-            } else if (Files.getFileAttributeView(staged, java.nio.file.attribute.PosixFileAttributeView.class) != null) {
-                Files.setPosixFilePermissions(staged, java.util.Set.of(
-                        java.nio.file.attribute.PosixFilePermission.OWNER_READ,
-                        java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
+            } else if (Files.getFileAttributeView(staged, PosixFileAttributeView.class) != null) {
+                Files.setPosixFilePermissions(staged, Set.of(
+                        PosixFilePermission.OWNER_READ,
+                        PosixFilePermission.OWNER_WRITE));
             } else {
                 throw new IOException("Credential storage requires ACL or POSIX permissions: " + staged);
             }
@@ -81,9 +93,34 @@ public final class AtomicFiles {
             if (!Files.isRegularFile(staged, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IOException("Staged output is not a regular file: " + staged);
             }
-            Files.move(staged, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            replaceStagedFile(staged, destination);
         } finally {
             Files.deleteIfExists(staged);
+        }
+    }
+
+    private static void replaceStagedFile(Path staged, Path destination) throws IOException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (true) {
+            try {
+                Files.move(staged, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                return;
+            } catch (AccessDeniedException denied) {
+                // Windows cannot replace a file while a reader holds it open. Keep the old
+                // publication intact and retry only the move, never the writer's work.
+                if (destination.getFileSystem().getSeparator().equals("\\") && System.nanoTime() < deadline) {
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        var failure = new InterruptedIOException("Interrupted while replacing " + destination);
+                        failure.initCause(denied);
+                        throw failure;
+                    }
+                } else {
+                    throw denied;
+                }
+            }
         }
     }
 
