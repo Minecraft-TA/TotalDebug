@@ -105,12 +105,12 @@ class CompanionMcpSidecarTest {
                     "\"name\":\"debugger_status\",\"arguments\":{}}}");
             assertUnreachableFailure(response(reader, executor, 31));
 
-            CompletableFuture<Void> submitted = new CompletableFuture<>();
+            CompletableFuture<Integer> submitted = new CompletableFuture<>();
             CodeModeJobService.Transport waitingTransport = new CodeModeJobService.Transport() {
                 @Override
                 public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
                                     CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
-                    submitted.complete(null);
+                    submitted.complete(id);
                 }
 
                 @Override
@@ -128,14 +128,16 @@ class CompanionMcpSidecarTest {
                         {"jsonrpc":"2.0","id":40,"method":"tools/call","params":{
                           "name":"client_code_execute","arguments":{"code":"return 1;","wait_ms":12000}}}
                         """);
-                submitted.get(5, TimeUnit.SECONDS);
+                int scriptId = submitted.get(5, TimeUnit.SECONDS);
                 send(writer, """
                         {"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"status","arguments":{}}}
                         """);
                 assertFalse(response(reader, executor, 41).getAsJsonObject("result").get("isError").getAsBoolean());
-                JsonObject waited = response(reader, executor, 40, 20).getAsJsonObject("result");
+                jobServices.getLast().acceptResult(scriptId, ExecutionResult.completed("", null));
+                JsonObject waited = response(reader, executor, 40).getAsJsonObject("result");
                 assertFalse(waited.get("isError").getAsBoolean());
                 assertTrue(waited.getAsJsonObject("structuredContent").has("job_id"));
+                assertEquals("succeeded", waited.getAsJsonObject("structuredContent").get("state").getAsString());
             }
 
             send(writer, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{" +
@@ -201,13 +203,9 @@ class CompanionMcpSidecarTest {
     }
 
     private static JsonObject response(BufferedReader reader, ExecutorService executor, int id) throws Exception {
-        return response(reader, executor, id, 5);
-    }
-
-    private static JsonObject response(BufferedReader reader, ExecutorService executor, int id, int timeoutSeconds) throws Exception {
         for (int index = 0; index < 20; index++) {
             Future<String> line = executor.submit(reader::readLine);
-            String value = line.get(timeoutSeconds, TimeUnit.SECONDS);
+            String value = line.get(5, TimeUnit.SECONDS);
             if (value == null) {
                 throw new AssertionError("Sidecar output closed before response " + id);
             }

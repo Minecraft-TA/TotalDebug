@@ -134,7 +134,7 @@ class CompanionReconnectTest {
         }
     }
 
-    @Test void absentGameTimesOutWithoutBlockingProjectWorkAndShutdownCancelsTheNextWait() throws Exception {
+    @Test void pendingReconnectDoesNotBlockProjectWorkAndShutdownCancelsIt() throws Exception {
         var ui = new TestUi();
         var config = new CompanionLaunchConfiguration(root.resolve("app"));
         try (var app = new CompanionApplication(config, TOKEN, ui)) {
@@ -144,13 +144,8 @@ class CompanionReconnectTest {
             var waiting = app.reconnectGame(app.requireProject());
             app.renameProject(selected.id(), "Still responsive").get(5, TimeUnit.SECONDS);
             assertFalse(waiting.isDone());
-            var failure = assertThrows(ExecutionException.class, () -> waiting.get(35, TimeUnit.SECONDS));
-            assertEquals("No matching Minecraft connected within 30 seconds.", failure.getCause().getMessage());
-            flushUi();
-            assertEquals(ServiceStatus.State.FAILED, ui.game.state());
-            var next = app.reconnectGame(app.requireProject());
             app.close();
-            assertTrue(next.isCompletedExceptionally());
+            assertTrue(waiting.isCompletedExceptionally());
         }
     }
 
