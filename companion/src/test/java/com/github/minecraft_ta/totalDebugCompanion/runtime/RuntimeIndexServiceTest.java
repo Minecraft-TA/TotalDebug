@@ -256,10 +256,7 @@ class RuntimeIndexServiceTest {
         new RuntimeInventory("same", "21", System.getProperty("java.home"), true,
                 List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
                 .write(paths.inventory());
-        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
-            IndexCache.write(paths.index(), index, new IndexCache.Manifest("same",
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(), module)))).close();
-        }
+        RuntimeTestSources.writeRuntimeCache(paths);
         CountDownLatch loading = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch installed = new CountDownLatch(1);
@@ -389,17 +386,14 @@ class RuntimeIndexServiceTest {
         } finally { if (candidate.get() != null) candidate.get().close(); }
     }
 
-    private com.github.minecraft_ta.totaldebug.storage.InstancePaths cachedFixture(String id) throws Exception {
+    private InstancePaths cachedFixture(String id) throws Exception {
         var paths = new InstancePaths(temporaryDirectory.resolve(id));
         Path jar = Files.write(temporaryDirectory.resolve(id + ".jar"), archive(RuntimeIndexServiceTest.class, null));
         var module = new RuntimeInventory.RuntimeModule("fixture", "Fixture", RuntimeInventory.ModuleKind.MOD);
         new RuntimeInventory(id, "21", System.getProperty("java.home"), true,
                 List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
                 .write(paths.inventory());
-        try (ClassIndex index = ClassIndex.fromBytes(List.of(classBytes(RuntimeIndexServiceTest.class)))) {
-            IndexCache.write(paths.index(), index, new IndexCache.Manifest(id,
-                    List.of(new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(), module)))).close();
-        }
+        RuntimeTestSources.writeRuntimeCache(paths);
         return paths;
     }
 

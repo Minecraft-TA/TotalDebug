@@ -478,26 +478,33 @@ class ScriptCompilationServiceTest {
 
     private ReadySnapshot fixture() throws Exception { return fixture(directory); }
 
-    static ReadySnapshot fixture(Path directory) throws Exception {
-        Path dependency;
-        Path api;
-        Path program;
-        try (var compiler = new InMemoryJavaCompiler()) {
-            dependency = jar(directory, "dependency.jar", compiler.compile(
-                    "package fixture; public interface QuadView {}", "fixture.QuadView", ""));
-            api = jar(directory, "api.jar", compiler.compile("""
-                    package fixture;
-                    class Base<T> { public T value(T value) { return value; } }
-                    public class Api extends Base<String> {
-                        private static int secret = 21;
-                        public static int pick(int[] first, int[] second) { return 7; }
-                        public static int pick(int[] first, QuadView second) { return 8; }
-                    }
-                    """, "fixture.Api", dependency.toString()));
-            program = jar(directory, "program.jar", compiler.compile(
-                    "package fixture; public abstract class ScriptProgram { public abstract Object run(); }",
-                    "fixture.ScriptProgram", ""));
+    private static Map<String, byte[]> fixtureArchives;
+
+    static synchronized ReadySnapshot fixture(Path directory) throws Exception {
+        Path dependency = directory.resolve("dependency.jar");
+        Path api = directory.resolve("api.jar");
+        Path program = directory.resolve("program.jar");
+        if (fixtureArchives == null) {
+            try (var compiler = new InMemoryJavaCompiler()) {
+                dependency = jar(directory, "dependency.jar", compiler.compile(
+                        "package fixture; public interface QuadView {}", "fixture.QuadView", ""));
+                api = jar(directory, "api.jar", compiler.compile("""
+                        package fixture;
+                        class Base<T> { public T value(T value) { return value; } }
+                        public class Api extends Base<String> {
+                            private static int secret = 21;
+                            public static int pick(int[] first, int[] second) { return 7; }
+                            public static int pick(int[] first, QuadView second) { return 8; }
+                        }
+                        """, "fixture.Api", dependency.toString()));
+                program = jar(directory, "program.jar", compiler.compile(
+                        "package fixture; public abstract class ScriptProgram { public abstract Object run(); }",
+                        "fixture.ScriptProgram", ""));
+            }
+            fixtureArchives = Map.of("dependency.jar", Files.readAllBytes(dependency),
+                    "api.jar", Files.readAllBytes(api), "program.jar", Files.readAllBytes(program));
         }
+        for (var archive : fixtureArchives.entrySet()) Files.write(directory.resolve(archive.getKey()), archive.getValue());
         Files.writeString(directory.resolve("inventory.json"), "{\"id\":\"inventory\"}");
         ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.archive(0, api.toString()),
                 IndexSource.archive(1, dependency.toString()), IndexSource.archive(2, program.toString())));

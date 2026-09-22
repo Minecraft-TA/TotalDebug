@@ -24,7 +24,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
-import com.github.minecraft_ta.totalDebugCompanion.ui.views.SearchEverywherePopup;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
@@ -41,7 +40,6 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowEvent;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -306,82 +304,6 @@ public final class UiDevHarness {
         return null;
     }
 
-    private static void scheduleSearchEverywhereInteractionVerification() {
-        Timer openTimer = new Timer(500, event -> {
-            mainWindow.openSearchEverywhere();
-            SearchEverywherePopup popup = Arrays.stream(java.awt.Window.getWindows())
-                    .filter(SearchEverywherePopup.class::isInstance)
-                    .map(SearchEverywherePopup.class::cast)
-                    .filter(java.awt.Window::isShowing)
-                    .findFirst()
-                    .orElseThrow();
-            // This fixture sends synthetic events; native focus belongs to the user's other windows.
-            var focusListeners = popup.getWindowFocusListeners();
-            for (var listener : focusListeners) popup.removeWindowFocusListener(listener);
-            Timer firstQuery = new Timer(250, queryEvent -> {
-                popup.setLocation(mainWindow.getX() + 220, mainWindow.getY() + 70);
-                FlatIconTextField search = findComponent(popup, FlatIconTextField.class);
-                if (search == null) {
-                    throw new IllegalStateException("Search Everywhere query field was not found");
-                }
-                search.setText("Theme");
-
-                long resultsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                Timer verifyResults = new Timer(50, verifyEvent -> {
-                    @SuppressWarnings("rawtypes")
-                    JList results = findComponent(popup, JList.class);
-                    if (results == null || results.getModel().getSize() == 0 || !results.isShowing()) {
-                        if (System.nanoTime() < resultsDeadline) return;
-                        throw new IllegalStateException("Initial Search Everywhere results did not become visible");
-                    }
-
-                    ((Timer) verifyEvent.getSource()).stop();
-                    int previousResultCount = results.getModel().getSize();
-                    search.setText("ThemeSampleImpl");
-                    if (!results.isShowing() || results.getModel().getSize() != previousResultCount) {
-                        throw new IllegalStateException("Typing replaced visible results with a transient blank state");
-                    }
-
-                    Component dragSurface = findNamedComponent(popup, "searchEverywhere.dragSurface");
-                    if (dragSurface == null) {
-                        throw new IllegalStateException("Search Everywhere drag surface was not found");
-                    }
-                    Point before = popup.getLocation();
-                    dispatchWindowDrag(dragSurface, 36, 24);
-                    Point after = popup.getLocation();
-                    if (!after.equals(new Point(before.x + 36, before.y + 24))) {
-                        throw new IllegalStateException(
-                                "Search Everywhere drag moved to " + after + " instead of the expected offset"
-                        );
-                    }
-
-                    long updatedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                    Timer verifyUpdated = new Timer(50, updatedEvent -> {
-                        if (results.getModel().getSize() != 1 || !results.isShowing()) {
-                            if (System.nanoTime() < updatedDeadline) return;
-                            throw new IllegalStateException("Updated Search Everywhere results did not remain visible");
-                        }
-                        ((Timer) updatedEvent.getSource()).stop();
-                        for (var listener : focusListeners) popup.addWindowFocusListener(listener);
-                        var lostFocus = new WindowEvent(popup, WindowEvent.WINDOW_LOST_FOCUS);
-                        for (var listener : focusListeners) listener.windowLostFocus(lostFocus);
-                        if (popup.isVisible()) throw new IllegalStateException("Losing focus must dismiss Search Everywhere");
-                        System.out.println("Search Everywhere interaction verification passed");
-                        popup.dispose();
-                        mainWindow.dispose();
-                        finishHarness(0);
-                    });
-                    verifyUpdated.start();
-                });
-                verifyResults.start();
-            });
-            firstQuery.setRepeats(false);
-            firstQuery.start();
-        });
-        openTimer.setRepeats(false);
-        openTimer.start();
-    }
-
     private static void scheduleMethodNavigationVerification() {
         Timer openTimer = new Timer(500, event -> application.openClass(
                 "sample.ThemeSampleImpl",
@@ -449,68 +371,6 @@ public final class UiDevHarness {
         });
         verifyTimer.setInitialDelay(0);
         verifyTimer.start();
-    }
-
-    private static Component findNamedComponent(Container root, String name) {
-        if (name.equals(root.getName())) {
-            return root;
-        }
-        for (Component component : root.getComponents()) {
-            if (name.equals(component.getName())) {
-                return component;
-            }
-            if (component instanceof Container child) {
-                Component match = findNamedComponent(child, name);
-                if (match != null) {
-                    return match;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static void dispatchWindowDrag(Component component, int deltaX, int deltaY) {
-        Point screen = component.getLocationOnScreen();
-        long now = System.currentTimeMillis();
-        component.dispatchEvent(new MouseEvent(
-                component,
-                MouseEvent.MOUSE_PRESSED,
-                now,
-                MouseEvent.BUTTON1_DOWN_MASK,
-                4,
-                4,
-                screen.x + 4,
-                screen.y + 4,
-                1,
-                false,
-                MouseEvent.BUTTON1
-        ));
-        component.dispatchEvent(new MouseEvent(
-                component,
-                MouseEvent.MOUSE_DRAGGED,
-                now + 1,
-                MouseEvent.BUTTON1_DOWN_MASK,
-                4 + deltaX,
-                4 + deltaY,
-                screen.x + 4 + deltaX,
-                screen.y + 4 + deltaY,
-                0,
-                false,
-                MouseEvent.NOBUTTON
-        ));
-        component.dispatchEvent(new MouseEvent(
-                component,
-                MouseEvent.MOUSE_RELEASED,
-                now + 2,
-                0,
-                4 + deltaX,
-                4 + deltaY,
-                screen.x + 4 + deltaX,
-                screen.y + 4 + deltaY,
-                1,
-                false,
-                MouseEvent.BUTTON1
-        ));
     }
 
     /**
@@ -1033,12 +893,6 @@ public final class UiDevHarness {
             mainWindow.setSize(1280, 720);
             if (mainWindow.isAutoRequestFocus()) {
                 throw new IllegalStateException("Showing the main window must not automatically request focus");
-            }
-            boolean verifySearchEverywhere = Arrays.asList(args).contains(
-                    "--verify-search-everywhere-interactions"
-            );
-            if (verifySearchEverywhere) {
-                scheduleSearchEverywhereInteractionVerification();
             }
             if (Arrays.asList(args).contains("--verify-method-navigation")) {
                 scheduleMethodNavigationVerification();

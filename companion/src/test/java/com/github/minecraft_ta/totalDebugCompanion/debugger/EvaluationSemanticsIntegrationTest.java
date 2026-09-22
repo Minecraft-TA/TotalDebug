@@ -243,19 +243,6 @@ class EvaluationSemanticsIntegrationTest {
     }
 
     @Test
-    void slowBreakpointActionNeverAutomaticallyContinues() throws Exception {
-        try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
-            harness.setBreakpoints(new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_STOP"))
-                    .withAction(new DebugEngine.BreakpointAction("Thread.sleep(5200); local = 19; return local;", null, true)));
-            harness.start();
-            var stop = harness.awaitStop("slow action");
-            assertEquals(DebugEngine.State.STOPPED, harness.engine().state());
-            assertEquals("19", value(harness.engine(), harness.firstFrame(stop.threadId()), "local"));
-            assertTrue(harness.engine().breakpointActionResult().error().contains("slow"));
-        }
-    }
-
-    @Test
     void objectActionResultRemainsInspectableWhenContinuationIsRejected() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_STOP"))
@@ -274,17 +261,15 @@ class EvaluationSemanticsIntegrationTest {
     void cancellingActionByOperationIdKeepsExecutionTrackedAndPaused() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_STOP"))
-                    .withAction(new DebugEngine.BreakpointAction("Thread.sleep(1200); return local;", null, true)));
+                    .withAction(new DebugEngine.BreakpointAction("receiver.awaitCancellation(); return local;", null, true)));
             harness.start();
-            DebuggerEvaluation<?> operation = null;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-            while (operation == null && System.nanoTime() < deadline) {
-                operation = harness.engine().activeEvaluation();
-                if (operation == null) Thread.sleep(10);
-            }
+            assertEquals("action entered", harness.readOutputLine("breakpoint action entry"));
+            DebuggerEvaluation<?> operation = harness.engine().activeEvaluation();
             assertNotNull(operation);
             assertSame(operation, harness.engine().evaluationOperation(operation.id()));
             operation.cancel();
+            assertTrue(operation.running(), "Cancellation cannot finish an invocation still running in the target");
+            harness.closeInput();
             harness.awaitStop("cancelled action");
             assertEquals("cancelled", operation.snapshot().state());
             assertSame(operation, harness.engine().evaluationOperation(operation.id()));

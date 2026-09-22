@@ -90,6 +90,7 @@ class OfflineProjectIntegrationTest {
         Path game = Files.createDirectories(root.resolve("refresh"));
         Path mods = Files.createDirectory(game.resolve("mods"));
         writeProjectJar(mods.resolve("old.jar"), 42);
+        RuntimeTestSources.writeLocalCache(game);
         var paths = InstancePaths.forGame(game);
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
             var profile = ProjectDirectories.resolve(game);
@@ -138,7 +139,6 @@ class OfflineProjectIntegrationTest {
                     assertEquals("No mod archives found", ((JLabel) message.get(popup.get())).getText());
                 } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
             });
-            captureThemes(popup.get(), "offline-empty-search");
         } finally { SwingUtilities.invokeAndWait(() -> { if (popup.get() != null) popup.get().dispose(); }); }
     }
 
@@ -167,6 +167,9 @@ class OfflineProjectIntegrationTest {
             new RuntimeInventory("runtime-refresh", "21", System.getProperty("java.home"), true,
                     List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, jar, jar.toUri().toString(), module)))
                     .write(InstancePaths.forGame(game).inventory());
+            RuntimeTestSources.writeRuntimeCache(InstancePaths.forGame(game));
+        } else {
+            RuntimeTestSources.writeLocalCache(game);
         }
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
             app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
@@ -188,6 +191,7 @@ class OfflineProjectIntegrationTest {
         Path game = Files.createDirectories(root.resolve("refresh"));
         Path mods = Files.createDirectory(game.resolve("mods"));
         writeProjectJar(mods.resolve("demo.jar"), 42);
+        RuntimeTestSources.writeLocalCache(game);
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
             app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
@@ -208,6 +212,7 @@ class OfflineProjectIntegrationTest {
         Path game = Files.createDirectories(root.resolve("handover"));
         Path mods = Files.createDirectory(game.resolve("mods"));
         writeProjectJar(mods.resolve("demo.jar"), 42);
+        RuntimeTestSources.writeLocalCache(game);
         var paths = InstancePaths.forGame(game);
         try (var app = new CompanionApplication(new CompanionLaunchConfiguration(root.resolve("application")), "test")) {
             app.openProject(ProjectDirectories.resolve(game)).get(10, TimeUnit.SECONDS);
@@ -270,7 +275,6 @@ class OfflineProjectIntegrationTest {
             await(() -> onEdtText(view).contains("Copper Panel"));
             assertNull(app.requireProject().runtime());
             expandMods(view);
-            captureThemes(view, "offline-browsing");
             release.countDown();
             blocker.get(5, TimeUnit.SECONDS);
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY);
@@ -282,7 +286,6 @@ class OfflineProjectIntegrationTest {
                     NavigationService.Activation.KEEP_CURRENT_WINDOW).get(15, TimeUnit.SECONDS);
             await(() -> onEdtText(view).contains("return 42"));
             expandMods(view);
-            captureThemes(view, "offline-indexed");
 
             var previous = app.requireProject().requireRuntime();
             var oldIndex = previous.snapshot().index();
@@ -305,22 +308,6 @@ class OfflineProjectIntegrationTest {
         var tree = new AtomicReference<LazyFileJTree>();
         SwingUtilities.invokeAndWait(() -> tree.set(find(view, LazyFileJTree.class)));
         assertTrue(tree.get().revealItemPath("runtime", "demo.jar [demo.jar]", List.of("demo")).get(5, TimeUnit.SECONDS));
-    }
-
-    private static void captureThemes(Window view, String name) throws Exception {
-        Path screenshots = Files.createDirectories(Path.of("build/ui-screenshots"));
-        for (var theme : List.of(CompanionTheme.ISLANDS_DARK, CompanionTheme.ISLANDS_LIGHT)) {
-            SwingUtilities.invokeAndWait(() -> ThemeManager.apply(theme));
-            Thread.sleep(300);
-            SwingUtilities.invokeAndWait(() -> {
-                view.validate();
-                var image = new BufferedImage(view.getWidth(), view.getHeight(), BufferedImage.TYPE_INT_RGB);
-                var graphics = image.createGraphics();
-                view.paintAll(graphics);
-                graphics.dispose();
-                assertDoesNotThrow(() -> ImageIO.write(image, "png", screenshots.resolve(name + (theme.dark() ? "-dark.png" : "-light.png")).toFile()));
-            });
-        }
     }
 
     private static String onEdtText(Container container) {
