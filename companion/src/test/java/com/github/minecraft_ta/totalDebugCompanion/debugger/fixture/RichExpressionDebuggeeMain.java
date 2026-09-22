@@ -161,6 +161,7 @@ public final class RichExpressionDebuggeeMain {
         }
 
         private String neverReturns() {
+            System.out.println("non-returning evaluation entered");
             while (true) {
                 Thread.onSpinWait();
             }

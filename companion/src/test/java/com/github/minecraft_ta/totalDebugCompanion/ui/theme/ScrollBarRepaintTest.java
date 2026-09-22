@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -11,6 +12,7 @@ import java.awt.image.BufferedImage;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
+@UiTest
 class ScrollBarRepaintTest {
     private static final int WIDTH = 14;
     private static final int HEIGHT = 180;

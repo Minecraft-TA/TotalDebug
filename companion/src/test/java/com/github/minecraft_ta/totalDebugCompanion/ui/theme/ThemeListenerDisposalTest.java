@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@UiTest
 class ThemeListenerDisposalTest {
     @TempDir Path directory;
 

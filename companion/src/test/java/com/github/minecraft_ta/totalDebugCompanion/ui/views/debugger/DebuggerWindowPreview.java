@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -69,7 +70,8 @@ public final class DebuggerWindowPreview {
                 ),
                 new DebuggerSessionController.PausedState(stopped, frames, variables)
         );
-        window.setBounds(owner.getX() + 80, owner.getY() + 50, 1120, 620);
+        window.setSize(1120, 620);
+        UiTestScope.place(window, owner, 80, 50);
         window.setVisible(true);
         return window;
     }

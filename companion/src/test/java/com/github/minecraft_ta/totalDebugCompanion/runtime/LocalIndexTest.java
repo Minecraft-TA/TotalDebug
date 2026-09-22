@@ -39,8 +39,8 @@ class LocalIndexTest {
         Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
         writeJar(jar, "sample/Example", 1, false);
         var paths = InstancePaths.forGame(game);
-        Files.createDirectories(paths.index());
-        Path blocker = Files.writeString(paths.index().resolve("blocker"), "blocks publication");
+        Files.createDirectories(paths.cache());
+        Path blocker = Files.writeString(paths.runtime(), "blocks cache-directory creation");
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
         var retry = new AtomicBoolean(true);
         try (var service = new RuntimeIndexService(new Object(), ready::complete)) {
@@ -49,7 +49,6 @@ class LocalIndexTest {
                 if (!retry.getAndSet(false)) { ready.completeExceptionally(status.failure()); return; }
                 try {
                     Files.delete(blocker);
-                    Files.delete(paths.index());
                     service.restore(paths.home(), game);
                 } catch (IOException failure) { ready.completeExceptionally(failure); }
             });
@@ -91,6 +90,7 @@ class LocalIndexTest {
         var paths = InstancePaths.forGame(game);
         Files.createDirectories(paths.runtime());
         Files.writeString(paths.inventory(), "invalid saved inventory");
+        RuntimeTestSources.writeLocalCache(game);
         try (var snapshot = open()) {
             assertFalse(snapshot.isRuntime());
             assertEquals("invalid saved inventory", Files.readString(paths.inventory()));
@@ -108,7 +108,7 @@ class LocalIndexTest {
             archive.putNextEntry(new JarEntry("asset.bin"));
             archive.write(resource);
         }
-        try (var ignored = open()) { }
+        RuntimeTestSources.writeLocalCache(game);
         Path recordingFile = game.resolve("cached-open.jfr");
         try (var recording = new Recording()) {
             recording.enable("jdk.FileRead").withThreshold(Duration.ZERO);
@@ -129,7 +129,7 @@ class LocalIndexTest {
     @Test void cachedLoadRejectsAnArchiveChangedAfterTheScan() throws Exception {
         Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
         writeJar(jar, "sample/Example", 1, false);
-        try (var ignored = open()) { }
+        RuntimeTestSources.writeLocalCache(game);
         var paths = InstancePaths.forGame(game);
         FileTime written = Files.getLastModifiedTime(paths.index());
         var failure = new CompletableFuture<RuntimeIndexService.Status>();
@@ -189,7 +189,7 @@ class LocalIndexTest {
         new RuntimeInventory("damaged-runtime", "21", System.getProperty("java.home"), true,
                 List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE, damaged, damaged.toUri().toString(), module))).write(paths.inventory());
         String original = Files.readString(paths.inventory());
-        try (var cachedRuntime = open()) { assertTrue(cachedRuntime.isRuntime()); }
+        RuntimeTestSources.writeRuntimeCache(paths);
         assertTrue(Files.isRegularFile(paths.index()));
         Files.writeString(damaged, "not an archive");
         try (var snapshot = open()) {
@@ -222,7 +222,7 @@ class LocalIndexTest {
     @Test void liveInventorySupersedesALoadingLocalIndexAndRemainsAvailableOffline() throws Exception {
         Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
         writeJar(jar, "sample/Example", 1, false);
-        try (var ignored = open()) { }
+        RuntimeTestSources.writeLocalCache(game);
         var paths = InstancePaths.forGame(game);
         var loading = new CountDownLatch(1);
         var release = new CountDownLatch(1);
@@ -263,7 +263,7 @@ class LocalIndexTest {
     void failedRuntimePreparationDoesNotCancelALoadingLocalIndex(boolean beforeWorkerStarts) throws Exception {
         Path jar = Files.createDirectories(game.resolve("mods")).resolve("sample.jar");
         writeJar(jar, "sample/Example", 1, false);
-        try (var ignored = open()) { }
+        RuntimeTestSources.writeLocalCache(game);
         var loading = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();

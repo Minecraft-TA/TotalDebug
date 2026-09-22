@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.formdev.flatlaf.ui.FlatTitlePane;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -25,6 +26,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@UiTest
 class SettingsWindowThemeTest {
     @TempDir Path directory;
 

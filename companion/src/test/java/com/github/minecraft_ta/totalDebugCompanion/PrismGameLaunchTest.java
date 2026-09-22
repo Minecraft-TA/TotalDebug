@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
@@ -163,10 +164,11 @@ class PrismGameLaunchTest {
         }
     }
 
+    @UiTest
     @Test void realPlayButtonReflectsUnsupportedStartingConnectedAndOfflineStates() throws Exception {
         try (var fixture = new Fixture()) {
             GlobalConfig.getInstance().loadFrom(fixture.config.appHome());
-            CompanionApp.configureLookAndFeel();
+            SwingUtilities.invokeAndWait(CompanionApp::configureLookAndFeel);
             var create = new FutureTask<>(fixture.app::createWindow);
             SwingUtilities.invokeAndWait(create);
             MainWindow window = create.get();

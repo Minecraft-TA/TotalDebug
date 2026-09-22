@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
 
+import java.io.IOException;
+
 public final class EvaluationSemanticsDebuggee {
     private static int calls;
     private static int order;
@@ -10,6 +12,11 @@ public final class EvaluationSemanticsDebuggee {
         int local = 7;
         System.out.println(local); // EVALUATION_STOP
         System.out.println("done"); // EVALUATION_SECOND
+    }
+
+    private int awaitCancellation() throws IOException {
+        System.out.println("action entered");
+        return System.in.read();
     }
 
     private EvaluationSemanticsDebuggee receiver() {

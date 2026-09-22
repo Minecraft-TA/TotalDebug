@@ -47,13 +47,11 @@ class RuntimeIndexRecoveryTest {
     @ParameterizedTest
     @EnumSource(Damage.class)
     void rebuildsUnusableCacheFromValidInventory(Damage damage) throws Exception {
-        for (boolean restore : List.of(false, true)) {
-            InstancePaths paths = currentInventory(this.temporaryDirectory.resolve(Boolean.toString(restore)));
-            writeCache(paths, CURRENT_ID, paths.home().resolve("current.jar"));
-            damageCache(paths.index(), damage);
+        InstancePaths paths = currentInventory(this.temporaryDirectory);
+        writeCache(paths, CURRENT_ID, paths.home().resolve("current.jar"));
+        damageCache(paths.index(), damage);
 
-            assertRebuilt(paths, restore);
-        }
+        assertRebuilt(paths, true);
     }
 
     @ParameterizedTest

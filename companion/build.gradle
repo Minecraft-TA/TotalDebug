@@ -103,10 +103,33 @@ tasks.named('assemble') {
     dependsOn tasks.named('shadowJar')
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
+tasks.withType(Test).configureEach {
     systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
     systemProperty 'totaldebug.testClasspath', sourceSets.test.runtimeClasspath.asPath
+}
+
+tasks.named('test') {
+    useJUnitPlatform { excludeTags 'desktop' }
+    systemProperty 'javax.swing.adjustPopupLocationToFit', 'false'
+}
+
+tasks.register('uiTest', Test) {
+    group = 'verification'
+    description = 'Runs isolated Swing tests without native desktop interaction.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'ui'; excludeTags 'desktop' }
+    systemProperty 'javax.swing.adjustPopupLocationToFit', 'false'
+}
+
+// Requires an isolated desktop: these assertions deliberately exercise native focus and monitor edges.
+tasks.register('desktopTest', Test) {
+    group = 'verification'
+    description = 'Runs native desktop interaction tests; use an isolated desktop.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'desktop' }
+    systemProperty 'totaldebug.desktopTests', 'true'
 }
 
 // Brings the UI up without a Minecraft session so themes and icons can be eyeballed.

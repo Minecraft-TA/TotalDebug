@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
@@ -14,6 +16,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import org.junit.jupiter.api.Test;
+import com.github.minecraft_ta.totalDebugCompanion.testui.RequiresDesktop;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -41,6 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class StatusInteractionTest extends StatusBarTestFixture {
     @Test void anInactiveHistoryPanelDoesNotReadNewEvents() throws Exception {
         var active = new AtomicBoolean();
@@ -49,11 +53,11 @@ class StatusInteractionTest extends StatusBarTestFixture {
         try {
             SwingUtilities.invokeAndWait(() -> {
                 widget.set(new NotificationWidget(notifications, source -> null, source -> {}));
-                frame.setAutoRequestFocus(false);
+
                 frame.add(widget.get(), BorderLayout.SOUTH);
                 frame.add(widget.get().historyPanel(), BorderLayout.CENTER);
-                frame.setBounds(70, 80, 420, 400);
-                frame.setVisible(true);
+                frame.setSize(420, 400);
+                UiTestScope.show(frame);
                 widget.get().doClick(0);
                 notifications.publish(Severity.INFORMATION, "Arrived in the background", "", Source.application("Index"));
                 frame.validate();
@@ -78,11 +82,11 @@ class StatusInteractionTest extends StatusBarTestFixture {
                 var workspace = new WorkspacePanel(new JLabel("Files"), new JPanel(), new JTextArea(), bar);
                 workspace.setNotificationPanel(bar.notificationPanel());
                 JFrame frame = new JFrame();
-                frame.setAutoRequestFocus(false);
+
                 frame.setContentPane(workspace);
                 try {
-                    frame.setBounds(80, 90, 984, 620);
-                    frame.setVisible(true);
+                    frame.setSize(984, 620);
+                    UiTestScope.show(frame);
                     bar.setRuntimeStatus(new RuntimeIndexService.Status(RuntimeIndexService.Phase.READY, "Runtime index ready", null,
                             IndexIdentity.Kind.RUNTIME, new RuntimeIndexService.Metrics(82314, 10_500_000_000L, true)));
                     frame.validate();
@@ -113,17 +117,18 @@ class StatusInteractionTest extends StatusBarTestFixture {
         });
     }
 
+    @RequiresDesktop
     @Test void realServiceMenusFitTheOwnerAtEitherSideOfTheScreen() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var bar = statusBar(target -> {});
             JFrame frame = new JFrame();
-            frame.setAutoRequestFocus(false);
+
             frame.add(bar, BorderLayout.SOUTH);
             try {
                 Rectangle screen = frame.getGraphicsConfiguration().getBounds();
                 for (int x : new int[]{screen.x + 30, screen.x + Math.max(30, screen.width - 1010)}) {
                     frame.setBounds(x, screen.y + 100, 984, 550);
-                    frame.setVisible(true);
+                    UiTestScope.show(frame);
                     bar.setMcpToggle(ignored -> {});
                     bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Listening", "http://127.0.0.1:32123/mcp"));
                     bar.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Connected"));
@@ -176,9 +181,9 @@ class StatusInteractionTest extends StatusBarTestFixture {
                 var calls = new AtomicInteger();
                 var attempt = new CompletableFuture<Void>();
                 var frame = new JFrame();
-                frame.setAutoRequestFocus(false);
+
                 frame.add(bar, BorderLayout.SOUTH);
-                frame.setBounds(100, 100, 720, 400);
+                frame.setSize(720, 400);
                 try {
                     assertFalse(game.isEnabled());
                     assertFalse(retry.isVisible());
@@ -186,7 +191,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     assertTrue(game.isEnabled());
                     assertTrue(retry.getText() == null || retry.getText().isEmpty());
                     assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
-                    frame.setVisible(true);
+                    UiTestScope.show(frame);
                     game.doClick(0);
                     assertTrue(popup.isShowing());
                     retry.doClick(0);
@@ -281,9 +286,8 @@ class StatusInteractionTest extends StatusBarTestFixture {
                 var frame = new JFrame();
                 // Put the actual activity control at the right edge of a small owner.
                 frame.add(activity, BorderLayout.SOUTH);
-                frame.setAutoRequestFocus(false);
-                frame.setBounds(100, 100, 340, 400);
-                frame.setVisible(true);
+                frame.setSize(340, 400);
+                UiTestScope.show(frame);
                 var inspected = new AtomicBoolean();
                 // Inspect the real initial run event before the disconnected fixture rejects submission.
                 Runnable unsubscribe = runs.subscribe(() -> {

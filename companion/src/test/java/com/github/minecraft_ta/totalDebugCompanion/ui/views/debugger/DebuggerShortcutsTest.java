@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class DebuggerShortcutsTest {
     @Test
     void sharesDebuggerCommandsAcrossRegisteredCompanionWindows() throws Exception {

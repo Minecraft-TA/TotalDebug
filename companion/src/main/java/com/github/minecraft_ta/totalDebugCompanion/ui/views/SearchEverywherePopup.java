@@ -125,6 +125,10 @@ public class SearchEverywherePopup extends JFrame {
     SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
                           Consumer<NavigationTarget> navigator) {
         this.owner = owner;
+        if (owner != null && !owner.getFocusableWindowState()) {
+            setAutoRequestFocus(false);
+            setFocusableWindowState(false);
+        }
         this.indexLoader = indexLoader;
         this.runtime = runtime;
         this.navigator = navigator;
@@ -186,10 +190,10 @@ public class SearchEverywherePopup extends JFrame {
         }
         RuntimeBinding installed = runtime.get();
         if (installed != null) syncRuntimeModules(installed);
-        setVisible(true);
         if (!this.manuallyPositioned) {
             UIUtils.centerJFrame(this, owner == null ? this : owner);
         }
+        setVisible(true);
         this.searchTextField.requestFocusInWindow();
         this.searchTextField.selectAll();
         refreshResults();

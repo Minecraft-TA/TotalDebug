@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -39,7 +40,7 @@ public final class BreakpointsWindowPreview {
 
         BreakpointsWindow window = new BreakpointsWindow(new ASTCache(), owner, controller, new ScriptFiles(Path.of("companion/build/breakpoint-preview/scripts")), target -> {
         });
-        window.setLocation(owner.getX() + 190, owner.getY() + 90);
+        UiTestScope.place(window, owner, 190, 90);
         window.showWindow();
         return window;
     }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class SourceResultMenusTest {
     @Test
     void searchMenuCopiesQualifiedReferencesAndOpensItsCapturedResult() throws Exception {

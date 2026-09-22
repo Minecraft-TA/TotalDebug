@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
@@ -39,6 +41,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class BreakpointsWindowTest {
     @TempDir Path directory;
     private static ClassIndex index;
@@ -204,7 +207,7 @@ class BreakpointsWindowTest {
     void escapeAndWindowCloseValidateBeforeHiding() throws Exception {
         try (Fixture fixture = new Fixture(directory)) {
             SwingUtilities.invokeAndWait(() -> {
-                fixture.window.setVisible(true);
+                UiTestScope.show(fixture.window);
                 JTextField hitCount = field(fixture.window, "hitCount", JTextField.class);
                 hitCount.setText("bad");
                 fixture.window.dispatchEvent(new WindowEvent(fixture.window, WindowEvent.WINDOW_CLOSING));
@@ -307,7 +310,7 @@ class BreakpointsWindowTest {
     void rightClickCannotOpenAnotherRowsMenuWhenAnEditIsInvalid() throws Exception {
         try (Fixture fixture = new Fixture(directory)) {
             SwingUtilities.invokeAndWait(() -> {
-                fixture.window.setVisible(true);
+                UiTestScope.show(fixture.window);
                 field(fixture.window, "hitCount", JTextField.class).setText("bad");
                 JList<?> list = field(fixture.window, "list", JList.class);
                 var bounds = list.getCellBounds(1, 1);
@@ -324,7 +327,7 @@ class BreakpointsWindowTest {
     void rightClickTargetsTheClickedRowAndBlankSpaceHasNoMenu() throws Exception {
         try (Fixture fixture = new Fixture(directory)) {
             SwingUtilities.invokeAndWait(() -> {
-                fixture.window.setVisible(true);
+                UiTestScope.show(fixture.window);
                 JList<?> list = field(fixture.window, "list", JList.class);
                 var bounds = list.getCellBounds(1, 1);
                 list.dispatchEvent(new MouseEvent(list, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),

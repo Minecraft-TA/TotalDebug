@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import java.io.UncheckedIOException;
 import java.io.IOException;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -120,6 +122,17 @@ final class UiScenarioDriver {
         int[] stableReadyPolls = {0};
         Timer timer = new Timer(50, event -> {
             try {
+                // Anchored popups dismiss themselves when an ancestor moves or resizes.
+                // Let the initial editor/tree layout settle before opening the preview once.
+                boolean anchoredPopup = switch (scenario) {
+                    case COMPLETION_SINGLE, COMPLETION_SHORTLIST, COMPLETION_MODIFIERS,
+                            COMPLETION_CASTS, SIGNATURE_HELP -> true;
+                    default -> false;
+                };
+                if (anchoredPopup && !context.workspaceReady()) {
+                    if (System.nanoTime() >= deadline) throw new IllegalStateException("Workspace did not become ready: " + scenario.id());
+                    return;
+                }
                 advance(scenario, context);
                 if (context.workspaceReady() && ready(scenario, context)) {
                     stableReadyPolls[0]++;
@@ -140,6 +153,7 @@ final class UiScenarioDriver {
                     throw new IllegalStateException("UI scenario did not become ready: " + scenario.id());
                 }
             } catch (Exception exception) {
+                ((Timer) event.getSource()).stop();
                 exception.printStackTrace(System.err);
                 mainWindow.dispose();
                 exit.accept(2);
@@ -229,8 +243,8 @@ final class UiScenarioDriver {
                     var dialog = mainWindow.scriptFileActions().creationPopup(mainWindow.editorContext().project().paths().scripts(), false);
                     findComponent(dialog, JTextField.class).setText(
                             scenario == UiRenderScenario.NEW_SCRIPT ? "" : "My Script");
-                    dialog.setLocation(mainWindow.getX() + (mainWindow.getWidth() - dialog.getWidth()) / 2,
-                            mainWindow.getY() + (mainWindow.getHeight() - dialog.getHeight()) / 2);
+                    UiTestScope.place(dialog, mainWindow, (mainWindow.getWidth() - dialog.getWidth()) / 2,
+                            (mainWindow.getHeight() - dialog.getHeight()) / 2);
                     dialog.setVisible(true);
                 });
             }
@@ -251,11 +265,10 @@ final class UiScenarioDriver {
                         new CompilationDiagnostic(Diagnostic.Kind.ERROR, "compiler.err.cant.resolve",
                                 "Cannot find symbol: missingValue", second, second + 12, 1, 1));
                 try {
-                    var id = ScriptPanel.class.getDeclaredField("scriptId"); id.setAccessible(true);
-                    var accept = ScriptPanel.class.getDeclaredMethod("acceptResult", ExecutionResultMessage.class,
+                    var accept = ScriptPanel.class.getDeclaredMethod("showRunResult", ExecutionResultMessage.class,
                             JavaSnippetSource.GeneratedSource.class, List.class);
                     accept.setAccessible(true);
-                    accept.invoke(panel, new ExecutionResultMessage(id.getInt(panel),
+                    accept.invoke(panel, new ExecutionResultMessage(0,
                             ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED, "Compilation failed")), generated, diagnostics);
                     if (scenario == UiRenderScenario.SCRIPT_PROBLEMS_OUTDATED) SwingUtilities.invokeLater(() ->
                             editor.setText(text.replace("\"three\"", "3")));
@@ -427,8 +440,8 @@ final class UiScenarioDriver {
                 editor.setText(scenario == UiRenderScenario.EVALUATE_CODE
                         ? "var values = java.util.List.of(1, 2, 3);\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nreturn total;"
                         : "getServer()");
-                window.showWindow();
-                window.setLocation(mainWindow.getX() + 70, mainWindow.getY() + 70);
+                UiTestScope.place(window, mainWindow, 70, 70);
+                window.setVisible(true);
             });
             case HIERARCHY_ONE -> advanceHierarchyPreview(
                     context,
@@ -512,7 +525,7 @@ final class UiScenarioDriver {
                 selectCodeEditor(context);
                 context.once("open-settings", () -> {
                     SettingsWindow settings = new SettingsWindow(mainWindow, mainWindow.editorContext().project().state(), mainWindow.editorContext().debugger());
-                    settings.setLocation(mainWindow.getX() + 250, mainWindow.getY() + 80);
+                    UiTestScope.place(settings, mainWindow, 250, 80);
                     settings.setVisible(true);
                 });
             }
@@ -657,7 +670,7 @@ final class UiScenarioDriver {
             case SERVICE_STATUS -> visibleMenuPopup() != null
                     && findButton(mainWindow, "Game: Connected") != null
                     && findButton(mainWindow, "MCP: Listening") != null;
-            case INDEXING -> findLabelContaining(mainWindow, "Building class index") != null;
+            case INDEXING -> findButton(mainWindow, "Building class index") != null;
         };
     }
 

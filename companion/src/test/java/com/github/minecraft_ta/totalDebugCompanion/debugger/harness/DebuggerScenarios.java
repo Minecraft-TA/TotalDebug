@@ -24,6 +24,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Real-JDWP debugger scenarios shared by JUnit and {@code DebuggerDevHarness}. */
 public final class DebuggerScenarios {
@@ -714,10 +715,11 @@ public final class DebuggerScenarios {
             DebugEngine.StackFrame frame = harness.firstFrame(stop.threadId());
 
             var operation = harness.engine().startEvaluation("target.neverReturns()", frame.id());
+            while (!"non-returning evaluation entered".equals(harness.readOutputLine("target invocation"))) { }
             try {
-                operation.completion().get(6, TimeUnit.SECONDS);
+                operation.completion().get(0, TimeUnit.NANOSECONDS);
                 throw new AssertionError("Non-returning target invocation unexpectedly completed");
-            } catch (java.util.concurrent.TimeoutException expected) {
+            } catch (TimeoutException expected) {
                 check(operation.running(), "Caller timeout forgot the active invocation");
                 equal(DebugEngine.State.STOPPED, harness.engine().state(), "state during slow evaluation");
             }

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis.Problem;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaParser;
@@ -27,6 +28,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class InlineDiagnosticsTest {
     @Test void groupsByLineAndSeverityWithoutChangingDocumentOrEditorSize() throws Exception {
         edt(() -> {

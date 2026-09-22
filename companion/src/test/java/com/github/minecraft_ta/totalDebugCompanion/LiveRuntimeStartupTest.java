@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -52,6 +54,7 @@ class LiveRuntimeStartupTest {
     private static final String TOKEN = "live-runtime-startup-test-token-abcdefghijklmnopqrstuvwxyz";
     @TempDir Path root;
 
+    @UiTest
     @Test void restoredInventoryCannotCompileDuringLiveStartupAndTheNewInventoryBecomesUsable() throws Exception {
         var cachedA = cache("A", "oldOnly");
         var cachedB = cache("B", "newOnly");
@@ -250,14 +253,7 @@ class LiveRuntimeStartupTest {
         new RuntimeInventory(identity, System.getProperty("java.runtime.version"), System.getProperty("java.home"), false,
                 List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.DIRECTORY, source, source.toUri().toString(), module)))
                 .write(paths.inventory());
-        var ready = new CompletableFuture<RuntimeIndexService.ReadySnapshot>();
-        try (var loader = new RuntimeIndexService(new Object(), ready::complete)) {
-            loader.addStatusListener(status -> {
-                if (status.phase() == RuntimeIndexService.Phase.FAILED) ready.completeExceptionally(status.failure());
-            });
-            loader.restore(paths.home());
-            try (var snapshot = ready.get(15, TimeUnit.SECONDS)) { assertEquals(identity, snapshot.inventoryId()); }
-        }
+        RuntimeTestSources.writeRuntimeCache(paths);
         return paths;
     }
 

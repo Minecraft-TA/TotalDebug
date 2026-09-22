@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.formdev.flatlaf.FlatDarkLaf;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.Cust
 import javax.swing.SwingUtilities;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class JavaExpressionFieldTest {
     @BeforeEach void configureJava() {
         ((AbstractTokenMakerFactory) TokenMakerFactory.getDefaultInstance()).putMapping(

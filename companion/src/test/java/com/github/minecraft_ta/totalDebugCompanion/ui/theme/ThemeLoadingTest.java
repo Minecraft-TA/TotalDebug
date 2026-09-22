@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.StatusBarTestFixture;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.util.UIScale;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * half-styled UI rather than an exception, so these tests assert the themes both load and carry
  * enough resolved colour to be the real thing.
  */
+@UiTest
 class ThemeLoadingTest extends StatusBarTestFixture {
 
     static List<CompanionTheme> themes() {

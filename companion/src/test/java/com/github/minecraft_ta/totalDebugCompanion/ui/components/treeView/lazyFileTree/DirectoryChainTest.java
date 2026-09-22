@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class DirectoryChainTest {
     @TempDir Path directory;
     private final List<LazyFileJTree> trees = new ArrayList<>();

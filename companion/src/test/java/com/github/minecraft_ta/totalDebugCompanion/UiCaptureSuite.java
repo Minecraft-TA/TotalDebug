@@ -71,6 +71,7 @@ public final class UiCaptureSuite {
         );
         Process process = new ProcessBuilder(
                 java.toString(),
+                "-Djavax.swing.adjustPopupLocationToFit=false",
                 "-cp",
                 System.getProperty("java.class.path"),
                 UiDevHarness.class.getName(),

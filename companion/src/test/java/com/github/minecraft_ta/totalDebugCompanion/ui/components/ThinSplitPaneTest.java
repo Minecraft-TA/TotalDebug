@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -23,6 +25,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@UiTest
 class ThinSplitPaneTest {
     @Test void bothEdgesDragWhileOnlyTheCenterLineIsPainted() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
@@ -34,11 +37,11 @@ class ThinSplitPaneTest {
                 right.setMinimumSize(new Dimension(90, 0));
                 ThinSplitPane split = new ThinSplitPane(left, right);
                 JFrame window = new JFrame();
-                window.setAutoRequestFocus(false);
+
                 window.setContentPane(split);
-                window.setBounds(-20000, -20000, 600, 360);
+                window.setSize(600, 360);
                 try {
-                    window.setVisible(true);
+                    UiTestScope.show(window);
                     split.setDividerLocation(220);
                     window.validate();
                     BasicSplitPaneDivider divider = ((BasicSplitPaneUI) split.getUI()).getDivider();

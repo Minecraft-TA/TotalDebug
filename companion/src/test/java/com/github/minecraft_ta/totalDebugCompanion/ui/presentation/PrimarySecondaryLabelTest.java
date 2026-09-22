@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.presentation;
 
+import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@UiTest
 class PrimarySecondaryLabelTest {
     @Test void narrowRowsShrinkTextWithoutClippingItsHeight() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
