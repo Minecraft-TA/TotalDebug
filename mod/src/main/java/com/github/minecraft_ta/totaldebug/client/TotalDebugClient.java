@@ -4,6 +4,8 @@ import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
 import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
+import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
+import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
@@ -14,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +30,7 @@ public final class TotalDebugClient {
     private final CodeViewOperation codeView;
     private final CodeViewInput codeViewInput;
     private final ClientScriptService scripts;
+    private final ResourceSnapshots resources;
     private volatile String gameSessionId;
 
     private TotalDebugClient(Path gameDirectory) {
@@ -48,6 +52,10 @@ public final class TotalDebugClient {
         }));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.codeOpen = new ClientCodeOpenService(companionApp);
+        this.resources = new ResourceSnapshots(
+                totalDebugDirectory.resolve("cache/inspection-previews"),
+                companionApp::sendResourceSnapshot
+        );
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(WorldSubject subject) {
@@ -57,8 +65,11 @@ public final class TotalDebugClient {
                         subject.displayName(),
                         subject.registryId(),
                         subject.modName(),
-                        subject.classes()
+                        subject.classes(),
+                        subject.icon().map(ItemIcons.Icon::model).orElse(""),
+                        subject.icon().map(ItemIcons.Icon::tints).orElse(Map.of())
                 ));
+                TotalDebugClient.this.resources.prepare();
             }
 
             @Override

@@ -106,7 +106,7 @@ class ScriptProtocolCodecTest {
 
         assertEquals(7, input.readInt());
         assertEquals("""
-                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false}}""", input.readString());
+                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false},"facts":[]}""", input.readString());
     }
 
     @Test

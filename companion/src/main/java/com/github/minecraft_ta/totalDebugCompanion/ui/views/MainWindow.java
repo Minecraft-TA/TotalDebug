@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
@@ -90,6 +91,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final Supplier<ProjectScope> project;
     private final DebuggerSessionController debugger;
     private final CodeInsightService insights;
+    private final ItemIconService itemIcons;
     private final NotificationCenter notifications;
     private final EditorScriptRunService editorRuns;
     private final ScriptExecutionService scripts;
@@ -101,8 +103,9 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
                       ScriptExecutionService scripts, ExecutionRuns executions, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
-                      ProjectControls projects, Consumer<Boolean> toggleMcp) {
+                      ProjectControls projects, Consumer<Boolean> toggleMcp, ItemIconService itemIcons) {
         this.projects = projects;
+        this.itemIcons = itemIcons;
         this.notifications = notifications;
         this.editorRuns = editorRuns;
         this.projectSelector = new ProjectSelector(projects, notifications);
@@ -269,7 +272,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
-        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, notifications, editorRuns, this::showDebuggerValue, this::snippetExecutions);
+        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, notifications, editorRuns, this::showDebuggerValue, this::snippetExecutions, itemIcons);
     }
 
     private String notificationUnavailable(Source source) {

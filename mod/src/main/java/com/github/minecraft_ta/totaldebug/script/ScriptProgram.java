@@ -23,8 +23,14 @@ public abstract class ScriptProgram {
     private static final Object NO_RESULT = new Object();
 
     private final ExecutionTextBuffer output = new ExecutionTextBuffer(ExecutionResultCodec.MAX_WIRE_BYTES);
+    private final ScriptFacts facts = new ScriptFacts();
     private Supplier<ScriptTarget> targetSource;
     private ScriptTarget target;
+
+    /** Structured sections reported with this run's result, shown by Companion alongside the returned value. */
+    public final ScriptFacts facts() {
+        return this.facts;
+    }
 
     /**
      * The block or entity this run was started for, found in this side's world on first use.

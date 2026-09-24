@@ -1,18 +1,33 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import java.util.List;
 import java.util.Objects;
 
-/** Canonical, transport-safe update for one live Java execution. */
+/** Canonical, transport-safe update for one live Java execution. {@code facts} are sections the script reported. */
 public record ExecutionResult(
         ExecutionStatus status,
         ExecutionText logs,
         ExecutionValue value,
-        ExecutionText error
+        ExecutionText error,
+        List<FactSection> facts
 ) {
     public ExecutionResult {
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(logs, "logs");
         Objects.requireNonNull(error, "error");
+        facts = List.copyOf(Objects.requireNonNullElse(facts, List.of()));
+        if (facts.size() > FactSection.MAX_SECTIONS) {
+            throw new IllegalArgumentException("An execution result carries at most " + FactSection.MAX_SECTIONS
+                    + " fact sections");
+        }
+    }
+
+    public ExecutionResult(ExecutionStatus status, ExecutionText logs, ExecutionValue value, ExecutionText error) {
+        this(status, logs, value, error, List.of());
+    }
+
+    public ExecutionResult withFacts(List<FactSection> sections) {
+        return new ExecutionResult(this.status, this.logs, this.value, this.error, sections);
     }
 
     public static ExecutionResult progress(ExecutionStatus status) {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.ASTCache;
@@ -20,4 +21,4 @@ public record EditorContext(ASTCache astCache, Executor analysisExecutor, Window
                             DebuggerSessionController debugger, NavigationService navigation,
                             ScriptExecutionService scripts, NotificationCenter notifications, EditorScriptRunService editorRuns,
                             BiConsumer<DebugEngine.StackFrame, DebugEngine.Variable> inspectVariable,
-                            Supplier<SnippetExecutionService> snippets) { }
+                            Supplier<SnippetExecutionService> snippets, ItemIconService itemIcons) { }

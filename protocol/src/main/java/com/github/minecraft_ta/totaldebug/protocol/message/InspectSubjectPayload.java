@@ -4,12 +4,15 @@ import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
  * Protocol-17 payload. The client's description of a subject selected with the inspect key. {@code gameSessionId}
- * identifies the joined world, so a later run can be rejected once that world is left.
+ * identifies the joined world, so a later run can be rejected once that world is left. {@code iconModel} is the item
+ * model shown for the subject, or empty, and {@code iconTints} maps its tint indexes to ARGB colors.
  */
 public record InspectSubjectPayload(
         String gameSessionId,
@@ -17,9 +20,12 @@ public record InspectSubjectPayload(
         String displayName,
         String registryId,
         String modName,
-        List<ClassLink> classes
+        List<ClassLink> classes,
+        String iconModel,
+        Map<Integer, Integer> iconTints
 ) {
     public static final int MAX_CLASSES = 8;
+    public static final int MAX_TINTS = 32;
 
     public InspectSubjectPayload {
         Objects.requireNonNull(gameSessionId, "gameSessionId");
@@ -30,6 +36,11 @@ public record InspectSubjectPayload(
         classes = List.copyOf(Objects.requireNonNull(classes, "classes"));
         if (classes.size() > MAX_CLASSES) {
             throw new IllegalArgumentException("Too many class links");
+        }
+        iconModel = Objects.requireNonNullElse(iconModel, "");
+        iconTints = Map.copyOf(Objects.requireNonNullElse(iconTints, Map.of()));
+        if (iconTints.size() > MAX_TINTS) {
+            throw new IllegalArgumentException("Too many icon tints");
         }
     }
 
@@ -54,7 +65,17 @@ public record InspectSubjectPayload(
         for (int index = 0; index < count; index++) {
             classes.add(new ClassLink(input.readString(), input.readString()));
         }
-        return new InspectSubjectPayload(gameSessionId, subject, displayName, registryId, modName, classes);
+        String iconModel = input.readString();
+        int tintCount = input.readInt();
+        if (tintCount < 0 || tintCount > MAX_TINTS) {
+            throw new IllegalArgumentException("Invalid icon tint count: " + tintCount);
+        }
+        Map<Integer, Integer> tints = new LinkedHashMap<>();
+        for (int index = 0; index < tintCount; index++) {
+            tints.put(input.readInt(), input.readInt());
+        }
+        return new InspectSubjectPayload(gameSessionId, subject, displayName, registryId, modName, classes,
+                iconModel, tints);
     }
 
     public void write(ByteBufferOutputStream output) {
@@ -67,6 +88,12 @@ public record InspectSubjectPayload(
         for (ClassLink link : this.classes) {
             output.writeString(link.label());
             output.writeString(link.binaryName());
+        }
+        output.writeString(this.iconModel);
+        output.writeInt(this.iconTints.size());
+        for (Map.Entry<Integer, Integer> tint : this.iconTints.entrySet()) {
+            output.writeInt(tint.getKey());
+            output.writeInt(tint.getValue());
         }
     }
 }

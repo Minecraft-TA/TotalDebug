@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.input;
 
+import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload.ClassLink;
 import net.minecraft.client.Minecraft;
@@ -73,7 +74,8 @@ final class CodeTargetResolver {
                 state.getBlock().getName().getString(),
                 id.toString(),
                 modName(id.getNamespace()),
-                classes
+                classes,
+                ItemIcons.of(new ItemStack(state.getBlock().asItem()))
         );
     }
 
@@ -84,8 +86,14 @@ final class CodeTargetResolver {
                 entity.getName().getString(),
                 id.toString(),
                 modName(id.getNamespace()),
-                List.of(new ClassLink("Entity", entity.getClass().getName()))
+                List.of(new ClassLink("Entity", entity.getClass().getName())),
+                spawnEgg(entity).flatMap(ItemIcons::of)
         );
+    }
+
+    private static Optional<ItemStack> spawnEgg(Entity entity) {
+        SpawnEggItem egg = SpawnEggItem.byId(entity.getType());
+        return egg == null ? Optional.empty() : Optional.of(new ItemStack(egg));
     }
 
     private static String modName(String namespace) {

@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
@@ -50,6 +51,8 @@ public final class CompanionSession implements AutoCloseable {
         default void openClass(OpenClassMessage message) { }
 
         default void inspectSubject(InspectSubjectMessage message) { }
+
+        default void resourceSnapshot(ResourceSnapshotMessage message) { }
 
         default void focusWindow() { }
 
@@ -209,6 +212,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(OpenClassMessage.class, this.listener::openClass);
         this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
+        this.server.getMessageBus().listenAlways(ResourceSnapshotMessage.class, this.listener::resourceSnapshot);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(this.listener::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {

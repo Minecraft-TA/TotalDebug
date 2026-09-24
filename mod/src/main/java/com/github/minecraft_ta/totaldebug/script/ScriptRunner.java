@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCodec;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
@@ -18,6 +19,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -198,7 +200,7 @@ public final class ScriptRunner implements AutoCloseable {
             outcome = compiledScript.execute(subject == null ? null : () -> this.targetResolver.resolve(subject));
         } catch (Throwable throwable) {
             outcome = new ScriptExecutionOutcome(
-                    ExecutionText.empty(), null, unwrapInvocationException(throwable)
+                    ExecutionText.empty(), null, unwrapInvocationException(throwable), List.of()
             );
         } finally {
             run.clearExecutionThread(Thread.currentThread());
@@ -207,15 +209,15 @@ public final class ScriptRunner implements AutoCloseable {
         if (run.isCancellationRequested()) {
             run.finish(ExecutionResult.failed(
                     outcome.output(), outcome.value(), "Script run cancelled"
-            ));
+            ).withFacts(outcome.facts()));
         } else if (outcome.failure() != null) {
             run.finish(ExecutionResult.failed(
                     outcome.output(),
                     outcome.value(),
                     shortenedStackTrace(outcome.failure(), compiledScript.className)
-            ));
+            ).withFacts(outcome.facts()));
         } else {
-            run.finish(ExecutionResult.completed(outcome.output(), outcome.value()));
+            run.finish(ExecutionResult.completed(outcome.output(), outcome.value()).withFacts(outcome.facts()));
         }
     }
 
@@ -565,14 +567,15 @@ public final class ScriptRunner implements AutoCloseable {
                     );
                 }
             }
-            return new ScriptExecutionOutcome(output, value, failure);
+            return new ScriptExecutionOutcome(output, value, failure, instance.facts().snapshot());
         }
     }
 
     private record ScriptExecutionOutcome(
             ExecutionText output,
             ExecutionValue value,
-            Throwable failure
+            Throwable failure,
+            List<FactSection> facts
     ) {
     }
 }

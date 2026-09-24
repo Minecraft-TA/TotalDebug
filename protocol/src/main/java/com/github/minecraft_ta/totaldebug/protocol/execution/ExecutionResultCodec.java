@@ -117,7 +117,7 @@ public final class ExecutionResultCodec {
         ExecutionText logs = retention.retain(result.logs());
         ExecutionValue value = retainText(result.value(), retention);
         ExecutionText error = retention.retain(result.error());
-        return new ExecutionResult(result.status(), logs, value, error);
+        return new ExecutionResult(result.status(), logs, value, error, result.facts());
     }
 
     private static long retainedCharacters(List<ExecutionText> texts, int perFieldLimit) {
@@ -206,7 +206,8 @@ public final class ExecutionResultCodec {
                 result.status(),
                 result.logs().retain(retainedLogs),
                 value,
-                result.error().retain(retainedError)
+                result.error().retain(retainedError),
+                result.facts()
         );
     }
 

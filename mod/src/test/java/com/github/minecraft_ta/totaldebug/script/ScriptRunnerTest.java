@@ -115,6 +115,34 @@ public class ScriptRunnerTest {
     }
 
     @Test
+    void factsReportedByAScriptArriveWithItsResultEvenWhenItFails() throws Exception {
+        StatusRecorder completed = new StatusRecorder();
+        StatusRecorder failed = new StatusRecorder();
+        try (ScriptRunner first = runner((phase, task) -> { }, completed, Duration.ofMillis(50));
+             ScriptRunner second = runner((phase, task) -> { }, failed, Duration.ofMillis(50))) {
+            first.runScript(90, script("FactsFixture", """
+                    facts().section("Energy").bar("Stored", 1200, 50000, "FE").text("Accepts energy", "Yes");
+                    facts().section("Energy").text("Provides energy", "No");
+                    return 1;
+                    """), ScriptExecutionEnvironment.THREAD);
+            second.runScript(91, script("FailingFactsFixture", """
+                    facts().section("Partial").text("Read before failing", 1);
+                    throw new IllegalStateException("boom");
+                    """), ScriptExecutionEnvironment.THREAD);
+
+            assertEquals(List.of(new FactSection("Energy", List.of(
+                    Fact.bar("Stored", 1200, 50000, "FE"),
+                    Fact.text("Accepts energy", "Yes"),
+                    Fact.text("Provides energy", "No")
+            ), 3)), completed.awaitTerminal().status().facts());
+            Status failure = failed.awaitTerminal();
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, failure.type());
+            assertEquals(List.of(new FactSection("Partial", List.of(Fact.text("Read before failing", "1")), 1)),
+                    failure.status().facts());
+        }
+    }
+
+    @Test
     void threadRunReturnsLogOutput() throws Exception {
         StatusRecorder statuses = new StatusRecorder();
         try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {

@@ -19,6 +19,7 @@ public final class CompanionProtocol {
     public static final short SERVER_MANIFEST = 28;
     public static final short SERVER_SOURCE_REQUEST = 29;
     public static final short INSPECT_SUBJECT = 30;
+    public static final short RESOURCE_SNAPSHOT = 31;
 
     private CompanionProtocol() {
     }

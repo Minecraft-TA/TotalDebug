@@ -18,6 +18,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
@@ -282,6 +283,11 @@ public final class CompanionAppClient implements AutoCloseable {
             return;
         }
         send(new ExecutionResultMessage(scriptId, result));
+    }
+
+    /** Tells Companion where to read item icon resources; dropped while no session is authenticated. */
+    public void sendResourceSnapshot(String archive, int layers) {
+        send(new ResourceSnapshotMessage(archive, layers));
     }
 
     public synchronized void openClassAndFocus(

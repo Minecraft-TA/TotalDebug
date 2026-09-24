@@ -16,7 +16,7 @@ class CodeViewOperationTest {
         RecordingActions actions = new RecordingActions();
         WorldSubject subject = new WorldSubject(
                 new SubjectRef.Block("minecraft:overworld", 1, 64, 2), "Furnace", "minecraft:furnace", "Minecraft",
-                List.of());
+                List.of(), Optional.empty());
 
         new CodeViewOperation(actions).inspectOrFocus(Optional.of(subject));
 
