@@ -17,6 +17,8 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
@@ -292,6 +294,14 @@ public final class CompanionAppClient implements AutoCloseable {
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
         transferForeground(beforeTransfer, () -> enqueueOpenClass(binaryName, sourceTarget));
+    }
+
+    public synchronized void inspectAndFocus(InspectSubjectPayload subject, Runnable beforeTransfer)
+            throws IOException {
+        Objects.requireNonNull(subject, "subject");
+        Objects.requireNonNull(beforeTransfer, "beforeTransfer");
+        ensureConnectedAndReady();
+        transferForeground(beforeTransfer, () -> send(new InspectSubjectMessage(subject)));
     }
 
     public synchronized void focus(Runnable beforeFocus) throws IOException {

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResultCode
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.evaluation.ScriptClassLoader;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
 import net.minecraft.world.level.block.Block;
@@ -27,6 +28,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /** Defines, runs, and cooperatively cancels scripts compiled by Companion. */
 public final class ScriptRunner implements AutoCloseable {
@@ -34,6 +36,7 @@ public final class ScriptRunner implements AutoCloseable {
     private final ClassLoader parentClassLoader;
     private final ScriptTickScheduler tickScheduler;
     private final ExecutionResultSink resultSink;
+    private final ScriptTargetResolver targetResolver;
     private final Duration stopGrace;
     private final ExecutorService loaderExecutor;
     private final ScheduledExecutorService stopExecutor;
@@ -44,12 +47,14 @@ public final class ScriptRunner implements AutoCloseable {
     public ScriptRunner(
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
-            ExecutionResultSink resultSink
+            ExecutionResultSink resultSink,
+            ScriptTargetResolver targetResolver
     ) {
         this(
                 parentClassLoader,
                 tickScheduler,
                 resultSink,
+                targetResolver,
                 DEFAULT_STOP_GRACE,
                 Executors.newSingleThreadExecutor(runnable -> daemonThread(
                         runnable,
@@ -66,6 +71,7 @@ public final class ScriptRunner implements AutoCloseable {
             ClassLoader parentClassLoader,
             ScriptTickScheduler tickScheduler,
             ExecutionResultSink resultSink,
+            ScriptTargetResolver targetResolver,
             Duration stopGrace,
             ExecutorService loaderExecutor,
             ScheduledExecutorService stopExecutor
@@ -73,6 +79,7 @@ public final class ScriptRunner implements AutoCloseable {
         this.parentClassLoader = Objects.requireNonNull(parentClassLoader, "parentClassLoader");
         this.tickScheduler = Objects.requireNonNull(tickScheduler, "tickScheduler");
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
+        this.targetResolver = Objects.requireNonNull(targetResolver, "targetResolver");
         this.stopGrace = Objects.requireNonNull(stopGrace, "stopGrace");
         if (stopGrace.isNegative() || stopGrace.isZero()) {
             throw new IllegalArgumentException("stopGrace must be positive");
@@ -86,6 +93,16 @@ public final class ScriptRunner implements AutoCloseable {
             ScriptBytecode bytecode,
             ScriptExecutionEnvironment environment
     ) {
+        runScript(scriptId, bytecode, environment, null);
+    }
+
+    /** Runs a script whose {@link ScriptProgram#target()} resolves {@code subject}, or has no target when null. */
+    public void runScript(
+            int scriptId,
+            ScriptBytecode bytecode,
+            ScriptExecutionEnvironment environment,
+            SubjectRef subject
+    ) {
         Objects.requireNonNull(bytecode, "bytecode");
         Objects.requireNonNull(environment, "environment");
         if (this.closed) {
@@ -93,7 +110,7 @@ public final class ScriptRunner implements AutoCloseable {
             return;
         }
 
-        ScriptRun run = new ScriptRun(scriptId, bytecode, environment);
+        ScriptRun run = new ScriptRun(scriptId, bytecode, environment, subject);
         if (this.runs.putIfAbsent(scriptId, run) != null) {
             sendCompilationFailure(
                     scriptId,
@@ -177,7 +194,8 @@ public final class ScriptRunner implements AutoCloseable {
 
         ScriptExecutionOutcome outcome;
         try {
-            outcome = compiledScript.execute();
+            SubjectRef subject = run.subject;
+            outcome = compiledScript.execute(subject == null ? null : () -> this.targetResolver.resolve(subject));
         } catch (Throwable throwable) {
             outcome = new ScriptExecutionOutcome(
                     ExecutionText.empty(), null, unwrapInvocationException(throwable)
@@ -327,6 +345,7 @@ public final class ScriptRunner implements AutoCloseable {
         private final int scriptId;
         private final ScriptBytecode bytecode;
         private final ScriptExecutionEnvironment environment;
+        private final SubjectRef subject;
         private Future<?> loadingFuture;
         private Thread executionThread;
         private boolean executionStarted;
@@ -334,10 +353,16 @@ public final class ScriptRunner implements AutoCloseable {
         private boolean terminal;
         private boolean deliveringResults;
 
-        private ScriptRun(int scriptId, ScriptBytecode bytecode, ScriptExecutionEnvironment environment) {
+        private ScriptRun(
+                int scriptId,
+                ScriptBytecode bytecode,
+                ScriptExecutionEnvironment environment,
+                SubjectRef subject
+        ) {
             this.scriptId = scriptId;
             this.bytecode = bytecode;
             this.environment = environment;
+            this.subject = subject;
         }
 
         private void installLoadingFuture(Future<?> future) {
@@ -518,8 +543,9 @@ public final class ScriptRunner implements AutoCloseable {
             return new CompiledScript(scriptClass.asSubclass(ScriptProgram.class), className);
         }
 
-        private ScriptExecutionOutcome execute() throws Throwable {
+        private ScriptExecutionOutcome execute(Supplier<ScriptTarget> target) throws Throwable {
             ScriptProgram instance = this.scriptClass.getDeclaredConstructor().newInstance();
+            instance.bindTarget(target);
             Throwable failure = null;
             Object result = null;
             try {

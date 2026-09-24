@@ -4,9 +4,11 @@ import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionProgressActionBar;
 import com.github.minecraft_ta.totaldebug.client.decompile.ClientCodeOpenService;
 import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
+import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import net.minecraft.client.Minecraft;
@@ -14,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Owns the client-only runtime assembled after Minecraft has reached client setup. */
 public final class TotalDebugClient {
@@ -21,9 +24,10 @@ public final class TotalDebugClient {
 
     private final CompanionAppClient companionApp;
     private final ClientCodeOpenService codeOpen;
-    private final OpenCodeOperation openCode;
+    private final CodeViewOperation codeView;
     private final CodeViewInput codeViewInput;
     private final ClientScriptService scripts;
+    private volatile String gameSessionId;
 
     private TotalDebugClient(Path gameDirectory) {
         Path totalDebugDirectory = gameDirectory
@@ -44,7 +48,19 @@ public final class TotalDebugClient {
         }));
         companionApp.setProgressListener(progress -> CompanionProgressActionBar.show(Minecraft.getInstance(), progress));
         this.codeOpen = new ClientCodeOpenService(companionApp);
-        this.openCode = new OpenCodeOperation(new OpenCodeOperation.Actions() {
+        this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
+            @Override
+            public void inspect(WorldSubject subject) {
+                TotalDebugClient.this.codeOpen.inspect(new InspectSubjectPayload(
+                        gameSession(),
+                        subject.subject().format(),
+                        subject.displayName(),
+                        subject.registryId(),
+                        subject.modName(),
+                        subject.classes()
+                ));
+            }
+
             @Override
             public void openClass(Class<?> targetClass) {
                 TotalDebugClient.this.codeOpen.openClass(targetClass);
@@ -55,8 +71,8 @@ public final class TotalDebugClient {
                 TotalDebugClient.this.codeOpen.focusCompanion();
             }
         });
-        this.codeViewInput = new CodeViewInput(this::openOrFocus);
-        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks());
+        this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this::openOrFocus);
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId);
         TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);
@@ -85,7 +101,7 @@ public final class TotalDebugClient {
     }
 
     public void openOrFocus(Optional<Class<?>> targetClass) {
-        this.openCode.openOrFocus(targetClass);
+        this.codeView.openOrFocus(targetClass);
     }
 
     public void openClass(Class<?> targetClass) {
@@ -97,7 +113,18 @@ public final class TotalDebugClient {
     }
 
     public void onServerDisconnect() {
+        synchronized (this) {
+            this.gameSessionId = null;
+        }
         this.companionApp.acceptServerManifest(ServerManifestMessage.unavailable("Disconnected from the game server"));
         this.scripts.onServerDisconnect();
+    }
+
+    /** Identifies the world joined since the last logout, so a run against a left world is rejected. */
+    private synchronized String gameSession() {
+        if (this.gameSessionId == null) {
+            this.gameSessionId = UUID.randomUUID().toString();
+        }
+        return this.gameSessionId;
     }
 }

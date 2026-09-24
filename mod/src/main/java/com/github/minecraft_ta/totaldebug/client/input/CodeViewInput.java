@@ -13,23 +13,28 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Holds the one-press latch for the F6 world and GUI code-view input. */
+/** Holds the one-press latch for F6: inspect the targeted block or entity, or open a hovered item's class. */
 public final class CodeViewInput {
     private static final ScreenItemStackResolver NO_SCREEN_ITEM = (screen, mouseX, mouseY) -> Optional.empty();
 
-    private final Consumer<Optional<Class<?>>> openTarget;
+    private final Consumer<Optional<WorldSubject>> inspectWorldTarget;
+    private final Consumer<Optional<Class<?>>> openItemTarget;
     private final AtomicReference<ScreenItemStackResolver> screenItemResolver = new AtomicReference<>(NO_SCREEN_ITEM);
     private boolean worldKeyWasDown;
     private Screen screenHoldingKey;
 
-    public CodeViewInput(Consumer<Optional<Class<?>>> openTarget) {
-        this.openTarget = Objects.requireNonNull(openTarget, "openTarget");
+    public CodeViewInput(
+            Consumer<Optional<WorldSubject>> inspectWorldTarget,
+            Consumer<Optional<Class<?>>> openItemTarget
+    ) {
+        this.inspectWorldTarget = Objects.requireNonNull(inspectWorldTarget, "inspectWorldTarget");
+        this.openItemTarget = Objects.requireNonNull(openItemTarget, "openItemTarget");
     }
 
     public void onClientTick(Minecraft minecraft, KeyMapping keyMapping) {
         boolean worldKeyIsDown = minecraft.screen == null && keyMapping.isDown();
         if (worldKeyIsDown && !this.worldKeyWasDown) {
-            this.openTarget.accept(CodeTargetResolver.resolveWorldTarget(minecraft));
+            this.inspectWorldTarget.accept(CodeTargetResolver.resolveWorldTarget(minecraft));
         }
         this.worldKeyWasDown = worldKeyIsDown;
     }
@@ -61,7 +66,7 @@ public final class CodeViewInput {
                 mouseY,
                 () -> containerItem(event.getScreen())
         ).flatMap(itemStack -> CodeTargetResolver.resolveItemTarget(minecraft, itemStack));
-        this.openTarget.accept(targetClass);
+        this.openItemTarget.accept(targetClass);
         event.setCanceled(true);
     }
 

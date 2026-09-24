@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.protocol.execution.*;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
@@ -16,6 +17,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ScriptRunnerTest {
+    private static final ScriptTargetResolver NO_TARGETS = subject -> {
+        throw new IllegalStateException("Tests have no world");
+    };
+
     @Test
     void concurrentCloseDoesNotWaitForTheFirstCallersResultCallback() throws Exception {
         Object serviceMonitor = new Object();
@@ -31,7 +36,7 @@ public class ScriptRunnerTest {
                 closingCallback.countDown();
                 synchronized (serviceMonitor) { }
             }
-        }, Duration.ofMillis(50), worker, monitor)) {
+        }, NO_TARGETS, Duration.ofMillis(50), worker, monitor)) {
             runner.runScript(70, script("ConcurrentCloseFixture", "return 42;"), ScriptExecutionEnvironment.POST_TICK);
             assertTrue(compiled.await(5, TimeUnit.SECONDS));
             worker.submit(() -> { }).get(5, TimeUnit.SECONDS);
@@ -60,13 +65,53 @@ public class ScriptRunnerTest {
         ScheduledExecutorService monitor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         StatusRecorder statuses = new StatusRecorder();
         try (ScriptRunner runner = new ScriptRunner(
-                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, statuses,
+                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, statuses, NO_TARGETS,
                 Duration.ofMillis(50), worker, monitor)) {
             runner.runScript(71, script("CloseCompilerFixture", "return 42;"), ScriptExecutionEnvironment.THREAD);
             assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
         }
         assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS), "Compiler cleanup did not finish");
 
+    }
+
+    @Test
+    void targetWithoutASubjectFailsWithAnActionableMessage() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(80, script("NoTargetFixture", "return target();"), ScriptExecutionEnvironment.THREAD);
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertTrue(terminal.error().contains("This run has no target"), terminal.error());
+        }
+    }
+
+    @Test
+    void targetIsResolvedOnlyWhenTheScriptAsksForIt() throws Exception {
+        List<SubjectRef> resolved = new CopyOnWriteArrayList<>();
+        ScriptTargetResolver targets = subject -> {
+            resolved.add(subject);
+            throw new IllegalStateException("The chunk containing 1 64 -2 in minecraft:overworld is not loaded");
+        };
+        SubjectRef subject = SubjectRef.parse("block minecraft:overworld 1 64 -2");
+        StatusRecorder unused = new StatusRecorder();
+        StatusRecorder asked = new StatusRecorder();
+        try (ScriptRunner quiet = runner((phase, task) -> { }, unused, Duration.ofMillis(50), targets);
+             ScriptRunner asking = runner((phase, task) -> { }, asked, Duration.ofMillis(50), targets)) {
+            quiet.runScript(81, script("UnusedTargetFixture", "return 1;"), ScriptExecutionEnvironment.THREAD,
+                    subject);
+            assertEquals(ExecutionStatus.RUN_COMPLETED, unused.awaitTerminal().type());
+            assertTrue(resolved.isEmpty());
+
+            asking.runScript(82, script("AskedTargetFixture", "return target();"), ScriptExecutionEnvironment.THREAD,
+                    subject);
+            Status terminal = asked.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertTrue(terminal.error().contains("is not loaded"), terminal.error());
+            assertEquals(List.of(subject), resolved);
+        }
     }
 
     @Test
@@ -463,12 +508,22 @@ public class ScriptRunnerTest {
             ExecutionResultSink resultSink,
             Duration grace
     ) {
+        return runner(tickScheduler, resultSink, grace, NO_TARGETS);
+    }
+
+    private static ScriptRunner runner(
+            ScriptTickScheduler tickScheduler,
+            ExecutionResultSink resultSink,
+            Duration grace,
+            ScriptTargetResolver targets
+    ) {
         ExecutorService compilerExecutor = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
         ScheduledExecutorService stopExecutor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         return new ScriptRunner(
                 ScriptRunnerTest.class.getClassLoader(),
                 tickScheduler,
                 resultSink,
+                targets,
                 grace,
                 compilerExecutor,
                 stopExecutor
