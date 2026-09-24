@@ -25,6 +25,12 @@ public record ExecutionResult(
             throw new IllegalArgumentException("An execution result carries at most " + FactSection.MAX_SECTIONS
                     + " fact sections");
         }
+        long dataBytes = facts.stream().flatMap(section -> section.facts().stream())
+                .filter(fact -> fact.data() != null).mapToLong(fact -> fact.data().size()).sum();
+        if (dataBytes > FactData.MAX_TOTAL_BYTES) {
+            throw new IllegalArgumentException("An execution result carries at most " + FactData.MAX_TOTAL_BYTES
+                    + " bytes of fact data");
+        }
     }
 
     public ExecutionResult(ExecutionStatus status, ExecutionText logs, ExecutionValue value, ExecutionText error) {

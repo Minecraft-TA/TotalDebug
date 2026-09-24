@@ -197,8 +197,7 @@ final class ToolsPanel extends JPanel {
             this.status.setToolTipText(null);
             this.status.setText(outcome.facts().isEmpty() ? "No sections reported" : "");
             if (this.facts == null || !this.facts.update(outcome.facts())) {
-                FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons,
-                        this.facts == null ? Map.of() : this.facts.expandedTrees());
+                FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons);
                 rebuilt.setBorder(null);
                 if (this.facts != null) this.section.remove(this.facts);
                 this.facts = rebuilt;

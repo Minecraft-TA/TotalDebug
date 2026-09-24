@@ -1,11 +1,9 @@
 package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -20,12 +18,13 @@ import java.util.function.Consumer;
 
 /**
  * Structured information a script reports alongside its result. Companion shows each section with a presentation
- * fitting its facts: rows of text, bars, item slots and fluid tanks. Sections and facts beyond the transport limits
- * are counted but not kept.
+ * fitting its facts: rows of text, bars, item slots, fluid tanks and exact NBT data. Sections and facts beyond the
+ * transport limits are counted but not kept.
  */
 public final class ScriptFacts {
     private final Map<String, Section> sections = new LinkedHashMap<>();
     private final Consumer<String> log;
+    private long dataBudget = FactData.MAX_TOTAL_BYTES;
 
     /** {@code log} receives the stack traces of guarded reads that failed. */
     public ScriptFacts(Consumer<String> log) {
@@ -70,12 +69,11 @@ public final class ScriptFacts {
         return result;
     }
 
-    public static final class Section {
+    public final class Section {
         private final String title;
         private final boolean retained;
         private final List<Fact> facts = new ArrayList<>();
         private int total;
-        private int nodes;
 
         private Section(String title, boolean retained) {
             this.title = title;
@@ -83,99 +81,80 @@ public final class ScriptFacts {
         }
 
         public Section text(String label, Object value) {
-            return add(Fact.text(Fact.clip(label), Fact.clip(String.valueOf(value))));
+            add(Fact.text(Fact.clip(label), Fact.clip(String.valueOf(value))));
+            return this;
         }
 
         /** Reports that reading {@code label} failed; facts already reported stay. */
         public Section problem(String label, Throwable failure) {
             String message = failure.getMessage();
             String summary = failure.getClass().getSimpleName() + (message == null ? "" : ": " + message);
-            return add(Fact.problem(Fact.clip(label), Fact.clip(summary)));
+            add(Fact.problem(Fact.clip(label), Fact.clip(summary)));
+            return this;
         }
 
         public Section bar(String label, long amount, long capacity, String unit) {
-            return add(Fact.bar(Fact.clip(label), Math.max(0, amount), Math.max(0, capacity), Fact.clip(unit)));
+            add(Fact.bar(Fact.clip(label), Math.max(0, amount), Math.max(0, capacity), Fact.clip(unit)));
+            return this;
         }
 
         /** Reports a slot's contents; an empty stack is shown as an empty slot. */
         public Section stack(String label, ItemStack stack) {
             if (stack == null || stack.isEmpty()) {
-                return add(Fact.stack(Fact.clip(label), "", 0, ""));
+                add(Fact.stack(Fact.clip(label), "", 0, ""));
+                return this;
             }
-            return add(Fact.stack(
+            add(Fact.stack(
                     Fact.clip(label),
                     BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),
                     stack.getCount(),
                     Fact.clip(stack.getHoverName().getString())
             ));
+            return this;
         }
 
         /** Reports a tank's contents and capacity in millibuckets. */
         public Section fluid(String label, FluidStack stack, long capacity) {
             if (stack == null || stack.isEmpty()) {
-                return add(Fact.fluid(Fact.clip(label), "", 0, Math.max(0, capacity), ""));
+                add(Fact.fluid(Fact.clip(label), "", 0, Math.max(0, capacity), ""));
+                return this;
             }
-            return add(Fact.fluid(
+            add(Fact.fluid(
                     Fact.clip(label),
                     BuiltInRegistries.FLUID.getKey(stack.getFluid()).toString(),
                     stack.getAmount(),
                     Math.max(0, capacity),
                     Fact.clip(stack.getHoverName().getString())
             ));
+            return this;
         }
 
         /**
-         * Reports a tag as a tree: compounds and lists become nodes, other tags show their SNBT text. Entries beyond
-         * the section's node budget or depth are counted but not kept.
+         * Reports a tag as exact data, which Companion can show as a tree, search and copy as SNBT. A tag larger than
+         * the transport budget keeps its first entries in printing order and records which parts were left out.
          */
         public Section nbt(String label, Tag tag) {
             if (tag == null) {
                 return text(label, "null");
             }
-            int[] budget = {FactSection.MAX_NODES - this.nodes - 1};
-            return add(nbtFact(Fact.clip(label), tag, 1, budget));
-        }
-
-        private static Fact nbtFact(String label, Tag tag, int depth, int[] budget) {
-            if (tag instanceof CompoundTag compound) {
-                List<String> keys = new ArrayList<>(compound.getAllKeys());
-                keys.sort(null);
-                List<Fact> children = new ArrayList<>();
-                for (String key : keys) {
-                    if (depth >= FactSection.MAX_DEPTH || budget[0] <= 0) break;
-                    budget[0]--;
-                    children.add(nbtFact(Fact.clip(key), compound.get(key), depth + 1, budget));
-                }
-                return Fact.tree(label, count(keys.size(), "entry", "entries"), children, keys.size());
+            int budget = (int) Math.min(FactData.MAX_BYTES, ScriptFacts.this.dataBudget);
+            if (budget < 1) {
+                return text(label, "Not reported: the data budget of this read is used up");
             }
-            if (tag instanceof ListTag list) {
-                List<Fact> children = new ArrayList<>();
-                for (int index = 0; index < list.size(); index++) {
-                    if (depth >= FactSection.MAX_DEPTH || budget[0] <= 0) break;
-                    budget[0]--;
-                    children.add(nbtFact("[" + index + "]", list.get(index), depth + 1, budget));
-                }
-                return Fact.tree(label, count(list.size(), "item", "items"), children, list.size());
-            }
-            if (tag instanceof StringTag string) {
-                return Fact.text(label, Fact.clip("\"" + string.getAsString() + "\""));
-            }
-            return Fact.text(label, Fact.clip(tag.toString()));
-        }
-
-        private static String count(int size, String singular, String plural) {
-            return size + " " + (size == 1 ? singular : plural);
-        }
-
-        private Section add(Fact fact) {
-            this.total++;
-            int nodes = fact.nodeCount();
-            if (this.retained && this.facts.size() < FactSection.MAX_FACTS
-                    && this.nodes + nodes <= FactSection.MAX_NODES) {
-                this.facts.add(fact);
-                this.nodes += nodes;
+            FactData data = NbtFactData.encode(tag, budget);
+            if (add(Fact.data(Fact.clip(label), data))) {
+                ScriptFacts.this.dataBudget -= data.size();
             }
             return this;
+        }
+
+        private boolean add(Fact fact) {
+            this.total++;
+            if (this.retained && this.facts.size() < FactSection.MAX_FACTS) {
+                this.facts.add(fact);
+                return true;
+            }
+            return false;
         }
     }
 }

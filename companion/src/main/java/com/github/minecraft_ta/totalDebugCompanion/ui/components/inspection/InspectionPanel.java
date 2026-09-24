@@ -381,8 +381,7 @@ public final class InspectionPanel extends JPanel {
     /** Presents a completed read's sections and returned object. */
     void showOutcome(ExecutionResult outcome, Side selectedSide) {
         if (this.facts == null || !this.facts.update(outcome.facts())) {
-            this.facts = new FactsPanel(outcome.facts(), this.icons,
-                    this.facts == null ? Map.of() : this.facts.expandedTrees());
+            this.facts = new FactsPanel(outcome.facts(), this.icons);
             this.builtIn.removeAll();
             this.builtIn.add(this.facts, BorderLayout.CENTER);
             this.overview.revalidate();

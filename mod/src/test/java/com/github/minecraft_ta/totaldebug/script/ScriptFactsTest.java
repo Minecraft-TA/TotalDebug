@@ -1,11 +1,11 @@
 package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
+import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
+import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.IntTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -17,52 +17,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScriptFactsTest {
     @Test
-    void nbtBecomesASortedTreeWithSnbtLeaves() {
-        CompoundTag item = new CompoundTag();
-        item.putString("id", "minecraft:coal");
-        item.putByte("count", (byte) 8);
-        ListTag items = new ListTag();
-        items.add(item);
-        CompoundTag root = new CompoundTag();
-        root.put("Items", items);
-        root.putShort("BurnTime", (short) 120);
-
+    void nbtIsReportedAsExactData() {
+        CompoundTag root = NbtFactDataTest.corpus();
         ScriptFacts facts = new ScriptFacts(text -> { });
-        facts.section("NBT").nbt("Block entity", root);
-        Fact tree = facts.snapshot().getFirst().facts().getFirst();
 
-        assertEquals("2 entries", tree.value());
-        assertEquals(List.of("BurnTime", "Items"), tree.children().stream().map(Fact::label).toList());
-        assertEquals("120s", tree.children().get(0).value());
-        Fact first = tree.children().get(1).children().getFirst();
-        assertEquals("[0]", first.label());
-        assertEquals(List.of(Fact.text("count", "8b"), Fact.text("id", "\"minecraft:coal\"")), first.children());
+        facts.section("NBT").nbt("Block entity", root);
+
+        Fact fact = facts.snapshot().getFirst().facts().getFirst();
+        assertEquals(Fact.Kind.DATA, fact.kind());
+        assertEquals("Block entity", fact.label());
+        assertTrue(fact.data().complete());
+        assertEquals(root.toString(), NbtData.snbt(fact.data().tag()));
     }
 
     @Test
-    void largeTagsStayWithinTheSectionBudgetAndCountWhatWasLeftOut() {
-        ListTag values = new ListTag();
-        for (int index = 0; index < 5_000; index++) {
-            values.add(IntTag.valueOf(index));
-        }
-        CompoundTag nested = new CompoundTag();
-        CompoundTag current = nested;
-        for (int depth = 0; depth < 40; depth++) {
-            CompoundTag next = new CompoundTag();
-            current.put("child", next);
-            current = next;
-        }
-        current.put("leaf", StringTag.valueOf("deep"));
-
+    void dataFactsShareOneBudgetPerRead() {
+        CompoundTag large = new CompoundTag();
+        large.put("bytes", new ByteArrayTag(new byte[FactData.MAX_BYTES - 64]));
         ScriptFacts facts = new ScriptFacts(text -> { });
-        facts.section("NBT").nbt("Values", values).nbt("Nested", nested);
-        FactSection section = facts.snapshot().getFirst();
 
-        int nodes = section.facts().stream().mapToInt(Fact::nodeCount).sum();
-        assertTrue(nodes <= FactSection.MAX_NODES, "retained " + nodes);
-        Fact list = section.facts().getFirst();
-        assertEquals(5_000, list.totalChildren());
-        assertTrue(list.omittedChildren() > 0);
+        for (int index = 0; index < 5; index++) {
+            facts.section("NBT").nbt("Copy " + index, large);
+        }
+
+        List<Fact> reported = facts.snapshot().getFirst().facts();
+        long total = reported.stream().filter(fact -> fact.data() != null).mapToLong(fact -> fact.data().size()).sum();
+        assertTrue(total <= FactData.MAX_TOTAL_BYTES, "reported " + total);
+        assertFalse(reported.getLast().data() != null && reported.getLast().data().complete(),
+                "the fifth copy cannot fit completely");
     }
 
     @Test

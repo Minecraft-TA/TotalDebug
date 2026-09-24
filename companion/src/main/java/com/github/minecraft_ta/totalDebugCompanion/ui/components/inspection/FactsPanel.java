@@ -4,7 +4,9 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
+import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -32,12 +34,12 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
- * Presents the fact sections of one script result: slot grids, bars and label/value rows, and trees for nested facts.
+ * Presents the fact sections of one script result: slot grids, bars, label/value rows and a summary of each data fact.
  * A newer read with the same shape updates in place and marks the values that changed.
  */
 public final class FactsPanel extends JPanel {
@@ -50,11 +52,6 @@ public final class FactsPanel extends JPanel {
     private List<FactSection> sections;
 
     public FactsPanel(List<FactSection> sections, ItemIconService icons) {
-        this(sections, icons, Map.of());
-    }
-
-    /** Builds the panel, expanding tree sections as they were expanded in {@code expanded} (keyed by title). */
-    FactsPanel(List<FactSection> sections, ItemIconService icons, Map<String, Set<List<String>>> expanded) {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.sections = List.copyOf(sections);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -63,7 +60,7 @@ public final class FactsPanel extends JPanel {
             add(aligned(new JLabel("No sections reported")));
         }
         for (FactSection section : sections) {
-            SectionView view = new SectionView(section, expanded.get(section.title()));
+            SectionView view = new SectionView(section);
             this.views.add(view);
             add(aligned(title(section)));
             add(Box.createVerticalStrut(4));
@@ -84,17 +81,6 @@ public final class FactsPanel extends JPanel {
         }
         this.sections = List.copyOf(next);
         return true;
-    }
-
-    /** Tree expansion by section title, for carrying over into a rebuilt panel. */
-    Map<String, Set<List<String>>> expandedTrees() {
-        Map<String, Set<List<String>>> expanded = new HashMap<>();
-        for (int index = 0; index < this.views.size(); index++) {
-            if (this.views.get(index).tree != null) {
-                expanded.put(this.sections.get(index).title(), this.views.get(index).tree.expandedLabels());
-            }
-        }
-        return expanded;
     }
 
     /** Draws slot icons and fluid textures again, for example after the game published a newer snapshot. */
@@ -129,9 +115,7 @@ public final class FactsPanel extends JPanel {
         for (int index = 0; index < previous.size(); index++) {
             Fact before = previous.get(index);
             Fact after = next.get(index);
-            if (before.kind() != after.kind() || !before.label().equals(after.label())
-                    || before.totalChildren() != after.totalChildren()
-                    || !sameFacts(before.children(), after.children())) {
+            if (before.kind() != after.kind() || !before.label().equals(after.label())) {
                 return false;
             }
         }
@@ -165,6 +149,31 @@ public final class FactsPanel extends JPanel {
                 : fact.value() + "  ·  " + amounts(fact.amount(), fact.capacity(), fact.unit());
     }
 
+    /** A row's text: the value, or for data a summary of its shape and size. */
+    static String displayedValue(Fact fact) {
+        if (fact.kind() != Fact.Kind.DATA) {
+            return fact.value();
+        }
+        FactData data = fact.data();
+        String shape;
+        try {
+            shape = switch (data.tag()) {
+                case NbtData.CompoundTag compound -> count(compound.entries().size(), "key", "keys");
+                case NbtData.ListTag list -> count(list.items().size(), "entry", "entries");
+                case NbtData.Tag other -> other.typeName();
+            };
+        } catch (IllegalArgumentException unreadable) {
+            return "Unreadable data: " + unreadable.getMessage();
+        }
+        String size = data.size() < 1_024 ? data.size() + " B"
+                : String.format(Locale.ROOT, "%.1f KB", data.size() / 1_024.0);
+        return shape + "  ·  " + size + (data.complete() ? "" : "  ·  incomplete");
+    }
+
+    private static String count(int count, String singular, String plural) {
+        return count + " " + (count == 1 ? singular : plural);
+    }
+
     private static <T extends JComponent> T aligned(T component) {
         component.setAlignmentX(Component.LEFT_ALIGNMENT);
         return component;
@@ -176,15 +185,9 @@ public final class FactsPanel extends JPanel {
         private final List<SlotCell> slots = new ArrayList<>();
         private final List<JComponent> values = new ArrayList<>();
         private final Map<AmountBar, String> fluids = new HashMap<>();
-        private FactTree tree;
 
-        private SectionView(FactSection section, Set<List<String>> expanded) {
+        private SectionView(FactSection section) {
             this.content.setLayout(new BoxLayout(this.content, BoxLayout.Y_AXIS));
-            if (section.facts().stream().anyMatch(fact -> fact.totalChildren() > 0)) {
-                this.tree = FactTree.of(section.facts(), expanded);
-                this.content.add(aligned(this.tree));
-                return;
-            }
             List<Fact> stacks = section.facts().stream().filter(fact -> fact.kind() == Fact.Kind.STACK).toList();
             if (!stacks.isEmpty()) {
                 JPanel grid = new JPanel(new GridLayout(0, Math.min(SLOT_COLUMNS, stacks.size()), 2, 2));
@@ -236,9 +239,10 @@ public final class FactsPanel extends JPanel {
                 problem.setBackground(ChangeMarks.tint());
                 return problem;
             }
-            if (fact.kind() == Fact.Kind.TEXT) {
-                JLabel value = new JLabel(fact.value());
-                value.setToolTipText(fact.value());
+            if (fact.kind() == Fact.Kind.TEXT || fact.kind() == Fact.Kind.DATA) {
+                String text = displayedValue(fact);
+                JLabel value = new JLabel(text);
+                value.setToolTipText(text);
                 value.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
                 value.setBackground(ChangeMarks.tint());
                 return value;
@@ -251,10 +255,6 @@ public final class FactsPanel extends JPanel {
         }
 
         private void update(FactSection before, FactSection after) {
-            if (this.tree != null) {
-                this.tree.update(after.facts());
-                return;
-            }
             int slot = 0;
             int value = 0;
             for (int index = 0; index < after.facts().size(); index++) {
@@ -267,8 +267,8 @@ public final class FactsPanel extends JPanel {
                 }
                 JComponent component = this.values.get(value++);
                 if (component instanceof JLabel label) {
-                    label.setText(next.value());
-                    label.setToolTipText(next.value());
+                    label.setText(displayedValue(next));
+                    label.setToolTipText(displayedValue(next));
                     label.setOpaque(changed);
                     label.repaint();
                 } else if (component instanceof AmountBar bar) {

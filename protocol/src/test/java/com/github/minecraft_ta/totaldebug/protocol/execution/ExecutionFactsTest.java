@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -54,29 +56,32 @@ class ExecutionFactsTest {
     }
 
     @Test
-    void nestedFactsSurviveTheWireCodecAndStayBounded() {
-        Fact tree = Fact.tree("Block entity", "3 entries", List.of(
-                Fact.text("id", "\"minecraft:furnace\""),
-                Fact.tree("Items", "1 item", List.of(Fact.tree("[0]", "2 entries", List.of(
-                        Fact.text("id", "\"minecraft:coal\""), Fact.text("count", "8")), 2)), 1)
-        ), 5);
+    void dataFactsSurviveTheWireCodecExactly() {
+        byte[] nbt = {10, 3, 0, 5, 'C', 'o', 'u', 'n', 't', 0, 0, 0, 7, 0};
+        Fact data = Fact.data("Block entity", FactData.of(nbt, List.of(new FactData.Omission("Items", 3))));
         ExecutionResult result = new ExecutionResult(ExecutionStatus.RUN_COMPLETED, ExecutionText.empty(),
-                null, ExecutionText.empty(), List.of(new FactSection("NBT", List.of(tree), 1)), null);
+                null, ExecutionText.empty(), List.of(new FactSection("NBT", List.of(data), 1)), null);
 
         ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
 
-        assertEquals(tree, decoded.facts().getFirst().facts().getFirst());
-        assertEquals(3, tree.omittedChildren());
-        assertEquals(6, tree.nodeCount());
-        assertThrows(IllegalArgumentException.class, () -> new FactSection("Deep", List.of(nested(FactSection.MAX_DEPTH + 1)), 1));
-        assertThrows(IllegalArgumentException.class, () -> new FactSection("Wide", List.of(Fact.tree("root", "",
-                Collections.nCopies(FactSection.MAX_NODES, Fact.text("a", "b")), FactSection.MAX_NODES)), 1));
-        assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.BAR, "Stored", "", "", 1, 2, "FE",
-                List.of(Fact.text("a", "b")), 1));
+        FactData carried = decoded.facts().getFirst().facts().getFirst().data();
+        assertArrayEquals(nbt, carried.bytes());
+        assertEquals(nbt.length, carried.size());
+        assertEquals("{Count:7}", NbtData.snbt(carried.tag()));
+        assertEquals(List.of(new FactData.Omission("Items", 3)), carried.omissions());
+        assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.TEXT, "a", "", "", 0, 0, "",
+                FactData.of(nbt, List.of())));
+        assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.DATA, "a", "", "", 0, 0, ""));
     }
 
-    private static Fact nested(int depth) {
-        return depth == 1 ? Fact.text("leaf", "") : Fact.tree("node", "", List.of(nested(depth - 1)), 1);
+    @Test
+    void oneResultCarriesABoundedAmountOfData() {
+        FactData full = FactData.of(new byte[FactData.MAX_BYTES], List.of());
+        List<Fact> facts = Collections.nCopies(FactData.MAX_TOTAL_BYTES / FactData.MAX_BYTES + 1,
+                Fact.data("copy", full));
+
+        assertThrows(IllegalArgumentException.class, () -> ExecutionResult.completed("", null)
+                .withFacts(List.of(new FactSection("NBT", facts, facts.size()))));
     }
 
     @Test

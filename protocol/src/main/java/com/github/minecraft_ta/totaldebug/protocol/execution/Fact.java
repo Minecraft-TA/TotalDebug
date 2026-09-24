@@ -1,19 +1,18 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
-import java.util.List;
 import java.util.Objects;
 
 /**
  * One piece of structured information reported by a script. {@code kind} decides which fields are meaningful:
  * <ul>
- *     <li>{@code TEXT}: {@code label} and {@code value}. It may have {@code children}, forming a tree such as NBT;
- *     {@code totalChildren} counts children that were reported but not retained.</li>
+ *     <li>{@code TEXT}: {@code label} and {@code value}.</li>
  *     <li>{@code BAR}: {@code amount} of {@code capacity} in {@code unit}, such as stored energy.</li>
  *     <li>{@code STACK}: {@code amount} items of registry {@code id} named {@code value}; an empty slot has an empty
  *     id.</li>
  *     <li>{@code FLUID}: {@code amount} of {@code capacity} millibuckets of fluid {@code id} named {@code value}.</li>
  *     <li>{@code PROBLEM}: reading {@code label} failed with the message {@code value}; facts reported before the
  *     failure remain.</li>
+ *     <li>{@code DATA}: the exact NBT {@code data} labelled {@code label}, such as a block entity's saved data.</li>
  * </ul>
  */
 public record Fact(
@@ -24,8 +23,7 @@ public record Fact(
         long amount,
         long capacity,
         String unit,
-        List<Fact> children,
-        int totalChildren
+        FactData data
 ) {
     public static final int MAX_TEXT_LENGTH = 256;
 
@@ -34,7 +32,8 @@ public record Fact(
         BAR,
         STACK,
         FLUID,
-        PROBLEM
+        PROBLEM,
+        DATA
     }
 
     public Fact {
@@ -46,26 +45,17 @@ public record Fact(
         if (amount < 0 || capacity < 0) {
             throw new IllegalArgumentException("Fact amounts must not be negative");
         }
-        children = List.copyOf(Objects.requireNonNullElse(children, List.of()));
-        if (totalChildren < children.size()) {
-            throw new IllegalArgumentException("totalChildren must cover the retained children");
-        }
-        if (kind != Kind.TEXT && totalChildren > 0) {
-            throw new IllegalArgumentException("Only text facts have children");
+        if ((kind == Kind.DATA) != (data != null)) {
+            throw new IllegalArgumentException("Data facts, and only they, carry data");
         }
     }
 
     public Fact(Kind kind, String label, String value, String id, long amount, long capacity, String unit) {
-        this(kind, label, value, id, amount, capacity, unit, List.of(), 0);
+        this(kind, label, value, id, amount, capacity, unit, null);
     }
 
     public static Fact text(String label, String value) {
         return new Fact(Kind.TEXT, label, value, "", 0, 0, "");
-    }
-
-    /** A text fact with nested facts, of which {@code total} were reported. */
-    public static Fact tree(String label, String value, List<Fact> children, int total) {
-        return new Fact(Kind.TEXT, label, value, "", 0, 0, "", children, total);
     }
 
     public static Fact bar(String label, long amount, long capacity, String unit) {
@@ -84,26 +74,8 @@ public record Fact(
         return new Fact(Kind.PROBLEM, label, message, "", 0, 0, "");
     }
 
-    public int omittedChildren() {
-        return this.totalChildren - this.children.size();
-    }
-
-    /** Counts this fact and all retained descendants. */
-    public int nodeCount() {
-        int count = 1;
-        for (Fact child : this.children) {
-            count += child.nodeCount();
-        }
-        return count;
-    }
-
-    /** The deepest chain of retained children, where a leaf has depth 1. */
-    public int depth() {
-        int deepest = 0;
-        for (Fact child : this.children) {
-            deepest = Math.max(deepest, child.depth());
-        }
-        return deepest + 1;
+    public static Fact data(String label, FactData data) {
+        return new Fact(Kind.DATA, label, "", "", 0, 0, "", Objects.requireNonNull(data, "data"));
     }
 
     /** Shortens text to the transport limit; decoding rejects anything longer. */
