@@ -34,9 +34,11 @@ import java.awt.FlowLayout;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -57,7 +59,7 @@ final class ToolsPanel extends JPanel {
     private final Runnable refreshInspection;
     private final Set<Path> chosen = new LinkedHashSet<>();
     private final List<SnippetExecutionService.Execution> active = new ArrayList<>();
-    private final List<FactsPanel> results = new ArrayList<>();
+    private final Map<Path, ToolView> views = new LinkedHashMap<>();
     private List<InspectionTool> tools = List.of();
     private long revision;
     private boolean disposed;
@@ -79,27 +81,52 @@ final class ToolsPanel extends JPanel {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
     }
 
-    /** Loads the project's tools and runs those that apply, replacing earlier runs. */
-    void run(Side side) {
+    /**
+     * Loads the project's tools and runs those that apply, replacing earlier runs. Tools that ran in the previous
+     * read keep their views and update in place. The result completes when every tool has finished.
+     */
+    CompletableFuture<Void> run(Side side) {
         cancelActive();
         long current = ++this.revision;
+        CompletableFuture<Void> done = new CompletableFuture<>();
         CompletableFuture.supplyAsync(this::loadTools).whenComplete((loaded, failure) -> SwingUtilities.invokeLater(() -> {
-            if (this.disposed || current != this.revision) return;
-            removeAll();
-            this.results.clear();
-            if (failure != null) {
-                add(aligned(problemLabel("Tools could not be read: " + rootMessage(failure))));
-            } else {
-                this.tools = loaded;
-                for (InspectionTool tool : loaded) {
-                    if (tool.appliesTo(this.subject.registryId()) || this.chosen.contains(tool.path())) {
-                        start(tool, side, current);
-                    }
-                }
+            if (this.disposed || current != this.revision) {
+                done.complete(null);
+                return;
             }
-            revalidate();
-            repaint();
+            if (failure != null) {
+                removeAll();
+                this.views.clear();
+                add(aligned(problemLabel("Tools could not be read: " + rootMessage(failure))));
+                revalidate();
+                repaint();
+                done.complete(null);
+                return;
+            }
+            this.tools = loaded;
+            List<InspectionTool> applicable = loaded.stream()
+                    .filter(tool -> tool.appliesTo(this.subject.registryId()) || this.chosen.contains(tool.path()))
+                    .toList();
+            List<Path> paths = applicable.stream().map(InspectionTool::path).toList();
+            if (!paths.equals(List.copyOf(this.views.keySet()))) {
+                removeAll();
+                this.views.clear();
+                for (InspectionTool tool : applicable) {
+                    ToolView view = new ToolView(tool);
+                    this.views.put(tool.path(), view);
+                    add(aligned(view.section));
+                    add(Box.createVerticalStrut(8));
+                }
+                revalidate();
+                repaint();
+            }
+            List<CompletableFuture<?>> runs = new ArrayList<>();
+            for (InspectionTool tool : applicable) {
+                runs.add(start(this.views.get(tool.path()), tool, side, current));
+            }
+            CompletableFuture.allOf(runs.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> done.complete(null));
         }));
+        return done;
     }
 
     private List<InspectionTool> loadTools() {
@@ -110,15 +137,7 @@ final class ToolsPanel extends JPanel {
         }
     }
 
-    private void start(InspectionTool tool, Side side, long current) {
-        JPanel section = new JPanel();
-        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
-        JLabel status = new JLabel("Running…");
-        status.setForeground(UIManager.getColor("Label.disabledForeground"));
-        section.add(aligned(toolHeader(tool, status)));
-        add(aligned(section));
-        add(Box.createVerticalStrut(8));
-
+    private CompletableFuture<?> start(ToolView view, InspectionTool tool, Side side, long current) {
         JavaSnippetSource.GeneratedSource source;
         SnippetExecutionService.Execution execution;
         try {
@@ -127,56 +146,71 @@ final class ToolsPanel extends JPanel {
             execution = this.snippets.get().execute(source, side, ScriptExecutionEnvironment.POST_TICK,
                     new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId()));
         } catch (RuntimeException exception) {
-            showFailure(section, status, exception.getMessage());
-            return;
+            view.showFailure(exception.getMessage());
+            return CompletableFuture.completedFuture(null);
         }
         this.active.add(execution);
-        execution.completion().whenComplete((outcome, failure) -> SwingUtilities.invokeLater(() -> {
-            this.active.remove(execution);
-            if (this.disposed || current != this.revision) return;
-            finish(section, status, source, outcome, failure);
-        }));
+        return execution.completion().handle((outcome, failure) -> {
+            SwingUtilities.invokeLater(() -> {
+                this.active.remove(execution);
+                if (this.disposed || current != this.revision) return;
+                view.finish(source, outcome, failure);
+            });
+            return null;
+        });
     }
 
-    private void finish(
-            JPanel section,
-            JLabel status,
-            JavaSnippetSource.GeneratedSource source,
-            ExecutionResult outcome,
-            Throwable failure
-    ) {
-        if (failure != null) {
-            showFailure(section, status, failure.getMessage());
-            return;
-        }
-        if (outcome.status() != ExecutionStatus.RUN_COMPLETED) {
-            String error = ExecutionTextDisplay.format(outcome.error());
-            showFailure(section, status, error.isBlank() ? "The tool ended without a result" : source.mapDiagnostics(error));
-            return;
-        }
-        status.setText(outcome.facts().isEmpty() ? "No sections reported" : "");
-        if (!outcome.facts().isEmpty()) {
-            FactsPanel facts = new FactsPanel(outcome.facts(), this.icons);
-            facts.setBorder(null);
-            this.results.add(facts);
-            section.add(aligned(facts));
-        }
-        String logs = ExecutionTextDisplay.format(outcome.logs()).strip();
-        if (!logs.isEmpty()) {
-            JLabel output = new JLabel(logs.lines().findFirst().orElse(logs));
-            output.setToolTipText(logs);
-            section.add(aligned(output));
-        }
-        section.revalidate();
-        section.repaint();
-    }
+    /** One tool's header, status, sections and first output line. */
+    private final class ToolView {
+        private final JPanel section = new JPanel();
+        private final JLabel status = new JLabel("Running…");
+        private final JLabel output = new JLabel();
+        private FactsPanel facts;
 
-    private void showFailure(JPanel section, JLabel status, String message) {
-        String text = message == null || message.isBlank() ? "The tool failed" : message;
-        status.setIcon(Icons.ERROR);
-        status.setText(text.lines().findFirst().orElse(text));
-        status.setToolTipText("<html><pre>" + escape(text) + "</pre></html>");
-        section.revalidate();
+        private ToolView(InspectionTool tool) {
+            this.section.setLayout(new BoxLayout(this.section, BoxLayout.Y_AXIS));
+            this.status.setForeground(UIManager.getColor("Label.disabledForeground"));
+            this.section.add(aligned(toolHeader(tool, this.status)));
+            this.output.setVisible(false);
+            this.section.add(aligned(this.output));
+        }
+
+        private void finish(JavaSnippetSource.GeneratedSource source, ExecutionResult outcome, Throwable failure) {
+            if (failure != null) {
+                showFailure(failure.getMessage());
+                return;
+            }
+            if (outcome.status() != ExecutionStatus.RUN_COMPLETED) {
+                String error = ExecutionTextDisplay.format(outcome.error());
+                showFailure(error.isBlank() ? "The tool ended without a result" : source.mapDiagnostics(error));
+                return;
+            }
+            this.status.setIcon(null);
+            this.status.setToolTipText(null);
+            this.status.setText(outcome.facts().isEmpty() ? "No sections reported" : "");
+            if (this.facts == null || !this.facts.update(outcome.facts())) {
+                FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons,
+                        this.facts == null ? Map.of() : this.facts.expandedTrees());
+                rebuilt.setBorder(null);
+                if (this.facts != null) this.section.remove(this.facts);
+                this.facts = rebuilt;
+                this.section.add(aligned(rebuilt), 1);
+            }
+            String logs = ExecutionTextDisplay.format(outcome.logs()).strip();
+            this.output.setText(logs.lines().findFirst().orElse(""));
+            this.output.setToolTipText(logs.isEmpty() ? null : logs);
+            this.output.setVisible(!logs.isEmpty());
+            this.section.revalidate();
+            this.section.repaint();
+        }
+
+        private void showFailure(String message) {
+            String text = message == null || message.isBlank() ? "The tool failed" : message;
+            this.status.setIcon(Icons.ERROR);
+            this.status.setText(text.lines().findFirst().orElse(text));
+            this.status.setToolTipText("<html><pre>" + escape(text) + "</pre></html>");
+            this.section.revalidate();
+        }
     }
 
     private JComponent toolHeader(InspectionTool tool, JLabel status) {
@@ -271,7 +305,9 @@ final class ToolsPanel extends JPanel {
     }
 
     void reloadIcons() {
-        this.results.forEach(FactsPanel::reloadIcons);
+        this.views.values().forEach(view -> {
+            if (view.facts != null) view.facts.reloadIcons();
+        });
     }
 
     void dispose() {

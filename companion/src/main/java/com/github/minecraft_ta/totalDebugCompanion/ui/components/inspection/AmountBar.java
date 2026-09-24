@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -17,30 +18,42 @@ import java.awt.image.BufferedImage;
 /**
  * A filled amount such as stored energy or a tank's contents. The fill is a texture tiled at the bar's height when one
  * is set, for example the fluid's own still texture, otherwise the theme's progress color. Text stays readable over
- * any fill through an outline.
+ * any fill through an outline. A changed bar is outlined in the accent color until its next update.
  */
 final class AmountBar extends JComponent {
     private static final int WIDTH = 320;
     private static final int HEIGHT = 20;
     private static final int ARC = 6;
 
-    private final long amount;
-    private final long capacity;
-    private final String text;
+    private long amount;
+    private long capacity;
+    private String text;
     private BufferedImage texture;
+    private boolean changed;
 
     AmountBar(long amount, long capacity, String text) {
-        this.amount = amount;
-        this.capacity = capacity;
-        this.text = text;
-        setToolTipText(text);
         Dimension size = new Dimension(WIDTH, HEIGHT);
         setPreferredSize(size);
         setMinimumSize(size);
+        set(amount, capacity, text, false);
+    }
+
+    /** Shows newer values; {@code changed} marks them as different from the previous read. */
+    void set(long amount, long capacity, String text, boolean changed) {
+        this.amount = amount;
+        this.capacity = capacity;
+        this.text = text;
+        this.changed = changed;
+        setToolTipText(text);
+        repaint();
     }
 
     String text() {
         return this.text;
+    }
+
+    boolean changed() {
+        return this.changed;
     }
 
     void setTexture(BufferedImage texture) {
@@ -77,8 +90,14 @@ final class AmountBar extends JComponent {
                 g.fillRect(0, 0, filled, height);
                 g.setClip(oldClip);
             }
-            g.setColor(UIManager.getColor("Component.borderColor"));
-            g.draw(track);
+            if (this.changed) {
+                g.setColor(ChangeMarks.color());
+                g.setStroke(new BasicStroke(2f));
+                g.draw(new RoundRectangle2D.Float(1, 1, width - 3, height - 3, ARC, ARC));
+            } else {
+                g.setColor(UIManager.getColor("Component.borderColor"));
+                g.draw(track);
+            }
             paintText(g, width, height);
         } finally {
             g.dispose();

@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
@@ -64,6 +65,14 @@ public final class ScriptCompilationService implements AutoCloseable {
     private Baseline baseline;
     private Comparison comparison;
     private Set<String> compilingForServer;
+    /** Identical source compiled against the same runtime and server comparison yields identical bytecode. */
+    private record CompiledKey(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass) {}
+    private static final int MAX_COMPILED = 64;
+    private final Map<CompiledKey, CompilationResult> compiled = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<CompiledKey, CompilationResult> eldest) {
+            return size() > MAX_COMPILED;
+        }
+    };
 
     public ScriptCompilationService(Predicate<RunScriptMessage> sender,
                                     Predicate<ServerSourceRequestMessage> sourceRequester) {
@@ -216,6 +225,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             }
             this.compiler = null;
             this.snapshot = snapshot;
+            this.compiled.clear();
             if (snapshot != null) {
                 this.compiler = new InMemoryJavaCompiler(standard ->
                         new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources(), () -> this.compilingForServer));
@@ -323,6 +333,14 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     private CompilationResult compileSelected(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass,
                                                BooleanSupplier cancelled) throws Exception {
+        CompiledKey key = new CompiledKey(selected, server, source, entryClass);
+        synchronized (this.compilerLock) {
+            CompilationResult cached = this.compiled.get(key);
+            if (cached != null && !this.closed && this.snapshot == selected
+                    && (server == null || this.serverSnapshot == server)) {
+                return cached;
+            }
+        }
         return CacheFiles.locked(selected.indexFile().getParent(), () -> {
             synchronized (this.compilerLock) {
                 if (this.closed || this.snapshot != selected || (server != null && this.serverSnapshot != server) || cancelled.getAsBoolean()) {
@@ -332,8 +350,10 @@ public final class ScriptCompilationService implements AutoCloseable {
                         "id", selected.inventoryId());
                 this.compilingForServer = server == null ? null : server.unsupported();
                 try {
-                    return new CompilationResult(new ScriptBytecode(entryClass,
+                    CompilationResult result = new CompilationResult(new ScriptBytecode(entryClass,
                             this.compiler.compile(source, entryClass, "")), selected.inventoryId());
+                    this.compiled.put(key, result);
+                    return result;
                 } finally {
                     this.compilingForServer = null;
                 }

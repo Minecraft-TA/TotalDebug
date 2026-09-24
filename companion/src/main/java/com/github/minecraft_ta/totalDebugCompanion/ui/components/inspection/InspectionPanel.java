@@ -31,8 +31,10 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.CompoundBorder;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -43,7 +45,9 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -60,6 +64,7 @@ public final class InspectionPanel extends JPanel {
     private static final int HEADER_ICON_SIZE = 48;
     private static final int TAB_ICON_SIZE = 32;
     private static final DateTimeFormatter CAPTURE_TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
+    static final List<Integer> LIVE_INTERVALS_MS = List.of(500, 1_000, 2_000, 5_000);
 
     private final InspectSubjectPayload subject;
     private final Supplier<SnippetExecutionService> snippets;
@@ -71,6 +76,9 @@ public final class InspectionPanel extends JPanel {
     private final JComboBox<String> face = new JComboBox<>(FACES.toArray(String[]::new));
     private final JButton refresh = new JButton("Refresh", Icons.REFRESH);
     private final JButton toolsButton = new JButton("Tools", Icons.SCRIPT_FILE);
+    private final JToggleButton live = new JToggleButton("Live");
+    private final JComboBox<Integer> liveInterval = new JComboBox<>(LIVE_INTERVALS_MS.toArray(Integer[]::new));
+    private final Timer liveTimer = new Timer(1_000, event -> liveTick());
     private final ToolsPanel tools;
     private final JPanel builtIn = new JPanel(new BorderLayout());
     private final JLabel status = new JLabel(" ");
@@ -79,6 +87,7 @@ public final class InspectionPanel extends JPanel {
     private final JTextArea problem = new JTextArea();
     private final JPanel cards = new JPanel(new CardLayout());
     private FactsPanel facts;
+    private boolean objectShown;
     private SnippetExecutionService.Execution active;
     private long revision;
     private boolean disposed;
@@ -123,6 +132,18 @@ public final class InspectionPanel extends JPanel {
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
         this.refresh.addActionListener(event -> refresh());
+        this.liveInterval.setSelectedItem(1_000);
+        this.liveInterval.setEnabled(false);
+        this.liveInterval.setRenderer(labels(value -> value instanceof Integer millis
+                ? (millis % 1_000 == 0 ? millis / 1_000 + " s" : millis / 1_000.0 + " s") : ""));
+        this.liveInterval.setToolTipText("Time between reads while Live is on");
+        this.live.setToolTipText("Read again automatically while this tab is visible");
+        this.live.addActionListener(event -> {
+            this.liveInterval.setEnabled(this.live.isSelected());
+            if (this.live.isSelected()) refresh();
+            else this.liveTimer.stop();
+        });
+        this.liveTimer.setRepeats(false);
         this.toolsButton.setToolTipText("Project scripts run on this subject");
         this.toolsButton.addActionListener(event ->
                 this.tools.menu().show(this.toolsButton, 0, this.toolsButton.getHeight()));
@@ -140,9 +161,14 @@ public final class InspectionPanel extends JPanel {
         title.add(Box.createHorizontalGlue());
         this.face.setMaximumSize(this.face.getPreferredSize());
         this.runSide.setMaximumSize(this.runSide.getPreferredSize());
+        this.liveInterval.setMaximumSize(this.liveInterval.getPreferredSize());
         title.add(this.face);
         title.add(Box.createHorizontalStrut(6));
         title.add(this.runSide);
+        title.add(Box.createHorizontalStrut(6));
+        title.add(this.live);
+        title.add(Box.createHorizontalStrut(4));
+        title.add(this.liveInterval);
         title.add(Box.createHorizontalStrut(6));
         title.add(this.toolsButton);
         title.add(Box.createHorizontalStrut(6));
@@ -213,6 +239,7 @@ public final class InspectionPanel extends JPanel {
     public void refresh() {
         requireEdt();
         if (this.disposed) return;
+        this.liveTimer.stop();
         cancelActive();
         Side selectedSide = (Side) this.runSide.getSelectedItem();
         JavaSnippetSource.GeneratedSource source = JavaSnippetSource.body("InspectTarget",
@@ -227,14 +254,38 @@ public final class InspectionPanel extends JPanel {
             );
         } catch (RuntimeException exception) {
             showProblem(exception.getMessage());
+            scheduleLive(current);
             return;
         }
-        this.refresh.setEnabled(false);
-        this.status.setIcon(null);
-        this.status.setText("Reading on " + sideName(selectedSide) + "…");
-        this.tools.run(selectedSide);
-        this.active.completion().whenComplete((outcome, failure) -> SwingUtilities.invokeLater(() ->
-                finish(current, selectedSide, source, outcome, failure)));
+        if (!this.live.isSelected()) {
+            this.refresh.setEnabled(false);
+            this.status.setIcon(null);
+            this.status.setText("Reading on " + sideName(selectedSide) + "…");
+        }
+        CompletableFuture<Void> toolsDone = this.tools.run(selectedSide);
+        CompletableFuture<Void> builtInDone = this.active.completion().handle((outcome, failure) -> {
+            SwingUtilities.invokeLater(() -> finish(current, selectedSide, source, outcome, failure));
+            return null;
+        });
+        CompletableFuture.allOf(builtInDone, toolsDone).whenComplete((ignored, failure) ->
+                SwingUtilities.invokeLater(() -> scheduleLive(current)));
+    }
+
+    /** Queues the next live read once the current one, including tools, has finished. */
+    private void scheduleLive(long current) {
+        if (this.disposed || current != this.revision || !this.live.isSelected()) return;
+        this.liveTimer.setInitialDelay((Integer) this.liveInterval.getSelectedItem());
+        this.liveTimer.restart();
+    }
+
+    private void liveTick() {
+        if (this.disposed || !this.live.isSelected()) return;
+        if (!isShowing()) {
+            // Hidden tabs keep their last read; check again later instead of loading the game.
+            this.liveTimer.restart();
+            return;
+        }
+        refresh();
     }
 
     private void finish(
@@ -261,15 +312,25 @@ public final class InspectionPanel extends JPanel {
 
     /** Presents a completed read's sections and returned object. */
     void showOutcome(ExecutionResult outcome, Side selectedSide) {
-        this.facts = new FactsPanel(outcome.facts(), this.icons);
-        this.builtIn.removeAll();
-        this.builtIn.add(this.facts, BorderLayout.CENTER);
-        this.overview.revalidate();
-        this.overview.repaint();
-        this.object.showResult(outcome.value());
-        this.object.expandRow(0);
+        if (this.facts == null || !this.facts.update(outcome.facts())) {
+            this.facts = new FactsPanel(outcome.facts(), this.icons,
+                    this.facts == null ? Map.of() : this.facts.expandedTrees());
+            this.builtIn.removeAll();
+            this.builtIn.add(this.facts, BorderLayout.CENTER);
+            this.overview.revalidate();
+            this.overview.repaint();
+        }
+        if (this.objectShown) {
+            this.object.replaceResult(outcome.value());
+        } else {
+            this.object.showResult(outcome.value());
+            this.object.expandRow(0);
+            this.objectShown = true;
+        }
         ((CardLayout) this.cards.getLayout()).show(this.cards, RESULT_CARD);
-        this.status.setText(capitalized(sideName(selectedSide)) + " · " + LocalTime.now().format(CAPTURE_TIME));
+        this.status.setIcon(null);
+        this.status.setText((this.live.isSelected() ? "Live · " : "") + capitalized(sideName(selectedSide))
+                + " · " + LocalTime.now().format(CAPTURE_TIME));
     }
 
     private void showProblem(String message) {
@@ -310,6 +371,7 @@ public final class InspectionPanel extends JPanel {
         requireEdt();
         this.disposed = true;
         this.removeIconListener.run();
+        this.liveTimer.stop();
         this.tools.dispose();
         cancelActive();
     }

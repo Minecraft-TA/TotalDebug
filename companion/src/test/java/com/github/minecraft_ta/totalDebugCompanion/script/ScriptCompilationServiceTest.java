@@ -145,6 +145,28 @@ class ScriptCompilationServiceTest {
     }
 
     @Test
+    void reusesBytecodeForIdenticalSourceUntilTheRuntimeChanges() throws Exception {
+        try (ReadySnapshot snapshot = fixture();
+             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+            compiler.bind(snapshot);
+            compiler.submit(9, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            RunScriptMessage first = this.sent.poll(10, TimeUnit.SECONDS);
+            compiler.submit(10, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            RunScriptMessage second = this.sent.poll(10, TimeUnit.SECONDS);
+
+            assertNotNull(first, () -> this.failures.toString());
+            assertNotNull(second, () -> this.failures.toString());
+            assertSame(first.bytecode(), second.bytecode());
+
+            compiler.bind(snapshot);
+            compiler.submit(11, SOURCE, false, ScriptExecutionEnvironment.POST_TICK, outcome -> this.failures.add(outcome.result()));
+            RunScriptMessage rebound = this.sent.poll(10, TimeUnit.SECONDS);
+            assertNotNull(rebound, () -> this.failures.toString());
+            assertNotSame(first.bytecode(), rebound.bytecode());
+        }
+    }
+
+    @Test
     void compilationFailureAndRecoveryStayLocalAndDoNotReusePreviousOutputs() throws Exception {
         try (ReadySnapshot snapshot = fixture(); var compiler = service()) {
             compiler.bind(snapshot);
