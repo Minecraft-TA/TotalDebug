@@ -45,6 +45,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -144,6 +145,8 @@ class LiveRuntimeStartupTest {
                 output.write(classBytes("oldOnly"));
                 output.closeEntry();
             }
+            // Exercise local recovery without making it depend on a full JDK index build.
+            RuntimeTestSources.writeLocalCache(profile.workspaceDirectory());
         } else {
             install(cache("A", "oldOnly"), paths);
         }
@@ -165,9 +168,13 @@ class LiveRuntimeStartupTest {
             await(() -> !app.session().hasClient() && !app.isConnected());
             restoreGate.release();
             await(() -> app.getRuntimeIndexStatus().phase() == RuntimeIndexService.Phase.READY
-                    && app.requireProject().runtime() != null);
+                            && app.requireProject().runtime() != null,
+                    () -> "Offline runtime did not recover: " + app.getRuntimeIndexStatus()
+                            + ", connected=" + app.isConnected()
+                            + ", installed=" + (app.requireProject().runtime() != null));
             var snapshot = app.requireProject().requireRuntime().snapshot();
             assertEquals(!localFallback, snapshot.isRuntime());
+            assertFalse(snapshot.rebuilt(), "Recovery must reuse the fixture index rather than rebuild the JDK");
             assertNotNull(snapshot.index().findClass("sample", "LiveVersion"), "Offline browsing must recover without manual retry");
             assertFalse(executions.isReady(), "An offline index must not enable game execution");
         }
@@ -292,9 +299,13 @@ class LiveRuntimeStartupTest {
     }
 
     private static void await(BooleanSupplier condition) throws Exception {
+        await(condition, () -> "Live runtime did not reach the expected state");
+    }
+
+    private static void await(BooleanSupplier condition, Supplier<String> message) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
         while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(10);
-        assertTrue(condition.getAsBoolean(), "Live runtime did not reach the expected state");
+        assertTrue(condition.getAsBoolean(), message);
     }
 
     private static final class HeldCache implements AutoCloseable {

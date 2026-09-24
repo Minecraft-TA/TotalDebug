@@ -305,14 +305,18 @@ class CompanionAutomaticConnectionTest {
             AtomicFiles.writeString(paths.instanceKey(), "test-token-" + System.nanoTime() + "-abcdefghijklmnopqrstuvwxyz");
             ProtocolBindings.registerCompanion(server.getMessageProcessor());
             server.getMessageBus().listenAlways(ClientHelloMessage.class, hello -> {
+                // The test may change these flags as soon as it observes the hello count.
+                boolean dropHello = drop;
+                boolean rejectHello = reject;
+                boolean holdHello = hold;
                 hellos.incrementAndGet();
                 assertEquals(CompanionProtocol.VERSION, hello.protocolVersion());
                 assertEquals(profile(), hello.profileId());
-                if (drop) server.closeClient();
-                else if (reject) {
+                if (dropHello) server.closeClient();
+                else if (rejectHello) {
                     server.getMessageProcessor().enqueueMessage(ServerHelloMessage.rejected("fixture rejection"));
                     server.closeClientAfterPendingWrites();
-                } else if (!hold) accept();
+                } else if (!holdHello) accept();
             });
             server.getMessageBus().listenAlways(FocusWindowMessage.class, ignored -> focused.incrementAndGet());
             server.bind(new InetSocketAddress("127.0.0.1", 0));

@@ -25,7 +25,7 @@ public final class RuntimeTestSources {
         }
     }
 
-    static void writeLocalCache(Path game) throws IOException {
+    public static void writeLocalCache(Path game) throws IOException {
         var scan = LocalModSources.scan(game, () -> { });
         var prepared = LocalModSources.prepare(scan, () -> { });
         try (var index = ClassIndex.fromSources(prepared.inputs().stream().map(PreparedInput::indexSource).toList())) {
