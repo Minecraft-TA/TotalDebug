@@ -28,7 +28,7 @@ class CompanionProjectAttachmentTest {
         try (var session = new CompanionSession("secret", hello -> {
             if (!hello.profileId().equals(selected.get())) throw new IOException("Select the project first");
         }, new CompanionSession.Listener() {
-            @Override public void disconnected() { disconnected.add(true); }
+            @Override public void disconnected(long connection) { disconnected.add(true); }
         })) {
             session.setProjectSelectionHandler(hello -> {
                 if (!hello.profileId().equals(selected.get())) {

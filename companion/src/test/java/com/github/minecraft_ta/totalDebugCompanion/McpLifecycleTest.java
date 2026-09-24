@@ -55,7 +55,7 @@ class McpLifecycleTest {
             assertEquals(CodeModeJobService.JobState.DISCONNECTED, jobs.get(old.jobId()).orElseThrow().state());
             app.startMcpServer(jobs, 0);
             var next = jobs.submit("return 2;", List.of(), CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD);
-            assertTrue(next.scriptId() < old.scriptId());
+            assertTrue(next.scriptId() > old.scriptId(), "Script ids are not reused after the MCP server restarts");
             assertEquals(CodeModeJobService.JobState.COMPILING, next.state());
         }
         assertFalse(jobs.isAvailable());

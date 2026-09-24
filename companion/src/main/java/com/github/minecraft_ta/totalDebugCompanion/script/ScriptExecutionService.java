@@ -8,7 +8,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import java.util.function.Consumer;
 import java.util.function.BooleanSupplier;
 
-/** Authenticated execution and cancellation, shared by editors and MCP jobs. */
+/** Authenticated execution and cancellation for {@link ExecutionRuns}. */
 public final class ScriptExecutionService {
     private final CompanionSession session;
     private final BooleanSupplier connected;

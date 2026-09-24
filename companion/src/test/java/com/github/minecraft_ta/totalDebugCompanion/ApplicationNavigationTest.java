@@ -25,15 +25,13 @@ import java.awt.Component;
 import javax.swing.AbstractButton;
 import com.github.tth05.scnet.IConnectionListener;
 import com.github.tth05.scnet.Client;
-import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ProtocolBindings;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import java.net.InetSocketAddress;
-import java.util.Map;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -233,7 +231,7 @@ class ApplicationNavigationTest {
         }
     }
 
-    @Test void reconnectPendingKeepsSnippetsUntilTheTransportActuallyDisconnects() throws Exception {
+    @Test void reconnectPendingKeepsRunsUntilTheTransportActuallyDisconnects() throws Exception {
         var configuration = new CompanionLaunchConfiguration(directory);
         var game = new Client();
         try (var app = new CompanionApplication(configuration, "test-token")) {
@@ -256,20 +254,17 @@ class ApplicationNavigationTest {
             SwingUtilities.invokeAndWait(() -> {
                 var window = app.createWindow();
                 try {
-                    var scriptsField = MainWindow.class.getDeclaredField("scripts");
-                    scriptsField.setAccessible(true);
-                    var snippets = new SnippetExecutionService(app.session(), (ScriptExecutionService) scriptsField.get(window), app.requireProject());
-                    var ownerField = MainWindow.class.getDeclaredField("snippetExecutions");
-                    ownerField.setAccessible(true);
-                    ownerField.set(window, snippets);
-                    // Seed an observation without executing game code; the real transport owns its lifetime.
-                    var runsField = SnippetExecutionService.class.getDeclaredField("runs");
-                    runsField.setAccessible(true);
-                    @SuppressWarnings("unchecked")
-                    var observations = (Map<Integer, CompletableFuture<ExecutionResult>>) runsField.get(snippets);
-                    observations.put(Integer.MAX_VALUE, completion);
+                    var executionsField = MainWindow.class.getDeclaredField("executions");
+                    executionsField.setAccessible(true);
+                    // Observe a run on this connection without executing game code; the real transport owns its lifetime.
+                    ((ExecutionRuns) executionsField.get(window)).open(new ExecutionRuns.Observer() {
+                        @Override public void result(int id, ExecutionResult result) { completion.complete(result); }
+                        @Override public void disconnected(int id, boolean expected) {
+                            completion.completeExceptionally(new IllegalStateException("Minecraft disconnected"));
+                        }
+                    });
                     window.setGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for Minecraft."));
-                    assertFalse(completion.isDone(), "A pending request must preserve the still-connected snippet");
+                    assertFalse(completion.isDone(), "A pending request must preserve the still-connected run");
                 } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
             });
             var reconnect = app.reconnectGame(app.requireProject());

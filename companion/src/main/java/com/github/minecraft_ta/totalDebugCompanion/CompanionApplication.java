@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.IndexIdentity;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -72,6 +73,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
     private final NotificationCenter notifications = new NotificationCenter();
+    private final ExecutionRuns executionRuns;
     private final EditorScriptRunService editorRuns;
     public NotificationCenter notifications() { return notifications; }
     private final ScriptExecutionService scriptExecutions;
@@ -165,8 +167,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
 
                 @Override
-                public void disconnected() {
-                    if (editorRuns != null) editorRuns.disconnected(closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
+                public void disconnected(long connection) {
+                    if (executionRuns != null) executionRuns.disconnected(connection,
+                            closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                     scriptCompiler.runtimeDisconnected();
                     synchronized (lifecycleLock) {
                         if (reconnect != null)
@@ -177,10 +180,6 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Minecraft is not connected."));
                     }
                     debuggerController.clearTarget();
-                    CodeModeJobService current = mcpJobs;
-                    if (current != null) {
-                        current.runtimeDisconnected();
-                    }
                     restoreOfflineAfterDisconnect();
                     Launch pendingLaunch = launch;
                     if (pendingLaunch != null) queueLaunch(pendingLaunch);
@@ -212,7 +211,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 }
             });
             scriptExecutions = new ScriptExecutionService(session, scriptCompiler, this::isConnected);
-            editorRuns = new EditorScriptRunService(scriptExecutions, session, notifications);
+            executionRuns = new ExecutionRuns(session, scriptExecutions);
+            editorRuns = new EditorScriptRunService(executionRuns, notifications);
             session.setProjectSelectionHandler(hello -> {
                 try { openProject(CompanionProfile.fromHello(hello)).join(); }
                 catch (CompletionException failure) {
@@ -250,6 +250,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         cancelReconnect("Companion is closing");
         cancelLaunch("Companion is closing");
         notifications.close();
+        if (executionRuns != null) executionRuns.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
             mcpWorker.close();
@@ -634,7 +635,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             // a broken debugger/connection cannot detach cleanly.
             CodeModeJobService jobs = mcpJobs;
             if (jobs != null) runCleanup("Disconnect execution jobs", jobs::prepareProjectSwitch);
-            if (editorRuns != null) editorRuns.disconnected(true);
+            if (executionRuns != null) executionRuns.disconnectAll(true);
             runCleanup("Disconnect script compiler", scriptCompiler::runtimeDisconnected);
             if (session != null) runCleanup("Disconnect Minecraft", session::disconnect);
             runCleanup("Clear debugger target", () -> getDebuggerController().clearTarget().join());
@@ -890,7 +891,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
     private void startMcpServer() throws Exception {
         CodeModeJobService jobs = mcpJobs;
-        if (jobs == null) jobs = new CodeModeJobService(session, scriptExecutions, this::requireProject,
+        if (jobs == null) jobs = new CodeModeJobService(executionRuns, this::requireProject,
                 this::isConnected, this::runtimeContext);
         startMcpServer(jobs, CompanionMcpServer.MCP_PORT);
     }
@@ -981,7 +982,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, session, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
+                scriptExecutions, executionRuns, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {

@@ -3,32 +3,37 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
-import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
-/** Owns transient Companion snippet runs and correlates their terminal status messages. */
+/** Completes one future per transient Companion snippet run. */
 public final class SnippetExecutionService implements AutoCloseable {
-    private final AtomicInteger nextId = new AtomicInteger(Integer.MAX_VALUE);
     private final Map<Integer, CompletableFuture<ExecutionResult>> runs = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
-    private final CompanionSession session;
-    private final ScriptExecutionService scripts;
+    private final ExecutionRuns executions;
     private final ProjectScope project;
-    private final Consumer<ExecutionResultMessage> listener = this::acceptResult;
+    private final ExecutionRuns.Observer observer = new ExecutionRuns.Observer() {
+        @Override public void result(int id, ExecutionResult result) {
+            if (!result.status().terminal()) return;
+            CompletableFuture<ExecutionResult> completion = runs.remove(id);
+            if (completion != null) completion.complete(result);
+        }
 
-    public SnippetExecutionService(CompanionSession session, ScriptExecutionService scripts, ProjectScope project) {
-        this.session = session;
-        this.scripts = scripts;
+        @Override public void disconnected(int id, boolean expected) {
+            CompletableFuture<ExecutionResult> completion = runs.remove(id);
+            if (completion != null) {
+                completion.completeExceptionally(new IllegalStateException("Minecraft disconnected while the expression was running"));
+            }
+        }
+    };
+
+    public SnippetExecutionService(ExecutionRuns executions, ProjectScope project) {
+        this.executions = executions;
         this.project = project;
-        session.addExecutionResultListener(this.listener);
     }
 
     public Execution execute(
@@ -42,62 +47,21 @@ public final class SnippetExecutionService implements AutoCloseable {
         if (this.closed) {
             throw new IllegalStateException("Snippet execution service is closed");
         }
-        if (!scripts.isConnected()) {
-            throw new IllegalStateException("Minecraft is not connected");
-        }
         source.requireExecutableSize();
-        int id = nextId();
+        int id = this.executions.open(this.observer);
         CompletableFuture<ExecutionResult> completion = new CompletableFuture<>();
         this.runs.put(id, completion);
-        boolean sent = scripts.run(
-                project,
-                id,
-                source.source(),
-                side == Side.SERVER,
-                environment,
-                failure -> acceptResult(new ExecutionResultMessage(id, failure.result()))
-        );
-        if (!sent) {
+        if (!this.executions.submit(id, project, source.source(), side == Side.SERVER, environment)) {
             this.runs.remove(id, completion);
-            throw new IllegalStateException("Minecraft disconnected while the expression was submitted");
+            throw new IllegalStateException("Minecraft is not connected");
         }
         return new Execution(id, completion, () -> cancel(id));
     }
 
-    private int nextId() {
-        int id = this.nextId.getAndDecrement();
-        if (id <= 1_000_000_000) {
-            throw new IllegalStateException("Transient snippet id space exhausted");
-        }
-        return id;
-    }
-
     private void cancel(int id) {
         if (this.runs.containsKey(id)) {
-            scripts.stop(id);
+            this.executions.stop(id);
         }
-    }
-
-    private void acceptResult(ExecutionResultMessage message) {
-        ExecutionResult result = message.result();
-        if (!result.status().terminal()) {
-            return;
-        }
-        CompletableFuture<ExecutionResult> completion = this.runs.remove(message.scriptId());
-        if (completion == null) {
-            return;
-        }
-        completion.complete(result);
-    }
-
-    public void runtimeDisconnected() {
-        IllegalStateException failure = new IllegalStateException(
-                "Minecraft disconnected while the expression was running"
-        );
-        for (CompletableFuture<ExecutionResult> completion : this.runs.values()) {
-            completion.completeExceptionally(failure);
-        }
-        this.runs.clear();
     }
 
     @Override
@@ -106,9 +70,8 @@ public final class SnippetExecutionService implements AutoCloseable {
             return;
         }
         this.closed = true;
-        session.removeExecutionResultListener(this.listener);
         for (Map.Entry<Integer, CompletableFuture<ExecutionResult>> entry : this.runs.entrySet()) {
-            scripts.stop(entry.getKey());
+            this.executions.stop(entry.getKey());
             entry.getValue().completeExceptionally(new IllegalStateException("Snippet execution service closed"));
         }
         this.runs.clear();

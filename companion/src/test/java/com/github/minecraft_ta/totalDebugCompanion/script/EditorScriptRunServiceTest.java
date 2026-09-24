@@ -183,14 +183,14 @@ class EditorScriptRunServiceTest {
             var second = fixture.start(CODE);
             fixture.awaitSubmission(first);
             fixture.awaitSubmission(second);
-            fixture.runs.disconnected(true);
+            fixture.executions.disconnected(fixture.session.connection(), true);
             assertTrue(first.state().terminal());
             assertTrue(second.state().terminal());
             assertTrue(fixture.runs.activeRuns().isEmpty());
             assertTrue(fixture.notifications.snapshot().entries().isEmpty());
             var third = fixture.start(CODE);
             fixture.awaitSubmission(third);
-            fixture.runs.disconnected(false);
+            fixture.executions.disconnected(fixture.session.connection(), false);
             assertTrue(third.state().terminal());
             assertEquals(1, fixture.notifications.snapshot().entries().size());
             assertTrue(fixture.notifications.snapshot().entries().getFirst().details().contains("could not be confirmed"));
@@ -229,13 +229,15 @@ class EditorScriptRunServiceTest {
         final LinkedBlockingQueue<RunScriptMessage> sent = new LinkedBlockingQueue<>();
         final ScriptCompilationService compiler = new ScriptCompilationService(sent::add, message -> false);
         final ProjectScope project = new ProjectScope(new Object(), new CompanionProfile("project", directory, directory), InstanceState.inMemory());
+        final ExecutionRuns executions;
         final EditorScriptRunService runs;
         final ReadySnapshot snapshot;
         Fixture(boolean runtime) throws Exception {
             session.server().setMessageBus(bus);
             snapshot = runtime ? ScriptCompilationServiceTest.fixture(directory) : null;
             if (snapshot != null) compiler.bind(snapshot);
-            runs = new EditorScriptRunService(new ScriptExecutionService(session, compiler, () -> true), session, notifications);
+            executions = new ExecutionRuns(session, new ScriptExecutionService(session, compiler, () -> true));
+            runs = new EditorScriptRunService(executions, notifications);
         }
         EditorScriptRunService.Run start(String code) { return runs.start(project, Source.capture(project, "Test", null), code, false, ScriptExecutionEnvironment.THREAD); }
         void awaitSubmission(EditorScriptRunService.Run run) throws Exception {
@@ -245,13 +247,13 @@ class EditorScriptRunServiceTest {
         }
         void result(EditorScriptRunService.Run run, ExecutionStatus status) { bus.deliver(new ExecutionResultMessage(run.id(), ExecutionResult.fromStatus(status, "fixture result"))); }
         @Override public void close() throws Exception {
-            runs.close(); compiler.close(); session.close(); notifications.close();
+            executions.close(); runs.close(); compiler.close(); session.close(); notifications.close();
             project.retire(); project.close(); if (snapshot != null) snapshot.close();
             assertTrue(bus.results.isEmpty());
         }
     }
 
-    private static final class ResultBus extends DefaultMessageBus {
+    static final class ResultBus extends DefaultMessageBus {
         final List<Consumer<ExecutionResultMessage>> results = new CopyOnWriteArrayList<>();
         @Override public <T extends AbstractMessage> void listenAlways(Class<T> type, Object owner, Consumer<T> listener) {
             super.listenAlways(type, owner, listener);

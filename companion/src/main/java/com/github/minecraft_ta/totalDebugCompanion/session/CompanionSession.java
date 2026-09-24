@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class CompanionSession implements AutoCloseable {
@@ -55,7 +56,8 @@ public final class CompanionSession implements AutoCloseable {
         default void connected() {
         }
 
-        default void disconnected() {
+        /** Reports the number of the authenticated connection that ended, as returned by {@link CompanionSession#connection()}. */
+        default void disconnected(long connection) {
         }
 
         default void failed(String detail, ClientHelloMessage hello) { }
@@ -74,6 +76,7 @@ public final class CompanionSession implements AutoCloseable {
     private final AttachmentHandler attachmentHandler;
     private final Listener listener;
     private final AtomicReference<State> state = new AtomicReference<>(State.WAITING_FOR_HELLO);
+    private final AtomicLong connections = new AtomicLong();
     private ProjectSelectionServer projectSelections;
     private AttachmentHandler projectSelectionHandler;
     private CompanionSessionDescriptor descriptor;
@@ -151,6 +154,11 @@ public final class CompanionSession implements AutoCloseable {
         return this.server;
     }
 
+    /** Numbers authenticated connections; it changes before a new connection reports itself connected. */
+    public long connection() {
+        return this.connections.get();
+    }
+
     public boolean isConnected() {
         return this.state.get() == State.AUTHENTICATED && this.server.isClientConnected();
     }
@@ -210,17 +218,19 @@ public final class CompanionSession implements AutoCloseable {
 
             @Override
             public void onDisconnected() {
+                // Read before leaving AUTHENTICATED; a replacement cannot authenticate until then.
+                long ended = CompanionSession.this.connections.get();
                 State previous = CompanionSession.this.state.getAndUpdate(state ->
                         state == State.CLOSED ? State.CLOSED : State.WAITING_FOR_HELLO
                 );
                 if (previous != State.CLOSED) {
-                    CompanionSession.this.listener.disconnected();
+                    CompanionSession.this.listener.disconnected(ended);
                 }
             }
 
             @Override
             public void onConnectionError(Throwable cause) {
-                CompanionSession.this.listener.disconnected();
+                CompanionSession.this.listener.disconnected(CompanionSession.this.connections.get());
                 CompanionSession.this.listener.failed("Minecraft connection failed: " + cause.getMessage(), clientHello);
             }
         });
@@ -247,6 +257,7 @@ public final class CompanionSession implements AutoCloseable {
             return;
         }
 
+        this.connections.incrementAndGet();
         this.state.set(State.AUTHENTICATED);
         this.server.getMessageProcessor().enqueueMessage(response);
         this.server.getMessageProcessor().enqueueMessage(new ReadyMessage());
@@ -267,11 +278,12 @@ public final class CompanionSession implements AutoCloseable {
 
     @Override
     public synchronized void close() {
+        long ended = this.connections.get();
         State previous = this.state.getAndSet(State.CLOSED);
         this.server.close();
         if (this.projectSelections != null) this.projectSelections.close();
         if (previous == State.AUTHENTICATED) {
-            this.listener.disconnected();
+            this.listener.disconnected(ended);
         }
     }
 }

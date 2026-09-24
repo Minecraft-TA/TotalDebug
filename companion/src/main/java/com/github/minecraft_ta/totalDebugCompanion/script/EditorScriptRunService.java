@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -62,41 +61,48 @@ public final class EditorScriptRunService implements AutoCloseable {
         }
     }
 
-    private final ScriptExecutionService executions;
-    private final CompanionSession session;
+    private final ExecutionRuns executions;
     private final NotificationCenter notifications;
     private final Map<Integer, Run> runs = new LinkedHashMap<>();
     private final List<Runnable> listeners = new ArrayList<>();
-    private final Consumer<ExecutionResultMessage> resultListener = message -> accept(message.scriptId(), new State(switch (message.result().status()) {
-        case CANCELLATION_PENDING -> Phase.STOPPING;
-        case RUN_COMPLETED -> Phase.COMPLETED;
-        case RUN_EXCEPTION, COMPILATION_FAILED -> Phase.FAILED;
-        default -> Phase.RUNNING;
-    }, message, List.of()));
-    private int nextId;
+    private final ExecutionRuns.Observer observer = new ExecutionRuns.Observer() {
+        @Override public void result(int id, ExecutionResult result) {
+            accept(id, new State(switch (result.status()) {
+                case CANCELLATION_PENDING -> Phase.STOPPING;
+                case RUN_COMPLETED -> Phase.COMPLETED;
+                case RUN_EXCEPTION, COMPILATION_FAILED -> Phase.FAILED;
+                default -> Phase.RUNNING;
+            }, new ExecutionResultMessage(id, result), List.of()));
+        }
+
+        @Override public void failed(int id, ScriptCompilationService.Failure failure) {
+            // Local compilation reports RUN_EXCEPTION only for its explicit cancellation path.
+            accept(id, new State(failure.result().status() == ExecutionStatus.RUN_EXCEPTION ? Phase.CANCELLED : Phase.FAILED,
+                    new ExecutionResultMessage(id, failure.result()), failure.diagnostics()));
+        }
+
+        @Override public void disconnected(int id, boolean expected) {
+            accept(id, new State(Phase.DISCONNECTED, new ExecutionResultMessage(id,
+                    ExecutionResult.failed("", null, "Minecraft disconnected; script completion could not be confirmed")), List.of()), !expected);
+        }
+    };
     private boolean closed;
 
-    public EditorScriptRunService(ScriptExecutionService executions, CompanionSession session, NotificationCenter notifications) {
+    public EditorScriptRunService(ExecutionRuns executions, NotificationCenter notifications) {
         this.executions = executions;
-        this.session = session;
         this.notifications = notifications;
-        session.addExecutionResultListener(resultListener);
     }
 
     public Run start(ProjectScope project, Source source, String code, boolean server, ScriptExecutionEnvironment environment) {
         Run run;
         synchronized (this) {
             if (closed) throw new IllegalStateException("Editor script service is closed");
-            if (nextId == 999_999_999) throw new IllegalStateException("Editor script run identifiers exhausted");
-            run = new Run(++nextId, source, project);
+            run = new Run(executions.open(observer), source, project);
             runs.put(run.id, run);
         }
         changed();
         try {
-            boolean accepted = executions.run(project, run.id, code, server, environment, failure ->
-                    // Local compilation reports RUN_EXCEPTION only for its explicit cancellation path.
-                    accept(run.id, new State(failure.result().status() == ExecutionStatus.RUN_EXCEPTION ? Phase.CANCELLED : Phase.FAILED,
-                            new ExecutionResultMessage(run.id, failure.result()), failure.diagnostics())));
+            boolean accepted = executions.submit(run.id, project, code, server, environment);
             if (!accepted) accept(run.id, new State(Phase.FAILED, new ExecutionResultMessage(run.id,
                     ExecutionResult.failed("", null, "Minecraft disconnected or the project changed before submission")), List.of()));
             boolean stop;
@@ -161,17 +167,8 @@ public final class EditorScriptRunService implements AutoCloseable {
         targets.forEach(Runnable::run);
     }
 
-    public void disconnected(boolean expected) {
-        for (Run run : activeRuns()) {
-            accept(run.id, new State(Phase.DISCONNECTED, new ExecutionResultMessage(run.id,
-                    ExecutionResult.failed("", null, "Minecraft disconnected; script completion could not be confirmed")), List.of()), !expected);
-        }
-    }
-
+    /** Runs end through {@link ExecutionRuns}; closing only stops new runs and view updates. */
     @Override public void close() {
-        synchronized (this) { closed = true; }
-        session.removeExecutionResultListener(resultListener);
-        disconnected(true);
-        synchronized (this) { listeners.clear(); }
+        synchronized (this) { closed = true; listeners.clear(); }
     }
 }

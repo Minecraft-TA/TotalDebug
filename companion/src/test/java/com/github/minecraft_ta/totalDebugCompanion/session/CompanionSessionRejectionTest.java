@@ -26,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -114,9 +115,11 @@ class CompanionSessionRejectionTest {
         String token = "correct-token-value-1234567890abcdef";
         CompanionLaunchConfiguration configuration = new CompanionLaunchConfiguration(this.temporaryDirectory);
         CountDownLatch disconnected = new CountDownLatch(1);
+        AtomicLong ended = new AtomicLong();
         CompanionSession.Listener listener = new CompanionSession.Listener() {
             @Override
-            public void disconnected() {
+            public void disconnected(long connection) {
+                ended.set(connection);
                 disconnected.countDown();
             }
         };
@@ -128,12 +131,15 @@ class CompanionSessionRejectionTest {
             CompanionSessionDescriptor descriptor = CompanionSessionDescriptor.read(configuration.descriptorFile(), CompanionProtocol.VERSION);
 
             assertTrue(connect(first, descriptor).get(2, TimeUnit.SECONDS).accepted);
+            assertEquals(1, session.connection());
             first.close();
             assertTrue(disconnected.await(2, TimeUnit.SECONDS));
             assertFalse(session.isConnected());
+            assertEquals(1, ended.get(), "The disconnect reports the connection that ended");
 
             assertTrue(connect(second, descriptor).get(2, TimeUnit.SECONDS).accepted);
             assertTrue(session.isConnected());
+            assertEquals(2, session.connection(), "Each authenticated connection receives a new number");
         }
     }
 
