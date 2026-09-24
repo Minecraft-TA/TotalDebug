@@ -45,8 +45,11 @@ public final class ItemIconService implements AutoCloseable {
             return size() > MAX_CACHED;
         }
     };
+    private final Map<String, Optional<BufferedImage>> fluids = new LinkedHashMap<>();
     private volatile Snapshot snapshot;
     private Snapshot opened;
+    private Snapshot fluidsOpened;
+    private FluidTextures fluidTextures;
     private ItemRenderBackend backend;
     private volatile boolean closed;
 
@@ -77,6 +80,42 @@ public final class ItemIconService implements AutoCloseable {
         }
         Key key = new Key(model, Map.copyOf(tints), size);
         return CompletableFuture.supplyAsync(() -> renderOnWorker(key), this.worker);
+    }
+
+    /** The tinted still texture of a fluid, as the game draws it; empty when it was not captured. */
+    public CompletableFuture<Optional<BufferedImage>> fluidTexture(String fluidId) {
+        if (this.closed || fluidId == null || fluidId.isBlank() || this.snapshot == null) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        return CompletableFuture.supplyAsync(() -> fluidOnWorker(fluidId), this.worker);
+    }
+
+    private Optional<BufferedImage> fluidOnWorker(String fluidId) {
+        Snapshot current = this.snapshot;
+        if (this.closed || current == null) {
+            return Optional.empty();
+        }
+        if (!current.equals(this.fluidsOpened)) {
+            this.fluids.clear();
+            this.fluidTextures = null;
+            this.fluidsOpened = current;
+            try {
+                this.fluidTextures = FluidTextures.open(current.archive());
+            } catch (IOException exception) {
+                System.getLogger(ItemIconService.class.getName()).log(System.Logger.Level.WARNING,
+                        "Unable to read fluid appearances from " + current.archive(), exception);
+            }
+        }
+        if (this.fluidTextures == null) {
+            return Optional.empty();
+        }
+        return this.fluids.computeIfAbsent(fluidId, id -> {
+            try {
+                return this.fluidTextures.texture(id);
+            } catch (IOException exception) {
+                return Optional.empty();
+            }
+        });
     }
 
     /** The conventional inventory model of an item registry id: {@code ns:path} becomes {@code ns:item/path}. */

@@ -3,6 +3,10 @@ package com.github.minecraft_ta.totaldebug.script;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import java.util.ArrayList;
@@ -46,6 +50,7 @@ public final class ScriptFacts {
         private final boolean retained;
         private final List<Fact> facts = new ArrayList<>();
         private int total;
+        private int nodes;
 
         private Section(String title, boolean retained) {
             this.title = title;
@@ -87,10 +92,56 @@ public final class ScriptFacts {
             ));
         }
 
+        /**
+         * Reports a tag as a tree: compounds and lists become nodes, other tags show their SNBT text. Entries beyond
+         * the section's node budget or depth are counted but not kept.
+         */
+        public Section nbt(String label, Tag tag) {
+            if (tag == null) {
+                return text(label, "null");
+            }
+            int[] budget = {FactSection.MAX_NODES - this.nodes - 1};
+            return add(nbtFact(Fact.clip(label), tag, 1, budget));
+        }
+
+        private static Fact nbtFact(String label, Tag tag, int depth, int[] budget) {
+            if (tag instanceof CompoundTag compound) {
+                List<String> keys = new ArrayList<>(compound.getAllKeys());
+                keys.sort(null);
+                List<Fact> children = new ArrayList<>();
+                for (String key : keys) {
+                    if (depth >= FactSection.MAX_DEPTH || budget[0] <= 0) break;
+                    budget[0]--;
+                    children.add(nbtFact(Fact.clip(key), compound.get(key), depth + 1, budget));
+                }
+                return Fact.tree(label, count(keys.size(), "entry", "entries"), children, keys.size());
+            }
+            if (tag instanceof ListTag list) {
+                List<Fact> children = new ArrayList<>();
+                for (int index = 0; index < list.size(); index++) {
+                    if (depth >= FactSection.MAX_DEPTH || budget[0] <= 0) break;
+                    budget[0]--;
+                    children.add(nbtFact("[" + index + "]", list.get(index), depth + 1, budget));
+                }
+                return Fact.tree(label, count(list.size(), "item", "items"), children, list.size());
+            }
+            if (tag instanceof StringTag string) {
+                return Fact.text(label, Fact.clip("\"" + string.getAsString() + "\""));
+            }
+            return Fact.text(label, Fact.clip(tag.toString()));
+        }
+
+        private static String count(int size, String singular, String plural) {
+            return size + " " + (size == 1 ? singular : plural);
+        }
+
         private Section add(Fact fact) {
             this.total++;
-            if (this.retained && this.facts.size() < FactSection.MAX_FACTS) {
+            int nodes = fact.nodeCount();
+            if (this.retained && this.facts.size() < FactSection.MAX_FACTS
+                    && this.nodes + nodes <= FactSection.MAX_NODES) {
                 this.facts.add(fact);
+                this.nodes += nodes;
             }
             return this;
         }

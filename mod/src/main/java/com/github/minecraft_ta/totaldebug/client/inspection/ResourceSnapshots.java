@@ -2,19 +2,27 @@ package com.github.minecraft_ta.totaldebug.client.inspection;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.Fluids;
+import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,6 +41,9 @@ import java.util.zip.ZipOutputStream;
  * definition, so Companion can draw item icons without Minecraft. Layer {@code n} holds the n-th contribution of an
  * additive atlas definition; ordinary resources only use layer 0. A new archive is captured when the pack stack
  * changes. Older archives are removed once no renderer holds them open.
+ *
+ * <p>Fluid appearances come from mod code rather than resources, so the snapshot also records each fluid's still
+ * texture, tint and light properties in {@value #FLUID_APPEARANCES}, the format Companion's renderer reads.</p>
  */
 public final class ResourceSnapshots {
     private static final long MAX_RESOURCE_BYTES = 16L * 1024 * 1024;
@@ -40,6 +51,7 @@ public final class ResourceSnapshots {
     private static final long MAX_ARCHIVE_BYTES = 512L * 1024 * 1024;
     private static final long MAX_RETAINED_BYTES = 1536L * 1024 * 1024;
     private static final long RETRY_NANOS = 10_000_000_000L;
+    static final String FLUID_APPEARANCES = "totaldebug/fluid-appearances.json";
 
     private record Ready(Path archive, int layers) {
     }
@@ -68,9 +80,10 @@ public final class ResourceSnapshots {
         if (this.pending == null || !current.equals(this.packs) || retry) {
             this.packs = current;
             this.attemptedAt = System.nanoTime();
+            byte[] fluids = fluidAppearances();
             this.pending = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return capture(manager, current);
+                    return capture(manager, current, fluids);
                 } catch (IOException exception) {
                     throw new IllegalStateException("Unable to prepare item icons: " + exception.getMessage(), exception);
                 }
@@ -84,7 +97,37 @@ public final class ResourceSnapshots {
         this.pending.thenAccept(ready -> this.publish.accept(ready.archive().toString(), ready.layers()));
     }
 
-    private Ready capture(ResourceManager manager, List<PackResources> expected) throws IOException {
+    /** Reads every fluid's client appearance. Client thread only, since mod extensions are client state. */
+    private static byte[] fluidAppearances() {
+        JsonObject fluids = new JsonObject();
+        for (Fluid fluid : BuiltInRegistries.FLUID) {
+            if (fluid == Fluids.EMPTY) {
+                continue;
+            }
+            try {
+                IClientFluidTypeExtensions client = IClientFluidTypeExtensions.of(fluid);
+                ResourceLocation still = client.getStillTexture();
+                if (still == null) {
+                    continue;
+                }
+                JsonObject appearance = new JsonObject();
+                appearance.addProperty("stillTexture", still.toString());
+                appearance.addProperty("tint", String.format(Locale.ROOT, "%08X", client.getTintColor()));
+                appearance.addProperty("lightLevel", Math.clamp(fluid.getFluidType().getLightLevel(), 0, 15));
+                appearance.addProperty("lighterThanAir", fluid.getFluidType().isLighterThanAir());
+                fluids.add(BuiltInRegistries.FLUID.getKey(fluid).toString(), appearance);
+            } catch (RuntimeException exception) {
+                TotalDebug.LOGGER.debug("No client appearance for fluid {}", BuiltInRegistries.FLUID.getKey(fluid),
+                        exception);
+            }
+        }
+        JsonObject root = new JsonObject();
+        root.addProperty("schemaVersion", 1);
+        root.add("fluids", fluids);
+        return root.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private Ready capture(ResourceManager manager, List<PackResources> expected, byte[] fluids) throws IOException {
         Files.createDirectories(this.directory);
         trimArchives();
         if (retainedBytes() > MAX_RETAINED_BYTES) {
@@ -120,6 +163,8 @@ public final class ResourceSnapshots {
                     }
                 }
                 requireUnchanged(manager, expected);
+                write(zip, written, total, "layers/0/" + FLUID_APPEARANCES,
+                        () -> new ByteArrayInputStream(fluids), MAX_METADATA_BYTES * 4);
             }
         });
         return new Ready(output, layers[0]);

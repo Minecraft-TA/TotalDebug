@@ -10,7 +10,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Color;
@@ -28,6 +27,7 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,6 +40,7 @@ public final class FactsPanel extends JPanel {
 
     private final ItemIconService icons;
     private final List<SlotCell> slots = new ArrayList<>();
+    private final Map<AmountBar, String> fluidBars = new LinkedHashMap<>();
 
     public FactsPanel(List<FactSection> sections, ItemIconService icons) {
         this.icons = Objects.requireNonNull(icons, "icons");
@@ -58,11 +59,13 @@ public final class FactsPanel extends JPanel {
         reloadIcons();
     }
 
-    /** Draws slot icons again, for example after the game published a newer resource snapshot. */
+    /** Draws slot icons and fluid textures again, for example after the game published a newer snapshot. */
     public void reloadIcons() {
         for (SlotCell slot : this.slots) {
             slot.load();
         }
+        this.fluidBars.forEach((bar, fluid) -> this.icons.fluidTexture(fluid).thenAccept(texture ->
+                SwingUtilities.invokeLater(() -> bar.setTexture(texture.orElse(null)))));
     }
 
     private static JLabel title(FactSection section) {
@@ -78,6 +81,10 @@ public final class FactsPanel extends JPanel {
     private JComponent content(FactSection section) {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        if (section.facts().stream().anyMatch(fact -> fact.totalChildren() > 0)) {
+            content.add(aligned(FactTree.of(section.facts())));
+            return content;
+        }
         List<Fact> stacks = section.facts().stream().filter(fact -> fact.kind() == Fact.Kind.STACK).toList();
         if (!stacks.isEmpty()) {
             content.add(aligned(slotGrid(stacks)));
@@ -104,7 +111,7 @@ public final class FactsPanel extends JPanel {
         return wrapper;
     }
 
-    private static JComponent rows(List<Fact> facts) {
+    private JComponent rows(List<Fact> facts) {
         JPanel rows = new JPanel(new GridBagLayout());
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.insets = new Insets(2, 0, 2, 12);
@@ -125,27 +132,25 @@ public final class FactsPanel extends JPanel {
         return rows;
     }
 
-    private static JComponent value(Fact fact) {
+    private JComponent value(Fact fact) {
         return switch (fact.kind()) {
             case TEXT, STACK -> {
                 JLabel value = new JLabel(fact.value());
                 value.setToolTipText(fact.value());
                 yield value;
             }
-            case BAR -> bar(fact.amount(), fact.capacity(), amounts(fact.amount(), fact.capacity(), fact.unit()));
-            case FLUID -> bar(fact.amount(), fact.capacity(), fact.id().isEmpty()
-                    ? "Empty  ·  " + amounts(0, fact.capacity(), fact.unit())
-                    : fact.value() + "  ·  " + amounts(fact.amount(), fact.capacity(), fact.unit()));
+            case BAR -> new AmountBar(fact.amount(), fact.capacity(),
+                    amounts(fact.amount(), fact.capacity(), fact.unit()));
+            case FLUID -> {
+                AmountBar bar = new AmountBar(fact.amount(), fact.capacity(), fact.id().isEmpty()
+                        ? "Empty  ·  " + amounts(0, fact.capacity(), fact.unit())
+                        : fact.value() + "  ·  " + amounts(fact.amount(), fact.capacity(), fact.unit()));
+                if (!fact.id().isEmpty()) {
+                    this.fluidBars.put(bar, fact.id());
+                }
+                yield bar;
+            }
         };
-    }
-
-    private static JProgressBar bar(long amount, long capacity, String text) {
-        JProgressBar bar = new JProgressBar(0, 1_000);
-        bar.setValue(capacity <= 0 ? 0 : (int) Math.min(1_000, amount * 1_000 / capacity));
-        bar.setStringPainted(true);
-        bar.setString(text);
-        bar.setPreferredSize(new Dimension(320, bar.getPreferredSize().height + 4));
-        return bar;
     }
 
     static String amounts(long amount, long capacity, String unit) {

@@ -57,6 +57,7 @@ public final class InspectionPanel extends JPanel {
     private static final String RESULT_CARD = "result";
     private static final String PROBLEM_CARD = "problem";
     private static final int HEADER_ICON_SIZE = 48;
+    private static final int TAB_ICON_SIZE = 32;
     private static final DateTimeFormatter CAPTURE_TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final InspectSubjectPayload subject;
@@ -64,6 +65,7 @@ public final class InspectionPanel extends JPanel {
     private final ItemIconService icons;
     private final Runnable removeIconListener;
     private final JLabel icon = new JLabel();
+    private final ItemTabIcon tabIcon = new ItemTabIcon(Icons.EVALUATE_EXPRESSION);
     private final JComboBox<Side> runSide = new JComboBox<>(new Side[]{Side.SERVER, Side.CLIENT});
     private final JComboBox<String> face = new JComboBox<>(FACES.toArray(String[]::new));
     private final JButton refresh = new JButton("Refresh", Icons.REFRESH);
@@ -177,10 +179,12 @@ public final class InspectionPanel extends JPanel {
         String side = faceName.isEmpty() ? "null" : "Direction." + faceName;
         return """
                 import com.github.minecraft_ta.totaldebug.inspection.CapabilityReader;
+                import com.github.minecraft_ta.totaldebug.inspection.NbtReader;
                 import com.github.minecraft_ta.totaldebug.inspection.StorageReader;
                 import net.minecraft.core.Direction;
                 StorageReader.read(target(), %1$s, facts());
                 CapabilityReader.read(target(), %1$s, facts());
+                NbtReader.read(target(), facts());
                 return target();
                 """.formatted(side);
     }
@@ -266,6 +270,18 @@ public final class InspectionPanel extends JPanel {
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (!this.disposed) this.icon.setIcon(image.map(ImageIcon::new).orElse(null));
                 }));
+        this.icons.render(this.subject.iconModel(), this.subject.iconTints(), TAB_ICON_SIZE)
+                .thenAccept(image -> SwingUtilities.invokeLater(() -> {
+                    if (this.disposed) return;
+                    this.tabIcon.setImage(image.orElse(null));
+                    Component tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, this);
+                    if (tabs != null) tabs.repaint();
+                }));
+    }
+
+    /** The subject's rendered item for its editor tab, with a generic icon until the item can be drawn. */
+    public ItemTabIcon tabIcon() {
+        return this.tabIcon;
     }
 
     public void dispose() {

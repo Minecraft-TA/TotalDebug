@@ -6,7 +6,6 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JLabel;
-import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -66,7 +65,7 @@ class FactsPanelTest {
     private static void collect(Container container, List<String> labels, List<String> bars) {
         for (Component child : container.getComponents()) {
             if (child instanceof JLabel label) labels.add(label.getText());
-            if (child instanceof JProgressBar bar) bars.add(bar.getString());
+            if (child instanceof AmountBar bar) bars.add(bar.text());
             if (child instanceof Container nested) collect(nested, labels, bars);
         }
     }

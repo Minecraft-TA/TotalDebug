@@ -1,6 +1,5 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
-import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -48,7 +47,7 @@ public final class InspectionView implements IEditorPanel {
 
     @Override
     public Icon getIcon() {
-        return Icons.EVALUATE_EXPRESSION;
+        return this.panel.tabIcon();
     }
 
     @Override
