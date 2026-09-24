@@ -30,15 +30,8 @@ public final class ExecutionRuns implements AutoCloseable {
         void disconnected(int id, boolean expected);
     }
 
-    private static final class Run {
-        private final Observer observer;
-        private volatile long connection;
-
-        private Run(Observer observer, long connection) {
-            this.observer = observer;
-            this.connection = connection;
-        }
-    }
+    /** Connection tags change only through per-key map operations, so disconnect checks cannot interleave with them. */
+    private record Run(Observer observer, long connection) { }
 
     private final CompanionSession session;
     private final ScriptExecutionService scripts;
@@ -66,9 +59,8 @@ public final class ExecutionRuns implements AutoCloseable {
     /** Returns false, and forgets the run, when the current connection did not accept it. */
     public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
                           ScriptExecutionEnvironment environment) {
-        Run run = this.runs.get(id);
+        Run run = this.runs.computeIfPresent(id, (key, opened) -> new Run(opened.observer(), this.session.connection()));
         if (run == null) return false;
-        run.connection = this.session.connection();
         boolean sent = false;
         try {
             sent = this.scripts.run(project, id, source, serverSide, environment, failure -> failed(id, failure));
@@ -84,12 +76,20 @@ public final class ExecutionRuns implements AutoCloseable {
 
     /** Ends runs submitted on the given connection or an earlier one. */
     public void disconnected(long connection, boolean expected) {
-        for (var entry : List.copyOf(this.runs.entrySet())) {
-            Run run = entry.getValue();
-            if (run.connection <= connection && this.runs.remove(entry.getKey(), run)) {
-                run.observer.disconnected(entry.getKey(), expected);
-            }
+        for (int id : List.copyOf(this.runs.keySet())) {
+            Run[] ended = new Run[1];
+            this.runs.computeIfPresent(id, (key, run) -> {
+                if (run.connection() > connection) return run;
+                ended[0] = run;
+                return null;
+            });
+            if (ended[0] != null) ended[0].observer().disconnected(id, expected);
         }
+    }
+
+    /** Forgets a run that was opened but will not be submitted. */
+    public void discard(int id) {
+        this.runs.remove(id);
     }
 
     public void disconnectAll(boolean expected) {
@@ -98,13 +98,13 @@ public final class ExecutionRuns implements AutoCloseable {
 
     private void result(int id, ExecutionResult result) {
         Run run = result.status().terminal() ? this.runs.remove(id) : this.runs.get(id);
-        if (run != null) run.observer.result(id, result);
+        if (run != null) run.observer().result(id, result);
     }
 
     private void failed(int id, ScriptCompilationService.Failure failure) {
         // Local failures are terminal: the script never reached Minecraft.
         Run run = this.runs.remove(id);
-        if (run != null) run.observer.failed(id, failure);
+        if (run != null) run.observer().failed(id, failure);
     }
 
     @Override

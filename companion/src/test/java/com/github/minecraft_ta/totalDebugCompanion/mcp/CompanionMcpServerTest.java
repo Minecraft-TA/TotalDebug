@@ -261,6 +261,10 @@ class CompanionMcpServerTest {
         }
 
         @Override
+        public void discard(int scriptId) {
+        }
+
+        @Override
         public void cancel(int scriptId) {
         }
     }

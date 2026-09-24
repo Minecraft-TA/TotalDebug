@@ -93,6 +93,11 @@ public final class CodeModeJobService implements AutoCloseable {
                     }
 
                     @Override
+                    public void discard(int scriptId) {
+                        runs.discard(scriptId);
+                    }
+
+                    @Override
                     public void cancel(int scriptId) {
                         if (!runs.stop(scriptId)) {
                             throw new IllegalStateException("Minecraft disconnected before cancellation was sent");
@@ -159,27 +164,32 @@ public final class CodeModeJobService implements AutoCloseable {
         evictCompletedJobs();
 
         int scriptId = this.transport.open(this.observer);
-        CodeModeSourceBuilder.GeneratedSource generated = CodeModeSourceBuilder.build(
-                scriptId,
-                code,
-                List.copyOf(imports)
-        );
         String jobId = UUID.randomUUID().toString();
-        Instant submittedAt = this.clock.instant();
-        Job job = new Job(
-                jobId,
-                scriptId,
-                side,
-                environment,
-                generated.source(),
-                submittedAt,
-                currentRuntimeContext()
-        );
+        Job job;
+        try {
+            CodeModeSourceBuilder.GeneratedSource generated = CodeModeSourceBuilder.build(
+                    scriptId,
+                    code,
+                    List.copyOf(imports)
+            );
+            job = new Job(
+                    jobId,
+                    scriptId,
+                    side,
+                    environment,
+                    generated.source(),
+                    this.clock.instant(),
+                    currentRuntimeContext()
+            );
+        } catch (RuntimeException rejected) {
+            this.transport.discard(scriptId);
+            throw rejected;
+        }
         this.jobs.put(jobId, job);
         this.jobsByScriptId.put(scriptId, jobId);
 
         try {
-            this.transport.execute(scriptId, generated.source(), side, environment);
+            this.transport.execute(scriptId, job.source, side, environment);
         } catch (RuntimeException exception) {
             job.finish(
                     JobState.FAILED,
@@ -429,6 +439,9 @@ public final class CodeModeJobService implements AutoCloseable {
         int open(ExecutionRuns.Observer observer);
 
         void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment);
+
+        /** Releases an opened id whose job could not be created. */
+        void discard(int scriptId);
 
         void cancel(int scriptId);
     }

@@ -211,6 +211,7 @@ class DebuggerMcpIntegrationTest {
         private int lastScriptId;
         public int open(ExecutionRuns.Observer observer) { return ++lastScriptId; }
         public void execute(int id, String source, CodeModeJobService.ExecutionSide side, CodeModeJobService.ExecutionEnvironment environment) { }
+        public void discard(int id) { }
         public void cancel(int id) { }
     }
 }

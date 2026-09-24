@@ -27,6 +27,9 @@ public final class ProjectSwitchJobs {
             @Override public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
                                           CodeModeJobService.ExecutionEnvironment environment) {
             }
+            @Override public void discard(int id) {
+                compiling.remove(id);
+            }
             @Override public void cancel(int id) {
                 cancelled.accept(id);
                 var observer = compiling.remove(id);

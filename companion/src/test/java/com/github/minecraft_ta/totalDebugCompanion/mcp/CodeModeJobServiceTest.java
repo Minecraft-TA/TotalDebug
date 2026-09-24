@@ -243,6 +243,18 @@ class CodeModeJobServiceTest {
     }
 
     @Test
+    void rejectedSourceReleasesItsOpenedRun() {
+        FakeTransport transport = new FakeTransport();
+        try (CodeModeJobService service = service(transport, true)) {
+            assertThrows(IllegalArgumentException.class, () -> service.submit(" ", List.of(),
+                    CodeModeJobService.ExecutionSide.CLIENT, CodeModeJobService.ExecutionEnvironment.THREAD));
+            assertEquals(List.of(1), transport.discardedScriptIds);
+            assertTrue(transport.executions.isEmpty());
+            assertTrue(service.list(10).isEmpty());
+        }
+    }
+
+    @Test
     void cancellationTransportFailureDoesNotLoseTheLiveJob() {
         FakeTransport transport = new FakeTransport();
         try (CodeModeJobService service = service(transport, true)) {
@@ -409,6 +421,7 @@ class CodeModeJobServiceTest {
     private static final class FakeTransport implements CodeModeJobService.Transport {
         private final List<Execution> executions = new ArrayList<>();
         private final List<Integer> cancelledScriptIds = new ArrayList<>();
+        private final List<Integer> discardedScriptIds = new ArrayList<>();
         private RuntimeException cancelFailure;
         private IntConsumer onCancel = ignored -> { };
         private ExecutionRuns.Observer observer;
@@ -428,6 +441,11 @@ class CodeModeJobServiceTest {
                 CodeModeJobService.ExecutionEnvironment environment
         ) {
             this.executions.add(new Execution(scriptId, source, side, environment));
+        }
+
+        @Override
+        public void discard(int scriptId) {
+            this.discardedScriptIds.add(scriptId);
         }
 
         @Override

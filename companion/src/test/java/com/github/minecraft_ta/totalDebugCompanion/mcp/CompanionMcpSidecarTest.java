@@ -123,6 +123,9 @@ class CompanionMcpSidecarTest {
                 }
 
                 @Override
+                public void discard(int id) { }
+
+                @Override
                 public void cancel(int id) { }
             };
             try (CompanionMcpServer companion = companion(port, "first", waitingTransport)) {
@@ -241,6 +244,10 @@ class CompanionMcpSidecarTest {
                 CodeModeJobService.ExecutionSide side,
                 CodeModeJobService.ExecutionEnvironment environment
         ) {
+        }
+
+        @Override
+        public void discard(int scriptId) {
         }
 
         @Override

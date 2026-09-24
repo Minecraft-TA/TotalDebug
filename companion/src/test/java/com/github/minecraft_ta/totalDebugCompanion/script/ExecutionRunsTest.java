@@ -80,6 +80,17 @@ class ExecutionRunsTest {
         }
     }
 
+    @Test void discardedRunReceivesNoFurtherUpdates() throws Exception {
+        try (var fixture = new Fixture(true)) {
+            var recorder = new Recorder();
+            int id = fixture.runs.open(recorder);
+            fixture.runs.discard(id);
+            fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
+            fixture.runs.disconnectAll(false);
+            assertTrue(recorder.events.isEmpty());
+        }
+    }
+
     @Test void closeEndsEveryRunAsExpectedAndStopsListening() throws Exception {
         var fixture = new Fixture(true);
         var recorder = new Recorder();
