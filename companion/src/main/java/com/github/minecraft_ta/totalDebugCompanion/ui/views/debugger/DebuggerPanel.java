@@ -23,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
+import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -56,7 +57,7 @@ public final class DebuggerPanel extends JPanel {
     private final JButton stepOut;
     private final JButton detach;
     private final JButton cancelEvaluation = new JButton("Cancel evaluation");
-    private final javax.swing.Timer evaluationTimer = new javax.swing.Timer(250, event -> updateEvaluationStatus());
+    private final Timer evaluationTimer = new Timer(250, event -> updateEvaluationStatus());
     private final JButton viewBreakpoints;
     private final JToggleButton muteBreakpoints;
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.DefaultListModel;
 import javax.swing.JComponent;
 import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
@@ -203,8 +204,8 @@ class SpeedSearchTest {
             assertEquals(1, table.getSelectedRow());
 
             JTabbedPane tabs = new JTabbedPane();
-            tabs.addTab("First.java", new javax.swing.JPanel());
-            tabs.addTab("Second.java", new javax.swing.JPanel());
+            tabs.addTab("First.java", new JPanel());
+            tabs.addTab("Second.java", new JPanel());
             SpeedSearch tabSearch = SpeedSearch.install(tabs, tabs::getTitleAt);
             type(tabs, 's');
             type(tabs, 'e');
@@ -331,7 +332,7 @@ class SpeedSearchTest {
         return model;
     }
 
-    private static void type(javax.swing.JComponent component, char character) {
+    private static void type(JComponent component, char character) {
         KeyEvent event = typedEvent(component, character);
         for (KeyListener listener : component.getKeyListeners()) {
             listener.keyTyped(event);
@@ -339,7 +340,7 @@ class SpeedSearchTest {
         assertTrue(event.isConsumed(), "Speed-search typing should not reach the component itself");
     }
 
-    private static KeyEvent typedEvent(javax.swing.JComponent component, char character) {
+    private static KeyEvent typedEvent(JComponent component, char character) {
         return new KeyEvent(
                 component,
                 KeyEvent.KEY_TYPED,
@@ -350,7 +351,7 @@ class SpeedSearchTest {
         );
     }
 
-    private static KeyEvent press(javax.swing.JComponent component, int keyCode, int modifiers) {
+    private static KeyEvent press(JComponent component, int keyCode, int modifiers) {
         KeyEvent event = new KeyEvent(
                 component,
                 KeyEvent.KEY_PRESSED,

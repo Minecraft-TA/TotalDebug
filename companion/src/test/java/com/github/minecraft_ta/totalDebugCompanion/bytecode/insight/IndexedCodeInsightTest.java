@@ -113,7 +113,7 @@ final class IndexedCodeInsightTest {
             assertEquals(List.of("fixture.Base"), implementations.results().stream()
                     .map(result -> result.symbol().ownerClassName())
                     .toList());
-            assertEquals(true, implementations.truncated());
+            assertTrue(implementations.truncated());
 
             HierarchyPage bases = insight.search(HierarchyQuery.baseMethods(CHILD_RUN), 10);
             assertEquals(

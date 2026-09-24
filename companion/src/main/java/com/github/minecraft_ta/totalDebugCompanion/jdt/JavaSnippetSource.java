@@ -3,6 +3,13 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaEditorSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaSourceMap;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaImports.Import;
+import org.eclipse.jdt.core.ToolFactory;
+import org.eclipse.jdt.core.compiler.ITerminalSymbols;
+import org.eclipse.jdt.core.compiler.InvalidInputException;
+import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.Expression;
 
 import javax.lang.model.SourceVersion;
 import java.nio.charset.StandardCharsets;
@@ -36,28 +43,28 @@ public final class JavaSnippetSource {
     public static Mode detectMode(String source) {
         String body = splitImports(source).body().trim();
         var parser = JdtConfiguration.createParser();
-        parser.setKind(org.eclipse.jdt.core.dom.ASTParser.K_EXPRESSION);
+        parser.setKind(ASTParser.K_EXPRESSION);
         parser.setSource(body.toCharArray());
         var node = parser.createAST(null);
-        if (!(node instanceof org.eclipse.jdt.core.dom.Expression)
+        if (!(node instanceof Expression)
                 || !onlyTrivia(body.substring(0, node.getStartPosition()))
                 || !onlyTrivia(body.substring(node.getStartPosition() + node.getLength()))) return Mode.BODY;
         boolean[] valid = {true};
-        node.accept(new org.eclipse.jdt.core.dom.ASTVisitor() {
-            @Override public void preVisit(org.eclipse.jdt.core.dom.ASTNode child) {
-                if ((child.getFlags() & (org.eclipse.jdt.core.dom.ASTNode.MALFORMED
-                        | org.eclipse.jdt.core.dom.ASTNode.RECOVERED)) != 0) valid[0] = false;
+        node.accept(new ASTVisitor() {
+            @Override public void preVisit(ASTNode child) {
+                if ((child.getFlags() & (ASTNode.MALFORMED
+                        | ASTNode.RECOVERED)) != 0) valid[0] = false;
             }
         });
         return valid[0] ? Mode.EXPRESSION : Mode.BODY;
     }
 
     private static boolean onlyTrivia(String source) {
-        var scanner = org.eclipse.jdt.core.ToolFactory.createScanner(false, false, false, JdtConfiguration.JAVA_VERSION);
+        var scanner = ToolFactory.createScanner(false, false, false, JdtConfiguration.JAVA_VERSION);
         scanner.setSource(source.toCharArray());
         try {
-            return scanner.getNextToken() == org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF;
-        } catch (org.eclipse.jdt.core.compiler.InvalidInputException invalid) {
+            return scanner.getNextToken() == ITerminalSymbols.TokenNameEOF;
+        } catch (InvalidInputException invalid) {
             return false;
         }
     }

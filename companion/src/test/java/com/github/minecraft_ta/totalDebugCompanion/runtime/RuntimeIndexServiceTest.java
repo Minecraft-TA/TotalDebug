@@ -23,10 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimeIndexServiceTest {
     @TempDir
@@ -310,10 +307,10 @@ class RuntimeIndexServiceTest {
             service.restore(paths.home());
             assertTrue(loading.await(5, TimeUnit.SECONDS));
             service.close();
-            assertTrue(!loaded.get().isDestroyed(), "A native operation still running retains ownership");
+            assertFalse(loaded.get().isDestroyed(), "A native operation still running retains ownership");
             release.countDown();
             workerThread.get().join(5000);
-            assertTrue(!workerThread.get().isAlive());
+            assertFalse(workerThread.get().isAlive());
             assertTrue(loaded.get().isDestroyed());
             assertEquals(0, installations.get());
         } finally {
@@ -382,7 +379,7 @@ class RuntimeIndexServiceTest {
                 service.restore(paths.home());
                 assertTrue(ready.await(5, TimeUnit.SECONDS));
             }
-            assertTrue(!candidate.get().index().isDestroyed());
+            assertFalse(candidate.get().index().isDestroyed());
         } finally { if (candidate.get() != null) candidate.get().close(); }
     }
 

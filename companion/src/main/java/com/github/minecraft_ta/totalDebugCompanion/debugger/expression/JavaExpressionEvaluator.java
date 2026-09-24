@@ -10,10 +10,13 @@ import com.sun.jdi.ClassType;
 import com.sun.jdi.DoubleValue;
 import com.sun.jdi.Field;
 import com.sun.jdi.FloatValue;
+import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.IntegerValue;
 import com.sun.jdi.InterfaceType;
 import com.sun.jdi.InvocationException;
 import com.sun.jdi.LocalVariable;
+import com.sun.jdi.Location;
+import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
 import com.sun.jdi.ObjectReference;
 import com.sun.jdi.PrimitiveValue;
@@ -25,8 +28,12 @@ import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Type;
 import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
+import org.eclipse.jdt.core.ToolFactory;
+import org.eclipse.jdt.core.compiler.ITerminalSymbols;
+import org.eclipse.jdt.core.compiler.InvalidInputException;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.CastExpression;
@@ -616,7 +623,7 @@ final class JavaExpressionEvaluator {
 
     static Integer constantInt(Expression expression, Context context) throws Exception {
         boolean[] literalOnly = {true};
-        expression.accept(new org.eclipse.jdt.core.dom.ASTVisitor() {
+        expression.accept(new ASTVisitor() {
             @Override public void preVisit(ASTNode node) {
                 if (node instanceof Expression && !(node instanceof NumberLiteral || node instanceof CharacterLiteral
                         || node instanceof BooleanLiteral || node instanceof ParenthesizedExpression
@@ -660,7 +667,7 @@ final class JavaExpressionEvaluator {
         if (value instanceof ByteValue number) return number.byteValue();
         if (value instanceof ShortValue number) return number.shortValue();
         if (value instanceof IntegerValue number) return number.intValue();
-        if (value instanceof com.sun.jdi.LongValue number) return number.longValue();
+        if (value instanceof LongValue number) return number.longValue();
         if (value instanceof FloatValue number) return number.floatValue();
         if (value instanceof DoubleValue number) return number.doubleValue();
         if (value instanceof CharValue character) return (int) character.charValue();
@@ -714,16 +721,16 @@ final class JavaExpressionEvaluator {
         if (!(node instanceof Expression expression) || (node.getFlags() & ASTNode.MALFORMED) != 0) {
             throw new IllegalArgumentException("Invalid Java expression: " + source);
         }
-        var scanner = org.eclipse.jdt.core.ToolFactory.createScanner(false, false, false, "21");
+        var scanner = ToolFactory.createScanner(false, false, false, "21");
         scanner.setSource(source.toCharArray());
         try {
-            while (scanner.getNextToken() != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF) {
+            while (scanner.getNextToken() != ITerminalSymbols.TokenNameEOF) {
                 if (scanner.getCurrentTokenStartPosition() < expression.getStartPosition()
                         || scanner.getCurrentTokenEndPosition() >= expression.getStartPosition() + expression.getLength()) {
                     throw new IllegalArgumentException("Trailing input after Java expression");
                 }
             }
-        } catch (org.eclipse.jdt.core.compiler.InvalidInputException invalid) {
+        } catch (InvalidInputException invalid) {
             throw new IllegalArgumentException("Invalid Java expression", invalid);
         }
         return expression;
@@ -762,7 +769,7 @@ final class JavaExpressionEvaluator {
         private final JavaExpressionEvaluator evaluator;
         private final ThreadReference thread;
         private final int depth;
-        private final com.sun.jdi.Location location;
+        private final Location location;
 
         Context(StackFrame frame, ObjectReference thisObject, JavaExpressionEvaluator evaluator, ThreadReference thread) {
             this.thisObject = thisObject;
@@ -771,7 +778,7 @@ final class JavaExpressionEvaluator {
             this.location = frame.location();
             try {
                 this.depth = thread.frames().indexOf(frame);
-            } catch (com.sun.jdi.IncompatibleThreadStateException exception) {
+            } catch (IncompatibleThreadStateException exception) {
                 throw new IllegalStateException("Evaluation requires a suspended thread", exception);
             }
             if (this.depth < 0) throw new IllegalStateException("Selected frame is no longer available");
@@ -784,7 +791,7 @@ final class JavaExpressionEvaluator {
                     throw new IllegalStateException("Selected evaluation frame has changed");
                 }
                 return current;
-            } catch (com.sun.jdi.IncompatibleThreadStateException exception) {
+            } catch (IncompatibleThreadStateException exception) {
                 throw new IllegalStateException("Evaluation frame is no longer suspended", exception);
             }
         }

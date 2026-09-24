@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.Icon;
 import javax.swing.JProgressBar;
 import javax.swing.JButton;
 import javax.swing.JPanel;
@@ -117,7 +118,7 @@ class ApplicationStatusBarTest extends StatusBarTestFixture {
             bar.setEditor(new IEditorPanel() {
                 @Override public String getTitle() { return "GrassBlock"; }
                 @Override public String getTooltip() { return "GrassBlock"; }
-                @Override public javax.swing.Icon getIcon() { return null; }
+                @Override public Icon getIcon() { return null; }
                 @Override public Component getComponent() { return new JPanel(); }
                 @Override public EditorLocation getLocation() {
                     return new EditorLocation(

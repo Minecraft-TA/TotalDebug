@@ -80,7 +80,7 @@ public record ExecutionValue(
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(value, "value");
-            if ((kind == ChildKind.MAP_ENTRY) != (key != null)) {
+            if ((kind == ChildKind.MAP_ENTRY) == (key == null)) {
                 throw new IllegalArgumentException("Only map entries carry a structured key");
             }
         }

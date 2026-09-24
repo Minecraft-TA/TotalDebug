@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 
@@ -103,7 +104,7 @@ public interface DebugEngine extends AutoCloseable {
         }
     }
 
-    record Source(URI uri, com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument document) {
+    record Source(URI uri, SourceDocument document) {
         public Source {
             Objects.requireNonNull(uri, "uri");
             if (!uri.isAbsolute()) throw new IllegalArgumentException("Debug source URI must be absolute");
@@ -114,13 +115,13 @@ public interface DebugEngine extends AutoCloseable {
         public SourceLineMap lineMap() { return document.lineMap(); }
         public SourceVariableNames variableNames() { return document.variableNames(); }
         public Source(URI uri, String binaryName, String contents, SourceLineMap lineMap, SourceVariableNames names) {
-            this(uri, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(binaryName, contents, lineMap, names, List.of()));
+            this(uri, new SourceDocument(binaryName, contents, lineMap, names, List.of()));
         }
         public Source(URI uri, String binaryName, String contents, SourceLineMap lineMap) {
             this(uri, binaryName, contents, lineMap, SourceVariableNames.empty());
         }
         public Source(URI uri, String binaryName, String contents) {
-            this(uri, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(binaryName, contents));
+            this(uri, new SourceDocument(binaryName, contents));
         }
     }
 

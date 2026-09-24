@@ -8,6 +8,8 @@ import java.awt.Rectangle;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class GlobalConfigPersistenceTest {
@@ -44,7 +46,7 @@ class GlobalConfigPersistenceTest {
     @Test
     void rejectsCorruptAndUnsupportedSettingsWithoutOverwritingThem() throws Exception {
         Path file = new AppPaths(this.home).settings();
-        for (String invalid : java.util.List.of("{bad", "{\"version\":999}", "{\"version\":1}")) {
+        for (String invalid : List.of("{bad", "{\"version\":999}", "{\"version\":1}")) {
             Files.writeString(file, invalid);
             assertThrows(IOException.class, () -> new GlobalConfig().loadFrom(this.home));
             assertEquals(invalid, Files.readString(file));

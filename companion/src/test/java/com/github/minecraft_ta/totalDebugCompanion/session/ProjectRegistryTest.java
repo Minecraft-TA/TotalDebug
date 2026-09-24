@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
@@ -41,7 +43,7 @@ class ProjectRegistryTest {
         Files.delete(paths.projects());
         Files.createDirectory(paths.projects());
         Files.writeString(paths.projects().resolve("occupied"), "x");
-        assertThrows(java.io.IOException.class, () -> registry.select(profile("b")));
+        assertThrows(IOException.class, () -> registry.select(profile("b")));
         assertEquals(a, registry.selected());
         assertEquals(1, registry.projects().size());
     }

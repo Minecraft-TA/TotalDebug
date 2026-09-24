@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.Shad
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
@@ -57,7 +58,7 @@ class EditorPaletteTest {
                 try {
                     assertEquals(Color.class, component.getType(), component.getName());
                     Object value = component.getAccessor().invoke(palette);
-                    org.junit.jupiter.api.Assertions.assertNotNull(value, component.getName());
+                    Assertions.assertNotNull(value, component.getName());
                 } catch (ReflectiveOperationException exception) {
                     throw new AssertionError(exception);
                 }

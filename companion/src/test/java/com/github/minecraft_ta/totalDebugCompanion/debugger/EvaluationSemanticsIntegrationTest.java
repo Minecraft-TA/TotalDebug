@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -239,7 +241,7 @@ class EvaluationSemanticsIntegrationTest {
     @Test
     void savedBreakpointScriptIsReadAgainForEveryHit() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
-            var source = new java.util.concurrent.atomic.AtomicReference<>("local = 8; return local;");
+            var source = new AtomicReference<>("local = 8; return local;");
             ((MicrosoftJavaDebugEngine) harness.engine()).breakpointScriptSource(path -> {
                 assertEquals("probe.java", path);
                 return source.get();
@@ -304,7 +306,7 @@ class EvaluationSemanticsIntegrationTest {
         Object values = valuesField.get(expressions);
         var pinnedField = values.getClass().getDeclaredField("pins");
         pinnedField.setAccessible(true);
-        return ((java.util.Map<?, ?>) pinnedField.get(values)).size();
+        return ((Map<?, ?>) pinnedField.get(values)).size();
     }
 
     private static void withFrame(Assertion assertion) throws Exception {

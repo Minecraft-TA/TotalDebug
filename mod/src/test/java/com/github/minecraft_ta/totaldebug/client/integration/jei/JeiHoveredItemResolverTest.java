@@ -10,6 +10,7 @@ import mezz.jei.api.runtime.IScreenHelper;
 import net.minecraft.client.renderer.Rect2i;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -198,6 +199,6 @@ class JeiHoveredItemResolverTest {
 
     @FunctionalInterface
     private interface MethodHandler {
-        Object invoke(java.lang.reflect.Method method, Object[] arguments) throws Throwable;
+        Object invoke(Method method, Object[] arguments) throws Throwable;
     }
 }

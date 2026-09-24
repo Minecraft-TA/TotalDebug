@@ -17,14 +17,19 @@ import org.objectweb.asm.tree.TypeInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 
 import javax.tools.JavaFileManager;
+import java.lang.invoke.CallSite;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Rewrites javac-generated script classes; application classes are read only as metadata. */
 final class ScriptBytecodeTransformer {
@@ -45,7 +50,7 @@ final class ScriptBytecodeTransformer {
         Objects.requireNonNull(classpath, "classpath");
         Set<String> generatedOwners = classes.keySet().stream()
                 .map(name -> name.replace('.', '/'))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(Collectors.toUnmodifiableSet());
         ScriptTypeResolver types = new ScriptTypeResolver(classes, classpath);
         Map<String, byte[]> transformed = new LinkedHashMap<>();
         classes.forEach((name, bytecode) -> transformed.put(
@@ -342,7 +347,7 @@ final class ScriptBytecodeTransformer {
 
     private static TypeInsnNode popAllocation(ArrayDeque<TypeInsnNode> allocations, String owner) {
         // push() and forward iteration pair the most recent same-owner allocation first.
-        for (java.util.Iterator<TypeInsnNode> iterator = allocations.iterator(); iterator.hasNext();) {
+        for (Iterator<TypeInsnNode> iterator = allocations.iterator(); iterator.hasNext();) {
             TypeInsnNode allocation = iterator.next();
             if (allocation.desc.equals(owner)) {
                 iterator.remove();
@@ -419,10 +424,10 @@ final class ScriptBytecodeTransformer {
 
     private static final class MethodTypeDescriptors {
         private static final String BOOTSTRAP = Type.getMethodDescriptor(
-                Type.getType(java.lang.invoke.CallSite.class),
-                Type.getType(java.lang.invoke.MethodHandles.Lookup.class),
+                Type.getType(CallSite.class),
+                Type.getType(MethodHandles.Lookup.class),
                 Type.getType(String.class),
-                Type.getType(java.lang.invoke.MethodType.class),
+                Type.getType(MethodType.class),
                 Type.getType(String.class),
                 Type.getType(String.class),
                 Type.getType(String.class),

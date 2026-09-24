@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.resource;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import java.awt.image.BufferedImage;
@@ -58,7 +60,7 @@ public final class ResourceLoader {
         }
 
         String syntaxStyle = fileType.syntaxStyle() == null
-                ? org.fife.ui.rsyntaxtextarea.RSyntaxTextArea.SYNTAX_STYLE_NONE
+                ? RSyntaxTextArea.SYNTAX_STYLE_NONE
                 : fileType.syntaxStyle();
         return new LoadedResource.Text(decoded.value(), syntaxStyle, decoded.charsetName(), bytes.length);
     }

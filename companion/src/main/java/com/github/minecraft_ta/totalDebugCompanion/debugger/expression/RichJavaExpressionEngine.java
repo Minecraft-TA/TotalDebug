@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease;
 import com.microsoft.java.debug.core.IEvaluatableBreakpoint;
 import com.microsoft.java.debug.core.adapter.ICompletionsProvider;
@@ -10,21 +11,36 @@ import com.microsoft.java.debug.core.adapter.variables.StackFrameReference;
 import com.microsoft.java.debug.core.adapter.variables.VariableProxy;
 import com.microsoft.java.debug.core.protocol.Types;
 import com.sun.jdi.AbsentInformationException;
+import com.sun.jdi.ArrayReference;
+import com.sun.jdi.BooleanValue;
+import com.sun.jdi.CharValue;
+import com.sun.jdi.DoubleValue;
+import com.sun.jdi.FloatValue;
 import com.sun.jdi.LocalVariable;
+import com.sun.jdi.LongValue;
 import com.sun.jdi.Method;
 import com.sun.jdi.ObjectReference;
+import com.sun.jdi.PrimitiveValue;
 import com.sun.jdi.StackFrame;
+import com.sun.jdi.StringReference;
 import com.sun.jdi.ThreadReference;
 import com.sun.jdi.Value;
 import com.sun.jdi.VirtualMachine;
+import com.sun.jdi.VoidValue;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Microsoft debug-core adapter for one Java expression, completion, and value previews. */
 public final class RichJavaExpressionEngine implements IEvaluationProvider, ICompletionsProvider {
@@ -37,24 +53,24 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
     private final CompiledFrameEvaluator compiled;
     private volatile IDebugAdapterContext debugContext;
     private volatile DebuggerTypeCatalog typeCatalog;
-    private final Map<String, ActionBinding> actions = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.concurrent.atomic.AtomicLong stopRevision = new java.util.concurrent.atomic.AtomicLong();
+    private final Map<String, ActionBinding> actions = new ConcurrentHashMap<>();
+    private final AtomicLong stopRevision = new AtomicLong();
     private volatile DebugEngine.BreakpointActionResult actionResult;
     private DebuggerValueLease actionValue = DebuggerValueLease.NONE;
-    private java.util.function.Function<String, String> scriptSource = path -> {
+    private Function<String, String> scriptSource = path -> {
         throw new IllegalStateException("Saved breakpoint scripts require the workspace script resolver");
     };
-    private record ActionBinding(java.net.URI source, DebugEngine.SourceBreakpoint breakpoint) { }
+    private record ActionBinding(URI source, DebugEngine.SourceBreakpoint breakpoint) { }
 
-    public void scriptSource(java.util.function.Function<String, String> source) { this.scriptSource = source; }
+    public void scriptSource(Function<String, String> source) { this.scriptSource = source; }
     public void invalidateContinuation() { this.stopRevision.incrementAndGet(); }
     public DebugEngine.BreakpointActionResult breakpointActionResult() { return this.actionResult; }
-    public void clearBreakpointActions(java.net.URI source) {
+    public void clearBreakpointActions(URI source) {
         this.actions.entrySet().removeIf(entry -> entry.getValue().source().equals(source));
     }
-    public String breakpointCondition(java.net.URI source, DebugEngine.SourceBreakpoint breakpoint) {
+    public String breakpointCondition(URI source, DebugEngine.SourceBreakpoint breakpoint) {
         if (breakpoint.action() == null) return breakpoint.condition();
-        String key = "__tdBreakpoint" + java.util.UUID.randomUUID().toString().replace("-", "");
+        String key = "__tdBreakpoint" + UUID.randomUUID().toString().replace("-", "");
         this.actions.put(key, new ActionBinding(source, breakpoint));
         return key;
     }
@@ -64,7 +80,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
     }
 
     public RichJavaExpressionEngine(VariableNameResolver variableNameResolver, TypeScopeResolver typeScopeResolver,
-                                    java.util.function.Supplier<String> classpath) {
+                                    Supplier<String> classpath) {
         VariableNameResolver names = Objects.requireNonNull(variableNameResolver, "variableNameResolver");
         TypeScopeResolver scopes = Objects.requireNonNull(typeScopeResolver, "typeScopeResolver");
         this.evaluator = new JavaExpressionEvaluator(names, scopes, this::refreshStackFrames);
@@ -72,15 +88,15 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
         this.completion = new JavaExpressionCompletion(this, this.evaluator, names, scopes);
     }
 
-    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> activeEvaluation() {
+    public DebuggerEvaluation<?> activeEvaluation() {
         return this.evaluations.active();
     }
-    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> evaluationOperation(String id) {
+    public DebuggerEvaluation<?> evaluationOperation(String id) {
         return this.evaluations.operation(id);
     }
     public void onEvaluationChange(Runnable changed) { this.evaluations.onChange(changed); }
 
-    public com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<DebugEngine.EvaluationResult> startEvaluation(
+    public DebuggerEvaluation<DebugEngine.EvaluationResult> startEvaluation(
             String expression, int frameId) {
         if (this.evaluations.active() != null) throw new IllegalStateException("Debugger evaluation is still running");
         long generation = this.retainedValues.generation();
@@ -96,31 +112,31 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                 reference = this.retainedValues.register(generation, DebuggerEvaluationRunner.currentId(), object,
                         () -> this.debugContext.getRecyclableIdPool().addObject(thread.uniqueID(),
                                 valueProxy(thread, "eval", value, expression)));
-                if (value instanceof com.sun.jdi.ArrayReference array) indexed = array.length();
+                if (value instanceof ArrayReference array) indexed = array.length();
             }
-            return new DebugEngine.EvaluationResult(value instanceof com.sun.jdi.VoidValue ? "" : formatter.valueToString(value, options),
-                    value instanceof com.sun.jdi.VoidValue ? "<void>" : value == null ? "null" : value.type().name(),
+            return new DebugEngine.EvaluationResult(value instanceof VoidValue ? "" : formatter.valueToString(value, options),
+                    value instanceof VoidValue ? "<void>" : value == null ? "null" : value.type().name(),
                     reference, indexed, scalar(value));
         });
     }
     private static VariableProxy valueProxy(ThreadReference thread, String scope, Value value, String expression) {
         var proxy = new VariableProxy(thread, scope, value, null, expression);
-        proxy.setIndexedVariable(value instanceof com.sun.jdi.ArrayReference);
+        proxy.setIndexedVariable(value instanceof ArrayReference);
         return proxy;
     }
 
     private static DebugEngine.ScalarValue scalar(Value value) {
         if (value == null) return new DebugEngine.ScalarValue("null", null);
-        if (value instanceof com.sun.jdi.VoidValue) return new DebugEngine.ScalarValue("void", null);
-        if (value instanceof com.sun.jdi.StringReference text) return new DebugEngine.ScalarValue("string", text.value());
-        if (value instanceof com.sun.jdi.BooleanValue flag) return new DebugEngine.ScalarValue("boolean", flag.value());
-        if (value instanceof com.sun.jdi.CharValue character) return new DebugEngine.ScalarValue("char", String.valueOf(character.value()));
-        if (value instanceof com.sun.jdi.LongValue number) return new DebugEngine.ScalarValue("long", Long.toString(number.value()));
-        if (value instanceof com.sun.jdi.FloatValue number) return new DebugEngine.ScalarValue("float",
+        if (value instanceof VoidValue) return new DebugEngine.ScalarValue("void", null);
+        if (value instanceof StringReference text) return new DebugEngine.ScalarValue("string", text.value());
+        if (value instanceof BooleanValue flag) return new DebugEngine.ScalarValue("boolean", flag.value());
+        if (value instanceof CharValue character) return new DebugEngine.ScalarValue("char", String.valueOf(character.value()));
+        if (value instanceof LongValue number) return new DebugEngine.ScalarValue("long", Long.toString(number.value()));
+        if (value instanceof FloatValue number) return new DebugEngine.ScalarValue("float",
                 Float.isFinite(number.value()) ? number.value() : Float.toString(number.value()));
-        if (value instanceof com.sun.jdi.DoubleValue number) return new DebugEngine.ScalarValue("double",
+        if (value instanceof DoubleValue number) return new DebugEngine.ScalarValue("double",
                 Double.isFinite(number.value()) ? number.value() : Double.toString(number.value()));
-        if (value instanceof com.sun.jdi.PrimitiveValue number) return new DebugEngine.ScalarValue(number.type().name(), number.intValue());
+        if (value instanceof PrimitiveValue number) return new DebugEngine.ScalarValue(number.type().name(), number.intValue());
         return null;
     }
 
@@ -175,7 +191,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
 
     public int arrayLength(int variablesReference) {
         Object reference = this.debugContext.getRecyclableIdPool().getObjectById(variablesReference);
-        if (reference instanceof VariableProxy proxy && proxy.getProxiedVariable() instanceof com.sun.jdi.ArrayReference array) {
+        if (reference instanceof VariableProxy proxy && proxy.getProxiedVariable() instanceof ArrayReference array) {
             return array.length();
         }
         throw new IllegalArgumentException("Variable reference does not identify an array: " + variablesReference);
@@ -267,7 +283,7 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                 String condition = binding == null ? conditionKey : binding.breakpoint().condition();
                 Value accepted = condition == null || condition.isBlank() ? thread.virtualMachine().mirrorOf(true)
                         : evaluateFragment(condition, frame, frame.thisObject(), thread);
-                if (!(accepted instanceof com.sun.jdi.BooleanValue booleanValue)) {
+                if (!(accepted instanceof BooleanValue booleanValue)) {
                     throw new IllegalArgumentException("Breakpoint condition must return a boolean");
                 }
                 boolean stayPaused = booleanValue.value();
@@ -286,11 +302,11 @@ public final class RichJavaExpressionEngine implements IEvaluationProvider, ICom
                                         valueProxy(thread, "breakpoint action", result, null)));
                     }
                     var formatter = this.debugContext.getVariableFormatter();
-                    String display = result instanceof com.sun.jdi.VoidValue ? ""
+                    String display = result instanceof VoidValue ? ""
                             : formatter.valueToString(result, formatter.getDefaultOptions());
                     formatted = new DebugEngine.EvaluationResult(display,
-                            result == null ? "null" : result instanceof com.sun.jdi.VoidValue ? "<void>" : result.type().name(),
-                            reference, result instanceof com.sun.jdi.ArrayReference array ? array.length() : 0, captured);
+                            result == null ? "null" : result instanceof VoidValue ? "<void>" : result.type().name(),
+                            reference, result instanceof ArrayReference array ? array.length() : 0, captured);
                     if (action.continueOnSuccess() && captured == null) {
                         throw new IllegalStateException("Continue-on-success requires a scalar action result; object results remain paused for inspection");
                     }

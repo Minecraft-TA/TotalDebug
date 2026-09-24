@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 
 /** Independent of the occupied game socket and of the optional MCP host. */
 final class ProjectSelectionServer implements AutoCloseable {
@@ -16,7 +17,7 @@ final class ProjectSelectionServer implements AutoCloseable {
             runnable -> Thread.ofPlatform().daemon().name("companion-project-request").unstarted(runnable));
 
     ProjectSelectionServer(SessionAuthenticator authenticator, CompanionSession.AttachmentHandler select,
-                           java.util.function.BooleanSupplier connected) throws IOException {
+                           BooleanSupplier connected) throws IOException {
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 8);
         this.server.setExecutor(this.worker);
         this.server.createContext(ProjectSelectionRequest.PATH, exchange -> {

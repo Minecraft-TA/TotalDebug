@@ -9,7 +9,7 @@ public class JIndexResolvedBinaryMethod implements IMethodStub {
 
     private final JIndexBinaryMethod binaryMethod;
     private final String descriptor;
-    private String[] parameterTypes;
+    private final String[] parameterTypes;
 
     public JIndexResolvedBinaryMethod(JIndexBinaryMethod binaryMethod) {
         this.binaryMethod = binaryMethod;

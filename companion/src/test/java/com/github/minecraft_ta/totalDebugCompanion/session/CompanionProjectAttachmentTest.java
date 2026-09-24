@@ -38,7 +38,7 @@ class CompanionProjectAttachmentTest {
             });
             var config = new CompanionLaunchConfiguration(directory);
             session.bindAndPublish(config);
-            var descriptor = CompanionSessionDescriptor.read(config.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION);
+            var descriptor = CompanionSessionDescriptor.read(config.descriptorFile(), CompanionProtocol.VERSION);
             try (var a = connect(descriptor.port())) {
                 assertTrue(handshake(a, "a"));
                 assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("a")));
@@ -62,7 +62,7 @@ class CompanionProjectAttachmentTest {
                         assertTrue(handshake(reconnected, "b"));
                         assertTrue(ProjectSelectionRequest.send(descriptor.projectPort(), hello("b")));
                     }
-                    assertEquals(descriptor, CompanionSessionDescriptor.read(config.descriptorFile(), com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol.VERSION));
+                    assertEquals(descriptor, CompanionSessionDescriptor.read(config.descriptorFile(), CompanionProtocol.VERSION));
                 }
             }
         }

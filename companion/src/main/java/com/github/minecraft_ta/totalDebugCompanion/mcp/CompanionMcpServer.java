@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totalDebugCompanion.session.PrismInstances;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectDirectories;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -63,7 +64,7 @@ public final class CompanionMcpServer implements AutoCloseable {
         this.projects = Objects.requireNonNull(projects);
         this.project = Objects.requireNonNull(project);
         this.dataDirectory = normalize(dataDirectory);
-        this.endpointDescriptor = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpEndpoint();
+        this.endpointDescriptor = new AppPaths(this.dataDirectory).mcpEndpoint();
         this.jobs = Objects.requireNonNull(jobs, "jobs");
         this.debugger = Objects.requireNonNull(debugger, "debugger");
         this.runtimeSource = new CompanionMcpRuntimeSource(() -> this.project.get().requireRuntime().decompiler());
@@ -99,7 +100,7 @@ public final class CompanionMcpServer implements AutoCloseable {
                 .tools(CompanionMcpToolCatalog.specifications(this::callTool))
                 .build();
 
-        Path tomcatDirectory = new com.github.minecraft_ta.totaldebug.storage.AppPaths(this.dataDirectory).mcpCache();
+        Path tomcatDirectory = new AppPaths(this.dataDirectory).mcpCache();
         Files.createDirectories(tomcatDirectory);
 
         Tomcat embeddedTomcat = new Tomcat();

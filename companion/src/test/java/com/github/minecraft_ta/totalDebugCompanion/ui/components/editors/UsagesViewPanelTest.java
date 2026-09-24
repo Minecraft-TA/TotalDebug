@@ -28,8 +28,10 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -45,7 +47,7 @@ class UsagesViewPanelTest {
                 type(fixture.tree, "apply");
                 assertFalse(SpeedSearch.matchingRanges(fixture.tree, first.getLastPathComponent().toString()).isEmpty());
                 BufferedImage after = render(fixture.tree, first);
-                assertFalse(java.util.Arrays.equals(
+                assertFalse(Arrays.equals(
                         before.getRGB(0, 0, 700, 28, null, 0, 700),
                         after.getRGB(0, 0, 700, 28, null, 0, 700)
                 ), "Matching text must paint a highlight, not only change the selected row");
@@ -104,7 +106,7 @@ class UsagesViewPanelTest {
                 type(fixture.tree, "Bravo");
                 assertEquals(group, fixture.tree.getSelectionPath());
                 BufferedImage after = render(fixture.tree, group);
-                assertFalse(java.util.Arrays.equals(before.getRGB(0, 0, 700, 28, null, 0, 700),
+                assertFalse(Arrays.equals(before.getRGB(0, 0, 700, 28, null, 0, 700),
                         after.getRGB(0, 0, 700, 28, null, 0, 700)));
             }
         });
@@ -201,7 +203,7 @@ class UsagesViewPanelTest {
 
     @Test
     void regroupingKeepsActiveSearchUsable() throws Exception {
-        var reference = new java.util.concurrent.atomic.AtomicReference<Fixture>();
+        var reference = new AtomicReference<Fixture>();
         onEdt(() -> {
             Fixture fixture = new Fixture();
             reference.set(fixture);
@@ -288,7 +290,7 @@ class UsagesViewPanelTest {
     }
 
     private static List<String> menuLabels(JPopupMenu menu) {
-        return java.util.Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance)
+        return Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance)
                 .map(component -> ((JMenuItem) component).getText()).toList();
     }
 

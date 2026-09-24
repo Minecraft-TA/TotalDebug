@@ -138,12 +138,12 @@ class SearchEverywherePopupTest {
         }
         AbstractButton filter = requireNamedComponent(popup, "searchEverywhere.moduleFilter", AbstractButton.class);
         assertTrue(filter.isFocusable());
-        assertTrue(!filter.isRequestFocusEnabled());
+        assertFalse(filter.isRequestFocusEnabled());
         assertTrue(filter.getToolTipText().contains("Alt+M"));
-        assertTrue(popup.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                .get(KeyStroke.getKeyStroke("alt M")) != null);
-        assertTrue(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl TAB")) != null);
-        assertTrue(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl shift TAB")) != null);
+        assertNotNull(popup.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .get(KeyStroke.getKeyStroke("alt M")));
+        assertNotNull(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl TAB")));
+        assertNotNull(query.getInputMap().get(KeyStroke.getKeyStroke("ctrl shift TAB")));
 
         assertSelected(popup, "all");
         invokeBinding(query, KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));

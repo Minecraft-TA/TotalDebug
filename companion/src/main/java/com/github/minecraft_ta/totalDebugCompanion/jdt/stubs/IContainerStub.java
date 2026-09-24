@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.stubs;
 
 import org.eclipse.core.resources.*;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 

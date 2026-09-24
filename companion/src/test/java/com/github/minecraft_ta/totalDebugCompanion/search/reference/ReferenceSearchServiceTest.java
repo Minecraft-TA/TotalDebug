@@ -12,11 +12,13 @@ import org.junit.jupiter.api.Test;
 import javax.swing.SwingUtilities;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,7 +105,7 @@ class ReferenceSearchServiceTest {
         AtomicReference<ReferenceUsagePage> secondResult = new AtomicReference<>();
 
         try (var service = new ReferenceSearchService((query, limit) -> {
-            if (query instanceof ReferenceQuery.ClassReference type && type.className().equals("example.First")) {
+            if (query instanceof ReferenceQuery.ClassReference(String className) && className.equals("example.First")) {
                 firstStarted.countDown();
                 try {
                     if (!releaseFirst.await(5, TimeUnit.SECONDS)) {
@@ -158,7 +160,7 @@ class ReferenceSearchServiceTest {
         }
     }
 
-    private static ReferenceSearchService.Listener listener(java.util.function.Consumer<ReferenceUsagePage> result) {
+    private static ReferenceSearchService.Listener listener(Consumer<ReferenceUsagePage> result) {
         return new ReferenceSearchService.Listener() {
             @Override
             public void onCompleted(ReferenceUsagePage value) {
@@ -173,6 +175,6 @@ class ReferenceSearchServiceTest {
     }
 
     private static ReferenceUsage usage(ReferenceLocation location) {
-        return new ReferenceUsage(1, location, 0, java.util.Set.of(ReferenceKind.METHOD_INVOKE), 1);
+        return new ReferenceUsage(1, location, 0, Set.of(ReferenceKind.METHOD_INVOKE), 1);
     }
 }

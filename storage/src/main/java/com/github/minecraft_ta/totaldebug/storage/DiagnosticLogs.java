@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.UUID;
 
 /** Two 4 MiB files per launch, ten retained inactive launches, with live-launch protection. */
@@ -114,7 +115,7 @@ public final class DiagnosticLogs {
 
         @Override
         public synchronized void write(byte[] values, int offset, int length) throws IOException {
-            java.util.Objects.checkFromIndexSize(offset, length, values.length);
+            Objects.checkFromIndexSize(offset, length, values.length);
             while (length > 0) {
                 if (this.bytes >= this.limit) {
                     this.output.close();

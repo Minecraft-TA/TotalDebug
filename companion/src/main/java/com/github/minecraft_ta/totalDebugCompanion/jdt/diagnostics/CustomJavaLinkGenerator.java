@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
@@ -183,11 +184,11 @@ public class CustomJavaLinkGenerator implements LinkGenerator {
                 throw new IllegalStateException(resolution.unavailableReason());
             }
             navigator.accept(switch (resolution.symbol()) {
-                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.ClassSymbol type ->
+                case CodeSymbol.ClassSymbol type ->
                         new NavigationTarget.RuntimeClass(type.className());
-                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.FieldSymbol field ->
+                case CodeSymbol.FieldSymbol field ->
                         new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(field));
-                case com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol.MethodSymbol method ->
+                case CodeSymbol.MethodSymbol method ->
                         new NavigationTarget.RuntimeDeclaration(RuntimeMember.from(method));
             });
         }

@@ -125,7 +125,7 @@ final class HierarchyGutterMarkers implements IconRowListener {
     }
 
     @Override
-    public void mouseClicked(IconRowEvent event, java.awt.event.MouseEvent mouseEvent) {
+    public void mouseClicked(IconRowEvent event, MouseEvent mouseEvent) {
         Marker marker = markerFor(event.getIconsAtLine());
         if (marker == null) {
             return;

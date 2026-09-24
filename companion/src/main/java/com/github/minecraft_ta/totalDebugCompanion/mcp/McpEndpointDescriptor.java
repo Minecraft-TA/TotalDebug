@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -20,7 +22,7 @@ record McpEndpointDescriptor(
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
-            .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create();
 
     McpEndpointDescriptor(String url, Instant startedAt) {
@@ -34,7 +36,7 @@ record McpEndpointDescriptor(
     }
 
     void writeAtomically(Path target) throws IOException {
-        com.github.minecraft_ta.totaldebug.storage.AtomicFiles.writeString(target, GSON.toJson(this));
+        AtomicFiles.writeString(target, GSON.toJson(this));
     }
 
     static McpEndpointDescriptor read(Path target) throws IOException {

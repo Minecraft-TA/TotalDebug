@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.storage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.concurrent.CompletableFuture;
@@ -35,9 +36,9 @@ class CacheFilesTest {
             try {
                 CacheFiles.locked(directory, () -> {
                     replaced.countDown();
-                    throw new java.io.IOException("failed publication");
+                    throw new IOException("failed publication");
                 });
-            } catch (java.io.IOException expected) {
+            } catch (IOException expected) {
                 assertEquals("failed publication", expected.getMessage());
             }
         });

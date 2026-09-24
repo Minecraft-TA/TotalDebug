@@ -19,6 +19,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.HierarchyEvent;
@@ -115,14 +116,14 @@ public abstract class AbstractTextViewPanel extends JPanel {
                 .put(KeyStroke.getKeyStroke("ESCAPE"), "closeSearchPopup");
         this.editorPane.getActionMap().put("closeSearchPopup", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 removeHeaderComponent();
                 searchManager.hideHighlights();
             }
         });
         this.editorPane.getActionMap().put("openSearchPopup", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 setHeaderComponent(new SearchHeaderBar(searchManager));
             }
         });

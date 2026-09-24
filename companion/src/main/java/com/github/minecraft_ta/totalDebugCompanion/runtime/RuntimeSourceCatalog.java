@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -120,7 +121,7 @@ public final class RuntimeSourceCatalog {
                     }
                     return sourceIds;
                 })
-                .flatMapToInt(java.util.Arrays::stream)
+                .flatMapToInt(Arrays::stream)
                 .sorted()
                 .distinct()
                 .toArray();

@@ -16,6 +16,7 @@ import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -128,7 +129,7 @@ final class BreakpointEditorPopup {
         JPanel footer = new JPanel(new BorderLayout(10, 0));
         this.validation.setPreferredSize(new Dimension(250, this.validation.getPreferredSize().height));
         footer.add(this.validation, BorderLayout.CENTER);
-        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING, 6, 0));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.TRAILING, 6, 0));
         buttons.add(this.remove);
         buttons.add(this.done);
         footer.add(buttons, BorderLayout.EAST);

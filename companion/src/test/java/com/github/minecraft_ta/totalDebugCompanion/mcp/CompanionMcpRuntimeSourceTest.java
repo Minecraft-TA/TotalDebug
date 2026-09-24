@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totalDebugCompanion.decompile.DecompiledSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.CompanionClassIndex;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
 import com.github.tth05.jindex.ClassIndex;
@@ -153,7 +154,7 @@ class CompanionMcpRuntimeSourceTest {
     }
 
     private CompanionMcpRuntimeSource source() {
-        DecompiledSource source = new DecompiledSource(this.temporaryDirectory.resolve("RuntimeSourceFixture.java"), new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument(RuntimeSourceFixture.class.getName(), SOURCE, SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()), null);
+        DecompiledSource source = new DecompiledSource(this.temporaryDirectory.resolve("RuntimeSourceFixture.java"), new SourceDocument(RuntimeSourceFixture.class.getName(), SOURCE, SourceLineMap.empty(), SourceVariableNames.empty(), List.of()), null);
         return new CompanionMcpRuntimeSource(binaryName -> source);
     }
 

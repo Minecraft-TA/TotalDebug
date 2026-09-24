@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -8,6 +10,7 @@ import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -22,10 +25,10 @@ class InstanceStateTest {
         var second = new InstancePaths(this.home.resolve("second"));
         var breakpoint = new InstanceState.PersistedBreakpoint("decompiled:///example/Target.java",
                 "example.Target", 12, 8, null, null, null, "x > 1", "2", false,
-                new com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction(null, "probe.java", true));
+                new DebugEngine.BreakpointAction(null, "probe.java", true));
         var entry = new ExpressionHistory.Entry("Blocks.AIR", SnippetExecutionService.Side.CLIENT,
                 List.of("net.minecraft.world.level.block.Blocks"),
-                com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode.BODY);
+                JavaSnippetSource.Mode.BODY);
         try (var state = InstanceState.open(first)) {
             state.setDebuggerWatches(List.of(" player ", "player", "level"));
             state.setDebuggerBreakpoints("runtime-a", List.of(breakpoint));
@@ -57,7 +60,7 @@ class InstanceStateTest {
         var paths = new InstancePaths(this.home);
         String invalid = "{\"format\":1,\"debuggerWatches\":null}";
         Files.writeString(paths.state(), invalid);
-        assertThrows(java.io.IOException.class, () -> InstanceState.open(paths));
+        assertThrows(IOException.class, () -> InstanceState.open(paths));
         assertEquals(invalid, Files.readString(paths.state()));
     }
 
@@ -69,7 +72,7 @@ class InstanceStateTest {
             var first = new JsonObject();
             first.addProperty("value", "first");
             writer.schedule(first);
-            assertThrows(java.io.IOException.class, writer::flush);
+            assertThrows(IOException.class, writer::flush);
             Files.delete(parent);
             Files.createDirectory(parent);
             writer.flush();

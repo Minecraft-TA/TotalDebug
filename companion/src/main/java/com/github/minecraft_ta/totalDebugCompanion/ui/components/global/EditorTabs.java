@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.datatransfer.StringSelection;
@@ -48,10 +49,10 @@ public class EditorTabs extends JTabbedPane {
         setTabLayoutPolicy(SCROLL_TAB_LAYOUT);
         setBorder(BorderFactory.createEmptyBorder());
         SpeedSearch.install(this, this::getTitleAt);
-        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "focusEditor");
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "focusEditor");
         getActionMap().put("focusEditor", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 Component selected = getSelectedComponent();
                 if (selected != null) {
                     selected.requestFocusInWindow();

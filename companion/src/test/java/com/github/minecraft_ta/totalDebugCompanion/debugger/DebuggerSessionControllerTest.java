@@ -15,13 +15,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class DebuggerSessionControllerTest {
     private static final Duration TEST_TIMEOUT = Duration.ofSeconds(2);
@@ -86,7 +80,7 @@ class DebuggerSessionControllerTest {
             engine.fireStopped(new DebugEngine.StoppedEvent("breakpoint", 42, true));
             awaitPhase(controller, DebuggerSessionController.Phase.PAUSED);
             String second = controller.snapshot().pauseId();
-            assertFalse(first.equals(second));
+            assertNotEquals(first, second);
             assertThrows(CompletionException.class, () -> controller.frames(first).join());
             assertThrows(CompletionException.class, () -> controller.evaluate(first, 1, "x").join());
             assertThrows(CompletionException.class, () -> controller.controlPaused(first, "step_over").join());
@@ -574,9 +568,8 @@ class DebuggerSessionControllerTest {
 
             CompletableFuture<List<DebugEngine.Variable>> inspection =
                     controller.variables(stale, 15, 0, 100);
-            assertTrue(assertThrows(Exception.class, () ->
-                    inspection.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).getCause()
-                    instanceof IllegalArgumentException);
+            assertInstanceOf(IllegalArgumentException.class, assertThrows(Exception.class, () ->
+                    inspection.get(TEST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)).getCause());
             assertEquals(0, engine.variableCalls, "A stale frame must not reach the adapter");
         } finally {
             controller.close();

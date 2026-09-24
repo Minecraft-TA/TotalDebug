@@ -6,6 +6,8 @@ import jdk.jfr.Label;
 import jdk.jfr.Name;
 import jdk.jfr.StackTrace;
 
+import java.util.Locale;
+
 /** Optional JFR spans and diagnostic timings; never controls application lifecycle. */
 @Name("com.github.minecraft_ta.totaldebug.RuntimePhase")
 @Label("TotalDebug runtime phase")
@@ -42,7 +44,7 @@ public final class RuntimePhase extends Event implements AutoCloseable {
         end();
         commit();
         if (this.log) {
-            System.err.printf(java.util.Locale.ROOT, "[TotalDebug timing] %s %.3f ms%n",
+            System.err.printf(Locale.ROOT, "[TotalDebug timing] %s %.3f ms%n",
                     this.phase, (System.nanoTime() - this.started) / 1_000_000.0);
         }
     }

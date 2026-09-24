@@ -6,10 +6,11 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ForwardedExecutionResultTest {
     @Test
@@ -23,7 +24,7 @@ class ForwardedExecutionResultTest {
         ForwardedExecutionResult decoded = original.toPayloads().stream()
                 .map(ForwardedExecutionResult::decodeChunk)
                 .map(assembler::accept)
-                .flatMap(java.util.Optional::stream)
+                .flatMap(Optional::stream)
                 .findFirst()
                 .orElseThrow();
 
@@ -61,7 +62,7 @@ class ForwardedExecutionResultTest {
                 7,
                 ExecutionResult.completed(logs, null)
         );
-        java.util.List<ForwardedCompanionPayload> payloads = original.toPayloads();
+        List<ForwardedCompanionPayload> payloads = original.toPayloads();
         assertTrue(payloads.size() > 1);
         assertTrue(payloads.stream().allMatch(payload -> payload.body().length <= ForwardedCompanionPayload.MAX_BODY_BYTES));
 
@@ -69,13 +70,13 @@ class ForwardedExecutionResultTest {
         ForwardedExecutionResult decoded = payloads.stream()
                 .map(ForwardedExecutionResult::decodeChunk)
                 .map(assembler::accept)
-                .flatMap(java.util.Optional::stream)
+                .flatMap(Optional::stream)
                 .findFirst()
                 .orElseThrow();
 
         assertEquals(logs, decoded.result().logs().text());
         assertEquals(logs.length(), decoded.result().logs().totalCharacters());
-        assertTrue(!decoded.result().logs().truncated());
+        assertFalse(decoded.result().logs().truncated());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -30,8 +31,10 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.border.CompoundBorder;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
@@ -237,7 +240,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         content.setBorder(PopupChrome.border());
 
         JPanel header = new JPanel(new BorderLayout());
-        header.setBorder(new javax.swing.border.CompoundBorder(
+        header.setBorder(new CompoundBorder(
                 DynamicMatteBorder.separatorRule(0, 0, 1, 0),
                 PopupChrome.contentPadding()
         ));
@@ -248,7 +251,7 @@ public final class ImplementationChooserPopup extends BasePopup {
 
         this.list.setCellRenderer(new ResultRenderer());
         this.list.setFixedCellHeight(28);
-        this.list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+        this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         ContextMenus.installList(this.list, this::createResultMenu);
         this.list.addMouseListener(new MouseAdapter() {
             @Override
@@ -449,7 +452,7 @@ public final class ImplementationChooserPopup extends BasePopup {
         String name = "<init>".equals(method.name())
                 ? simpleClassName(method.ownerClassName())
                 : method.name();
-        return name + '(' + String.join(", ", java.util.Arrays.stream(
+        return name + '(' + String.join(", ", Arrays.stream(
                         org.objectweb.asm.Type.getArgumentTypes(method.descriptor()))
                 .map(ImplementationChooserPopup::simpleTypeName)
                 .toList()) + ')';

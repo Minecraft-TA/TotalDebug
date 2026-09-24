@@ -1,11 +1,16 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -75,7 +80,7 @@ class CompanionAppInstallerTest {
     }
 
     @Test
-    @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    @EnabledOnOs(OS.WINDOWS)
     void usesTheSingleInstalledJarInsteadOfAnObsoleteVersionDirectory() throws Exception {
         String oldJar = System.getProperty(CompanionAppInstaller.DEV_JAR_PROPERTY);
         try {
@@ -87,10 +92,10 @@ class CompanionAppInstallerTest {
             Files.writeString(appDirectory.resolve("2.0.0/TotalDebugCompanion.jar"), "obsolete");
 
             CompanionRelease release = new CompanionRelease("test", "TotalDebugCompanion.jar",
-                    java.net.URI.create("https://example.invalid/TotalDebugCompanion.jar"),
-                    com.github.minecraft_ta.totaldebug.storage.LaunchCache.sha256(installedJar));
+                    URI.create("https://example.invalid/TotalDebugCompanion.jar"),
+                    LaunchCache.sha256(installedJar));
             CompanionInstallation installation = new CompanionAppInstaller(appDirectory, release,
-                    java.net.http.HttpClient.newHttpClient()).resolveOrInstall();
+                    HttpClient.newHttpClient()).resolveOrInstall();
 
             assertEquals(installedJar.toAbsolutePath().normalize(), installation.companionJar());
             assertEquals("current", Files.readString(installedJar));
@@ -125,7 +130,7 @@ class CompanionAppInstallerTest {
 
         assertEquals(
                 "abbcb536b7001362a76775a1494ea745d0d65dc37544bbf85ac06071c17fe770",
-                com.github.minecraft_ta.totaldebug.storage.LaunchCache.sha256(jar)
+                LaunchCache.sha256(jar)
         );
     }
 

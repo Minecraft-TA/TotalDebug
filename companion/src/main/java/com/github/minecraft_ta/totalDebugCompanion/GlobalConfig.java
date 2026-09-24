@@ -11,6 +11,7 @@ import java.awt.Rectangle;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -194,7 +195,7 @@ public final class GlobalConfig {
                 JsonFiles.bool(json, "debuggerInlineValues");
                 JsonFiles.bool(json, "automaticDebuggerPreviews");
                 if (json.has("inlineDiagnostics")) JsonFiles.bool(json, "inlineDiagnostics");
-                for (String font : java.util.List.of("editorFontSize", "uiFontSize")) {
+                for (String font : List.of("editorFontSize", "uiFontSize")) {
                     var value = json.get(font);
                     if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
                             || !Float.isFinite(value.getAsFloat())) {
@@ -202,7 +203,7 @@ public final class GlobalConfig {
                     }
                 }
                 persisted = GSON.fromJson(json, PersistedSettings.class);
-                var bounds = java.util.List.of("debuggerWindowX", "debuggerWindowY",
+                var bounds = List.of("debuggerWindowX", "debuggerWindowY",
                         "debuggerWindowWidth", "debuggerWindowHeight");
                 if (bounds.stream().anyMatch(json::has)) {
                     bounds.forEach(field -> JsonFiles.integer(json, field));

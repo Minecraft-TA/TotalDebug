@@ -19,27 +19,39 @@ import java.util.UUID;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.FileVisitResult;
 
-/** Files owned by one project's Scripts root. Call filesystem operations off the EDT. */
-public final class ScriptFiles {
+/**
+ * Files owned by one project's Scripts root. Call filesystem operations off the EDT.
+ */
+public record ScriptFiles(Path root) {
     public static final String EXTENSION = ".tdscript";
+
     // Content participates in conflict detection even when an external editor preserves metadata.
-    public record Snapshot(Object key, FileTime modified, long size, String text) { }
-    private final Path root;
+    public record Snapshot(Object key, FileTime modified, long size, String text) {
+    }
 
-    public ScriptFiles(Path root) { this.root = root.toAbsolutePath().normalize(); }
-    public Path root() { return root; }
-    public boolean contains(Path path) { return path.toAbsolutePath().normalize().startsWith(root); }
+    public ScriptFiles(Path root) {
+        this.root = root.toAbsolutePath().normalize();
+    }
 
-    /** Project-relative action references. Do not descend symlinks or Windows reparse directories. */
+    public boolean contains(Path path) {
+        return path.toAbsolutePath().normalize().startsWith(root);
+    }
+
+    /**
+     * Project-relative action references. Do not descend symlinks or Windows reparse directories.
+     */
     public List<String> listScripts() throws IOException {
         if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Not a directory: " + root);
         var names = new ArrayList<String>();
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
-            @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+            @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
                 return attributes.isSymbolicLink() || attributes.isOther() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
             }
-            @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
                 if (attributes.isRegularFile() && file.getFileName().toString().endsWith(EXTENSION))
                     names.add(root.relativize(file).toString().replace('\\', '/'));
                 return FileVisitResult.CONTINUE;
@@ -78,14 +90,17 @@ public final class ScriptFiles {
         String stem = name.split("\\.", 2)[0].toUpperCase(Locale.ROOT);
         if (name.isBlank() || name.equals(".") || name.equals("..") || name.endsWith(".") || name.endsWith(" ")
                 || name.chars().anyMatch(c -> c < 32 || "<>:\"/\\|?*".indexOf(c) >= 0)
-                || stem.matches("CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]")) throw new IOException("Use a valid file or folder name.");
-        if (script && !JavaSnippetSource.isValidClassName(name)) throw new IOException("Use a valid Java identifier for a script name.");
+                || stem.matches("CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]"))
+            throw new IOException("Use a valid file or folder name.");
+        if (script && !JavaSnippetSource.isValidClassName(name))
+            throw new IOException("Use a valid Java identifier for a script name.");
     }
 
     public Path create(Path parent, String name, boolean folder, String text) throws IOException {
         Files.createDirectories(root);
         Path destination = child(parent, name, !folder);
-        if (!Files.isDirectory(destination.getParent())) throw new IOException("The destination folder no longer exists.");
+        if (!Files.isDirectory(destination.getParent()))
+            throw new IOException("The destination folder no longer exists.");
         try {
             if (folder) Files.createDirectory(destination);
             else AtomicFiles.createNewString(destination, text);
@@ -108,17 +123,20 @@ public final class ScriptFiles {
     public Snapshot save(Path path, String text, Snapshot expected) throws IOException {
         path = resolve(path);
         var current = read(path);
-        if (!Objects.equals(expected, current)) throw new IOException("The script changed outside this editor. Reopen it before saving.");
+        if (!Objects.equals(expected, current))
+            throw new IOException("The script changed outside this editor. Reopen it before saving.");
         if (current.text().equals(text)) return expected;
         AtomicFiles.writeString(path, text);
         var saved = read(path);
-        if (!saved.text().equals(text)) throw new IOException("The script changed outside this editor while saving. Reopen it before saving again.");
+        if (!saved.text().equals(text))
+            throw new IOException("The script changed outside this editor while saving. Reopen it before saving again.");
         return saved;
     }
 
     private BasicFileAttributes metadata(Path path) throws IOException {
         var attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-        if (!attributes.isRegularFile()) throw new IOException("The script was moved or deleted. Reopen it from Scripts.");
+        if (!attributes.isRegularFile())
+            throw new IOException("The script was moved or deleted. Reopen it from Scripts.");
         return attributes;
     }
 
@@ -127,7 +145,8 @@ public final class ScriptFiles {
         to = resolve(to);
         validateName(to.getFileName().toString(), false);
         if (!Files.isDirectory(from) && from.getFileName().toString().endsWith(EXTENSION)) {
-            if (!to.getFileName().toString().endsWith(EXTENSION)) throw new IOException("Keep the .tdscript extension.");
+            if (!to.getFileName().toString().endsWith(EXTENSION))
+                throw new IOException("Keep the .tdscript extension.");
             validateName(to.getFileName().toString().substring(0, to.getFileName().toString().length() - EXTENSION.length()), true);
         }
         if (!Files.isDirectory(from) && to.getFileName().toString().endsWith(EXTENSION))
@@ -142,10 +161,14 @@ public final class ScriptFiles {
             // Windows treats case-only NIO moves as no-ops. Use a unique intermediate name.
             Path staged = from.resolveSibling(".td-rename-" + UUID.randomUUID());
             Files.move(from, staged);
-            try { return Files.move(staged, to); }
-            catch (IOException failure) {
-                try { Files.move(staged, from); }
-                catch (IOException restore) { throw new IOException("Rename failed; the original remains at " + staged, restore); }
+            try {
+                return Files.move(staged, to);
+            } catch (IOException failure) {
+                try {
+                    Files.move(staged, from);
+                } catch (IOException restore) {
+                    throw new IOException("Rename failed; the original remains at " + staged, restore);
+                }
                 throw failure;
             }
         }
@@ -158,12 +181,15 @@ public final class ScriptFiles {
         if (recycle) {
             if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.MOVE_TO_TRASH))
                 throw new IOException("The recycle bin is unavailable. Choose permanent deletion explicitly.");
-            if (!Desktop.getDesktop().moveToTrash(path.toFile())) throw new IOException("Unable to move to the recycle bin: " + path);
+            if (!Desktop.getDesktop().moveToTrash(path.toFile()))
+                throw new IOException("Unable to move to the recycle bin: " + path);
         } else {
             Path realRoot = root.toRealPath();
             Files.walkFileTree(path, new SimpleFileVisitor<>() {
-                @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
-                    if (!directory.toRealPath().equals(realRoot.resolve(root.relativize(directory)))) throw new IOException("Folder links outside Scripts: " + directory);
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+                    if (!directory.toRealPath().equals(realRoot.resolve(root.relativize(directory))))
+                        throw new IOException("Folder links outside Scripts: " + directory);
                     return FileVisitResult.CONTINUE;
                 }
             });
@@ -174,7 +200,8 @@ public final class ScriptFiles {
     public Path mutable(Path path) throws IOException {
         path = resolve(path);
         if (path.equals(root)) throw new IOException("The Scripts root cannot be renamed, moved or deleted.");
-        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("The file or folder no longer exists: " + path);
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("The file or folder no longer exists: " + path);
         return path;
     }
 

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.runtime;
 
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import cpw.mods.niofs.union.UnionFileSystemProvider;
 import net.neoforged.jarjar.nio.pathfs.PathFileSystemProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -10,19 +12,14 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimeSourceMaterializerTest {
     @TempDir
@@ -34,7 +31,7 @@ class RuntimeSourceMaterializerTest {
                 "META-INF/versions/21/Example.class", new byte[]{2},
                 "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n".getBytes(),
                 "resource.txt", new byte[]{3}));
-        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        var provider = new UnionFileSystemProvider();
         String previousId = null;
         String previousUri = null;
         for (int run = 0; run < 2; run++) {
@@ -46,7 +43,7 @@ class RuntimeSourceMaterializerTest {
                 assertEquals(original, prepared.sources().getFirst().original());
                 if (previousId != null) {
                     assertEquals(previousId, prepared.id());
-                    assertTrue(!previousUri.equals(original.path().toUri().toString()));
+                    assertNotEquals(previousUri, original.path().toUri().toString());
                 }
                 previousId = prepared.id();
                 previousUri = original.path().toUri().toString();
@@ -58,11 +55,11 @@ class RuntimeSourceMaterializerTest {
     void materializesFilteredAndOverlaidUnionViewsWithoutExposingHiddenClasses() throws Exception {
         Path archive = createArchive("base.jar", Map.of("Example.class", new byte[]{1}, "Hidden.class", new byte[]{2}));
         Path overlay = createArchive("overlay.jar", Map.of("Example.class", new byte[]{3}));
-        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        var provider = new UnionFileSystemProvider();
         try (var filtered = provider.newFileSystem((name, base) -> !name.equals("Hidden.class"), archive)) {
             var first = RuntimeSourceMaterializer.prepare(List.of(new RuntimeSourceInventory.Source(filtered.getRoot(), "filtered")),
                     directory.resolve("filtered/sources"));
-            assertTrue(!archive.equals(first.paths().getFirst()));
+            assertNotEquals(archive, first.paths().getFirst());
             try (var zip = new ZipFile(first.paths().getFirst().toFile())) {
                 assertNull(zip.getEntry("Hidden.class"));
                 assertArrayEquals(new byte[]{1}, zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
@@ -90,7 +87,7 @@ class RuntimeSourceMaterializerTest {
             Files.write(file, new byte[]{2});
             Files.setLastModifiedTime(file, stamp);
             var after = RuntimeSourceMaterializer.prepare(sources, cache);
-            assertTrue(!before.id().equals(after.id()));
+            assertNotEquals(before.id(), after.id());
             try (var zip = new ZipFile(after.paths().getFirst().toFile())) {
                 assertArrayEquals(new byte[]{2}, zip.getInputStream(zip.getEntry("Example.class")).readAllBytes());
             }
@@ -114,7 +111,7 @@ class RuntimeSourceMaterializerTest {
         Path inner = createArchive("inner.jar", Map.of("Example.class", new byte[]{1}, "resource.txt", new byte[]{2}));
         byte[] original = Files.readAllBytes(inner);
         Path outer = createArchive("outer.jar", Map.of("META-INF/jarjar/inner.jar", original));
-        var provider = new cpw.mods.niofs.union.UnionFileSystemProvider();
+        var provider = new UnionFileSystemProvider();
         String previous = null;
         for (int run = 0; run < 2; run++) {
             try (var container = provider.newFileSystem(null, outer);
@@ -170,8 +167,8 @@ class RuntimeSourceMaterializerTest {
             var current = RuntimeSourceMaterializer.prepare(List.of(
                     new RuntimeSourceInventory.Source(first, "first")), cache);
             assertEquals(old.paths().getFirst(), current.paths().getFirst());
-            assertTrue(!Files.exists(cache.resolve("second.jar")));
-            assertTrue(!Files.exists(cache.getParent().resolve("inventory.json")));
+            assertFalse(Files.exists(cache.resolve("second.jar")));
+            assertFalse(Files.exists(cache.getParent().resolve("inventory.json")));
             assertThrows(IOException.class, () -> old.withCurrentSources(() -> "stale"));
             assertEquals("current", current.withCurrentSources(() -> "current"));
             try (ZipFile zip = new ZipFile(current.paths().getFirst().toFile())) {
@@ -255,12 +252,12 @@ class RuntimeSourceMaterializerTest {
                     new RuntimeSourceInventory.Source(second, "two"));
             var before = RuntimeSourceMaterializer.prepare(inputs, cache);
             Path untouched = before.paths().get(1);
-            var stamp = java.nio.file.attribute.FileTime.fromMillis(1_234_000);
+            var stamp = FileTime.fromMillis(1_234_000);
             Files.setLastModifiedTime(untouched, stamp);
             Files.write(first.resolve("One.class"), new byte[]{3, 4});
             var after = RuntimeSourceMaterializer.prepare(inputs, cache);
             assertEquals(stamp, Files.getLastModifiedTime(untouched));
-            assertTrue(!before.id().equals(after.id()));
+            assertNotEquals(before.id(), after.id());
             Files.delete(after.paths().getFirst());
             RuntimeSourceMaterializer.prepare(inputs, cache);
             assertEquals(stamp, Files.getLastModifiedTime(untouched));
@@ -301,9 +298,9 @@ class RuntimeSourceMaterializerTest {
                 }
                 case INVALID_MANIFEST -> Files.writeString(manifest, "broken");
                 case UNSUPPORTED_FORMAT -> {
-                    var json = com.github.minecraft_ta.totaldebug.storage.JsonFiles.read(manifest);
+                    var json = JsonFiles.read(manifest);
                     json.addProperty("format", 99);
-                    com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(manifest, json);
+                    JsonFiles.write(manifest, json);
                 }
                 case TRUNCATED_JAR -> Files.writeString(copy, "truncated");
             }

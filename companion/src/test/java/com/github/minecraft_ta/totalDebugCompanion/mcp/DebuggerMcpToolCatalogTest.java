@@ -4,6 +4,7 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +17,7 @@ class DebuggerMcpToolCatalogTest {
                 "id", "pause-a", "reason", "breakpoint", "thread_id", 42, "all_threads_stopped", true,
                 "top_frame", Map.of("id", 1, "method", "run", "binary_name", "example.Test", "line", 4)));
         Map<String, Object> breakpoint = Map.of("binary_name", "example.Test", "line", 4, "state", "bound");
-        Map<String, Map<String, Object>> examples = new java.util.HashMap<>(Map.of(
+        Map<String, Map<String, Object>> examples = new HashMap<>(Map.of(
                 "debugger_status", state, "debugger_wait", state, "debugger_control", state,
                 "debugger_threads", Map.of("threads", List.of(Map.of("id", 42, "name", "main"))),
                 "debugger_breakpoints", Map.of("muted", false, "breakpoints", List.of(breakpoint)),

@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.sun.jdi.ArrayReference;
 import com.sun.jdi.ArrayType;
+import com.sun.jdi.BooleanValue;
 import com.sun.jdi.ClassType;
 import com.sun.jdi.InvocationException;
 import com.sun.jdi.Method;
@@ -245,7 +246,7 @@ final class DebuggerOverloadResolver {
 
     static Value mirrorPrimitive(VirtualMachine vm, Value value, DebuggerPrimitiveKind target) {
         if (target == DebuggerPrimitiveKind.BOOLEAN) {
-            if (!(value instanceof com.sun.jdi.BooleanValue booleanValue)) {
+            if (!(value instanceof BooleanValue booleanValue)) {
                 throw new IllegalArgumentException("Boolean value required");
             }
             return vm.mirrorOf(booleanValue.booleanValue());

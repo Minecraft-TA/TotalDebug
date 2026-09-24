@@ -34,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CancellationException;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 /** Resolves semantic destinations into the current Companion UI. */
 public final class NavigationService {
@@ -464,7 +465,7 @@ public final class NavigationService {
 
     private CompletableFuture<Void> openRuntimeSource(
             String binaryName,
-            java.util.function.ToIntFunction<DecompiledSource> offsetResolver,
+            ToIntFunction<DecompiledSource> offsetResolver,
             int executionLine,
             Activation activation
     ) {

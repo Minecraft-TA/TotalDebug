@@ -18,9 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class JdtConfigurationTest {
 
@@ -121,7 +119,7 @@ class JdtConfigurationTest {
         var elements = assertDoesNotThrow(() -> unit.getTypeRoot().codeSelect(stringOffset, 0));
 
         assertEquals(1, elements.length);
-        assertTrue(elements[0] instanceof IType);
+        assertInstanceOf(IType.class, elements[0]);
         assertEquals("java.lang.String", ((IType) elements[0]).getFullyQualifiedName());
     }
 

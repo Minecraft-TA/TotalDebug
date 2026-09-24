@@ -26,6 +26,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -229,7 +230,7 @@ final class DebuggerInspector extends JPanel implements AutoCloseable {
         input.add(this.addWatch, BorderLayout.EAST);
         JScrollPane scroll = new JScrollPane(this.tree);
         scroll.setBorder(BorderFactory.createEmptyBorder());
-        javax.swing.JSplitPane editorSplit = new javax.swing.JSplitPane(javax.swing.JSplitPane.VERTICAL_SPLIT, input, scroll);
+        JSplitPane editorSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, input, scroll);
         editorSplit.setBorder(BorderFactory.createEmptyBorder());
         editorSplit.setDividerSize(0);
         editorSplit.setResizeWeight(0);

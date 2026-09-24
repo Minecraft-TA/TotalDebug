@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -185,111 +186,94 @@ public final class VineflowerDecompiler implements JavaDecompiler {
                 .orElse("Vineflower produced no source for " + binaryName);
     }
 
-    private static final class TargetClassContext implements IContextSource {
-        private final String internalName;
-        private final Map<String, byte[]> targetClasses;
-        private final ClassBytecodeSource bytecodeSource;
-
-        private TargetClassContext(
-                String internalName,
-                Map<String, byte[]> targetClasses,
-                ClassBytecodeSource bytecodeSource
-        ) {
-            this.internalName = internalName;
-            this.targetClasses = targetClasses;
-            this.bytecodeSource = bytecodeSource;
-        }
+    private record TargetClassContext(String internalName, Map<String, byte[]> targetClasses,
+                                      ClassBytecodeSource bytecodeSource) implements IContextSource {
 
         @Override
-        public String getName() {
-            return this.internalName;
-        }
-
-        @Override
-        public Entries getEntries() {
-            List<Entry> entries = this.targetClasses.keySet().stream()
-                    .map(Entry::atBase)
-                    .toList();
-            return new Entries(entries, List.of(), List.of());
-        }
-
-        @Override
-        public InputStream getInputStream(String resource) throws IOException {
-            String className = resource.endsWith(CLASS_SUFFIX)
-                    ? resource.substring(0, resource.length() - CLASS_SUFFIX.length())
-                    : resource;
-            byte[] targetBytes = this.targetClasses.get(className);
-            if (targetBytes != null) {
-                return new ByteArrayInputStream(targetBytes);
+            public String getName() {
+                return this.internalName;
             }
-            return streamFor(this.bytecodeSource, resource);
-        }
 
-        @Override
-        public IOutputSink createOutputSink(IResultSaver saver) {
-            return new IOutputSink() {
-                @Override
-                public void begin() {
+            @Override
+            public Entries getEntries() {
+                List<Entry> entries = this.targetClasses.keySet().stream()
+                        .map(Entry::atBase)
+                        .toList();
+                return new Entries(entries, List.of(), List.of());
+            }
+
+            @Override
+            public InputStream getInputStream(String resource) throws IOException {
+                String className = resource.endsWith(CLASS_SUFFIX)
+                        ? resource.substring(0, resource.length() - CLASS_SUFFIX.length())
+                        : resource;
+                byte[] targetBytes = this.targetClasses.get(className);
+                if (targetBytes != null) {
+                    return new ByteArrayInputStream(targetBytes);
                 }
+                return streamFor(this.bytecodeSource, resource);
+            }
 
-                @Override
-                public void acceptClass(String qualifiedName, String fileName, String content, int[] mapping) {
-                    String entryName = fileName.substring(fileName.lastIndexOf('/') + 1);
-                    saver.saveClassFile("", qualifiedName, entryName, content, mapping);
-                }
+            @Override
+            public IOutputSink createOutputSink(IResultSaver saver) {
+                return new IOutputSink() {
+                    @Override
+                    public void begin() {
+                    }
 
-                @Override
-                public void acceptDirectory(String directory) {
-                }
+                    @Override
+                    public void acceptClass(String qualifiedName, String fileName, String content, int[] mapping) {
+                        String entryName = fileName.substring(fileName.lastIndexOf('/') + 1);
+                        saver.saveClassFile("", qualifiedName, entryName, content, mapping);
+                    }
 
-                @Override
-                public void acceptOther(String path) {
-                }
+                    @Override
+                    public void acceptDirectory(String directory) {
+                    }
 
-                @Override
-                public void close() {
-                }
-            };
+                    @Override
+                    public void acceptOther(String path) {
+                    }
+
+                    @Override
+                    public void close() {
+                    }
+                };
+            }
         }
-    }
 
-    private static final class BytecodeLookupContext implements IContextSource {
-        private final ClassBytecodeSource bytecodeSource;
-
-        private BytecodeLookupContext(ClassBytecodeSource bytecodeSource) {
-            this.bytecodeSource = bytecodeSource;
-        }
+    private record BytecodeLookupContext(ClassBytecodeSource bytecodeSource) implements IContextSource {
 
         @Override
-        public String getName() {
-            return "target defining class loader";
-        }
+            public String getName() {
+                return "target defining class loader";
+            }
 
-        @Override
-        public Entries getEntries() {
-            return Entries.EMPTY;
-        }
+            @Override
+            public Entries getEntries() {
+                return Entries.EMPTY;
+            }
 
-        @Override
-        public boolean isLazy() {
-            return true;
-        }
+            @Override
+            public boolean isLazy() {
+                return true;
+            }
 
-        @Override
-        public boolean hasClass(String className) throws IOException {
-            return this.bytecodeSource.hasClass(className);
-        }
+            @Override
+            public boolean hasClass(String className) throws IOException {
+                return this.bytecodeSource.hasClass(className);
+            }
 
-        @Override
-        public byte[] getClassBytes(String className) throws IOException {
-            return this.bytecodeSource.findClassBytes(className);
-        }
+            @Override
+            public byte[] getClassBytes(String className) throws IOException {
+                return this.bytecodeSource.findClassBytes(className);
+            }
 
-        @Override
-        public InputStream getInputStream(String resource) throws IOException {
-            return streamFor(this.bytecodeSource, resource);
+            @Override
+            public InputStream getInputStream(String resource) throws IOException {
+                return streamFor(this.bytecodeSource, resource);
+            }
         }
-    }
 
     private static InputStream streamFor(ClassBytecodeSource bytecodeSource, String resource) throws IOException {
         byte[] bytes = bytecodeSource.findClassBytes(resource);
@@ -317,7 +301,7 @@ public final class VineflowerDecompiler implements JavaDecompiler {
             }
             int[] normalizedMapping = mapping == null ? new int[0] : mapping.clone();
             int[] previousMapping = this.mappings.putIfAbsent(binaryName, normalizedMapping);
-            if (previousMapping != null && !java.util.Arrays.equals(previousMapping, normalizedMapping)) {
+            if (previousMapping != null && !Arrays.equals(previousMapping, normalizedMapping)) {
                 throw new IllegalStateException("Vineflower emitted multiple line maps for " + binaryName);
             }
         }

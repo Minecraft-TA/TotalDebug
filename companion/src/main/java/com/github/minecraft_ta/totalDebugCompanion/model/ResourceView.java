@@ -8,6 +8,8 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ResourceViewPanel;
+
+import java.util.List;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 
@@ -65,7 +67,7 @@ public final class ResourceView implements IEditorPanel {
         if (this.source instanceof LocalFileSource localFile) {
             return EditorLocation.forFile(localFile.path(), context.project().profile().workspaceDirectory());
         }
-        return new EditorLocation(this.source.displayName(), java.util.List.of(), this.source.tooltip());
+        return new EditorLocation(this.source.displayName(), List.of(), this.source.tooltip());
     }
 
     @Override

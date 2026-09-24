@@ -9,6 +9,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.GridBagLayout;
 import java.awt.Point;
@@ -137,7 +138,7 @@ final class EditorTabHeader extends JPanel {
 
     private static void installHoverTracking(Component component, MouseAdapter hover) {
         component.addMouseListener(hover);
-        if (component instanceof java.awt.Container container) {
+        if (component instanceof Container container) {
             for (Component child : container.getComponents()) {
                 installHoverTracking(child, hover);
             }

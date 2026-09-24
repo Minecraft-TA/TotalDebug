@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory.RuntimeModule
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -198,7 +199,7 @@ public final class RuntimeSnapshotBytecodeSource implements ClassBytecodeSource,
     }
 
     private static byte[] readDirectory(Path directory, String resourceName) throws IOException {
-        Path classFile = directory.resolve(resourceName.replace('/', java.io.File.separatorChar)).normalize();
+        Path classFile = directory.resolve(resourceName.replace('/', File.separatorChar)).normalize();
         if (!classFile.startsWith(directory) || !Files.isRegularFile(classFile)) {
             return null;
         }

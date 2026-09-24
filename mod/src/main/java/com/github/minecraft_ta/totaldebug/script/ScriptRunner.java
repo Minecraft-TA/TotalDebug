@@ -15,6 +15,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -238,7 +239,7 @@ public final class ScriptRunner implements AutoCloseable {
             throw new IllegalArgumentException("maxCharacters must be positive");
         }
         ExecutionTextBuffer output = new ExecutionTextBuffer(maxCharacters);
-        Set<Throwable> visited = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         Throwable current = throwable;
         boolean causedBy = false;
         while (current != null && visited.add(current)) {

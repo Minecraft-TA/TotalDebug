@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,7 +91,7 @@ public record RuntimeInventory(
 
     public void write(Path path) throws IOException {
         AtomicFiles.replace(path, staged -> {
-            Files.writeString(staged, JsonFiles.GSON.toJson(toJson()), java.nio.charset.StandardCharsets.UTF_8);
+            Files.writeString(staged, JsonFiles.GSON.toJson(toJson()), StandardCharsets.UTF_8);
             read(staged);
         });
     }

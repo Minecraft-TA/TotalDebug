@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LoadedResource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceFileType;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ResourceLoader;
+
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.beans.PropertyChangeListener;
 
@@ -149,7 +151,7 @@ public final class ResourceViewPanel extends JPanel {
 
     private static Throwable unwrap(Throwable failure) {
         Throwable current = failure;
-        while ((current instanceof CompletionException || current instanceof java.util.concurrent.ExecutionException)
+        while ((current instanceof CompletionException || current instanceof ExecutionException)
                 && current.getCause() != null) {
             current = current.getCause();
         }

@@ -1,16 +1,21 @@
 package com.github.minecraft_ta.totalDebugCompanion.bytecode;
 
+import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -60,32 +65,32 @@ class RuntimeSnapshotBytecodeSourceTest {
         Path selected = jar("selected.jar", resourceName(ArchiveFixture.class), expected);
         Path inventory = this.temporaryDirectory.resolve("inventory.json");
         Files.writeString(inventory, "{\"id\":\"first\"}");
-        var locked = new java.util.concurrent.CountDownLatch(1);
-        var release = new java.util.concurrent.CountDownLatch(1);
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.archive(0, selected.toString())))) {
             var source = RuntimeSnapshotBytecodeSource.fromRuntime(List.of(librarySource(0, selected)), index, inventory, "first");
-            var writer = java.util.concurrent.CompletableFuture.runAsync(() -> {
+            var writer = CompletableFuture.runAsync(() -> {
                 try {
-                    com.github.minecraft_ta.totaldebug.storage.CacheFiles.locked(this.temporaryDirectory, () -> {
+                    CacheFiles.locked(this.temporaryDirectory, () -> {
                         locked.countDown();
-                        assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                        assertTrue(release.await(5, TimeUnit.SECONDS));
                         return null;
                     });
                 } catch (Exception failure) {
                     throw new AssertionError(failure);
                 }
             });
-            assertTrue(locked.await(5, java.util.concurrent.TimeUnit.SECONDS));
-            var reader = java.util.concurrent.CompletableFuture.runAsync(() ->
+            assertTrue(locked.await(5, TimeUnit.SECONDS));
+            var reader = CompletableFuture.runAsync(() ->
                     assertThrows(IllegalStateException.class, () -> source.findClassBytes(ArchiveFixture.class.getName())));
             try {
-                java.util.concurrent.CompletableFuture.runAsync(source::close).get(1, java.util.concurrent.TimeUnit.SECONDS);
+                CompletableFuture.runAsync(source::close).get(1, TimeUnit.SECONDS);
                 index.close();
             } finally {
                 release.countDown();
             }
-            reader.get(5, java.util.concurrent.TimeUnit.SECONDS);
-            writer.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            reader.get(5, TimeUnit.SECONDS);
+            writer.get(5, TimeUnit.SECONDS);
         }
     }
 
@@ -143,7 +148,7 @@ class RuntimeSnapshotBytecodeSourceTest {
         byte[] expected = classBytes(DirectoryFixture.class);
         String resourceName = resourceName(DirectoryFixture.class);
         Path classes = this.temporaryDirectory.resolve("classes");
-        Path classFile = classes.resolve(resourceName.replace('/', java.io.File.separatorChar));
+        Path classFile = classes.resolve(resourceName.replace('/', File.separatorChar));
         Files.createDirectories(classFile.getParent());
         Files.write(classFile, expected);
 

@@ -5,6 +5,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
+import javax.swing.text.BadLocationException;
 import java.awt.Dimension;
 import java.awt.geom.Rectangle2D;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,7 +38,7 @@ final class UIUtilsTest {
                 int viewportTop = scrollPane.getViewport().getViewPosition().y;
                 int viewportHeight = scrollPane.getViewport().getExtentSize().height;
                 targetPosition.set((bounds.getY() - viewportTop) / viewportHeight);
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
         });

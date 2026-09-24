@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /** Desktop rendering and MCP projection of a captured execution value. */
@@ -89,19 +90,19 @@ public final class ExecutionValuePresentation {
         return result;
     }
 
-    private java.util.Optional<Map<String, Object>> stringMap(Set<Integer> referencedIdentities) {
+    private Optional<Map<String, Object>> stringMap(Set<Integer> referencedIdentities) {
         if (this.graph.truncated() || referencedIdentities.contains(this.graph.identity())) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         Map<String, Object> result = new LinkedHashMap<>();
         for (Child child : this.graph.children()) {
             if (child.key().kind() != Kind.STRING || child.key().value().truncated()
                     || result.containsKey(child.key().value().text())) {
-                return java.util.Optional.empty();
+                return Optional.empty();
             }
             result.put(child.key().value().text(), new ExecutionValuePresentation(child.value()).toJsonValue(referencedIdentities));
         }
-        return java.util.Optional.of(result);
+        return Optional.of(result);
     }
 
     private Map<String, Object> mapEnvelope(Set<Integer> referencedIdentities) {

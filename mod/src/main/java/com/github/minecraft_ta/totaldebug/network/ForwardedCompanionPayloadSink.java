@@ -30,21 +30,12 @@ public final class ForwardedCompanionPayloadSink {
         return true;
     }
 
-    private static final class Registration implements AutoCloseable {
-        private final AtomicReference<Consumer<ForwardedCompanionPayload>> receiver;
-        private final Consumer<ForwardedCompanionPayload> installedReceiver;
-
-        private Registration(
-                AtomicReference<Consumer<ForwardedCompanionPayload>> receiver,
-                Consumer<ForwardedCompanionPayload> installedReceiver
-        ) {
-            this.receiver = receiver;
-            this.installedReceiver = installedReceiver;
-        }
+    private record Registration(AtomicReference<Consumer<ForwardedCompanionPayload>> receiver,
+                                Consumer<ForwardedCompanionPayload> installedReceiver) implements AutoCloseable {
 
         @Override
-        public void close() {
-            this.receiver.compareAndSet(this.installedReceiver, null);
+            public void close() {
+                this.receiver.compareAndSet(this.installedReceiver, null);
+            }
         }
-    }
 }

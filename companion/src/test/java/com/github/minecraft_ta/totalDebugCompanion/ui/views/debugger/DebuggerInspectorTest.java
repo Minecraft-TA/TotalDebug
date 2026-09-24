@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -127,8 +128,8 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(true);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
-            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
-                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(DebuggerValueLease.NONE);
             }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
@@ -204,8 +205,8 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
-            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
-                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(DebuggerValueLease.NONE);
             }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
@@ -287,8 +288,8 @@ class DebuggerInspectorTest {
             config.setAutomaticDebuggerPreviews(false);
             SwingUtilities.invokeAndWait(() -> {
                 DebuggerInspector.RuntimeAccess runtime = new DebuggerInspector.RuntimeAccess() {
-            @Override public CompletableFuture<com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease> retainValue(String pauseId, int reference) {
-                return CompletableFuture.completedFuture(com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueLease.NONE);
+            @Override public CompletableFuture<DebuggerValueLease> retainValue(String pauseId, int reference) {
+                return CompletableFuture.completedFuture(DebuggerValueLease.NONE);
             }
                     @Override
                     public CompletableFuture<List<DebugEngine.Variable>> variables(
@@ -363,7 +364,7 @@ class DebuggerInspectorTest {
             AtomicInteger evaluations,
             List<DebugEngine.Variable> variables,
             int resultReference,
-            java.util.function.IntFunction<CompletableFuture<DebuggerValueLease>> retain
+            IntFunction<CompletableFuture<DebuggerValueLease>> retain
     ) {
         return new DebuggerInspector.RuntimeAccess() {
             @Override
@@ -476,8 +477,10 @@ class DebuggerInspectorTest {
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) tree.getModel().getRoot();
         for (int index = 0; index < root.getChildCount(); index++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) root.getChildAt(index);
-            if (child.getUserObject() instanceof DebuggerValueTree.ExpressionValue value && !value.watch()) {
-                return value.value();
+            if (child.getUserObject() instanceof DebuggerValueTree.ExpressionValue(
+                    DebuggerValueTree.DebugValue value1, boolean watch
+            ) && !watch) {
+                return value1;
             }
         }
         throw new AssertionError("No retained expression result was rendered");

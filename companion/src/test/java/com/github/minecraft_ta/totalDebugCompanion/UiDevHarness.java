@@ -1,7 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
 import javax.swing.JLabel;
+
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
+
+import javax.swing.JViewport;
 import javax.swing.Timer;
 import com.formdev.flatlaf.extras.FlatInspector;
 import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
@@ -14,12 +18,20 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+
+import java.awt.Window;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.HierarchyPreviewPopup;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.ImplementationChooserPopup;
@@ -30,8 +42,9 @@ import com.github.tth05.jindex.IndexSource;
 
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
-import javax.swing.JList;
 import javax.swing.ToolTipManager;
+
+import org.eclipse.jdt.core.IJavaElement;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.IconRowHeader;
 import java.awt.Component;
@@ -109,7 +122,7 @@ public final class UiDevHarness {
     }
 
     /** Exercises every token type the editor palette maps, so theming regressions are visible. */
-    private static Path writeSampleSource(Path target) throws java.io.IOException {
+    private static Path writeSampleSource(Path target) throws IOException {
         Files.writeString(target, """
                 package sample;
 
@@ -189,12 +202,12 @@ public final class UiDevHarness {
                     ) {
                     }
                 }
-                """ + "\n".repeat(20), java.nio.charset.StandardCharsets.UTF_8);
+                """ + "\n".repeat(20), StandardCharsets.UTF_8);
         return target;
     }
 
     /** Populates the Files tree with the archive entry types used by the icon and spacing pass. */
-    private static void writeSampleArchive(Path target) throws java.io.IOException {
+    private static void writeSampleArchive(Path target) throws IOException {
         try (ZipOutputStream archive = new ZipOutputStream(Files.newOutputStream(target))) {
             addArchiveEntry(archive, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n");
             addArchiveEntry(archive, "assets/sample/textures/gui/debug.png", samplePng());
@@ -212,18 +225,18 @@ public final class UiDevHarness {
     }
 
     private static void addArchiveEntry(ZipOutputStream archive, String name, String contents)
-            throws java.io.IOException {
-        addArchiveEntry(archive, name, contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            throws IOException {
+        addArchiveEntry(archive, name, contents.getBytes(StandardCharsets.UTF_8));
     }
 
     private static void addArchiveEntry(ZipOutputStream archive, String name, byte[] contents)
-            throws java.io.IOException {
+            throws IOException {
         archive.putNextEntry(new ZipEntry(name));
         archive.write(contents);
         archive.closeEntry();
     }
 
-    private static byte[] samplePng() throws java.io.IOException {
+    private static byte[] samplePng() throws IOException {
         BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setColor(new Color(0x4878D0));
@@ -236,8 +249,8 @@ public final class UiDevHarness {
         return output.toByteArray();
     }
 
-    private static void writeSampleClassIndex(Path target, Path sampleClasses) throws java.io.IOException {
-        List<byte[]> classes = new java.util.ArrayList<>(List.of(
+    private static void writeSampleClassIndex(Path target, Path sampleClasses) throws IOException {
+        List<byte[]> classes = new ArrayList<>(List.of(
                 classBytes(Object.class),
                 classBytes(String.class),
                 classBytes(Boolean.class),
@@ -282,7 +295,7 @@ public final class UiDevHarness {
         }
     }
 
-    private static byte[] classBytes(Class<?> type) throws java.io.IOException {
+    private static byte[] classBytes(Class<?> type) throws IOException {
         String resource = "/" + type.getName().replace('.', '/') + ".class";
         try (var stream = Objects.requireNonNull(type.getResourceAsStream(resource), resource)) {
             return stream.readAllBytes();
@@ -307,13 +320,13 @@ public final class UiDevHarness {
     private static void scheduleMethodNavigationVerification() {
         Timer openTimer = new Timer(500, event -> application.openClass(
                 "sample.ThemeSampleImpl",
-                org.eclipse.jdt.core.IJavaElement.METHOD,
+                IJavaElement.METHOD,
                 "Lsample/ThemeSampleImpl;.apply(Lsample/ThemeSample;)V"
         ));
         openTimer.setRepeats(false);
         openTimer.start();
 
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(12);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
         Timer verifyTimer = new Timer(100, event -> {
             try {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();
@@ -354,7 +367,7 @@ public final class UiDevHarness {
                         if (codeView.ready().isCompletedExceptionally()) {
                             try {
                                 codeView.ready().join();
-                            } catch (java.util.concurrent.CompletionException failure) {
+                            } catch (CompletionException failure) {
                                 detail += " readyFailure=" + failure.getCause();
                             }
                         }
@@ -381,11 +394,11 @@ public final class UiDevHarness {
     private static void startThemeCycling() {
         Timer timer = new Timer(8000, null);
         timer.addActionListener(event -> {
-            var themes = com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme.available();
-            var current = com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current();
+            var themes = CompanionTheme.available();
+            var current = ThemeManager.current();
             var next = themes.get((themes.indexOf(current) + 1) % themes.size());
             System.out.println("switching theme -> " + next.id());
-            com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.apply(next);
+            ThemeManager.apply(next);
         });
         timer.start();
     }
@@ -405,7 +418,7 @@ public final class UiDevHarness {
                         (int) Math.floor(anchor.getY() + anchor.getHeight() / 2)
                 );
 
-                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 Timer resultTimer = new Timer(250, resultEvent -> {
                     var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof UsagesView) {
@@ -452,7 +465,7 @@ public final class UiDevHarness {
                         iconRow
                 );
                 target.x = iconRow.getWidth() / 2;
-                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 Timer resultTimer = new Timer(250, resultEvent -> {
                     if (isShowing(ImplementationChooserPopup.class)) {
                         ((Timer) resultEvent.getSource()).stop();
@@ -497,7 +510,7 @@ public final class UiDevHarness {
                         iconRow
                 );
                 target.x = iconRow.getWidth() / 2;
-                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
                 Timer resultTimer = new Timer(250, resultEvent -> {
                     var selected = mainWindow.getEditorTabs().getSelectedEditor();
                     if (selected instanceof CodeView codeView && "SingleActionImpl".equals(codeView.getTitle())) {
@@ -529,7 +542,7 @@ public final class UiDevHarness {
     }
 
     private static void scheduleGutterHover(String source, int declarationOffset, boolean verify) {
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         Timer hoverTimer = new Timer(150, event -> {
             try {
                 RSyntaxTextArea editor = findComponent(mainWindow, RSyntaxTextArea.class);
@@ -549,8 +562,8 @@ public final class UiDevHarness {
                     ((Timer) event.getSource()).stop();
                 }
                 Rectangle2D declaration = editor.modelToView2D(declarationOffset);
-                var viewport = (javax.swing.JViewport) SwingUtilities.getAncestorOfClass(
-                        javax.swing.JViewport.class,
+                var viewport = (JViewport) SwingUtilities.getAncestorOfClass(
+                        JViewport.class,
                         editor
                 );
                 if (viewport != null) {
@@ -580,12 +593,12 @@ public final class UiDevHarness {
         hoverTimer.start();
     }
 
-    private static <T extends java.awt.Window> boolean isShowing(Class<T> type) {
-        return Arrays.stream(java.awt.Window.getWindows()).anyMatch(window -> type.isInstance(window) && window.isShowing());
+    private static <T extends Window> boolean isShowing(Class<T> type) {
+        return Arrays.stream(Window.getWindows()).anyMatch(window -> type.isInstance(window) && window.isShowing());
     }
 
-    private static <T extends java.awt.Window> void scheduleWindowVerification(Class<T> type, String successMessage) {
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+    private static <T extends Window> void scheduleWindowVerification(Class<T> type, String successMessage) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         Timer timer = new Timer(100, event -> {
             if (isShowing(type)) {
                 ((Timer) event.getSource()).stop();
@@ -604,12 +617,12 @@ public final class UiDevHarness {
     }
 
     private static void scheduleHierarchyRowLayoutVerification() {
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         Timer timer = new Timer(100, event -> {
-            HierarchyPreviewPopup popup = Arrays.stream(java.awt.Window.getWindows())
+            HierarchyPreviewPopup popup = Arrays.stream(Window.getWindows())
                     .filter(HierarchyPreviewPopup.class::isInstance)
                     .map(HierarchyPreviewPopup.class::cast)
-                    .filter(java.awt.Window::isShowing)
+                    .filter(Window::isShowing)
                     .findFirst()
                     .orElse(null);
             JLabel declaration = popup == null
@@ -780,7 +793,7 @@ public final class UiDevHarness {
         String sampleSource = CodeView.readCode(sample);
         int sampleEntryLine = sampleSource.substring(0, sampleSource.indexOf("double ratio"))
                 .split("\\n", -1).length;
-        DecompiledSource decompiledSample = new DecompiledSource(sample, new com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument("sample.ThemeSample", sampleSource, SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}), SourceVariableNames.empty(), java.util.List.of()), null);
+        DecompiledSource decompiledSample = new DecompiledSource(sample, new SourceDocument("sample.ThemeSample", sampleSource, SourceLineMap.fromOriginalToDisplayed(new int[]{sampleEntryLine, sampleEntryLine}), SourceVariableNames.empty(), List.of()), null);
         Path sampleClasses = Files.createDirectories(root.resolve("TotalDebug/build/classes/java/main"));
         compileSampleSource(sample, sampleClasses);
         Path indexFile = root.resolve("classes.jindex");
@@ -832,7 +845,7 @@ public final class UiDevHarness {
         CompanionApp.configureLookAndFeel();
 
         System.out.println("UI dev harness data directory: " + root);
-        System.out.println("theme: " + com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager.current().id());
+        System.out.println("theme: " + ThemeManager.current().id());
         System.out.println("F9 = component inspector, F10 = UI defaults inspector");
 
         SwingUtilities.invokeAndWait(() -> {
@@ -917,7 +930,7 @@ public final class UiDevHarness {
         finishHarness(0);
     }
 
-    private static java.util.Optional<String> argument(String[] args, String prefix) {
+    private static Optional<String> argument(String[] args, String prefix) {
         return Arrays.stream(args)
                 .filter(argument -> argument.startsWith(prefix))
                 .map(argument -> argument.substring(prefix.length()))

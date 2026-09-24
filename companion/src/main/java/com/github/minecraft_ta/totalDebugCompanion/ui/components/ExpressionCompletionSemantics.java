@@ -11,6 +11,7 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /** Derives semantic colors from a source-backed debugger completion provider. */
@@ -51,7 +52,7 @@ public final class ExpressionCompletionSemantics {
         return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new))
                 .thenApply(ignored -> requests.stream()
                         .map(CompletableFuture::join)
-                        .filter(java.util.Objects::nonNull)
+                        .filter(Objects::nonNull)
                         .sorted(Comparator.comparingInt(DebugEngine.ExpressionToken::start))
                         .toList());
     }

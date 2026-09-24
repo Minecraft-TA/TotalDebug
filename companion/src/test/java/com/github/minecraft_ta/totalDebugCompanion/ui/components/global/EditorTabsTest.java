@@ -17,6 +17,7 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -277,7 +278,7 @@ class EditorTabsTest {
         AtomicInteger forwardedMoves = new AtomicInteger();
 
         SwingUtilities.invokeAndWait(() -> {
-            tabs.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            tabs.addMouseMotionListener(new MouseMotionAdapter() {
                 @Override
                 public void mouseMoved(MouseEvent event) {
                     forwardedMoves.incrementAndGet();

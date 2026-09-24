@@ -1,6 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.io.IOException;
+import java.util.Objects;
 import java.util.function.Supplier;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -89,7 +94,7 @@ public class FileTreeView extends JScrollPane {
     public FileTreeView(Supplier<ProjectScope> project, Consumer<NavigationTarget> navigator) {
         super();
         this.project = project;
-        java.util.Objects.requireNonNull(navigator, "navigator");
+        Objects.requireNonNull(navigator, "navigator");
 
         this.tree = new LazyFileJTree();
         ContextMenus.installTree(this.tree, path -> createContextMenu(path != null && path.getLastPathComponent() instanceof LazyTreeNode node
@@ -97,10 +102,10 @@ public class FileTreeView extends JScrollPane {
 
         this.tree.addMouseDoubleClickListener((node, item) -> openItem(item, navigator));
         this.tree.getInputMap(JComponent.WHEN_FOCUSED)
-                .put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "openSelectedFile");
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openSelectedFile");
         this.tree.getActionMap().put("openSelectedFile", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 if (tree.getSelectionPath() == null
                         || !(tree.getSelectionPath().getLastPathComponent() instanceof LazyTreeNode node)) {
                     return;
@@ -366,7 +371,7 @@ public class FileTreeView extends JScrollPane {
                     .map(module -> module.getFileName().toString())
                     .findFirst()
                     .orElse(null);
-        } catch (java.io.IOException exception) {
+        } catch (IOException exception) {
             throw new IllegalStateException("Unable to browse the Java runtime image", exception);
         }
     }

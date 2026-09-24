@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLLoader;
@@ -51,7 +52,7 @@ final class RuntimeInventoryPublisher {
     }
 
     PublishedInventory publish() throws IOException {
-        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.collection")) {
+        try (var phase = RuntimePhase.start("runtime.collection")) {
             PreparedRuntimeSources prepared = TotalDebug.get().runtimeSources();
             return prepared.withCurrentSources(() -> publish(prepared));
         }

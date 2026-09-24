@@ -50,7 +50,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ForkJoinPool;
 import javax.swing.*;
-import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.border.CompoundBorder;
 import javax.swing.text.*;

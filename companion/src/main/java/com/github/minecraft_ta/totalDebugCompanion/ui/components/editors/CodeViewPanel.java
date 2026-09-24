@@ -45,9 +45,12 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
 import java.beans.PropertyChangeListener;
 import javax.swing.text.BadLocationException;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public class CodeViewPanel extends AbstractCodeViewPanel {
     private static final String FIND_IMPLEMENTATIONS_KEY = "findImplementations";
@@ -232,7 +235,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
 
                 @Override
                 public void breakpointsChanged(
-                        java.net.URI sourceUri,
+                        URI sourceUri,
                         List<DebuggerSessionController.Breakpoint> breakpoints
                 ) {
                     if (!debugSource.uri().equals(sourceUri)) {
@@ -524,7 +527,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
     private ExpressionCompletionSupport.CompletionProvider completionProviderAtLine(int displayedLine) {
         var snapshot = currentSnapshot();
         if (snapshot == null) {
-            return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
+            return (text, caret, explicit) -> CompletableFuture.completedFuture(List.of());
         }
         String source = snapshot.contents();
         var unit = snapshot.unit();
@@ -534,7 +537,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             lineStart = this.editorPane.getLineStartOffset(displayedLine - 1);
             lineEnd = this.editorPane.getLineEndOffset(displayedLine - 1);
         } catch (BadLocationException exception) {
-            return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(List.of());
+            return (text, caret, explicit) -> CompletableFuture.completedFuture(List.of());
         }
         int sourceOffset = lineStart;
         while (sourceOffset < lineEnd && sourceOffset < source.length()
@@ -542,7 +545,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
             sourceOffset++;
         }
         int contextOffset = sourceOffset;
-        return (text, caret, explicit) -> java.util.concurrent.CompletableFuture.completedFuture(
+        return (text, caret, explicit) -> CompletableFuture.completedFuture(
                 ExpressionScopeAnalyzer.complete(unit, contextOffset, text, caret)
         );
     }
@@ -664,7 +667,7 @@ public class CodeViewPanel extends AbstractCodeViewPanel {
         this.implementationChooser.navigate(this.editorPane, symbol, relation, count, anchorOffset);
     }
 
-    private void resolveSelectedSymbol(String action, java.util.function.Consumer<CodeSymbol> consumer) {
+    private void resolveSelectedSymbol(String action, Consumer<CodeSymbol> consumer) {
         try {
             var resolution = JavaSymbolResolver.resolve(context.astCache(), this.identifier, this.editorPane.getCaretPosition());
             if (!resolution.isResolved()) {

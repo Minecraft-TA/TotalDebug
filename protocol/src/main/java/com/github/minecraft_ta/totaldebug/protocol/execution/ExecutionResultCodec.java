@@ -4,6 +4,8 @@ import com.github.tth05.scnet.message.impl.DefaultMessageProcessor;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -377,7 +379,7 @@ public final class ExecutionResultCodec {
             try {
                 String number = value.value().text();
                 if (!number.equals("NaN") && !number.equals("Infinity") && !number.equals("-Infinity")) {
-                    new java.math.BigDecimal(number);
+                    new BigDecimal(number);
                 }
             } catch (NumberFormatException exception) {
                 throw new JsonParseException("Execution value contains an invalid number", exception);
@@ -388,7 +390,7 @@ public final class ExecutionResultCodec {
         validateText(value.type(), "type");
         for (ExecutionValue.Child child : value.children()) {
             if (child == null || child.name() == null || child.kind() == null || child.value() == null
-                    || (child.kind() == ExecutionValue.ChildKind.MAP_ENTRY) != (child.key() != null)
+                    || (child.kind() == ExecutionValue.ChildKind.MAP_ENTRY) == (child.key() == null)
                     || !ExecutionValue.validChildKind(value.kind(), child.kind())) {
                 throw new JsonParseException("Execution value contains an invalid child");
             }

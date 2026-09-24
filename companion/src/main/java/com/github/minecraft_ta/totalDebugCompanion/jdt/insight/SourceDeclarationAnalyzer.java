@@ -2,11 +2,13 @@ package com.github.minecraft_ta.totalDebugCompanion.jdt.insight;
 
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration;
 import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
 import org.eclipse.jdt.core.dom.EnumDeclaration;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.RecordDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
@@ -116,7 +118,7 @@ public final class SourceDeclarationAnalyzer {
                 return true;
             }
 
-            private int typeAnchor(SimpleName name, org.eclipse.jdt.core.dom.ASTNode declaration) {
+            private int typeAnchor(SimpleName name, ASTNode declaration) {
                 int searchStart = name.getStartPosition() + name.getLength();
                 int searchEnd = Math.min(source.length(), declaration.getStartPosition() + declaration.getLength());
                 int brace = source.indexOf('{', searchStart);
@@ -124,7 +126,7 @@ public final class SourceDeclarationAnalyzer {
             }
 
             private void add(
-                    org.eclipse.jdt.core.dom.IBinding binding,
+                    IBinding binding,
                     SimpleName name,
                     int anchor,
                     int endOffset

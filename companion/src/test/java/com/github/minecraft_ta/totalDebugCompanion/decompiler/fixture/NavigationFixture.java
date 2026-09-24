@@ -51,6 +51,7 @@ public class NavigationFixture<T> {
    Supplier<String> anonymous = new Supplier<>() { public String get() { return input.toUpperCase(); } };
    return new Local().read() + anonymous.get();
  }
+ // A non-constant field preserves the anonymous class initializer tested by source navigation.
  public static Object fieldOnlyAnonymous() { return new Object() { static String marker = "anon-initializer"; }; }
  public String pattern(Object value) {
    return switch(value) {

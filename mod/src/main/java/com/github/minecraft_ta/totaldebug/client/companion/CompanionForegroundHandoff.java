@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.client.companion;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
 
 final class CompanionForegroundHandoff {
     private final CompanionForegroundPermission permission;
@@ -21,7 +22,7 @@ final class CompanionForegroundHandoff {
         beforeTransfer.run();
         try {
             sendRequest.run();
-        } catch (java.util.concurrent.RejectedExecutionException rejected) {
+        } catch (RejectedExecutionException rejected) {
             throw new IOException("Companion connection could not accept the request: " + rejected.getMessage(), rejected);
         }
     }

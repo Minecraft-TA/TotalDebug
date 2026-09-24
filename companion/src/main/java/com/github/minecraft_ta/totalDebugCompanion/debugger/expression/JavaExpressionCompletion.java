@@ -14,12 +14,15 @@ import org.eclipse.jdt.core.dom.ArrayAccess;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.CharacterLiteral;
+import org.eclipse.jdt.core.dom.ConditionalExpression;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldAccess;
+import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.NullLiteral;
 import org.eclipse.jdt.core.dom.NumberLiteral;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
+import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.StringLiteral;
@@ -396,15 +399,15 @@ final class JavaExpressionCompletion {
             return declaredOwner(cast.getType().toString(), context).typeName();
         }
         try {
-            if (expression instanceof org.eclipse.jdt.core.dom.ConditionalExpression conditional) {
+            if (expression instanceof ConditionalExpression conditional) {
                 return DebuggerConditionalType.resolve(conditional, context);
             }
-            if (expression instanceof org.eclipse.jdt.core.dom.PrefixExpression prefix) {
-                if (prefix.getOperator() == org.eclipse.jdt.core.dom.PrefixExpression.Operator.NOT) return "boolean";
+            if (expression instanceof PrefixExpression prefix) {
+                if (prefix.getOperator() == PrefixExpression.Operator.NOT) return "boolean";
                 var kind = DebuggerPrimitiveKind.fromTypeName(staticTypeName(prefix.getOperand(), context));
                 return kind == null ? null : DebuggerConditionalType.promote(kind, DebuggerPrimitiveKind.INT);
             }
-            if (expression instanceof org.eclipse.jdt.core.dom.InfixExpression infix) {
+            if (expression instanceof InfixExpression infix) {
                 String left = staticTypeName(infix.getLeftOperand(), context);
                 List<Expression> operands = new ArrayList<>();
                 operands.add(infix.getRightOperand());

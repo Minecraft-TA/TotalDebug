@@ -7,7 +7,9 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CompletionItem;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.completion.CustomCompletionRequestor;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.impls.CompilationUnitImpl;
+import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.tth05.jindex.ClassIndex;
+import org.example.totaldebug.fixture.LaterType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -26,11 +28,11 @@ class SnippetExpressionSupportTest {
     static void initializeClassIndex() throws IOException {
         CompanionClassIndex.set(ClassIndex.fromBytes(List.of(
                 classBytes(Object.class),
-                classBytes(com.github.minecraft_ta.totaldebug.TotalDebug.class),
+                classBytes(TotalDebug.class),
                 classBytes(ExternalCompletionType.class),
                 classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.a.Blocks.class),
                 classBytes(com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks.class),
-                classBytes(org.example.totaldebug.fixture.LaterType.class)
+                classBytes(LaterType.class)
         )));
     }
 
@@ -140,7 +142,7 @@ class SnippetExpressionSupportTest {
 
     @Test
     void mapsJdtImportEditsBackIntoTheVisibleScriptBody() throws Exception {
-        assertImportEditMaps("LaterT", "LaterType", org.example.totaldebug.fixture.LaterType.class.getName());
+        assertImportEditMaps("LaterT", "LaterType", LaterType.class.getName());
         assertImportEditMaps("ExternalComp", "ExternalCompletionType", ExternalCompletionType.class.getName());
     }
 

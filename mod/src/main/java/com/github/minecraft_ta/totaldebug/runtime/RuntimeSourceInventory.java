@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.runtime;
 
 import net.neoforged.fml.ModList;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.module.ResolvedModule;
 import java.net.URI;
@@ -134,7 +135,7 @@ public final class RuntimeSourceInventory {
             return;
         }
         List<Path> classpathSources = new ArrayList<>();
-        for (String entry : classpath.split(java.io.File.pathSeparator)) {
+        for (String entry : classpath.split(File.pathSeparator)) {
             if (!entry.isBlank()) {
                 classpathSources.add(Path.of(entry));
             }

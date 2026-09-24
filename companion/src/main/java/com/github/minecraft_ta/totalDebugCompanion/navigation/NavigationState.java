@@ -24,7 +24,7 @@ public final class NavigationState {
             if (entry == null) return null;
             NavigationTarget target = entry.target();
             Path path = target instanceof NavigationTarget.LocalFile file ? file.path()
-                    : target instanceof NavigationTarget.LocalDirectory directory ? directory.path() : null;
+                    : target instanceof NavigationTarget.LocalDirectory(Path path1) ? path1 : null;
             if (path == null || !path.startsWith(from)) return entry;
             if (to == null) return null;
             Path moved = ScriptFiles.relocated(path, from, to);

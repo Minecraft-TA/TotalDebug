@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import org.eclipse.jdt.core.dom.*;
 
+import java.util.Locale;
+
 /** Checks the complete tree before the interpreter can invoke target code. */
 final class JavaExpressionSupport {
     private JavaExpressionSupport() { }
@@ -36,7 +38,7 @@ final class JavaExpressionSupport {
                         && (!call.typeArguments().isEmpty() || call.getQualifier() != null)) unsupported(value);
                 if (value instanceof TypeLiteral literal && (literal.getType().isPrimitiveType() || literal.getType().isArrayType())) unsupported(value);
                 if (value instanceof NumberLiteral literal) {
-                    String token = literal.getToken().replace("_", "").toLowerCase(java.util.Locale.ROOT);
+                    String token = literal.getToken().replace("_", "").toLowerCase(Locale.ROOT);
                     if (token.startsWith("0x") || token.startsWith("0b")
                             || token.startsWith("0") && token.length() > 1 && !token.contains(".")
                             && !token.contains("e")) unsupported(value);

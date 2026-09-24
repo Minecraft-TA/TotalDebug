@@ -5,6 +5,8 @@ import jdk.jfr.consumer.RecordingFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
+import java.time.Duration;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class RuntimePhaseTest {
@@ -14,7 +16,7 @@ class RuntimePhaseTest {
     void recordsNamedDurationsWithoutControllingTheApplication() throws Exception {
         Path file = directory.resolve("phases.jfr");
         try (var recording = new Recording()) {
-            recording.enable(RuntimePhase.class).withThreshold(java.time.Duration.ZERO);
+            recording.enable(RuntimePhase.class).withThreshold(Duration.ZERO);
             recording.start();
             try (var phase = RuntimePhase.start("test.phase")) {
                 phase.close(); // Closing twice must not duplicate a span.

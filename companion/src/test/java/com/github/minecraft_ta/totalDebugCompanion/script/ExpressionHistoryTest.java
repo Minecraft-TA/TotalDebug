@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,8 +16,8 @@ class ExpressionHistoryTest {
 
     @Test
     void persistsOnlyTheBoundedMostRecentUniqueExpressions() throws Exception {
-        var paths = new com.github.minecraft_ta.totaldebug.storage.InstancePaths(this.temporaryDirectory);
-        var state = com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState.open(paths);
+        var paths = new InstancePaths(this.temporaryDirectory);
+        var state = InstanceState.open(paths);
         ExpressionHistory history = state.expressionHistory();
         for (int index = 0; index < ExpressionHistory.MAX_ENTRIES + 5; index++) {
             history.record(entry("value" + index));
@@ -23,7 +25,7 @@ class ExpressionHistoryTest {
         history.record(entry("value10"));
 
         state.close();
-        var reopened = com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState.open(paths);
+        var reopened = InstanceState.open(paths);
         List<ExpressionHistory.Entry> restored = reopened.expressionHistory().entries();
         reopened.close();
 

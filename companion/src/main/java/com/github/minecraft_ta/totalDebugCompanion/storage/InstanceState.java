@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.storage;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExpressionHistory;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
@@ -232,7 +233,7 @@ public final class InstanceState implements AutoCloseable {
             String condition,
             String hitCondition,
             boolean enabled,
-            com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine.BreakpointAction action
+            DebugEngine.BreakpointAction action
     ) {
         public PersistedBreakpoint {
             if (sourceUri == null || sourceUri.isBlank()) {

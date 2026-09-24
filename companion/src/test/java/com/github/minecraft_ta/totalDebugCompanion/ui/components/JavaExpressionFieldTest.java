@@ -8,7 +8,12 @@ import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import java.awt.event.ActionEvent;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @UiTest
@@ -38,7 +43,7 @@ class JavaExpressionFieldTest {
             JavaExpressionField field = new JavaExpressionField(30);
             field.setExpandable(true);
             new ExpressionCompletionSupport(field);
-            java.util.concurrent.atomic.AtomicInteger evaluations = new java.util.concurrent.atomic.AtomicInteger();
+            AtomicInteger evaluations = new AtomicInteger();
             field.addActionListener(event -> evaluations.incrementAndGet());
             field.setText("1 + 2");
             press(field, "ENTER");
@@ -49,15 +54,15 @@ class JavaExpressionFieldTest {
             assertTrue(field.getText().endsWith("\n"));
             assertEquals(1, evaluations.get());
             press(field, "TAB");
-            assertTrue(!field.getText().substring(field.getText().indexOf('\n') + 1).isEmpty());
+            assertFalse(field.getText().substring(field.getText().indexOf('\n') + 1).isEmpty());
             press(field, "ctrl ENTER");
             assertEquals(2, evaluations.get());
         });
     }
 
     private static void press(JavaExpressionField field, String stroke) {
-        Object binding = field.getInputMap().get(javax.swing.KeyStroke.getKeyStroke(stroke));
-        field.getActionMap().get(binding).actionPerformed(new java.awt.event.ActionEvent(field, 0, stroke));
+        Object binding = field.getInputMap().get(KeyStroke.getKeyStroke(stroke));
+        field.getActionMap().get(binding).actionPerformed(new ActionEvent(field, 0, stroke));
     }
 
     @Test

@@ -11,7 +11,6 @@ import java.awt.Color;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Guards the ServiceLoader wiring. If {@code META-INF/services/com.formdev.flatlaf.FlatDefaultsAddon}
@@ -61,7 +60,7 @@ class CompanionDefaultsAddonTest {
         assertEquals("plain", UIManager.get("SplitPaneDivider.style"));
         assertEquals(UiMetrics.TREE_ROW_HEIGHT, UIManager.get("Tree.rowHeight"));
         assertEquals(UiMetrics.TAB_HEIGHT, UIManager.get("TabbedPane.tabHeight"));
-        assertTrue(UIManager.getInsets("TabbedPane.tabInsets").left == 10);
+        assertEquals(10, UIManager.getInsets("TabbedPane.tabInsets").left);
         assertEquals(
                 UIManager.getColor("Component.accentColor"),
                 UIManager.getColor("CheckBox.icon[filled].selectedBackground")

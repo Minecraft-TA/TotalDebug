@@ -149,7 +149,7 @@ class LazyFileJTreeTest {
         contents.set(List.of(directory("another", List.of()),
                 directory("nested", List.of(new TreeItem("selected.tdscript"))), new TreeItem("new.tdscript")));
         tree.loadItemsForTopLevelItem(scripts);
-        awaitOnEdt(() -> ((LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0)).getChildCount() == 3);
+        awaitOnEdt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0).getChildCount() == 3);
         SwingUtilities.invokeAndWait(() -> {
             assertTrue(tree.isExpanded(selection.getParentPath()), "Expanded folder collapsed during refresh");
             assertEquals(selection, tree.getSelectionPath(), "Refresh moved the selection to a different item");
@@ -181,7 +181,7 @@ class LazyFileJTreeTest {
             });
             items.add(new TreeItem("added"));
             tree.loadItemsForTopLevelItem(other);
-            awaitOnEdt(() -> ((LazyTreeNode) root.getChildAt(1)).getChildCount() == 2);
+            awaitOnEdt(() -> root.getChildAt(1).getChildCount() == 2);
             SwingUtilities.invokeAndWait(() -> assertEquals(placeholder, tree.getSelectionPath()));
         } finally {
             release.countDown();
@@ -240,7 +240,7 @@ class LazyFileJTreeTest {
         contents.set(List.of(new TreeItem("original"), new TreeItem("latest")));
         SwingUtilities.invokeAndWait(() -> tree.loadItemsForTopLevelItem(scripts));
         release.countDown();
-        awaitOnEdt(() -> ((LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0)).getChildCount() == 2);
+        awaitOnEdt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0).getChildCount() == 2);
     }
 
     @Test
@@ -258,7 +258,7 @@ class LazyFileJTreeTest {
         var expanded = tree.getSelectionPath().getParentPath();
         assertTrue(tree.revealItemPath("scripts", List.of("remove.tdscript")).get(3, TimeUnit.SECONDS));
         SwingUtilities.invokeAndWait(() -> { contents.set(List.of(nested)); tree.loadItemsForTopLevelItem(scripts); });
-        awaitOnEdt(() -> ((LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0)).getChildCount() == 1);
+        awaitOnEdt(() -> ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0).getChildCount() == 1);
         SwingUtilities.invokeAndWait(() -> assertTrue(tree.isExpanded(expanded)));
     }
 
@@ -469,7 +469,7 @@ class LazyFileJTreeTest {
         assertEquals(1, tree.getSelectionCount());
         var selection = (LazyTreeNode) tree.getSelectionPath().getLastPathComponent();
         assertEquals("example", selection.getUserObject().getName());
-        assertEquals("second.jar", ((LazyTreeNode) selection.getParent().getParent()).getUserObject().getName());
+        assertEquals("second.jar", selection.getParent().getParent().getUserObject().getName());
         assertTrue(tree.isExpanded(tree.getSelectionPath()));
     }
 
