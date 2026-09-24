@@ -7,11 +7,14 @@ import com.github.minecraft_ta.totalDebugCompanion.mcp.ProjectSwitchJobs;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
+import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.ui.CompanionUi;
 import com.github.minecraft_ta.totaldebug.protocol.CompanionProtocol;
 import com.github.minecraft_ta.totaldebug.protocol.ProjectSelectionRequest;
+import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerHelloMessage;
 import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
@@ -32,6 +35,7 @@ import java.nio.file.Path;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -364,6 +368,35 @@ class CompanionReconnectTest {
             SwingUtilities.invokeAndWait(() -> assertThrows(IllegalStateException.class, app::start));
             assertFalse(Files.exists(config.descriptorFile()));
         }
+    }
+
+    @Test void disconnectWaitsForAdmittedScriptSubmissionBeforeEndingItsObserver() throws Exception {
+        var config = new CompanionLaunchConfiguration(root.resolve("app"));
+        try (var app = new CompanionApplication(config, TOKEN)) {
+            var lifecycle = field(app, "lifecycleLock", Object.class);
+            var runs = field(app, "executionRuns", ExecutionRuns.class);
+            var listener = field(app.session(), "listener", CompanionSession.Listener.class);
+            var ended = new CompletableFuture<Integer>();
+            int id = runs.open(new ExecutionRuns.Observer() {
+                @Override public void result(int runId, ExecutionResult result) { fail("No result expected"); }
+                @Override public void disconnected(int runId, boolean expected) { ended.complete(runId); }
+            });
+            var disconnect = new FutureTask<>(() -> listener.disconnected(app.session().connection()), null);
+            Thread disconnecting = Thread.ofPlatform().unstarted(disconnect);
+            synchronized (lifecycle) {
+                disconnecting.start();
+                await(() -> disconnecting.getState() == Thread.State.BLOCKED);
+                assertFalse(ended.isDone(), "Disconnect must not end a run while compiler admission holds the lifecycle gate");
+            }
+            disconnect.get(5, TimeUnit.SECONDS);
+            assertEquals(id, ended.get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    private static <T> T field(Object owner, String name, Class<T> type) throws ReflectiveOperationException {
+        var field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(owner));
     }
 
     private CompanionProfile profile(String name) throws IOException {

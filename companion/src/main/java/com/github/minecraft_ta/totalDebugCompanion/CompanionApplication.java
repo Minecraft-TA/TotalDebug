@@ -168,10 +168,10 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
 
                 @Override
                 public void disconnected(long connection) {
-                    if (executionRuns != null) executionRuns.disconnected(connection,
-                            closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
-                    scriptCompiler.runtimeDisconnected();
                     synchronized (lifecycleLock) {
+                        if (executionRuns != null) executionRuns.disconnected(connection,
+                                closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
+                        scriptCompiler.runtimeDisconnected();
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
                         else if (launch != null)

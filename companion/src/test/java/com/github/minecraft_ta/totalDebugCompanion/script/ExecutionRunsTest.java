@@ -8,16 +8,24 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,6 +85,67 @@ class ExecutionRunsTest {
             fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
             fixture.runs.disconnectAll(false);
             assertTrue(recorder.events.isEmpty());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "switching", "retired"})
+    void unavailableProjectForgetsTheRun(String state) throws Exception {
+        try (var fixture = new Fixture(true)) {
+            var recorder = new Recorder();
+            int id = fixture.runs.open(recorder);
+            if (state.equals("switching")) fixture.project.beginSwitch();
+            if (state.equals("retired")) fixture.project.retire();
+            assertFalse(fixture.runs.submit(id, state.equals("missing") ? null : fixture.project,
+                    "public class Probe {}", false, ScriptExecutionEnvironment.THREAD));
+            fixture.deliver(id, ExecutionStatus.RUN_COMPLETED);
+            fixture.runs.disconnectAll(false);
+            assertTrue(recorder.events.isEmpty());
+        }
+    }
+
+    @Test void disconnectWhileWaitingForAdmissionCannotSubmitToTheReplacementConnection() throws Exception {
+        Object lifecycle = new Object();
+        var project = new ProjectScope(lifecycle, new CompanionProfile("project", directory, directory), InstanceState.inMemory());
+        var sent = new LinkedBlockingQueue<RunScriptMessage>();
+        try (var session = new CompanionSession("execution-runs-test-token");
+             var snapshot = ScriptCompilationServiceTest.fixture(directory);
+             var compiler = new ScriptCompilationService(sent::add, message -> false);
+             var runs = new ExecutionRuns(session, new ScriptExecutionService(session, compiler, () -> true))) {
+            compiler.bind(snapshot);
+            var field = CompanionSession.class.getDeclaredField("connections");
+            field.setAccessible(true);
+            var connections = (AtomicLong) field.get(session);
+            connections.set(1);
+            var recorder = new Recorder();
+            int id = runs.open(recorder);
+            String source = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return null; } }";
+            var submission = new FutureTask<>(() -> runs.submit(id, project, source, false, ScriptExecutionEnvironment.THREAD));
+            Thread submitter = Thread.ofPlatform().unstarted(submission);
+            synchronized (lifecycle) {
+                submitter.start();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (submitter.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) Thread.sleep(1);
+                assertEquals(Thread.State.BLOCKED, submitter.getState(), "Submission must be waiting at the project gate");
+                runs.disconnected(1, false);
+                compiler.runtimeDisconnected();
+                connections.set(2);
+                compiler.bind(snapshot);
+            }
+            assertFalse(submission.get(5, TimeUnit.SECONDS), "An ended run must not be admitted after reconnect");
+            assertEquals(List.of("disconnected " + id + " false"), recorder.events);
+
+            int replacementId = runs.open(new Recorder());
+            assertTrue(runs.submit(replacementId, project, source, false, ScriptExecutionEnvironment.THREAD));
+            // The single compiler worker processes the old submission first if it was wrongly accepted.
+            RunScriptMessage message = sent.poll(10, TimeUnit.SECONDS);
+            assertNotNull(message, "A fresh run must still execute on the replacement connection");
+            assertEquals(replacementId, message.scriptId());
+            compiler.compile("public class Fence {}", "Fence").get(10, TimeUnit.SECONDS);
+            assertTrue(sent.isEmpty(), "No untracked execution may be emitted");
+        } finally {
+            project.retire();
+            project.close();
         }
     }
 

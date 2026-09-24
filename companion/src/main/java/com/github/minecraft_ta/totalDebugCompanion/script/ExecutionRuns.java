@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
+import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope.InactiveProjectException;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -59,15 +60,27 @@ public final class ExecutionRuns implements AutoCloseable {
     /** Returns false, and forgets the run, when the current connection did not accept it. */
     public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
                           ScriptExecutionEnvironment environment) {
-        Run run = this.runs.computeIfPresent(id, (key, opened) -> new Run(opened.observer(), this.session.connection()));
-        if (run == null) return false;
-        boolean sent = false;
-        try {
-            sent = this.scripts.run(project, id, source, serverSide, environment, failure -> failed(id, failure));
-        } finally {
-            if (!sent) this.runs.remove(id, run);
+        if (project == null) {
+            discard(id);
+            return false;
         }
-        return sent;
+        try {
+            // Disconnect cleanup uses this same gate. A run cannot end between registration and compiler admission.
+            return project.admit(() -> {
+                Run run = this.runs.computeIfPresent(id, (key, opened) -> new Run(opened.observer(), this.session.connection()));
+                if (run == null) return false;
+                boolean sent = false;
+                try {
+                    sent = this.scripts.run(project, id, source, serverSide, environment, failure -> failed(id, failure));
+                    return sent;
+                } finally {
+                    if (!sent) this.runs.remove(id, run);
+                }
+            });
+        } catch (InactiveProjectException ignored) {
+            discard(id);
+            return false;
+        }
     }
 
     public boolean stop(int id) {
