@@ -239,18 +239,19 @@ public final class EvaluateExpressionWindow extends JDialog {
             showFailure(exception.getMessage());
             return;
         }
-        this.history.record(new ExpressionHistory.Entry(
-                requested,
-                selectedSide,
-                this.expressionSupport.imports(), JavaSnippetSource.detectMode(requested)
-        ));
-        this.historyIndex = -1;
         long revision = ++this.executionRevision;
         setRunning(true);
         this.status.setText("Compiling…");
         clearResults();
         this.activeExecution.completion().whenComplete((outcome, failure) ->
                 SwingUtilities.invokeLater(() -> finish(revision, outcome, failure)));
+        // The submitted run is tracked before history persistence can fail.
+        this.history.record(new ExpressionHistory.Entry(
+                requested,
+                selectedSide,
+                this.expressionSupport.imports(), JavaSnippetSource.detectMode(requested)
+        ));
+        this.historyIndex = -1;
     }
 
     private void evaluatePaused(String requested) {
@@ -273,10 +274,6 @@ public final class EvaluateExpressionWindow extends JDialog {
                     if (startFailure != null) { setRunning(false); showFailure(startFailure.getMessage()); return; }
                     this.pausedExecution = operation;
                     if (this.cancelPending) operation.cancel();
-                    this.history.record(new ExpressionHistory.Entry(requested,
-                            SnippetExecutionService.Side.CLIENT, this.expressionSupport.imports(),
-                            JavaSnippetSource.detectMode(requested)));
-                    this.historyIndex = -1;
                     operation.completion().whenComplete((value, failure) -> SwingUtilities.invokeLater(() -> {
                         this.pausedExecution = null;
                         setRunning(false);
@@ -290,6 +287,10 @@ public final class EvaluateExpressionWindow extends JDialog {
                                 controller, pauseId, requested, value));
                         this.status.setText("Evaluation completed in " + frame.name());
                     }));
+                    this.history.record(new ExpressionHistory.Entry(requested,
+                            SnippetExecutionService.Side.CLIENT, this.expressionSupport.imports(),
+                            JavaSnippetSource.detectMode(requested)));
+                    this.historyIndex = -1;
                 }));
     }
 

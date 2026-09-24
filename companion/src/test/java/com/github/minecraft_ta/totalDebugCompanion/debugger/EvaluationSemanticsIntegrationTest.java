@@ -186,6 +186,21 @@ class EvaluationSemanticsIntegrationTest {
     }
 
     @Test
+    void overridingFinallyReturnsKeepTheirOwnResultKind() throws Exception {
+        withFrame((engine, frame) -> {
+            var boxed = engine.evaluate("try { return 1; } finally { return Integer.valueOf(2); }", frame.id()).get();
+            assertEquals("java.lang.Integer", boxed.type());
+            assertTrue(boxed.variablesReference() > 0);
+            var primitive = engine.evaluate("try { return Integer.valueOf(1); } finally { return 2; }", frame.id()).get();
+            assertEquals("int", primitive.type());
+            assertEquals("2", primitive.value());
+            var nested = engine.evaluate(
+                    "try { try { return 1; } finally { return null; } } finally { return Long.valueOf(3); }", frame.id()).get();
+            assertEquals("java.lang.Long", nested.type());
+        });
+    }
+
+    @Test
     void breakpointActionWritesLocalsAndStaysPausedByDefault() throws Exception {
         try (DebuggerTestHarness harness = DebuggerTestHarness.launch(EvaluationSemanticsDebuggee.class)) {
             harness.setBreakpoints(new DebugEngine.SourceBreakpoint(harness.lineContaining("EVALUATION_STOP"))

@@ -105,6 +105,34 @@ class CompanionDecompilationServiceTest {
     }
 
     @Test
+    void damagedCacheFilesAreRegeneratedInsteadOfFailingEveryLoad() throws Exception {
+        byte[] bytes = classBytes(CacheFixture.class);
+        Path classes = writeClass(CacheFixture.class, bytes);
+        try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, bytes)))) {
+            Path output;
+            try (var service = service(bytecodeSource(List.of(classes), index), new AtomicInteger(), "first")) {
+                output = service.decompile(CacheFixture.class.getName()).join();
+            }
+            Files.delete(output.resolveSibling(CacheFixture.class.getName() + ".debug"));
+
+            AtomicInteger pairRuns = new AtomicInteger();
+            try (var service = service(bytecodeSource(List.of(classes), index), pairRuns, "second")) {
+                var source = service.load(CacheFixture.class.getName()).get(5, TimeUnit.SECONDS);
+                assertTrue(source.document().contents().contains("second"));
+            }
+            assertEquals(1, pairRuns.get());
+
+            Files.writeString(output.resolveSibling("manifest.json"), "{ damaged");
+            AtomicInteger manifestRuns = new AtomicInteger();
+            try (var service = service(bytecodeSource(List.of(classes), index), manifestRuns, "third")) {
+                var source = service.load(CacheFixture.class.getName()).get(5, TimeUnit.SECONDS);
+                assertTrue(source.document().contents().contains("third"));
+            }
+            assertEquals(1, manifestRuns.get());
+        }
+    }
+
+    @Test
     void changingRuntimeInvalidatesTheVisibleDecompiledSources() throws Exception {
         byte[] bytes = classBytes(CacheFixture.class);
         Path classes = writeClass(CacheFixture.class, bytes);
