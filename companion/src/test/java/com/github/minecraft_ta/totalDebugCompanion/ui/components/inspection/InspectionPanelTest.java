@@ -7,8 +7,10 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +32,9 @@ class InspectionPanelTest {
     private static final SubjectIdentity FURNACE = new SubjectIdentity(SubjectIdentity.Kind.BLOCK,
             "minecraft:furnace", "Furnace", "Minecraft", List.of(), "minecraft:furnace");
     private static final SubjectIdentity CHEST = new SubjectIdentity(SubjectIdentity.Kind.BLOCK,
-            "minecraft:chest", "Chest", "Minecraft", List.of(), "minecraft:chest");
+            "minecraft:chest", "Chest", "Minecraft",
+            List.of(new SubjectIdentity.ClassLink("Block", "net.minecraft.world.level.block.ChestBlock")),
+            "minecraft:chest");
     private static final InspectSubjectPayload SUBJECT = new InspectSubjectPayload("game-session",
             "block minecraft:overworld 12 64 -3", FURNACE, "minecraft:item/furnace", Map.of());
     private static final List<FactSection> ITEMS = List.of(
@@ -63,8 +67,8 @@ class InspectionPanelTest {
             panel.present(Side.SERVER, ExecutionResult.failed("", null, "The chunk is not loaded"), null, t -> t);
 
             assertFalse(problemCard(panel).isVisible(), "the previous read stays on screen");
-            assertTrue(labels(panel).stream().anyMatch(text -> text.startsWith("Last read ")
-                    && text.endsWith("The chunk is not loaded")), labels(panel)::toString);
+            assertTrue(labels(panel).contains("Showing the previous read. This one failed: The chunk is not loaded"),
+                    labels(panel)::toString);
             assertTrue(labels(panel).contains("Items"), labels(panel)::toString);
         });
     }
@@ -78,8 +82,8 @@ class InspectionPanelTest {
             List<String> labels = labels(panel);
             assertTrue(labels.contains("Chest"), labels::toString);
             assertTrue(labels.stream().anyMatch(text -> text.startsWith("minecraft:chest")), labels::toString);
-            assertTrue(labels.stream().anyMatch(text -> text.startsWith("Was Furnace (minecraft:furnace) until ")),
-                    labels::toString);
+            assertTrue(labels.contains("Replaced: previously Furnace (minecraft:furnace)"), labels::toString);
+            assertTrue(labels.contains("ChestBlock"), "the identity section links the current classes");
         });
     }
 
@@ -89,8 +93,24 @@ class InspectionPanelTest {
             panel.present(Side.SERVER, completed(ITEMS).withIdentity(FURNACE), null, text -> text);
 
             assertEquals("Furnace", panel.title());
-            assertFalse(labels(panel).stream().anyMatch(text -> text.startsWith("Was ")), labels(panel)::toString);
+            assertFalse(labels(panel).stream().anyMatch(text -> text.startsWith("Replaced")),
+                    labels(panel)::toString);
         });
+    }
+
+    @Test
+    void theIdentitySectionNamesWhereTheSubjectIsAndLinksItsClasses() {
+        FactSection section = InspectionPanel.identitySection(CHEST,
+                SubjectRef.parse("block minecraft:overworld 12 64 -3"));
+
+        assertEquals("Block", section.title());
+        assertEquals(List.of(
+                Fact.text("ID", "minecraft:chest"),
+                Fact.text("Mod", "Minecraft"),
+                Fact.text("Position", "12, 64, -3 in minecraft:overworld"),
+                Fact.text("Block", "ChestBlock")
+                        .withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"))
+        ), section.facts());
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionServic
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
@@ -37,6 +38,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -61,6 +63,7 @@ final class ToolsPanel extends JPanel {
     private final Supplier<ScriptFiles> scripts;
     private final ItemIconService icons;
     private final Consumer<NavigationTarget> navigator;
+    private final FactsPanel.Actions actions;
     private final Runnable refreshInspection;
     private final BiConsumer<String, List<FactSection>> reported;
     private final Set<Path> chosen = new LinkedHashSet<>();
@@ -77,6 +80,7 @@ final class ToolsPanel extends JPanel {
             Supplier<ScriptFiles> scripts,
             ItemIconService icons,
             Consumer<NavigationTarget> navigator,
+            FactsPanel.Actions actions,
             Runnable refreshInspection,
             BiConsumer<String, List<FactSection>> reported
     ) {
@@ -86,6 +90,7 @@ final class ToolsPanel extends JPanel {
         this.scripts = scripts;
         this.icons = icons;
         this.navigator = navigator;
+        this.actions = actions;
         this.refreshInspection = refreshInspection;
         this.reported = reported;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -176,6 +181,7 @@ final class ToolsPanel extends JPanel {
     /** One tool's header, status, sections and first output line. */
     private final class ToolView {
         private final String name;
+        private final Set<String> collapsed = new HashSet<>();
         private final JPanel section = new JPanel();
         private final JLabel status = new JLabel("Running…");
         private final JLabel output = new JLabel();
@@ -205,7 +211,8 @@ final class ToolsPanel extends JPanel {
             this.status.setText(outcome.facts().isEmpty() ? "No sections reported" : "");
             ToolsPanel.this.reported.accept(this.name, outcome.facts());
             if (this.facts == null || !this.facts.update(outcome.facts())) {
-                FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons);
+                FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons, toolActions(),
+                        this.collapsed);
                 rebuilt.setBorder(null);
                 if (this.facts != null) this.section.remove(this.facts);
                 this.facts = rebuilt;
@@ -217,6 +224,21 @@ final class ToolsPanel extends JPanel {
             this.output.setVisible(!logs.isEmpty());
             this.section.revalidate();
             this.section.repaint();
+        }
+
+        /** Class links open as for built-in facts; data opens under the tool's name in the data view. */
+        private FactsPanel.Actions toolActions() {
+            return new FactsPanel.Actions() {
+                @Override
+                public void open(FactLink link) {
+                    ToolsPanel.this.actions.open(link);
+                }
+
+                @Override
+                public void openData(String section, String label) {
+                    ToolsPanel.this.actions.openData(ToolView.this.name + " › " + section, label);
+                }
+            };
         }
 
         private void showFailure(String message) {

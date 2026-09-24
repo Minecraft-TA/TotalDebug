@@ -1,11 +1,24 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
-/** Generated read-only text, such as SNBT, in the editor's font and colors, with search. */
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
+import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
+
+/**
+ * Generated read-only text, such as SNBT, in the editor's font and colors, with search. Keys that a syntax style marks
+ * as attributes use the field color.
+ */
 public final class ReadOnlyTextPanel extends AbstractTextViewPanel {
-    public ReadOnlyTextPanel() {
+    public ReadOnlyTextPanel(String syntaxStyle) {
         super();
         this.editorPane.setEditable(false);
+        setSyntaxStyle(syntaxStyle);
         enableSearch();
+    }
+
+    @Override
+    protected void applyAdditionalSyntaxColors(SyntaxScheme scheme, EditorPalette palette) {
+        scheme.getStyle(TokenTypes.MARKUP_TAG_ATTRIBUTE).foreground = palette.field();
     }
 
     /** Replaces the text, keeping the caret where it was as far as the new text allows. */

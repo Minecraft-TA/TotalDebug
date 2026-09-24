@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 import net.minecraft.nbt.ByteArrayTag;
@@ -28,6 +29,20 @@ class ScriptFactsTest {
         assertEquals("Block entity", fact.label());
         assertTrue(fact.data().complete());
         assertEquals(root.toString(), NbtData.snbt(fact.data().tag()));
+    }
+
+    @Test
+    void classesAreReportedByNameAndLinkToTheirSource() {
+        ScriptFacts facts = new ScriptFacts(text -> { });
+
+        facts.section("Capabilities").classLink("neoforge:item_handler", ArrayList.class)
+                .classLink("anonymous", new Object() { }.getClass());
+
+        List<Fact> reported = facts.snapshot().getFirst().facts();
+        assertEquals(Fact.text("neoforge:item_handler", "ArrayList")
+                .withLink(FactLink.toClass("java.util.ArrayList")), reported.get(0));
+        assertEquals("ScriptFactsTest$1", reported.get(1).value());
+        assertEquals(ScriptFactsTest.class.getName() + "$1", reported.get(1).link().target());
     }
 
     @Test

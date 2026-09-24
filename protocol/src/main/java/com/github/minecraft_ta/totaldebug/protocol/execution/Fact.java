@@ -14,6 +14,7 @@ import java.util.Objects;
  *     failure remain.</li>
  *     <li>{@code DATA}: the exact NBT {@code data} labelled {@code label}, such as a block entity's saved data.</li>
  * </ul>
+ * Any fact may carry a {@code link}, such as the class behind a text value.
  */
 public record Fact(
         Kind kind,
@@ -23,7 +24,8 @@ public record Fact(
         long amount,
         long capacity,
         String unit,
-        FactData data
+        FactData data,
+        FactLink link
 ) {
     public static final int MAX_TEXT_LENGTH = 256;
 
@@ -51,7 +53,13 @@ public record Fact(
     }
 
     public Fact(Kind kind, String label, String value, String id, long amount, long capacity, String unit) {
-        this(kind, label, value, id, amount, capacity, unit, null);
+        this(kind, label, value, id, amount, capacity, unit, null, null);
+    }
+
+    /** This fact leading to {@code target} when clicked. */
+    public Fact withLink(FactLink target) {
+        return new Fact(this.kind, this.label, this.value, this.id, this.amount, this.capacity, this.unit, this.data,
+                target);
     }
 
     public static Fact text(String label, String value) {
@@ -75,7 +83,7 @@ public record Fact(
     }
 
     public static Fact data(String label, FactData data) {
-        return new Fact(Kind.DATA, label, "", "", 0, 0, "", Objects.requireNonNull(data, "data"));
+        return new Fact(Kind.DATA, label, "", "", 0, 0, "", Objects.requireNonNull(data, "data"), null);
     }
 
     /** Shortens text to the transport limit; decoding rejects anything longer. */

@@ -59,7 +59,7 @@ public final class CapabilityReader {
         if (handler == null) {
             return 0;
         }
-        section.text(capability.name().toString(), handler.getClass().getName());
+        section.classLink(capability.name().toString(), handler.getClass());
         return 1;
     }
 }

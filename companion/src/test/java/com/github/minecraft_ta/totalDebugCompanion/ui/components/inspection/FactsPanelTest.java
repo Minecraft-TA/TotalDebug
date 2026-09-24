@@ -32,10 +32,10 @@ class FactsPanelTest {
             SwingUtilities.invokeAndWait(() -> collect(new FactsPanel(sections, icons), labels, bars));
         }
 
-        assertTrue(labels.contains("Items  (28 more not shown)"), labels::toString);
+        assertTrue(labels.contains("28 more not shown"), labels::toString);
         assertTrue(labels.contains("Accepts energy"), labels::toString);
         assertEquals(1, bars.size());
-        assertTrue(bars.getFirst().endsWith(" FE"), bars::toString);
+        assertTrue(bars.getFirst().endsWith(" FE 50%"), bars::toString);
     }
 
     @Test
@@ -65,7 +65,7 @@ class FactsPanelTest {
     private static void collect(Container container, List<String> labels, List<String> bars) {
         for (Component child : container.getComponents()) {
             if (child instanceof JLabel label) labels.add(label.getText());
-            if (child instanceof AmountBar bar) bars.add(bar.text());
+            if (child instanceof FactsPanel.AmountRow bar) bars.add(bar.text());
             if (child instanceof Container nested) collect(nested, labels, bars);
         }
     }

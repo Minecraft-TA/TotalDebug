@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.script;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.Tag;
@@ -90,6 +91,15 @@ public final class ScriptFacts {
             String message = failure.getMessage();
             String summary = failure.getClass().getSimpleName() + (message == null ? "" : ": " + message);
             add(Fact.problem(Fact.clip(label), Fact.clip(summary)));
+            return this;
+        }
+
+        /** Reports a class by its simple name; Companion opens its source when the value is clicked. */
+        public Section classLink(String label, Class<?> type) {
+            String name = type.getName();
+            String simple = type.getSimpleName().isEmpty() ? name.substring(name.lastIndexOf('.') + 1)
+                    : type.getSimpleName();
+            add(Fact.text(Fact.clip(label), Fact.clip(simple)).withLink(FactLink.toClass(name)));
             return this;
         }
 

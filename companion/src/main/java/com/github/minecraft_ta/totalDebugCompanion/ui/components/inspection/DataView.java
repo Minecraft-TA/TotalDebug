@@ -1,11 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.AbstractTextViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ReadOnlyTextPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearchTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
@@ -28,8 +30,6 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.UIManager;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;
@@ -54,80 +54,62 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * The exact data of a read, such as block entity NBT, as a tree-table of key, type and value, or as SNBT text. The
- * filter keeps matching entries and the entries leading to them. Copying always yields Minecraft's own SNBT for the
- * entry; entries that were not transferred completely cannot be copied as values. A newer read keeps expansion,
- * selection and the scroll position by entry path and marks the values that changed.
+ * The exact data of a read, such as block entity NBT, as a tree-table of key, type and value, or as SNBT text. Typing
+ * searches every entry, including collapsed ones, and reveals the match. Copying always yields Minecraft's own SNBT
+ * for the entry; entries that were not transferred completely cannot be copied as values. A newer read keeps
+ * expansion, selection and the scroll position by entry path and marks the values that changed.
  */
 final class DataView extends JPanel {
     private static final String TREE_CARD = "tree";
     private static final String TEXT_CARD = "text";
     private static final int INDENT = 16;
 
-    private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
     private final JToggleButton treeMode = new JToggleButton("Tree");
     private final JToggleButton textMode = new JToggleButton("SNBT");
     private final RowsModel model = new RowsModel();
     private final JTable table = new JTable(this.model);
     private final JScrollPane tableScroll = new JScrollPane(this.table);
     private final JLabel textHeading = new JLabel();
-    private final ReadOnlyTextPanel text = new ReadOnlyTextPanel();
+    private final ReadOnlyTextPanel text = new ReadOnlyTextPanel(FileTypeResolver.SYNTAX_STYLE_SNBT);
     private final JPanel cards = new JPanel(new CardLayout());
     private final Set<String> toggled = new HashSet<>();
     private final Set<String> changed = new HashSet<>();
+    private final EntrySearch search = new EntrySearch();
     private List<DataRows.Decoded> roots = List.of();
     private Map<String, String> previousValues = Map.of();
     private List<DataRows.Row> rows = List.of();
+    private List<DataRows.Row> entries;
 
     DataView() {
         super(new BorderLayout());
-        this.filter.putClientProperty("JTextField.placeholderText", "Filter keys and values");
-        this.filter.putClientProperty("JTextField.showClearButton", true);
-        this.filter.setColumns(28);
-        this.filter.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent event) { showRows(); }
-            @Override public void removeUpdate(DocumentEvent event) { showRows(); }
-            @Override public void changedUpdate(DocumentEvent event) { showRows(); }
-        });
-        this.filter.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "clearFilter");
-        this.filter.getActionMap().put("clearFilter", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent event) { DataView.this.filter.setText(""); }
-        });
-
         ButtonGroup modes = new ButtonGroup();
         modes.add(this.treeMode);
         modes.add(this.textMode);
         this.treeMode.setSelected(true);
-        this.treeMode.putClientProperty("JButton.buttonType", "tab");
-        this.textMode.putClientProperty("JButton.buttonType", "tab");
-        this.treeMode.setToolTipText("Entries as a tree with their types");
-        this.textMode.setToolTipText("The selected entry's root as indented SNBT");
-        this.treeMode.addActionListener(event -> showMode());
-        this.textMode.addActionListener(event -> showMode());
-
-        JPanel bar = new JPanel(new BorderLayout(8, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
-        bar.add(this.filter, BorderLayout.WEST);
-        JPanel modeButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        modeButtons.add(this.treeMode);
-        modeButtons.add(this.textMode);
-        bar.add(modeButtons, BorderLayout.EAST);
+        for (JToggleButton mode : List.of(this.treeMode, this.textMode)) {
+            mode.putClientProperty("JButton.buttonType", "tab");
+            mode.addActionListener(event -> showMode());
+        }
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        bar.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10));
+        bar.add(this.treeMode);
+        bar.add(this.textMode);
         add(bar, BorderLayout.NORTH);
 
         configureTable();
         this.tableScroll.setBorder(BorderFactory.createEmptyBorder());
         JPanel textCard = new JPanel(new BorderLayout());
-        this.textHeading.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        this.textHeading.setBorder(BorderFactory.createEmptyBorder(4, 10, 6, 10));
         textCard.add(this.textHeading, BorderLayout.NORTH);
         textCard.add(this.text, BorderLayout.CENTER);
         this.cards.add(this.tableScroll, TREE_CARD);
         this.cards.add(textCard, TEXT_CARD);
         add(this.cards, BorderLayout.CENTER);
+        SpeedSearch.install(this.search);
     }
 
     /** Shows the data of a newer read, keeping expansion, selection and scroll position by entry. */
@@ -136,7 +118,7 @@ final class DataView extends JPanel {
         for (DataRows.Root root : next) {
             decoded.add(DataRows.Decoded.of(root));
         }
-        Map<String, String> values = allValues(decoded);
+        Map<String, String> values = leafValues(decoded);
         this.changed.clear();
         if (!this.previousValues.isEmpty()) {
             values.forEach((key, value) -> {
@@ -146,13 +128,21 @@ final class DataView extends JPanel {
         }
         this.previousValues = values;
         this.roots = List.copyOf(decoded);
+        this.entries = null;
         showRows();
         if (this.textMode.isSelected()) showText();
+        this.search.contentChanged();
     }
 
-    /** Whether the read reported any data. */
-    boolean hasData() {
-        return !this.roots.isEmpty();
+    /** Shows the tree and selects the root named {@code name}, as reported by {@link DataRows.Root#name()}. */
+    void reveal(String name) {
+        this.treeMode.doClick();
+        for (int index = 0; index < this.rows.size(); index++) {
+            if (this.rows.get(index).depth() == 0 && this.rows.get(index).name().equals(name)) {
+                select(index);
+                return;
+            }
+        }
     }
 
     void dispose() {
@@ -167,49 +157,31 @@ final class DataView extends JPanel {
         return this.table;
     }
 
-    void setFilter(String text) {
-        this.filter.setText(text);
+    SpeedSearchTarget search() {
+        return this.search;
     }
 
     /** Expands or collapses the entry in {@code row}. */
     void toggle(int row) {
         DataRows.Row entry = this.rows.get(row);
-        if (!entry.expandable() || !this.filter.getText().isBlank()) return;
+        if (!entry.expandable()) return;
         if (!this.toggled.remove(entry.key())) this.toggled.add(entry.key());
         showRows();
     }
 
-    /** The complete SNBT of every leaf and entry, keyed by row key, to find the values a newer read changed. */
-    private static Map<String, String> allValues(List<DataRows.Decoded> roots) {
+    /** The SNBT of every single value, keyed by row key, to find the values a newer read changed. */
+    private static Map<String, String> leafValues(List<DataRows.Decoded> roots) {
         Map<String, String> values = new HashMap<>();
-        for (DataRows.Decoded root : roots) {
-            if (root.tag() != null) collect(root, root.tag(), new ArrayList<>(), values);
+        for (DataRows.Row row : DataRows.all(roots)) {
+            if (row.kind() == DataRows.Kind.ENTRY && !row.expandable()) values.put(row.key(), row.value());
         }
         return values;
-    }
-
-    private static void collect(DataRows.Decoded root, NbtData.Tag tag, List<Object> path, Map<String, String> values) {
-        switch (tag) {
-            case NbtData.CompoundTag compound -> compound.entries().forEach((key, child) -> {
-                path.add(key);
-                collect(root, child, path, values);
-                path.removeLast();
-            });
-            case NbtData.ListTag list -> {
-                for (int index = 0; index < list.items().size(); index++) {
-                    path.add(index);
-                    collect(root, list.items().get(index), path, values);
-                    path.removeLast();
-                }
-            }
-            default -> values.put(DataRows.key(root.root(), path), NbtData.snbt(tag));
-        }
     }
 
     private void showRows() {
         String selected = selectedKey();
         Anchor anchor = anchor();
-        this.rows = DataRows.visible(this.roots, this.toggled, this.filter.getText());
+        this.rows = DataRows.visible(this.roots, this.toggled);
         this.model.fireTableDataChanged();
         restore(selected, anchor);
     }
@@ -251,6 +223,11 @@ final class DataView extends JPanel {
         return -1;
     }
 
+    private void select(int row) {
+        this.table.getSelectionModel().setSelectionInterval(row, row);
+        this.table.scrollRectToVisible(this.table.getCellRect(row, 0, true));
+    }
+
     private void showMode() {
         ((CardLayout) this.cards.getLayout()).show(this.cards, this.textMode.isSelected() ? TEXT_CARD : TREE_CARD);
         if (this.textMode.isSelected()) showText();
@@ -260,6 +237,7 @@ final class DataView extends JPanel {
     private void showText() {
         int row = this.table.getSelectedRow();
         int root = row >= 0 && row < this.rows.size() ? this.rows.get(row).root() : 0;
+        this.textHeading.setIcon(null);
         if (root >= this.roots.size()) {
             this.textHeading.setText("No data");
             this.text.setContent("");
@@ -267,13 +245,14 @@ final class DataView extends JPanel {
         }
         DataRows.Decoded decoded = this.roots.get(root);
         if (decoded.tag() == null) {
-            this.textHeading.setText(decoded.root().name() + "  ·  " + decoded.problem());
+            this.textHeading.setIcon(Icons.ERROR);
+            this.textHeading.setText(decoded.root().name() + ": " + decoded.problem());
             this.text.setContent("");
             return;
         }
         int omitted = DataRows.omittedBelow(decoded.root().data(), "");
-        this.textHeading.setText(decoded.root().name() + (omitted > 0
-                ? "  ·  Incomplete: " + omitted + " entries were not transferred and are missing below" : ""));
+        this.textHeading.setText(omitted > 0 ? decoded.root().name() + ": incomplete, " + omitted
+                + " entries were not transferred" : decoded.root().name());
         this.textHeading.setIcon(omitted > 0 ? Icons.WARNING : null);
         this.text.setContent(NbtData.prettySnbt(decoded.tag()));
     }
@@ -323,15 +302,10 @@ final class DataView extends JPanel {
             }
             for (int parent = row - 1; parent >= 0; parent--) {
                 if (this.rows.get(parent).depth() < entry.depth()) {
-                    this.table.getSelectionModel().setSelectionInterval(parent, parent);
-                    this.table.scrollRectToVisible(this.table.getCellRect(parent, 0, true));
+                    select(parent);
                     return;
                 }
             }
-        });
-        bindKey(KeyEvent.VK_ENTER, "toggleEntry", () -> {
-            int row = this.table.getSelectedRow();
-            if (row >= 0) toggle(row);
         });
         ContextMenus.installTable(this.table, this::menu);
     }
@@ -341,19 +315,6 @@ final class DataView extends JPanel {
         this.table.getActionMap().put(name, new AbstractAction() {
             @Override public void actionPerformed(ActionEvent event) { action.run(); }
         });
-    }
-
-    /** Where each filter term occurs in {@code text}, ignoring case. */
-    static List<int[]> matchRanges(String text, String filter) {
-        List<int[]> ranges = new ArrayList<>();
-        String lower = text.toLowerCase(Locale.ROOT);
-        for (String term : filter.toLowerCase(Locale.ROOT).split("\\s+")) {
-            if (term.isEmpty()) continue;
-            for (int at = lower.indexOf(term); at >= 0; at = lower.indexOf(term, at + term.length())) {
-                ranges.add(new int[]{at, at + term.length()});
-            }
-        }
-        return ranges;
     }
 
     private static int chevronRight(DataRows.Row row) {
@@ -384,6 +345,61 @@ final class DataView extends JPanel {
         return menu;
     }
 
+    /** Typing searches all entries, collapsed ones included; selecting a match expands the entries above it. */
+    private final class EntrySearch implements SpeedSearchTarget {
+        private final List<Runnable> listeners = new ArrayList<>();
+
+        private List<DataRows.Row> entries() {
+            if (DataView.this.entries == null) {
+                DataView.this.entries = DataRows.all(DataView.this.roots);
+            }
+            return DataView.this.entries;
+        }
+
+        @Override public JComponent component() { return DataView.this.table; }
+
+        @Override public int size() { return entries().size(); }
+
+        @Override
+        public String textAt(int index) {
+            DataRows.Row entry = entries().get(index);
+            return entry.expandable() ? entry.name() : entry.name() + " " + entry.value();
+        }
+
+        @Override
+        public int selectedIndex() {
+            String key = selectedKey();
+            if (key == null) return -1;
+            List<DataRows.Row> all = entries();
+            for (int index = 0; index < all.size(); index++) {
+                if (all.get(index).key().equals(key)) return index;
+            }
+            return -1;
+        }
+
+        @Override
+        public void select(int index) {
+            DataRows.Row entry = entries().get(index);
+            DataRows.Root root = DataView.this.roots.get(entry.root()).root();
+            for (String ancestor : DataRows.ancestorKeys(root, entry)) {
+                boolean rootEntry = ancestor.equals(DataRows.key(root, List.of()));
+                if (rootEntry) DataView.this.toggled.remove(ancestor);
+                else DataView.this.toggled.add(ancestor);
+            }
+            showRows();
+            int row = indexOf(entry.key());
+            if (row >= 0) DataView.this.select(row);
+        }
+
+        @Override public void installContentListener(Runnable listener) { this.listeners.add(listener); }
+
+        @Override public void dispose() { this.listeners.clear(); }
+
+        private void contentChanged() {
+            this.listeners.forEach(Runnable::run);
+        }
+    }
+
     private final class RowsModel extends AbstractTableModel {
         private static final String[] COLUMNS = {"Key", "Type", "Value"};
 
@@ -393,18 +409,17 @@ final class DataView extends JPanel {
 
         @Override public String getColumnName(int column) { return COLUMNS[column]; }
 
-        @Override
-        public Object getValueAt(int row, int column) {
-            return DataView.this.rows.get(row);
-        }
+        @Override public Object getValueAt(int row, int column) { return DataView.this.rows.get(row); }
     }
 
+    /** Cell renderer that marks the text matching the speed search. */
     private abstract class RowRenderer extends DefaultTableCellRenderer {
         private boolean highlight;
 
         @Override
         protected void paintComponent(Graphics graphics) {
-            List<int[]> matches = this.highlight ? matchRanges(getText(), DataView.this.filter.getText()) : List.of();
+            List<SpeedSearch.MatchRange> matches = this.highlight
+                    ? SpeedSearch.matchingRanges(DataView.this.table, getText()) : List.of();
             if (matches.isEmpty()) {
                 super.paintComponent(graphics);
                 return;
@@ -423,9 +438,9 @@ final class DataView extends JPanel {
                 // Values keep their syntax colors, so their matches are marked more lightly.
                 g.setColor(this instanceof ValueRenderer
                         ? new Color(match.getRed(), match.getGreen(), match.getBlue(), 110) : match);
-                for (int[] range : matches) {
-                    int start = x + metrics.stringWidth(getText().substring(0, range[0]));
-                    int width = metrics.stringWidth(getText().substring(range[0], range[1]));
+                for (SpeedSearch.MatchRange range : matches) {
+                    int start = x + metrics.stringWidth(getText().substring(0, range.start()));
+                    int width = metrics.stringWidth(getText().substring(range.start(), range.end()));
                     g.fillRoundRect(start - 1, y, width + 2, metrics.getHeight(), 4, 4);
                 }
             } finally {
@@ -439,11 +454,14 @@ final class DataView extends JPanel {
         @Override
         public Component getTableCellRendererComponent(
                 JTable table, Object value, boolean selected, boolean focused, int row, int column) {
+            // Colors set on this renderer become its defaults; reset them so one row's colors never carry over.
+            setForeground(null);
+            setBackground(null);
             super.getTableCellRendererComponent(table, "", selected, false, row, column);
             DataRows.Row entry = (DataRows.Row) value;
             setIcon(null);
             setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
-            this.highlight = column != 1 && !selected;
+            this.highlight = column != 1;
             configure(entry, selected);
             return this;
         }
@@ -465,10 +483,13 @@ final class DataView extends JPanel {
             int indent = 4 + row.depth() * INDENT + (chevron == null ? INDENT : 0);
             setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 6));
             setText(row.name());
-            setFont(DataView.this.table.getFont().deriveFont(row.depth() == 0 ? Font.BOLD : Font.PLAIN));
+            Font font = DataView.this.table.getFont();
+            setFont(row.depth() == 0 ? font.deriveFont(Font.BOLD) : font);
             if (row.kind() != DataRows.Kind.ENTRY) {
                 setIcon(row.kind() == DataRows.Kind.OMITTED ? null : Icons.ERROR);
                 setForeground(muted(selected));
+            } else if (!selected && row.depth() > 0) {
+                setForeground(row.name().startsWith("[") ? ThemeColors.mutedText() : ThemeManager.palette().field());
             }
         }
     }

@@ -37,12 +37,12 @@ class LiveUpdateTest {
         try (ItemIconService icons = new ItemIconService()) {
             SwingUtilities.invokeAndWait(() -> {
                 FactsPanel panel = new FactsPanel(read(10, "true", 5), icons);
-                AmountBar bar = first(panel, AmountBar.class);
+                FactsPanel.AmountRow bar = first(panel, FactsPanel.AmountRow.class);
 
                 assertTrue(panel.update(read(25, "true", 5)));
 
-                assertSame(bar, first(panel, AmountBar.class));
-                assertEquals("25 / 100 FE", bar.text());
+                assertSame(bar, first(panel, FactsPanel.AmountRow.class));
+                assertEquals("25 / 100 FE 25%", bar.text());
                 assertTrue(bar.changed());
                 JLabel lit = labels(panel).stream().filter(label -> label.getText().equals("true")).findFirst()
                         .orElseThrow();
@@ -50,7 +50,7 @@ class LiveUpdateTest {
 
                 assertTrue(panel.update(read(25, "false", 6)));
                 assertFalse(bar.changed());
-                JLabel data = labels(panel).stream().filter(label -> label.getText().startsWith("1 key")).findFirst()
+                JLabel data = labels(panel).stream().filter(label -> label.getText().startsWith("1 key,")).findFirst()
                         .orElseThrow();
                 assertTrue(data.isOpaque(), "changed data is marked");
             });
@@ -58,9 +58,26 @@ class LiveUpdateTest {
     }
 
     @Test
+    void aSectionThatChangedShapeIsRebuiltAloneAndTheOthersKeepTheirComponents() throws Exception {
+        try (ItemIconService icons = new ItemIconService()) {
+            SwingUtilities.invokeAndWait(() -> {
+                FactsPanel panel = new FactsPanel(read(10, "true", 5), icons);
+                FactsPanel.AmountRow bar = first(panel, FactsPanel.AmountRow.class);
+                List<FactSection> grown = List.of(read(10, "true", 5).get(0), new FactSection("NBT", List.of(
+                        Fact.data("Block entity", burnTime(5)), Fact.data("Second", burnTime(6))), 2));
+
+                assertTrue(panel.update(grown));
+
+                assertSame(bar, first(panel, FactsPanel.AmountRow.class));
+                assertTrue(labels(panel).stream().anyMatch(label -> label.getText().equals("Second")));
+            });
+        }
+    }
+
+    @Test
     void dataIsSummarisedByShapeAndSize() {
-        assertEquals("1 key  ·  15 B", FactsPanel.displayedValue(Fact.data("Block entity", burnTime(5))));
-        assertEquals("1 key  ·  15 B  ·  incomplete", FactsPanel.displayedValue(Fact.data("Block entity",
+        assertEquals("1 key, 15 B", FactsPanel.displayedValue(Fact.data("Block entity", burnTime(5))));
+        assertEquals("1 key, 15 B, incomplete", FactsPanel.displayedValue(Fact.data("Block entity",
                 FactData.of(burnTime(5).bytes(), List.of(new FactData.Omission("", 2))))));
     }
 

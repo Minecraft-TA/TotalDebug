@@ -70,8 +70,21 @@ class ExecutionFactsTest {
         assertEquals("{Count:7}", NbtData.snbt(carried.tag()));
         assertEquals(List.of(new FactData.Omission("Items", 3)), carried.omissions());
         assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.TEXT, "a", "", "", 0, 0, "",
-                FactData.of(nbt, List.of())));
+                FactData.of(nbt, List.of()), null));
         assertThrows(IllegalArgumentException.class, () -> new Fact(Fact.Kind.DATA, "a", "", "", 0, 0, ""));
+    }
+
+    @Test
+    void linksSurviveTheWireCodec() {
+        Fact handler = Fact.text("neoforge:item_handler", "SidedInvWrapper")
+                .withLink(FactLink.toClass("net.neoforged.neoforge.items.wrapper.SidedInvWrapper"));
+        ExecutionResult result = ExecutionResult.completed("", null)
+                .withFacts(List.of(new FactSection("Capabilities", List.of(handler), 1)));
+
+        ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
+
+        assertEquals(handler, decoded.facts().getFirst().facts().getFirst());
+        assertThrows(IllegalArgumentException.class, () -> FactLink.toClass(" "));
     }
 
     @Test

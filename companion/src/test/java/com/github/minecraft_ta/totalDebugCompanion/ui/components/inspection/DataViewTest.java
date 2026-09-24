@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
+import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearchTarget;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.Action;
@@ -58,20 +59,33 @@ class DataViewTest {
 
     @Test
     void rootsStartExpandedAndNestedEntriesCollapsed() throws IOException {
-        List<DataRows.Row> rows = DataRows.visible(decoded(furnace(2, "say \"hi\"", List.of())), Set.of(), "");
+        List<DataRows.Row> rows = DataRows.visible(decoded(furnace(2, "say \"hi\"", List.of())), Set.of());
 
         assertEquals(List.of("NBT › Block entity", "Items", "id", "note"), names(rows));
         assertEquals("[{Slot:0b,id:\"minecraft:coal\"},{Slot:1b,id:\"minecraft:coal\"}]", rows.get(1).value());
-        assertEquals("list · 2", rows.get(1).type());
+        assertEquals("list (2)", rows.get(1).type());
         assertEquals("'say \"hi\"'", rows.get(3).value(), "strings print as Minecraft quotes them");
     }
 
     @Test
-    void theFilterShowsMatchesAndTheEntriesLeadingToThem() throws IOException {
-        List<DataRows.Row> rows = DataRows.visible(decoded(furnace(2, "", List.of())), Set.of(), "slot");
+    void typingFindsCollapsedEntriesAndRevealsTheSelectedMatch() throws Exception {
+        run(() -> {
+            DataView view = new DataView();
+            view.show(List.of(new DataRows.Root("NBT › Block entity", furnace(2, "", List.of()))));
+            SpeedSearchTarget search = view.search();
+            int second = -1;
+            for (int index = 0; index < search.size(); index++) {
+                if (search.textAt(index).equals("Slot 1b")) second = index;
+            }
 
-        assertEquals(List.of("NBT › Block entity", "Items", "[0]", "Slot", "[1]", "Slot"), names(rows));
-        assertEquals("Items[1].Slot", rows.get(5).pathText());
+            assertTrue(second >= 0, "collapsed entries are searchable");
+            search.select(second);
+
+            assertEquals(List.of("NBT › Block entity", "Items", "[0]", "[1]", "Slot", "id", "id", "note"),
+                    names(view.rows()));
+            assertEquals("Items[1].Slot", view.rows().get(view.table().getSelectedRow()).pathText());
+            assertEquals(second, search.selectedIndex());
+        });
     }
 
     @Test
@@ -79,7 +93,7 @@ class DataViewTest {
         FactData data = furnace(1, "", List.of(new FactData.Omission("Items", 40)));
         String items = DataRows.key(new DataRows.Root("NBT › Block entity", data), List.of("Items"));
 
-        List<DataRows.Row> rows = DataRows.visible(decoded(data), Set.of(items), "");
+        List<DataRows.Row> rows = DataRows.visible(decoded(data), Set.of(items));
 
         assertEquals(List.of("NBT › Block entity", "Items", "[0]", "40 more not transferred", "id", "note"),
                 names(rows));

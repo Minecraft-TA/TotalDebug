@@ -10,6 +10,7 @@ import java.util.Set;
 public final class FileTypeResolver {
 
     public static final String SYNTAX_STYLE_TOML = "text/toml";
+    public static final String SYNTAX_STYLE_SNBT = "text/snbt";
     public static final String SYNTAX_STYLE_MANIFEST = "text/manifest";
 
     private static final Set<String> OTHER_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "gif", "webp", "bmp", "ico");
@@ -53,6 +54,7 @@ public final class FileTypeResolver {
             case "cfg", "conf", "config", "ini" -> text(RSyntaxTextArea.SYNTAX_STYLE_INI, Icons.CONFIG_FILE, "Configuration");
             case "json", "mcmeta" -> text(RSyntaxTextArea.SYNTAX_STYLE_JSON, Icons.JSON_FILE, "JSON");
             case "mf" -> text(SYNTAX_STYLE_MANIFEST, Icons.MANIFEST_FILE, "JAR manifest");
+            case "snbt" -> text(SYNTAX_STYLE_SNBT, Icons.JSON_FILE, "SNBT");
             case "properties" -> text(RSyntaxTextArea.SYNTAX_STYLE_PROPERTIES_FILE, Icons.PROPERTIES_FILE, "Properties");
             case "lang" -> text(RSyntaxTextArea.SYNTAX_STYLE_PROPERTIES_FILE, Icons.RESOURCE_BUNDLE, "Language bundle");
             case "xml" -> text(RSyntaxTextArea.SYNTAX_STYLE_XML, Icons.XML_FILE, "XML");

@@ -5,7 +5,6 @@ import com.github.minecraft_ta.totaldebug.protocol.nbt.NbtData;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -48,7 +47,7 @@ final class DataRows {
     }
 
     /**
-     * One visible row. {@code tag} is null for rows standing for missing data. {@code omitted} counts the entries not
+     * One row. {@code tag} is null for rows standing for missing data. {@code omitted} counts the entries not
      * transferred: below an entry that is therefore incomplete, or the entries an omission row stands for.
      */
     record Row(
@@ -67,10 +66,10 @@ final class DataRows {
         String type() {
             return switch (this.tag) {
                 case null -> "";
-                case NbtData.ListTag list -> "list · " + list.items().size();
-                case NbtData.ByteArrayTag array -> "byte[] · " + array.values().size();
-                case NbtData.IntArrayTag array -> "int[] · " + array.values().size();
-                case NbtData.LongArrayTag array -> "long[] · " + array.values().size();
+                case NbtData.ListTag list -> "list (" + list.items().size() + ")";
+                case NbtData.ByteArrayTag array -> "byte[] (" + array.values().size() + ")";
+                case NbtData.IntArrayTag array -> "int[] (" + array.values().size() + ")";
+                case NbtData.LongArrayTag array -> "long[] (" + array.values().size() + ")";
                 case NbtData.Tag other -> other.typeName();
             };
         }
@@ -90,24 +89,38 @@ final class DataRows {
         return root.name() + '\u0001' + NbtData.path(path);
     }
 
+    /** The keys of the entries enclosing {@code row}, outermost first. */
+    static List<String> ancestorKeys(Root root, Row row) {
+        List<String> keys = new ArrayList<>();
+        for (int length = 0; length < row.path().size(); length++) {
+            keys.add(key(root, row.path().subList(0, length)));
+        }
+        return keys;
+    }
+
     /**
      * The visible rows. Roots start expanded and other entries collapsed; {@code toggled} holds the keys of entries
-     * switched from that default. With a filter, only matching entries and the entries leading to them show,
-     * expanded as far as needed to reach every match.
+     * switched from that default.
      */
-    static List<Row> visible(List<Decoded> roots, Set<String> toggled, String filter) {
-        List<String> terms = terms(filter);
+    static List<Row> visible(List<Decoded> roots, Set<String> toggled) {
+        return rows(roots, toggled, false);
+    }
+
+    /** Every entry of every root, as if all were expanded; used to search entries that are not visible. */
+    static List<Row> all(List<Decoded> roots) {
+        return rows(roots, Set.of(), true);
+    }
+
+    private static List<Row> rows(List<Decoded> roots, Set<String> toggled, boolean everything) {
         List<Row> rows = new ArrayList<>();
         for (int index = 0; index < roots.size(); index++) {
             Decoded decoded = roots.get(index);
             if (decoded.tag() == null) {
-                if (terms.isEmpty() || matches(decoded.root().name(), terms)) {
-                    rows.add(new Row(key(decoded.root(), List.of()), Kind.UNREADABLE, index, List.of(), 0,
-                            decoded.root().name(), null, false, false, 0, decoded.problem()));
-                }
+                rows.add(new Row(key(decoded.root(), List.of()), Kind.UNREADABLE, index, List.of(), 0,
+                        decoded.root().name(), null, false, false, 0, decoded.problem()));
                 continue;
             }
-            new Walk(decoded, index, toggled, terms, rows).add(decoded.root().name(), decoded.tag(),
+            new Walk(decoded, index, toggled, everything, rows).add(decoded.root().name(), decoded.tag(),
                     new ArrayList<>(), 0);
         }
         return rows;
@@ -132,22 +145,6 @@ final class DataRows {
         return snbt.length() <= PREVIEW_LENGTH ? snbt : snbt.substring(0, PREVIEW_LENGTH - 1) + "…";
     }
 
-    private static List<String> terms(String filter) {
-        List<String> terms = new ArrayList<>();
-        for (String term : Objects.requireNonNullElse(filter, "").toLowerCase(Locale.ROOT).split("\\s+")) {
-            if (!term.isEmpty()) terms.add(term);
-        }
-        return terms;
-    }
-
-    private static boolean matches(String text, List<String> terms) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        for (String term : terms) {
-            if (!lower.contains(term)) return false;
-        }
-        return true;
-    }
-
     private static String summary(NbtData.Tag tag, int omitted) {
         int size = tag instanceof NbtData.CompoundTag compound ? compound.entries().size()
                 : ((NbtData.ListTag) tag).items().size();
@@ -155,67 +152,40 @@ final class DataRows {
         return omitted > 0 ? entries + " shown, " + omitted + " not transferred" : entries;
     }
 
-    private record Walk(Decoded decoded, int root, Set<String> toggled, List<String> terms, List<Row> rows) {
-        /** Adds the entry and what shows below it; returns whether anything was added. */
-        boolean add(String name, NbtData.Tag tag, List<Object> path, int depth) {
+    private record Walk(Decoded decoded, int root, Set<String> toggled, boolean everything, List<Row> rows) {
+        void add(String name, NbtData.Tag tag, List<Object> path, int depth) {
             List<Object> own = List.copyOf(path);
             String key = key(this.decoded.root(), own);
             String pathText = NbtData.path(own);
             boolean container = tag instanceof NbtData.CompoundTag || tag instanceof NbtData.ListTag;
-            boolean filtering = !this.terms.isEmpty();
-            boolean open = container && (depth == 0) != this.toggled.contains(key);
-            boolean matched = !filtering || matches(name + " " + (container ? "" : NbtData.snbt(tag)), this.terms);
-
-            int position = this.rows.size();
-            this.rows.add(null);
-            boolean childAdded = false;
-            if (container && (open || filtering)) {
-                childAdded = children(tag, path, depth + 1);
-            }
-            if (!matched && !childAdded) {
-                this.rows.subList(position, this.rows.size()).clear();
-                return false;
-            }
-            boolean shownOpen = container && (filtering ? childAdded : open);
-            if (!shownOpen) {
-                this.rows.subList(position + 1, this.rows.size()).clear();
-            } else {
-                int direct = directOmission(pathText);
-                if (direct > 0) {
-                    this.rows.add(new Row(key + "\u0002omitted", Kind.OMITTED, this.root, own, depth + 1,
-                            direct + " more not transferred", null, false, false, direct, ""));
-                }
-            }
+            boolean open = container && (this.everything || (depth == 0) != this.toggled.contains(key));
             int omitted = container ? omittedBelow(this.decoded.root().data(), pathText) : 0;
-            this.rows.set(position, new Row(key, Kind.ENTRY, this.root, own, depth, name, tag, container, shownOpen,
-                    omitted, shownOpen ? summary(tag, omitted) : valueText(tag)));
-            return true;
-        }
-
-        private boolean children(NbtData.Tag tag, List<Object> path, int depth) {
-            boolean added = false;
+            this.rows.add(new Row(key, Kind.ENTRY, this.root, own, depth, name, tag, container, open, omitted,
+                    open ? summary(tag, omitted) : valueText(tag)));
+            if (!open) {
+                return;
+            }
             if (tag instanceof NbtData.CompoundTag compound) {
                 for (Map.Entry<String, NbtData.Tag> entry : compound.entries().entrySet()) {
                     path.add(entry.getKey());
-                    added |= add(entry.getKey(), entry.getValue(), path, depth);
+                    add(entry.getKey(), entry.getValue(), path, depth + 1);
                     path.removeLast();
                 }
             } else if (tag instanceof NbtData.ListTag list) {
                 for (int index = 0; index < list.items().size(); index++) {
                     path.add(index);
-                    added |= add("[" + index + "]", list.items().get(index), path, depth);
+                    add("[" + index + "]", list.items().get(index), path, depth + 1);
                     path.removeLast();
                 }
             }
-            return added;
-        }
-
-        private int directOmission(String pathText) {
-            int omitted = 0;
+            int direct = 0;
             for (FactData.Omission omission : this.decoded.root().data().omissions()) {
-                if (omission.path().equals(pathText)) omitted += omission.count();
+                if (omission.path().equals(pathText)) direct += omission.count();
             }
-            return omitted;
+            if (direct > 0) {
+                this.rows.add(new Row(key + "\u0002omitted", Kind.OMITTED, this.root, own, depth + 1,
+                        direct + " more not transferred", null, false, false, direct, ""));
+            }
         }
     }
 }
