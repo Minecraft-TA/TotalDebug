@@ -187,6 +187,150 @@ The kernel handles the following once for every module:
 - **Streams:** only the latest value is kept, so a slow Companion never delays the server tick. Recorded streams are the basis for history and replay.
 - **Lifecycle order:** install shared, then game, then desktop parts; unload in reverse. A game part that fails to install leaves the previous build running and reports why.
 
+## Worked example: AE2 item flow
+
+This example shows the intended result end to end. The AE2 calls and parts of the TotalDebug API are illustrative, not settled signatures. The question it answers is: how much redstone does my network produce, and how much will I have in a given time?
+
+### Experience
+
+1. **Open the network.** F6 on an ME controller, cable or terminal opens the **ME Network** page, because the module adds the subject kind `ae2:grid`. The page shows:
+   - stored items as a searchable slot grid,
+   - power and channels,
+   - crafting CPUs.
+2. **Open an item's flow.** Selecting Redstone opens the **Flow** view for `ae2:grid/minecraft:redstone`:
+
+```
+ME Network · Base (controller 120 64 -35) ▸ Redstone                 [Live] [1 h]
+Redstone                                                        Stock 184,302
+
+Net +1,240 /min (+74,400 /h)    In 1,510 /min    Out 270 /min
+Stock over the last hour: sparkline                     observed, 3,600 samples
+
+Sources                                      Sinks
+Import Bus  Mining line       +1,020/min     Assembler  Repeaters        -180/min
+Interface   Ore washing         +410/min     Export Bus Smelter           -90/min
+Crafting    dust -> block        +80/min
+
+Target 1,000,000 reached in about 11 h at the current net rate      (projection)
+How much in 30 min? about 37,200 more, ±8% over the last hour       (projection)
+
+[Record] [Save as check] [Pin to HUD]
+```
+
+3. **Use the view:**
+   - Sources and sinks open the corresponding bus, interface, crafting job or pattern as their own subjects.
+   - **Record** stores the stream in the project for replay and before/after comparison.
+   - **Save as check** turns a condition such as "net rate at least 1,000 per minute" into a check that runs after pack updates or on demand.
+   - **Pin to HUD** shows the net rate in the game through the kernel's HUD extension point.
+
+### Evidence
+
+- Net, in and out rates are **observed** from sampled stock and recorded transfers.
+- Attribution to sources and sinks requires the module's transfer hook. Without it, the view shows only the net rate and states that sources are unknown.
+- Targets and "how much in" answers are **projections** from the current window and say so.
+
+### Module
+
+```
+modules/ae2-flow/
+  module.toml
+  shared/   FlowSample.java, FlowSource.java
+  game/     GridKind.java, GridReader.java, FlowProbe.java, FlowService.java
+  desktop/  FlowView.java, Ae2Terminal.java   (the AE2-styled panel is optional)
+```
+
+```toml
+id = "ae2-flow"
+version = "0.3.0"
+api = "1"
+requires = { ae2 = ">=19.0", td-std = "^1", td-charts = "^1" }
+
+[game]
+side = "server"
+subjects = ["ae2:grid", "ae2:grid/*"]
+actions = { changes-world = false }
+
+[desktop]
+views = ["ae2:grid", "ae2:grid/*"]
+```
+
+```java
+// shared
+public record FlowSource(String kind, String label, SubjectRef subject, long perMinute) {}
+public record FlowSample(long tick, long stock, long in, long out, List<FlowSource> sources) {}
+
+// game: F6 on any AE2 part resolves to its network
+@SubjectKind("ae2:grid")
+public Optional<SubjectRef> from(ScriptTarget.PlacedBlock block) {
+    return Ae2.gridNodeAt(block).map(node -> SubjectRef.custom("ae2:grid", Ae2.gridId(node)));
+}
+
+// game: the network page, presented entirely by the kernel
+@Reads("ae2:grid")
+public void read(Ae2Grid grid, Facts facts) {
+    facts.section("Network")
+         .bar("Power", grid.storedPower(), grid.maxPower(), "AE")
+         .text("Channels", grid.usedChannels() + " / " + grid.maxChannels());
+    Facts.Section items = facts.section("Items");
+    grid.storedItems().stream().sorted(byCountDesc()).limit(512)
+        .forEach(stack -> items.stack(stack.name(), stack).link(subject("ae2:grid/" + stack.id())));
+}
+
+// game: one sample per second, pushed to Companion
+@Stream(subject = "ae2:grid/*", everyTicks = 20)
+public FlowSample sample(Ae2Grid grid, ItemKey item, ProbeContext context) {
+    Ledger ledger = context.state(Ledger::new);
+    return new FlowSample(context.gameTime(), grid.count(item),
+            ledger.drainIn(item), ledger.drainOut(item), ledger.sources(item));
+}
+
+// game: attribute transfers; registered through the context, removed on replacement or stop
+@OnInstall
+public void hook(ModuleContext context) {
+    context.onEvent(Ae2StorageEvent.class, event ->
+            ledger(context).record(event.item(), event.amount(), event.actionSource()));
+}
+
+// game: requests made once by the view
+@Remote public Projection project(Ae2Grid grid, ItemKey item, Duration window) { ... }
+
+// desktop: a declarative view using the td-charts library
+@View("ae2:grid/*")
+public ViewModel flow(Subject subject, Channel game) {
+    var samples = game.stream(FlowProbe::sample, subject).window(Duration.ofHours(1));
+    return View.page(
+            Header.item(subject.item()).value("Stock", samples.latest(FlowSample::stock)),
+            Row.of(Stat.rate("Net", samples.netPerMinute()),
+                    Stat.rate("In", samples.inPerMinute()),
+                    Stat.rate("Out", samples.outPerMinute())),
+            Chart.sparkline(samples.map(FlowSample::stock)).evidence(Evidence.OBSERVED),
+            Table.of("Sources", samples.latest(FlowSample::sources), FlowSource::subject),
+            Form.question("How much in", Duration.ofMinutes(30),
+                    window -> game.call(FlowService::project, subject, window)),
+            Actions.record(samples),
+            Actions.check("Net rate", samples.netPerMinute(), ">= 1000"),
+            Actions.pinToHud(Hud.line(subject.item(), samples.netPerMinute())));
+}
+```
+
+### What the example exercises
+
+| Piece | Kernel or module |
+|---|---|
+| F6, subject references, page shell, Live, tabs | Kernel |
+| `ae2:grid` subject kind and network page | Module |
+| Slot grid, icons, bars, tables, forms | Kernel renderer |
+| Charts | `td-charts` library |
+| Pushed samples | Kernel stream |
+| Attribution of transfers | Module hook, owned by its context |
+| Projections | Module remote call |
+| Recording, replay and checks | Kernel |
+| HUD overlay | Kernel extension point, module content |
+| AE2-styled terminal panel | Optional mixed module part |
+| Agent questions such as "redstone per hour" | Automatic through the MCP bridge |
+
+Most of the module is game-only: a subject kind, a reader, a stream and a remote call rendered by the kernel. Only the optional AE2-styled panel needs custom Companion code.
+
 ## Hot replacement limits
 
 Replacement is clean only for what an extension registers through its lifecycle context.
@@ -218,7 +362,7 @@ Before freezing the API, port at least these through it:
 - the bundled readers,
 - the Fusion model loader,
 - the JEI hover integration,
-- one new mixed module: a side-configuration view with an action for a mod that supports configurable sides.
+- the [AE2 item flow](#worked-example-ae2-item-flow) module, which needs a new subject kind, streams, recording, a remote call, a declarative view and an optional custom panel.
 
 ## Open decisions
 
