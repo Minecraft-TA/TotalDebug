@@ -144,7 +144,7 @@ class InspectionPanelTest {
 
     private static Component problemCard(Container container) {
         for (Component child : container.getComponents()) {
-            if (child instanceof JTextArea) return child.getParent().getParent();
+            if (child.getClass() == JTextArea.class) return child.getParent().getParent();
             if (child instanceof Container nested) {
                 Component found = problemCard(nested);
                 if (found != null) return found;

@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionServic
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
@@ -43,6 +44,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -60,6 +62,7 @@ final class ToolsPanel extends JPanel {
     private final ItemIconService icons;
     private final Consumer<NavigationTarget> navigator;
     private final Runnable refreshInspection;
+    private final BiConsumer<String, List<FactSection>> reported;
     private final Set<Path> chosen = new LinkedHashSet<>();
     private final List<SnippetExecutionService.Execution> active = new ArrayList<>();
     private final Map<Path, ToolView> views = new LinkedHashMap<>();
@@ -74,7 +77,8 @@ final class ToolsPanel extends JPanel {
             Supplier<ScriptFiles> scripts,
             ItemIconService icons,
             Consumer<NavigationTarget> navigator,
-            Runnable refreshInspection
+            Runnable refreshInspection,
+            BiConsumer<String, List<FactSection>> reported
     ) {
         this.subject = subject;
         this.identity = identity;
@@ -83,6 +87,7 @@ final class ToolsPanel extends JPanel {
         this.icons = icons;
         this.navigator = navigator;
         this.refreshInspection = refreshInspection;
+        this.reported = reported;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
     }
 
@@ -170,12 +175,14 @@ final class ToolsPanel extends JPanel {
 
     /** One tool's header, status, sections and first output line. */
     private final class ToolView {
+        private final String name;
         private final JPanel section = new JPanel();
         private final JLabel status = new JLabel("Running…");
         private final JLabel output = new JLabel();
         private FactsPanel facts;
 
         private ToolView(InspectionTool tool) {
+            this.name = tool.name();
             this.section.setLayout(new BoxLayout(this.section, BoxLayout.Y_AXIS));
             this.status.setForeground(UIManager.getColor("Label.disabledForeground"));
             this.section.add(aligned(toolHeader(tool, this.status)));
@@ -196,6 +203,7 @@ final class ToolsPanel extends JPanel {
             this.status.setIcon(null);
             this.status.setToolTipText(null);
             this.status.setText(outcome.facts().isEmpty() ? "No sections reported" : "");
+            ToolsPanel.this.reported.accept(this.name, outcome.facts());
             if (this.facts == null || !this.facts.update(outcome.facts())) {
                 FactsPanel rebuilt = new FactsPanel(outcome.facts(), ToolsPanel.this.icons);
                 rebuilt.setBorder(null);

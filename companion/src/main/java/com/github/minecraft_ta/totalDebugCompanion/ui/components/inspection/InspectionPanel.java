@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
@@ -46,6 +47,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -96,6 +99,8 @@ public final class InspectionPanel extends JPanel {
     private final JLabel status = new JLabel(" ");
     private final JPanel overview = new JPanel(new BorderLayout());
     private final ScriptResultTree object = new ScriptResultTree();
+    private final DataView data = new DataView();
+    private final Map<String, List<DataRows.Root>> dataBySource = new LinkedHashMap<>();
     private final JTextArea problem = new JTextArea();
     private final JPanel cards = new JPanel(new CardLayout());
     private FactsPanel facts;
@@ -120,7 +125,7 @@ public final class InspectionPanel extends JPanel {
         this.icons = Objects.requireNonNull(icons, "icons");
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.tools = new ToolsPanel(subject, () -> this.identity, snippets, Objects.requireNonNull(scripts, "scripts"),
-                icons, navigator, this::refresh);
+                icons, navigator, this::refresh, this::showToolData);
         JPanel sections = new JPanel();
         sections.setLayout(new BoxLayout(sections, BoxLayout.Y_AXIS));
         this.builtIn.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -133,6 +138,7 @@ public final class InspectionPanel extends JPanel {
         add(header(), BorderLayout.NORTH);
         JTabbedPane views = new JTabbedPane();
         views.addTab("Overview", scroll(this.overview));
+        views.addTab("Data", this.data);
         views.addTab("Object", new JScrollPane(this.object));
         this.problem.setEditable(false);
         this.cards.add(views, RESULT_CARD);
@@ -380,6 +386,7 @@ public final class InspectionPanel extends JPanel {
 
     /** Presents a completed read's sections and returned object. */
     void showOutcome(ExecutionResult outcome, Side selectedSide) {
+        showData("", outcome.facts());
         if (this.facts == null || !this.facts.update(outcome.facts())) {
             this.facts = new FactsPanel(outcome.facts(), this.icons);
             this.builtIn.removeAll();
@@ -465,6 +472,29 @@ public final class InspectionPanel extends JPanel {
                 }));
     }
 
+    /** Shows the data facts a tool reported in the Data view, after the built-in readers' data. */
+    private void showToolData(String tool, List<FactSection> sections) {
+        showData(tool, sections);
+    }
+
+    /**
+     * Replaces the data reported by one source, the built-in readers ({@code ""}) or a tool. Data facts are named by
+     * their label, prefixed with the section, and with the tool when a tool reported them.
+     */
+    private void showData(String source, List<FactSection> sections) {
+        List<DataRows.Root> roots = new ArrayList<>();
+        for (FactSection section : sections) {
+            for (Fact fact : section.facts()) {
+                if (fact.kind() != Fact.Kind.DATA) continue;
+                String name = section.title() + " › " + fact.label();
+                roots.add(new DataRows.Root(source.isEmpty() ? name : source + " › " + name, fact.data()));
+            }
+        }
+        if (roots.isEmpty()) this.dataBySource.remove(source);
+        else this.dataBySource.put(source, roots);
+        this.data.show(this.dataBySource.values().stream().flatMap(List::stream).toList());
+    }
+
     /** The subject's rendered item for its editor tab, with a generic icon until the item can be drawn. */
     public ItemTabIcon tabIcon() {
         return this.tabIcon;
@@ -474,6 +504,7 @@ public final class InspectionPanel extends JPanel {
         requireEdt();
         this.disposed = true;
         this.removeIconListener.run();
+        this.data.dispose();
         this.liveTimer.stop();
         this.tools.dispose();
         cancelActive();
