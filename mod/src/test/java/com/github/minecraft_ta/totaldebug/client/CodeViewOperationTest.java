@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client;
 
 import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +16,10 @@ class CodeViewOperationTest {
     void inspectsTheResolvedWorldSubjectWithoutFocusingCompanion() {
         RecordingActions actions = new RecordingActions();
         WorldSubject subject = new WorldSubject(
-                new SubjectRef.Block("minecraft:overworld", 1, 64, 2), "Furnace", "minecraft:furnace", "Minecraft",
-                List.of(), Optional.empty());
+                new SubjectRef.Block("minecraft:overworld", 1, 64, 2),
+                new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "minecraft:furnace", "Furnace", "Minecraft",
+                        List.of(), "minecraft:furnace"),
+                Optional.empty());
 
         new CodeViewOperation(actions).inspectOrFocus(Optional.of(subject));
 

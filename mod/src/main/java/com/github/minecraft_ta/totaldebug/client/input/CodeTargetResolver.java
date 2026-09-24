@@ -2,12 +2,10 @@ package com.github.minecraft_ta.totaldebug.client.input;
 
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
-import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload.ClassLink;
+import com.github.minecraft_ta.totaldebug.script.SubjectIdentities;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -18,10 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.neoforged.fml.ModList;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -62,31 +57,17 @@ final class CodeTargetResolver {
 
     private static WorldSubject block(ClientLevel level, String dimension, BlockPos position) {
         BlockState state = level.getBlockState(position);
-        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        List<ClassLink> classes = new ArrayList<>();
-        classes.add(new ClassLink("Block", state.getBlock().getClass().getName()));
-        BlockEntity blockEntity = level.getBlockEntity(position);
-        if (blockEntity != null) {
-            classes.add(new ClassLink("Block entity", blockEntity.getClass().getName()));
-        }
         return new WorldSubject(
                 new SubjectRef.Block(dimension, position.getX(), position.getY(), position.getZ()),
-                state.getBlock().getName().getString(),
-                id.toString(),
-                modName(id.getNamespace()),
-                classes,
+                SubjectIdentities.block(state, level.getBlockEntity(position)),
                 ItemIcons.of(new ItemStack(state.getBlock().asItem()))
         );
     }
 
     private static WorldSubject entity(Entity entity) {
-        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         return new WorldSubject(
                 new SubjectRef.Entity(entity.getUUID()),
-                entity.getName().getString(),
-                id.toString(),
-                modName(id.getNamespace()),
-                List.of(new ClassLink("Entity", entity.getClass().getName())),
+                SubjectIdentities.entity(entity),
                 spawnEgg(entity).flatMap(ItemIcons::of)
         );
     }
@@ -94,12 +75,6 @@ final class CodeTargetResolver {
     private static Optional<ItemStack> spawnEgg(Entity entity) {
         SpawnEggItem egg = SpawnEggItem.byId(entity.getType());
         return egg == null ? Optional.empty() : Optional.of(new ItemStack(egg));
-    }
-
-    private static String modName(String namespace) {
-        return ModList.get().getModContainerById(namespace)
-                .map(container -> container.getModInfo().getDisplayName())
-                .orElse(namespace);
     }
 
     static Optional<Class<?>> resolveItemTarget(Minecraft minecraft, ItemStack itemStack) {

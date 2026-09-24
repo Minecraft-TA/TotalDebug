@@ -39,6 +39,7 @@ class ScriptProtocolCodecTest {
         assertEquals("POST_TICK", message.executionEnvironment());
         assertEquals("", message.subject());
         assertEquals("", message.subjectSessionId());
+        assertEquals("", message.subjectExpectedId());
     }
 
     @Test
@@ -51,7 +52,8 @@ class ScriptProtocolCodecTest {
                 ScriptExecutionEnvironment.POST_TICK.name(),
                 "",
                 "block minecraft:overworld 1 64 -2",
-                "game-session"
+                "game-session",
+                "minecraft:furnace"
         );
         ByteBufferOutputStream output = new ByteBufferOutputStream();
 
@@ -61,6 +63,7 @@ class ScriptProtocolCodecTest {
 
         assertEquals("block minecraft:overworld 1 64 -2", read.subject());
         assertEquals("game-session", read.subjectSessionId());
+        assertEquals("minecraft:furnace", read.subjectExpectedId());
     }
 
     @Test
@@ -73,7 +76,19 @@ class ScriptProtocolCodecTest {
                 ScriptExecutionEnvironment.POST_TICK.name(),
                 "",
                 "entity 00000000-0000-0000-0000-000000000001",
+                "",
                 ""
+        ));
+        assertThrows(IllegalArgumentException.class, () -> new RunScriptMessage(
+                7,
+                new ScriptBytecode("X", Map.of("X", new byte[]{1})),
+                "inventory",
+                false,
+                ScriptExecutionEnvironment.POST_TICK.name(),
+                "",
+                "",
+                "",
+                "minecraft:furnace"
         ));
     }
 

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -17,12 +18,29 @@ class ExecutionFactsTest {
                 ), 27)
         );
         ExecutionResult result = new ExecutionResult(ExecutionStatus.RUN_COMPLETED, ExecutionText.complete("log"),
-                null, ExecutionText.empty(), facts);
+                null, ExecutionText.empty(), facts, null);
 
         ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
 
         assertEquals(facts, decoded.facts());
         assertEquals(25, decoded.facts().get(1).omittedFacts());
+    }
+
+    @Test
+    void identityAndProblemsSurviveTheWireCodec() {
+        SubjectIdentity identity = new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "minecraft:chest", "Chest",
+                "Minecraft", List.of(new SubjectIdentity.ClassLink("Block", "net.minecraft.world.level.block.ChestBlock")),
+                "minecraft:chest");
+        List<FactSection> facts = List.of(new FactSection("Storage", List.of(
+                Fact.text("Contents", "Empty"),
+                Fact.problem("Fluids", "java.lang.IllegalStateException: broken tank")), 2));
+        ExecutionResult result = ExecutionResult.failed("", null, "boom").withFacts(facts).withIdentity(identity);
+
+        ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
+
+        assertEquals(identity, decoded.identity());
+        assertEquals(facts, decoded.facts());
+        assertEquals(ExecutionStatus.RUN_EXCEPTION, decoded.status());
     }
 
     @Test
@@ -32,6 +50,7 @@ class ExecutionFactsTest {
                         + "\"error\":{\"text\":\"\",\"totalCharacters\":0,\"truncated\":false}}");
 
         assertEquals(List.of(), decoded.facts());
+        assertEquals(null, decoded.identity());
     }
 
     @Test
@@ -42,7 +61,7 @@ class ExecutionFactsTest {
                         Fact.text("id", "\"minecraft:coal\""), Fact.text("count", "8")), 2)), 1)
         ), 5);
         ExecutionResult result = new ExecutionResult(ExecutionStatus.RUN_COMPLETED, ExecutionText.empty(),
-                null, ExecutionText.empty(), List.of(new FactSection("NBT", List.of(tree), 1)));
+                null, ExecutionText.empty(), List.of(new FactSection("NBT", List.of(tree), 1)), null);
 
         ExecutionResult decoded = ExecutionResultCodec.decode(ExecutionResultCodec.encode(result).json());
 

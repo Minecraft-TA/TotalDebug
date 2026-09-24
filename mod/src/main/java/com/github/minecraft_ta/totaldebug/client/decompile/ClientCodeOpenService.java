@@ -44,8 +44,8 @@ public final class ClientCodeOpenService {
 
     public void inspect(InspectSubjectPayload subject) {
         Objects.requireNonNull(subject, "subject");
-        request(subject.subject(), "Inspecting " + subject.displayName(),
-                "Companion is inspecting " + subject.displayName(),
+        request(subject.subject(), "Inspecting " + subject.identity().title(),
+                "Companion is inspecting " + subject.identity().title(),
                 () -> this.companionApp.inspectAndFocus(subject, ClientCodeOpenService::releaseGameInput));
     }
 

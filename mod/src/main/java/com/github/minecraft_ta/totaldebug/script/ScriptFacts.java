@@ -9,11 +9,14 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Structured information a script reports alongside its result. Companion shows each section with a presentation
@@ -22,6 +25,27 @@ import java.util.Objects;
  */
 public final class ScriptFacts {
     private final Map<String, Section> sections = new LinkedHashMap<>();
+    private final Consumer<String> log;
+
+    /** {@code log} receives the stack traces of guarded reads that failed. */
+    public ScriptFacts(Consumer<String> log) {
+        this.log = Objects.requireNonNull(log, "log");
+    }
+
+    /**
+     * Runs one independent part of a read. When it fails, the facts it reported so far remain, the section gets a
+     * problem naming the failure and the stack trace goes to the run's output; later parts still run.
+     */
+    public void guarded(String sectionTitle, Runnable read) {
+        try {
+            read.run();
+        } catch (RuntimeException | LinkageError failure) {
+            section(sectionTitle).problem("Read failed", failure);
+            StringWriter trace = new StringWriter();
+            failure.printStackTrace(new PrintWriter(trace));
+            this.log.accept(sectionTitle + " could not be read:" + System.lineSeparator() + trace);
+        }
+    }
 
     /** Returns the section with this title, creating it after the ones already reported. */
     public Section section(String title) {
@@ -37,7 +61,8 @@ public final class ScriptFacts {
         return section;
     }
 
-    List<FactSection> snapshot() {
+    /** The sections reported so far, in reporting order. */
+    public List<FactSection> snapshot() {
         List<FactSection> result = new ArrayList<>(this.sections.size());
         for (Section section : this.sections.values()) {
             result.add(new FactSection(section.title, section.facts, section.total));
@@ -59,6 +84,13 @@ public final class ScriptFacts {
 
         public Section text(String label, Object value) {
             return add(Fact.text(Fact.clip(label), Fact.clip(String.valueOf(value))));
+        }
+
+        /** Reports that reading {@code label} failed; facts already reported stay. */
+        public Section problem(String label, Throwable failure) {
+            String message = failure.getMessage();
+            String summary = failure.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+            return add(Fact.problem(Fact.clip(label), Fact.clip(summary)));
         }
 
         public Section bar(String label, long amount, long capacity, String unit) {

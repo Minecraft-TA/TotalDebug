@@ -57,12 +57,6 @@ class FactsPanelTest {
     }
 
     @Test
-    void readerSourceSelectsTheRequestedFace() {
-        assertTrue(InspectionPanel.readerSource("").contains("StorageReader.read(target(), null, facts());"));
-        assertTrue(InspectionPanel.readerSource("NORTH").contains("CapabilityReader.read(target(), Direction.NORTH, facts());"));
-    }
-
-    @Test
     void suggestsAToolNameFromTheRegistryPath() {
         assertEquals("BasicEnergyCubeTool", ToolsPanel.suggestedName("mekanism:basic_energy_cube"));
         assertEquals("Tool2x2DoorTool", ToolsPanel.suggestedName("example:2x2_door"));

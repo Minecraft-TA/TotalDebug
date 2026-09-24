@@ -9,8 +9,8 @@ import net.neoforged.neoforge.capabilities.EntityCapability;
 
 /**
  * Built-in reader listing every registered capability, including modded ones, that a block or entity exposes in the
- * requested context. Only capabilities whose context is a side (or none, for entities) can be queried generically;
- * others are skipped because their context value is unknown.
+ * requested context. Capabilities whose context is a side are queried with {@code side}; those without a context
+ * only when no side is selected. Others are skipped because their context value is unknown.
  */
 public final class CapabilityReader {
     private CapabilityReader() {
@@ -23,7 +23,7 @@ public final class CapabilityReader {
         switch (target) {
             case ScriptTarget.PlacedBlock block -> {
                 for (BlockCapability<?, ?> capability : BlockCapability.getAll()) {
-                    if (capability.contextClass() != Direction.class) {
+                    if (!queryable(capability.contextClass(), side)) {
                         continue;
                     }
                     Object handler = ((BlockCapability<Object, Direction>) capability).getCapability(
@@ -33,14 +33,11 @@ public final class CapabilityReader {
             }
             case ScriptTarget.LiveEntity entity -> {
                 for (EntityCapability<?, ?> capability : EntityCapability.getAll()) {
-                    Object handler;
-                    if (capability.contextClass() == Direction.class) {
-                        handler = ((EntityCapability<Object, Direction>) capability).getCapability(entity.entity(), side);
-                    } else if (capability.contextClass() == Void.class && side == null) {
-                        handler = ((EntityCapability<Object, Void>) capability).getCapability(entity.entity(), null);
-                    } else {
+                    if (!queryable(capability.contextClass(), side)) {
                         continue;
                     }
+                    Object handler = ((EntityCapability<Object, Direction>) capability)
+                            .getCapability(entity.entity(), side);
                     exposed += report(section, capability, handler);
                 }
             }
@@ -48,6 +45,14 @@ public final class CapabilityReader {
         if (exposed == 0) {
             section.text("Exposed", "None");
         }
+    }
+
+    /**
+     * Whether a capability with this context class can be queried for {@code side}. NeoForge gives capabilities
+     * without a context the primitive {@code void.class}, which is only meaningful when no side is selected.
+     */
+    static boolean queryable(Class<?> contextClass, Direction side) {
+        return contextClass == Direction.class || (contextClass == void.class && side == null);
     }
 
     private static int report(ScriptFacts.Section section, BaseCapability<?, ?> capability, Object handler) {

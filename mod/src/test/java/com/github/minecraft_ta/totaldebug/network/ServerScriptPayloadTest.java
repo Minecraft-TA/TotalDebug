@@ -21,7 +21,7 @@ class ServerScriptPayloadTest {
         byte[] bytes = new byte[50_000];
         for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) (i % 251);
         var original = new RunServerScriptPayload(8, new ScriptBytecode("Large", Map.of("Large", bytes)),
-                ScriptExecutionEnvironment.THREAD, "server-session", "");
+                ScriptExecutionEnvironment.THREAD, "server-session", "", "");
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
             RunServerScriptPayload.STREAM_CODEC.encode(buffer, original);
@@ -54,7 +54,8 @@ class ServerScriptPayloadTest {
         RunServerScriptPayload original = new RunServerScriptPayload(
                 -1,
                 new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2, 3})),
-                ScriptExecutionEnvironment.POST_TICK, "server-session", "block minecraft:overworld 1 64 -2"
+                ScriptExecutionEnvironment.POST_TICK, "server-session", "block minecraft:overworld 1 64 -2",
+                "minecraft:furnace"
         );
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
@@ -80,7 +81,7 @@ class ServerScriptPayloadTest {
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> new RunServerScriptPayload(7, oversized, ScriptExecutionEnvironment.THREAD, "server-session", "")
+                () -> new RunServerScriptPayload(7, oversized, ScriptExecutionEnvironment.THREAD, "server-session", "", "")
         );
 
         assertEquals(
@@ -93,7 +94,7 @@ class ServerScriptPayloadTest {
     void serverRunsCannotOmitTheHandshakeIdentity() {
         var bytecode = new ScriptBytecode("Test", Map.of("Test", new byte[]{1}));
         assertThrows(IllegalArgumentException.class,
-                () -> new RunServerScriptPayload(7, bytecode, ScriptExecutionEnvironment.THREAD, "", ""));
+                () -> new RunServerScriptPayload(7, bytecode, ScriptExecutionEnvironment.THREAD, "", "", ""));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.protocol.execution.*;
@@ -112,6 +113,69 @@ public class ScriptRunnerTest {
             assertTrue(terminal.error().contains("is not loaded"), terminal.error());
             assertEquals(List.of(subject), resolved);
         }
+    }
+
+    @Test
+    void theResolvedTargetsIdentityArrivesWithTheResult() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(83, script("IdentityFixture", "target(); return 1;"), ScriptExecutionEnvironment.THREAD,
+                    SubjectRef.parse("block minecraft:overworld 1 64 -2"));
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type());
+            assertEquals(CHEST, terminal.status().identity());
+        }
+    }
+
+    @Test
+    void aRunForAChangedSubjectFailsBeforeAnyScriptCodeRuns() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(84, script("ChangedSubjectFixture", """
+                    facts().section("Furnace").text("Ran", true);
+                    return 1;
+                    """), ScriptExecutionEnvironment.THREAD, SubjectRef.parse("block minecraft:overworld 1 64 -2"),
+                    "minecraft:furnace");
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertEquals("The target changed: block minecraft:overworld 1 64 -2 is now minecraft:chest, "
+                    + "not minecraft:furnace", terminal.error());
+            assertEquals(List.of(), terminal.status().facts());
+            assertEquals(CHEST, terminal.status().identity());
+        }
+    }
+
+    @Test
+    void aRunForAnUnchangedSubjectRuns() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(85, script("UnchangedSubjectFixture", "return 1;"), ScriptExecutionEnvironment.THREAD,
+                    SubjectRef.parse("block minecraft:overworld 1 64 -2"), "minecraft:chest");
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
+        }
+    }
+
+    private static final SubjectIdentity CHEST = new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "minecraft:chest",
+            "Chest", "Minecraft", List.of(), "minecraft:chest");
+
+    /** A resolver whose subject is always occupied by {@code identity}; tests have no world to return. */
+    private static ScriptTargetResolver occupiedBy(SubjectIdentity identity) {
+        return new ScriptTargetResolver() {
+            @Override
+            public ScriptTarget resolve(SubjectRef subject) {
+                return null;
+            }
+
+            @Override
+            public SubjectIdentity identify(ScriptTarget target) {
+                return identity;
+            }
+        };
     }
 
     @Test

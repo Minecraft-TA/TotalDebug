@@ -169,7 +169,8 @@ public final class ServerScriptService {
             );
             return;
         }
-        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment(), subject);
+        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment(), subject,
+                payload.subjectExpectedId());
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {

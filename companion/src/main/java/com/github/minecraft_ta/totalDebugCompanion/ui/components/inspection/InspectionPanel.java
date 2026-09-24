@@ -9,11 +9,14 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.values.ScriptResultTree;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
@@ -51,11 +54,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Shows a block or entity selected in the game. Each refresh runs the built-in readers against {@code target()} on
  * the chosen side through the ordinary snippet path, so it sees exactly what a script bound to the same subject sees.
  * The readers' fact sections form the overview; the returned object remains available for code-level inspection.
+ * Every read reports what currently occupies the subject: the header, the tab and the tools follow it, and a
+ * replaced block is called out. A read that fails keeps the facts it did report, and a failed refresh keeps the
+ * previous read on screen, marked as stale.
  */
 public final class InspectionPanel extends JPanel {
     static final List<String> FACES = List.of("", "DOWN", "UP", "NORTH", "SOUTH", "WEST", "EAST");
@@ -67,10 +74,15 @@ public final class InspectionPanel extends JPanel {
     static final List<Integer> LIVE_INTERVALS_MS = List.of(500, 1_000, 2_000, 5_000);
 
     private final InspectSubjectPayload subject;
+    private final Consumer<NavigationTarget> navigator;
     private final Supplier<SnippetExecutionService> snippets;
     private final ItemIconService icons;
     private final Runnable removeIconListener;
     private final JLabel icon = new JLabel();
+    private final JLabel name = new JLabel();
+    private final JLabel identityLine = new JLabel();
+    private final JLabel notice = new JLabel();
+    private final JPanel classes = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
     private final ItemTabIcon tabIcon = new ItemTabIcon(Icons.EVALUATE_EXPRESSION);
     private final JComboBox<Side> runSide = new JComboBox<>(new Side[]{Side.SERVER, Side.CLIENT});
     private final JComboBox<String> face = new JComboBox<>(FACES.toArray(String[]::new));
@@ -87,6 +99,8 @@ public final class InspectionPanel extends JPanel {
     private final JTextArea problem = new JTextArea();
     private final JPanel cards = new JPanel(new CardLayout());
     private FactsPanel facts;
+    private SubjectIdentity identity;
+    private String lastRead;
     private boolean objectShown;
     private SnippetExecutionService.Execution active;
     private long revision;
@@ -101,11 +115,12 @@ public final class InspectionPanel extends JPanel {
     ) {
         super(new BorderLayout());
         this.subject = Objects.requireNonNull(subject, "subject");
+        this.identity = subject.identity();
         this.snippets = Objects.requireNonNull(snippets, "snippets");
         this.icons = Objects.requireNonNull(icons, "icons");
-        Objects.requireNonNull(navigator, "navigator");
-        this.tools = new ToolsPanel(subject, snippets, Objects.requireNonNull(scripts, "scripts"), icons, navigator,
-                this::refresh);
+        this.navigator = Objects.requireNonNull(navigator, "navigator");
+        this.tools = new ToolsPanel(subject, () -> this.identity, snippets, Objects.requireNonNull(scripts, "scripts"),
+                icons, navigator, this::refresh);
         JPanel sections = new JPanel();
         sections.setLayout(new BoxLayout(sections, BoxLayout.Y_AXIS));
         this.builtIn.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -115,7 +130,7 @@ public final class InspectionPanel extends JPanel {
         sections.add(this.tools);
         this.overview.add(sections, BorderLayout.NORTH);
 
-        add(header(navigator), BorderLayout.NORTH);
+        add(header(), BorderLayout.NORTH);
         JTabbedPane views = new JTabbedPane();
         views.addTab("Overview", scroll(this.overview));
         views.addTab("Object", new JScrollPane(this.object));
@@ -126,9 +141,9 @@ public final class InspectionPanel extends JPanel {
 
         this.runSide.setRenderer(labels(value -> value == Side.CLIENT ? "Client" : "Server"));
         this.runSide.setToolTipText("Read the server's or the client's copy of the world");
-        this.face.setRenderer(labels(value -> value == null || value.toString().isEmpty()
-                ? "All sides" : capitalized(value.toString())));
-        this.face.setToolTipText("Face whose item, fluid and energy handlers are read");
+        this.face.setRenderer(labels(value -> sideLabel(value == null ? "" : value.toString())));
+        this.face.setToolTipText("<html>Side passed to capability queries.<br>None asks for the unsided handler, "
+                + "which the mod defines; it is not a combination of the six faces.</html>");
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
         this.refresh.addActionListener(event -> refresh());
@@ -151,13 +166,11 @@ public final class InspectionPanel extends JPanel {
         reloadIcons();
     }
 
-    private JComponent header(Consumer<NavigationTarget> navigator) {
-        JLabel name = new JLabel(this.subject.displayName().isBlank()
-                ? this.subject.registryId() : this.subject.displayName());
-        name.putClientProperty("FlatLaf.styleClass", "h3");
+    private JComponent header() {
+        this.name.putClientProperty("FlatLaf.styleClass", "h3");
 
         Box title = Box.createHorizontalBox();
-        title.add(name);
+        title.add(this.name);
         title.add(Box.createHorizontalGlue());
         this.face.setMaximumSize(this.face.getPreferredSize());
         this.runSide.setMaximumSize(this.runSide.getPreferredSize());
@@ -174,28 +187,23 @@ public final class InspectionPanel extends JPanel {
         title.add(Box.createHorizontalStrut(6));
         title.add(this.refresh);
 
-        JLabel identity = new JLabel(identity());
-        identity.putClientProperty("FlatLaf.styleClass", "small");
-
-        JPanel classes = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        for (InspectSubjectPayload.ClassLink link : this.subject.classes()) {
-            JButton button = new JButton(link.label() + ": " + simpleName(link.binaryName()), Icons.JAVA_CLASS);
-            button.putClientProperty("JButton.buttonType", "borderless");
-            button.setToolTipText(link.binaryName());
-            button.addActionListener(event -> navigator.accept(new NavigationTarget.RuntimeClass(link.binaryName())));
-            classes.add(button);
-        }
+        this.identityLine.putClientProperty("FlatLaf.styleClass", "small");
+        this.notice.putClientProperty("FlatLaf.styleClass", "small");
+        this.notice.setIcon(Icons.WARNING);
+        this.notice.setVisible(false);
+        showIdentity();
 
         JPanel details = new JPanel();
         details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
-        for (JComponent row : new JComponent[]{title, identity, classes, this.status}) {
+        for (JComponent row : new JComponent[]{title, this.identityLine, this.notice, this.classes, this.status}) {
             row.setAlignmentX(Component.LEFT_ALIGNMENT);
         }
         details.add(title);
         details.add(Box.createVerticalStrut(4));
-        details.add(identity);
+        details.add(this.identityLine);
+        details.add(this.notice);
         details.add(Box.createVerticalStrut(4));
-        details.add(classes);
+        details.add(this.classes);
         details.add(Box.createVerticalStrut(4));
         details.add(this.status);
 
@@ -212,25 +220,44 @@ public final class InspectionPanel extends JPanel {
         return header;
     }
 
-    private String identity() {
-        StringBuilder text = new StringBuilder(this.subject.registryId());
-        if (!this.subject.modName().isBlank()) {
-            text.append("  ·  ").append(this.subject.modName());
+    /** Shows the current identity in the header: name, registry id, mod, subject and class links. */
+    private void showIdentity() {
+        this.name.setText(this.identity.title());
+        StringBuilder text = new StringBuilder(this.identity.registryId());
+        if (!this.identity.modName().isBlank()) {
+            text.append("  ·  ").append(this.identity.modName());
         }
-        return text.append("  ·  ").append(this.subject.subject()).toString();
+        this.identityLine.setText(text.append("  ·  ").append(this.subject.subject()).toString());
+        this.classes.removeAll();
+        for (SubjectIdentity.ClassLink link : this.identity.classes()) {
+            JButton button = new JButton(link.label() + ": " + simpleName(link.binaryName()), Icons.JAVA_CLASS);
+            button.putClientProperty("JButton.buttonType", "borderless");
+            button.setToolTipText(link.binaryName());
+            button.addActionListener(event ->
+                    this.navigator.accept(new NavigationTarget.RuntimeClass(link.binaryName())));
+            this.classes.add(button);
+        }
+        this.classes.revalidate();
+        this.classes.repaint();
+    }
+
+    /** The side selector's text for a face name; the empty name is the unsided query. */
+    static String sideLabel(String faceName) {
+        return "Side: " + (faceName.isEmpty() ? "None" : capitalized(faceName));
+    }
+
+    /** The name of what currently occupies the subject, for the editor tab. */
+    public String title() {
+        return this.identity.title();
     }
 
     /** The snippet each refresh runs: the built-in readers report sections, and the target is the result. */
     static String readerSource(String faceName) {
         String side = faceName.isEmpty() ? "null" : "Direction." + faceName;
         return """
-                import com.github.minecraft_ta.totaldebug.inspection.CapabilityReader;
-                import com.github.minecraft_ta.totaldebug.inspection.NbtReader;
-                import com.github.minecraft_ta.totaldebug.inspection.StorageReader;
+                import com.github.minecraft_ta.totaldebug.inspection.InspectionReaders;
                 import net.minecraft.core.Direction;
-                StorageReader.read(target(), %1$s, facts());
-                CapabilityReader.read(target(), %1$s, facts());
-                NbtReader.read(target(), facts());
+                InspectionReaders.read(target(), %s, facts());
                 return target();
                 """.formatted(side);
     }
@@ -253,7 +280,7 @@ public final class InspectionPanel extends JPanel {
                     new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId())
             );
         } catch (RuntimeException exception) {
-            showProblem(exception.getMessage());
+            readFailed(exception.getMessage());
             scheduleLive(current);
             return;
         }
@@ -297,17 +324,58 @@ public final class InspectionPanel extends JPanel {
     ) {
         if (this.disposed || current != this.revision) return;
         this.active = null;
+        present(selectedSide, outcome, failure, source::mapDiagnostics);
+    }
+
+    /**
+     * Presents a finished read: its identity, then its facts even when the read failed part way. A read without facts
+     * leaves the previous one on screen. {@code diagnostics} maps error positions to the snippet's source.
+     */
+    void present(Side selectedSide, ExecutionResult outcome, Throwable failure, UnaryOperator<String> diagnostics) {
         this.refresh.setEnabled(true);
         if (failure != null) {
-            showProblem(failure.getMessage());
+            readFailed(failure.getMessage());
             return;
         }
-        if (outcome.status() != ExecutionStatus.RUN_COMPLETED || outcome.value() == null) {
-            String error = ExecutionTextDisplay.format(outcome.error());
-            showProblem(error.isBlank() ? "The read ended without a result" : source.mapDiagnostics(error));
+        if (outcome.identity() != null) {
+            applyIdentity(outcome.identity(), selectedSide);
+        }
+        boolean completed = outcome.status() == ExecutionStatus.RUN_COMPLETED && outcome.value() != null;
+        String error = ExecutionTextDisplay.format(outcome.error());
+        error = completed ? "" : error.isBlank() ? "The read ended without a result" : diagnostics.apply(error);
+        if (!completed && outcome.facts().isEmpty()) {
+            readFailed(error);
             return;
         }
         showOutcome(outcome, selectedSide);
+        String logs = ExecutionTextDisplay.format(outcome.logs()).strip();
+        if (!completed) {
+            showStatusProblem(this.status.getText() + "  ·  " + firstLine(error), error + "\n\n" + logs);
+        } else if (hasProblems(outcome)) {
+            showStatusProblem(this.status.getText() + "  ·  Some parts could not be read", logs);
+        }
+    }
+
+    /**
+     * Takes the identity a read reported. A different registry id means the subject was replaced: the header says
+     * what it was, and the tools are selected again for what is there now.
+     */
+    void applyIdentity(SubjectIdentity reported, Side selectedSide) {
+        if (reported.equals(this.identity)) return;
+        boolean replaced = !reported.registryId().equals(this.identity.registryId());
+        if (replaced) {
+            this.notice.setText("Was " + this.identity.title() + " (" + this.identity.registryId() + ") until "
+                    + LocalTime.now().format(CAPTURE_TIME));
+            this.notice.setVisible(true);
+        }
+        this.identity = reported;
+        showIdentity();
+        reloadIcons();
+        EditorTabs tabs = (EditorTabs) SwingUtilities.getAncestorOfClass(EditorTabs.class, this);
+        if (tabs != null) tabs.refreshEditorTitles();
+        if (replaced) {
+            this.tools.run(selectedSide);
+        }
     }
 
     /** Presents a completed read's sections and returned object. */
@@ -320,27 +388,58 @@ public final class InspectionPanel extends JPanel {
             this.overview.revalidate();
             this.overview.repaint();
         }
-        if (this.objectShown) {
-            this.object.replaceResult(outcome.value());
-        } else {
-            this.object.showResult(outcome.value());
-            this.object.expandRow(0);
-            this.objectShown = true;
+        if (outcome.value() != null) {
+            if (this.objectShown) {
+                this.object.replaceResult(outcome.value());
+            } else {
+                this.object.showResult(outcome.value());
+                this.object.expandRow(0);
+                this.objectShown = true;
+            }
         }
         ((CardLayout) this.cards.getLayout()).show(this.cards, RESULT_CARD);
+        this.lastRead = LocalTime.now().format(CAPTURE_TIME);
         this.status.setIcon(null);
+        this.status.setToolTipText(null);
         this.status.setText((this.live.isSelected() ? "Live · " : "") + capitalized(sideName(selectedSide))
-                + " · " + LocalTime.now().format(CAPTURE_TIME));
+                + " · " + this.lastRead);
     }
 
-    private void showProblem(String message) {
+    /**
+     * Reports a read that produced nothing to show. The previous read stays on screen, marked with the time it was
+     * taken; without one the problem replaces the overview.
+     */
+    private void readFailed(String message) {
         String text = message == null || message.isBlank() ? "The read failed" : message;
         this.refresh.setEnabled(true);
+        if (this.lastRead != null) {
+            showStatusProblem("Last read " + this.lastRead + "  ·  " + firstLine(text), text);
+            return;
+        }
         this.problem.setText(text);
         this.problem.setCaretPosition(0);
         ((CardLayout) this.cards.getLayout()).show(this.cards, PROBLEM_CARD);
+        showStatusProblem(firstLine(text), text);
+    }
+
+    private void showStatusProblem(String text, String details) {
         this.status.setIcon(Icons.ERROR);
-        this.status.setText(text.lines().findFirst().orElse(text));
+        this.status.setText(text);
+        String bounded = details.length() > 4_000 ? details.substring(0, 4_000) + "…" : details;
+        this.status.setToolTipText("<html><pre>" + escape(bounded.strip()) + "</pre></html>");
+    }
+
+    private static boolean hasProblems(ExecutionResult outcome) {
+        return outcome.facts().stream().flatMap(section -> section.facts().stream())
+                .anyMatch(fact -> fact.kind() == Fact.Kind.PROBLEM);
+    }
+
+    private static String firstLine(String text) {
+        return text.lines().findFirst().orElse(text);
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void reloadIcons() {
@@ -349,11 +448,16 @@ public final class InspectionPanel extends JPanel {
             this.facts.reloadIcons();
         }
         this.tools.reloadIcons();
-        this.icons.render(this.subject.iconModel(), this.subject.iconTints(), HEADER_ICON_SIZE)
+        // The client's icon has the selected item's tints; after a replacement only the plain item model is known.
+        boolean selectedItem = this.identity.iconItem().equals(this.subject.identity().iconItem());
+        String model = selectedItem ? this.subject.iconModel()
+                : this.identity.iconItem().isEmpty() ? "" : ItemIconService.itemModel(this.identity.iconItem());
+        Map<Integer, Integer> tints = selectedItem ? this.subject.iconTints() : Map.of();
+        this.icons.render(model, tints, HEADER_ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (!this.disposed) this.icon.setIcon(image.map(ImageIcon::new).orElse(null));
                 }));
-        this.icons.render(this.subject.iconModel(), this.subject.iconTints(), TAB_ICON_SIZE)
+        this.icons.render(model, tints, TAB_ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
                     this.tabIcon.setImage(image.orElse(null));

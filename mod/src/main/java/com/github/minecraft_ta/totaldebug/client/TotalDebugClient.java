@@ -62,10 +62,7 @@ public final class TotalDebugClient {
                 TotalDebugClient.this.codeOpen.inspect(new InspectSubjectPayload(
                         gameSession(),
                         subject.subject().format(),
-                        subject.displayName(),
-                        subject.registryId(),
-                        subject.modName(),
-                        subject.classes(),
+                        subject.identity(),
                         subject.icon().map(ItemIcons.Icon::model).orElse(""),
                         subject.icon().map(ItemIcons.Icon::tints).orElse(Map.of())
                 ));

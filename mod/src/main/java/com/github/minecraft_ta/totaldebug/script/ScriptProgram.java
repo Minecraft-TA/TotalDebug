@@ -23,7 +23,7 @@ public abstract class ScriptProgram {
     private static final Object NO_RESULT = new Object();
 
     private final ExecutionTextBuffer output = new ExecutionTextBuffer(ExecutionResultCodec.MAX_WIRE_BYTES);
-    private final ScriptFacts facts = new ScriptFacts();
+    private final ScriptFacts facts = new ScriptFacts(this.output::append);
     private Supplier<ScriptTarget> targetSource;
     private ScriptTarget target;
 

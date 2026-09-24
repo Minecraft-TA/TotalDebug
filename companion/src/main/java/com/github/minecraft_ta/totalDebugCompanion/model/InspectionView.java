@@ -27,6 +27,12 @@ public final class InspectionView implements IEditorPanel {
         return this.subject;
     }
 
+    /** Whether this tab shows {@code other}'s subject in the same game session, whatever occupies it now. */
+    public boolean shows(InspectSubjectPayload other) {
+        return this.subject.subject().equals(other.subject())
+                && this.subject.gameSessionId().equals(other.gameSessionId());
+    }
+
     public void refresh() {
         this.panel.refresh();
     }
@@ -38,7 +44,7 @@ public final class InspectionView implements IEditorPanel {
 
     @Override
     public String getTitle() {
-        return this.subject.displayName().isBlank() ? this.subject.registryId() : this.subject.displayName();
+        return this.panel.title();
     }
 
     @Override

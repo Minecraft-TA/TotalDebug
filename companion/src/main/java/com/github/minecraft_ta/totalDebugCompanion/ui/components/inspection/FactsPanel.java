@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 
@@ -227,6 +229,13 @@ public final class FactsPanel extends JPanel {
         }
 
         private JComponent value(Fact fact) {
+            if (fact.kind() == Fact.Kind.PROBLEM) {
+                JLabel problem = new JLabel(fact.value(), Icons.ERROR, JLabel.LEADING);
+                problem.setToolTipText(fact.value());
+                problem.setForeground(ThemeColors.error());
+                problem.setBackground(ChangeMarks.tint());
+                return problem;
+            }
             if (fact.kind() == Fact.Kind.TEXT) {
                 JLabel value = new JLabel(fact.value());
                 value.setToolTipText(fact.value());

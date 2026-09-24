@@ -1,15 +1,20 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import java.util.List;
 import java.util.Objects;
 
-/** Canonical, transport-safe update for one live Java execution. {@code facts} are sections the script reported. */
+/**
+ * Canonical, transport-safe update for one live Java execution. {@code facts} are sections the script reported and
+ * {@code identity} describes the target the run resolved, or is null when it resolved none.
+ */
 public record ExecutionResult(
         ExecutionStatus status,
         ExecutionText logs,
         ExecutionValue value,
         ExecutionText error,
-        List<FactSection> facts
+        List<FactSection> facts,
+        SubjectIdentity identity
 ) {
     public ExecutionResult {
         Objects.requireNonNull(status, "status");
@@ -23,11 +28,15 @@ public record ExecutionResult(
     }
 
     public ExecutionResult(ExecutionStatus status, ExecutionText logs, ExecutionValue value, ExecutionText error) {
-        this(status, logs, value, error, List.of());
+        this(status, logs, value, error, List.of(), null);
     }
 
     public ExecutionResult withFacts(List<FactSection> sections) {
-        return new ExecutionResult(this.status, this.logs, this.value, this.error, sections);
+        return new ExecutionResult(this.status, this.logs, this.value, this.error, sections, this.identity);
+    }
+
+    public ExecutionResult withIdentity(SubjectIdentity identity) {
+        return new ExecutionResult(this.status, this.logs, this.value, this.error, this.facts, identity);
     }
 
     public static ExecutionResult progress(ExecutionStatus status) {

@@ -208,7 +208,7 @@ class ClientScriptServiceTest {
     private static RunScriptMessage targetedServerRun(int scriptId, String gameSession) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
                 "inventory", true, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
-                "block minecraft:overworld 1 64 -2", gameSession);
+                "block minecraft:overworld 1 64 -2", gameSession, "");
     }
 
     private record Status(int scriptId, ExecutionResult status) {

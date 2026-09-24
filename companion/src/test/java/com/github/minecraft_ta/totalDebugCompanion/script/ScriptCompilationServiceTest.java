@@ -134,13 +134,15 @@ class ScriptCompilationServiceTest {
              var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
             compiler.bind(snapshot);
             compiler.submit(8, SOURCE, false, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session"),
+                    new ScriptSubject(SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session",
+                            "minecraft:pig"),
                     outcome -> this.failures.add(outcome.result()));
             RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
 
             assertNotNull(message, () -> this.failures.toString());
             assertEquals("entity 0f8fad5b-d9cb-469f-a165-70867728950e", message.subject());
             assertEquals("game-session", message.subjectSessionId());
+            assertEquals("minecraft:pig", message.subjectExpectedId());
         }
     }
 

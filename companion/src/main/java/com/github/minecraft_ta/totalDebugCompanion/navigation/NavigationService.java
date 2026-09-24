@@ -271,7 +271,7 @@ public final class NavigationService {
                 case NavigationTarget.RuntimePackage runtimePackage -> revealRuntimePath(runtimePackage.ownerClassName(), runtimePackage.packageName().replace('.', '/'));
                 case NavigationTarget.Inspection inspection -> dispatchNavigation(() -> openRuntimeEditor(requestedRuntime,
                         InspectionView.class,
-                        view -> view.subject().equals(inspection.subject()),
+                        view -> view.shows(inspection.subject()),
                         () -> new InspectionView(editors.get(), inspection.subject(), requestedRuntime)
                 ).thenAccept(InspectionView::refresh), activation);
                 case NavigationTarget.ModuleSearch search -> dispatchNavigation(() -> {

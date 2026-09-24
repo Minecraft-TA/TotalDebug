@@ -320,7 +320,8 @@ public final class ScriptCompilationService implements AutoCloseable {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || (server != null && this.serverSnapshot != server) || !this.sender.test(new RunScriptMessage(
                         id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId(),
-                        subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId()))) {
+                        subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId(),
+                        subject == null ? "" : subject.expectedId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
                 }
                 this.pending.remove(id, task);

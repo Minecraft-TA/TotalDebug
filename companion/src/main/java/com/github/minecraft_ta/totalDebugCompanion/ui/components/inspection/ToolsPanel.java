@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionServic
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
@@ -46,12 +47,14 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * The project scripts run as tools on an inspected subject: every tool whose {@code // inspect:} patterns match the
- * subject, plus scripts chosen from the Tools menu for this tab. Each tool is its own run, so a failing tool reports
- * its error without affecting the others.
+ * The project scripts run as tools on an inspected subject: every tool whose {@code // inspect:} patterns match what
+ * currently occupies the subject, plus scripts chosen from the Tools menu for this tab. Each tool is its own run, so a
+ * failing tool reports its error without affecting the others. A tool run only starts while the subject still has the
+ * registry id the tool was selected for.
  */
 final class ToolsPanel extends JPanel {
     private final InspectSubjectPayload subject;
+    private final Supplier<SubjectIdentity> identity;
     private final Supplier<SnippetExecutionService> snippets;
     private final Supplier<ScriptFiles> scripts;
     private final ItemIconService icons;
@@ -66,6 +69,7 @@ final class ToolsPanel extends JPanel {
 
     ToolsPanel(
             InspectSubjectPayload subject,
+            Supplier<SubjectIdentity> identity,
             Supplier<SnippetExecutionService> snippets,
             Supplier<ScriptFiles> scripts,
             ItemIconService icons,
@@ -73,6 +77,7 @@ final class ToolsPanel extends JPanel {
             Runnable refreshInspection
     ) {
         this.subject = subject;
+        this.identity = identity;
         this.snippets = snippets;
         this.scripts = scripts;
         this.icons = icons;
@@ -104,8 +109,9 @@ final class ToolsPanel extends JPanel {
                 return;
             }
             this.tools = loaded;
+            String registryId = this.identity.get().registryId();
             List<InspectionTool> applicable = loaded.stream()
-                    .filter(tool -> tool.appliesTo(this.subject.registryId()) || this.chosen.contains(tool.path()))
+                    .filter(tool -> tool.appliesTo(registryId) || this.chosen.contains(tool.path()))
                     .toList();
             List<Path> paths = applicable.stream().map(InspectionTool::path).toList();
             if (!paths.equals(List.copyOf(this.views.keySet()))) {
@@ -122,7 +128,7 @@ final class ToolsPanel extends JPanel {
             }
             List<CompletableFuture<?>> runs = new ArrayList<>();
             for (InspectionTool tool : applicable) {
-                runs.add(start(this.views.get(tool.path()), tool, side, current));
+                runs.add(start(this.views.get(tool.path()), tool, side, registryId, current));
             }
             CompletableFuture.allOf(runs.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> done.complete(null));
         }));
@@ -137,14 +143,16 @@ final class ToolsPanel extends JPanel {
         }
     }
 
-    private CompletableFuture<?> start(ToolView view, InspectionTool tool, Side side, long current) {
+    private CompletableFuture<?> start(ToolView view, InspectionTool tool, Side side, String registryId,
+                                       long current) {
         JavaSnippetSource.GeneratedSource source;
         SnippetExecutionService.Execution execution;
         try {
             source = JavaSnippetSource.body(tool.name(), tool.text());
             source.requireExecutableSize();
             execution = this.snippets.get().execute(source, side, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId()));
+                    new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId(),
+                            registryId));
         } catch (RuntimeException exception) {
             view.showFailure(exception.getMessage());
             return CompletableFuture.completedFuture(null);
@@ -232,12 +240,11 @@ final class ToolsPanel extends JPanel {
     /** The Tools menu: tools running automatically, other scripts to run on this subject, and a new tool. */
     JPopupMenu menu() {
         JPopupMenu menu = new JPopupMenu();
-        List<InspectionTool> matching = this.tools.stream()
-                .filter(tool -> tool.appliesTo(this.subject.registryId())).toList();
-        List<InspectionTool> others = this.tools.stream()
-                .filter(tool -> !tool.appliesTo(this.subject.registryId())).toList();
+        String registryId = this.identity.get().registryId();
+        List<InspectionTool> matching = this.tools.stream().filter(tool -> tool.appliesTo(registryId)).toList();
+        List<InspectionTool> others = this.tools.stream().filter(tool -> !tool.appliesTo(registryId)).toList();
         if (!matching.isEmpty()) {
-            menu.add(caption("Run with every inspection of " + this.subject.registryId()));
+            menu.add(caption("Run with every inspection of " + registryId));
             for (InspectionTool tool : matching) {
                 JMenuItem item = new JMenuItem(tool.name(), Icons.SCRIPT_FILE);
                 item.setToolTipText(String.join(", ", tool.patterns()));
@@ -259,19 +266,20 @@ final class ToolsPanel extends JPanel {
             }
             menu.addSeparator();
         }
-        JMenuItem create = new JMenuItem("New tool for " + this.subject.registryId() + "…", Icons.SCRIPT_FILE);
+        JMenuItem create = new JMenuItem("New tool for " + registryId + "…", Icons.SCRIPT_FILE);
         create.addActionListener(event -> createTool());
         menu.add(create);
         return menu;
     }
 
     private void createTool() {
-        String suggested = suggestedName(this.subject.registryId());
+        SubjectIdentity current = this.identity.get();
+        String suggested = suggestedName(current.registryId());
         Object answer = JOptionPane.showInputDialog(this, "Script name", "New tool", JOptionPane.PLAIN_MESSAGE,
                 null, null, suggested);
         if (answer == null || answer.toString().isBlank()) return;
         String name = answer.toString().strip();
-        String title = this.subject.displayName().isBlank() ? name : this.subject.displayName();
+        String title = current.displayName().isBlank() ? name : current.displayName();
         CompletableFuture.supplyAsync(() -> {
             try {
                 ScriptFiles files = this.scripts.get();
@@ -279,7 +287,7 @@ final class ToolsPanel extends JPanel {
                 if (!Files.isDirectory(folder)) {
                     folder = files.create(files.root(), InspectionTool.FOLDER, true, "");
                 }
-                return files.create(folder, name, false, InspectionTool.template(this.subject.registryId(), title));
+                return files.create(folder, name, false, InspectionTool.template(current.registryId(), title));
             } catch (Exception exception) {
                 throw new IllegalStateException(exception.getMessage(), exception);
             }

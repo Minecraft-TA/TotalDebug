@@ -4,22 +4,27 @@ import com.github.minecraft_ta.totaldebug.script.ScriptFacts;
 import com.github.minecraft_ta.totaldebug.script.ScriptTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.vehicle.ContainerEntity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.storage.loot.LootTable;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
+import java.util.function.Supplier;
 
 /**
  * Built-in reader for what a block or entity exposes through NeoForge's item, fluid and energy capabilities. It only
- * reads: no transfer is simulated, no chunk is loaded and unopened loot containers are left untouched. A side of
- * {@code null} reads the unsided handler, which may differ from what automation sees on a particular face.
+ * reads: no transfer is simulated, no chunk is loaded and containers whose loot is not generated yet are not read,
+ * because reading their slots would generate it. A side of {@code null} reads the unsided handler, which may differ
+ * from what automation sees on any particular face. Each part is read independently, so one failing handler does not
+ * hide the others.
  */
 public final class StorageReader {
     public static final int MAX_SLOTS = 96;
@@ -38,32 +43,46 @@ public final class StorageReader {
         Level level = block.level();
         BlockPos pos = block.pos();
         BlockState state = block.state();
-        BlockEntity blockEntity = block.blockEntity();
-
-        String pendingLoot = pendingLoot(level, pos, state, blockEntity);
-        if (pendingLoot != null) {
-            facts.section("Items").text("Contents", pendingLoot);
-        } else {
-            items(level.getCapability(Capabilities.ItemHandler.BLOCK, pos, state, blockEntity, side), facts);
-        }
-        fluids(level.getCapability(Capabilities.FluidHandler.BLOCK, pos, state, blockEntity, side), facts);
-        energy(level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, state, blockEntity, side), facts);
-
-        if (!state.getValues().isEmpty()) {
-            ScriptFacts.Section properties = facts.section("Block state");
-            state.getValues().forEach((property, value) -> properties.text(property.getName(), value));
-        }
+        facts.guarded("Items", () -> {
+            String otherHalf = pendingLootInOtherChestHalf(level, pos, state);
+            if (otherHalf != null) {
+                facts.section("Items").text("Contents", otherHalf);
+                return;
+            }
+            items(block.blockEntity(), () -> level.getCapability(Capabilities.ItemHandler.BLOCK, pos, state,
+                    block.blockEntity(), side), facts);
+        });
+        facts.guarded("Fluids", () -> fluids(level.getCapability(Capabilities.FluidHandler.BLOCK, pos, state,
+                block.blockEntity(), side), facts));
+        facts.guarded("Energy", () -> energy(level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, state,
+                block.blockEntity(), side), facts));
+        facts.guarded("Block state", () -> {
+            if (!state.getValues().isEmpty()) {
+                ScriptFacts.Section properties = facts.section("Block state");
+                state.getValues().forEach((property, value) -> properties.text(property.getName(), value));
+            }
+        });
     }
 
     private static void readEntity(Entity entity, Direction side, ScriptFacts facts) {
-        items(side == null
+        facts.guarded("Items", () -> items(entity, () -> side == null
                 ? entity.getCapability(Capabilities.ItemHandler.ENTITY)
-                : entity.getCapability(Capabilities.ItemHandler.ENTITY_AUTOMATION, side), facts);
-        fluids(entity.getCapability(Capabilities.FluidHandler.ENTITY, side), facts);
-        energy(entity.getCapability(Capabilities.EnergyStorage.ENTITY, side), facts);
+                : entity.getCapability(Capabilities.ItemHandler.ENTITY_AUTOMATION, side), facts));
+        facts.guarded("Fluids", () -> fluids(entity.getCapability(Capabilities.FluidHandler.ENTITY, side), facts));
+        facts.guarded("Energy", () -> energy(entity.getCapability(Capabilities.EnergyStorage.ENTITY, side), facts));
     }
 
-    private static void items(IItemHandler handler, ScriptFacts facts) {
+    /**
+     * Reports the slots of {@code owner}'s item handler, unless {@code owner} is a container whose loot is not
+     * generated yet; then the handler is never requested, because reading any slot would generate the loot.
+     */
+    static void items(Object owner, Supplier<IItemHandler> handlerSource, ScriptFacts facts) {
+        String pendingLoot = pendingLoot(owner);
+        if (pendingLoot != null) {
+            facts.section("Items").text("Contents", pendingLoot);
+            return;
+        }
+        IItemHandler handler = handlerSource.get();
         if (handler == null) {
             return;
         }
@@ -73,7 +92,7 @@ public final class StorageReader {
             section.stack("Slot " + slot, handler.getStackInSlot(slot));
         }
         if (slots > MAX_SLOTS) {
-            facts.section("Items").text("Slots", slots + " (first " + MAX_SLOTS + " shown)");
+            section.text("Slots", slots + " (first " + MAX_SLOTS + " shown)");
         }
     }
 
@@ -97,19 +116,33 @@ public final class StorageReader {
                 .text("Provides energy", storage.canExtract() ? "Yes" : "No");
     }
 
-    /** Reading a container with an unopened loot table would generate its loot, including the other chest half. */
-    private static String pendingLoot(Level level, BlockPos pos, BlockState state, BlockEntity blockEntity) {
-        if (blockEntity instanceof RandomizableContainerBlockEntity container && container.getLootTable() != null) {
-            return "Loot not generated yet; not read to avoid generating it";
+    /**
+     * Why {@code owner}'s contents must not be read, or null. Block containers and container entities with a loot
+     * table generate it on their first slot access, including {@code isEmpty()} for block entities.
+     */
+    static String pendingLoot(Object owner) {
+        ResourceKey<LootTable> lootTable = switch (owner) {
+            case RandomizableContainer container -> container.getLootTable();
+            case ContainerEntity container -> container.getLootTable();
+            case null, default -> null;
+        };
+        return lootTable == null ? null : notRead(lootTable);
+    }
+
+    private static String pendingLootInOtherChestHalf(Level level, BlockPos pos, BlockState state) {
+        if (!(state.getBlock() instanceof ChestBlock) || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
+            return null;
         }
-        if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
-            BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
-            if (level.isLoaded(other)
-                    && level.getBlockEntity(other) instanceof RandomizableContainerBlockEntity container
-                    && container.getLootTable() != null) {
-                return "Loot in the other chest half not generated yet; not read to avoid generating it";
-            }
+        BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
+        if (!level.isLoaded(other) || !(level.getBlockEntity(other) instanceof RandomizableContainer container)
+                || container.getLootTable() == null) {
+            return null;
         }
-        return null;
+        return "Not read: loot " + container.getLootTable().location()
+                + " in the other chest half is not generated yet";
+    }
+
+    private static String notRead(ResourceKey<LootTable> lootTable) {
+        return "Not read: loot " + lootTable.location() + " is not generated yet";
     }
 }

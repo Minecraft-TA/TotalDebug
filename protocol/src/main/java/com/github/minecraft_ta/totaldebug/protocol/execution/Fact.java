@@ -12,6 +12,8 @@ import java.util.Objects;
  *     <li>{@code STACK}: {@code amount} items of registry {@code id} named {@code value}; an empty slot has an empty
  *     id.</li>
  *     <li>{@code FLUID}: {@code amount} of {@code capacity} millibuckets of fluid {@code id} named {@code value}.</li>
+ *     <li>{@code PROBLEM}: reading {@code label} failed with the message {@code value}; facts reported before the
+ *     failure remain.</li>
  * </ul>
  */
 public record Fact(
@@ -31,7 +33,8 @@ public record Fact(
         TEXT,
         BAR,
         STACK,
-        FLUID
+        FLUID,
+        PROBLEM
     }
 
     public Fact {
@@ -75,6 +78,10 @@ public record Fact(
 
     public static Fact fluid(String label, String fluidId, long amount, long capacity, String name) {
         return new Fact(Kind.FLUID, label, name, fluidId, amount, capacity, "mB");
+    }
+
+    public static Fact problem(String label, String message) {
+        return new Fact(Kind.PROBLEM, label, message, "", 0, 0, "");
     }
 
     public int omittedChildren() {
