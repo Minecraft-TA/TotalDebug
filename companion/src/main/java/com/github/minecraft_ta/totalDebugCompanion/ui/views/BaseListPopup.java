@@ -153,10 +153,6 @@ public class BaseListPopup<ITEM> extends BasePopup {
         this.enterKeyListener = listener;
     }
 
-    public boolean isInvokedBy(Component component) {
-        return this.invoker == component;
-    }
-
     private void runEnterKeyListener() {
         if (this.list.getSelectedIndex() == -1 || this.enterKeyListener == null)
             return;
