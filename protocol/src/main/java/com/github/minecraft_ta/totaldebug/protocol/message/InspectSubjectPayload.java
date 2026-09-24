@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Protocol-17 payload. The client's description of a subject selected with the inspect key. {@code gameSessionId}
+ * Protocol-18 payload. The client's description of a subject selected with the inspect key. {@code gameSessionId}
  * identifies the joined world, so a later run can be rejected once that world is left. {@code iconModel} is the item
  * model shown for the subject, or empty, and {@code iconTints} maps its tint indexes to ARGB colors.
  */
