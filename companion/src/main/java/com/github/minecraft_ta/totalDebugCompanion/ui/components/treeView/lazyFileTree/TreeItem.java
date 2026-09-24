@@ -33,6 +33,11 @@ public class TreeItem {
         return false;
     }
 
+    /** Whether double-click and Enter open this item; directories only expand unless they open a page. */
+    public boolean isActivatable() {
+        return !isDirectory();
+    }
+
     public String getName() {
         return name;
     }

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
+
 import java.util.Objects;
 
 /**
@@ -24,5 +26,9 @@ public record FactLink(Kind kind, String target) {
 
     public static FactLink toClass(String binaryName) {
         return new FactLink(Kind.CLASS, binaryName);
+    }
+
+    public static FactLink toSubject(SubjectRef subject) {
+        return new FactLink(Kind.SUBJECT, subject.format());
     }
 }

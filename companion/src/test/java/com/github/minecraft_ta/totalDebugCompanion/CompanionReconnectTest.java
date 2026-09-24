@@ -451,6 +451,8 @@ class CompanionReconnectTest {
         public void refreshProfile() { }
         public void refreshProjects() { }
         public void runtimeChanged() { }
+        @Override
+        public void catalogChanged() { }
         public void setGameStatus(ServiceStatus status) { game = status; gameChanged.accept(status); }
         public void setMcpStatus(ServiceStatus status) { }
         public void setRuntimeIndexStatus(RuntimeIndexService.Status status) { }

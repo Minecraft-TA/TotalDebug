@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
 import java.nio.file.Path;
@@ -23,7 +24,40 @@ public sealed interface NavigationTarget permits
         NavigationTarget.LiteralUsages,
         NavigationTarget.RuntimePackage,
         NavigationTarget.ModuleSearch,
-        NavigationTarget.Inspection {
+        NavigationTarget.Inspection,
+        NavigationTarget.ModPage,
+        NavigationTarget.Definition,
+        NavigationTarget.RuntimeModuleNode {
+
+    /**
+     * An installed mod's page, or a namespace's or runtime module's page when no captured mod has that id.
+     * {@code resourceCategory} selects a resource category on the Resources tab and is empty otherwise.
+     */
+    record ModPage(String modId, ModTab tab, String resourceCategory) implements NavigationTarget {
+        public ModPage {
+            modId = requireText(modId, "modId");
+            Objects.requireNonNull(tab, "tab");
+            resourceCategory = Objects.requireNonNullElse(resourceCategory, "");
+        }
+
+        public ModPage(String modId) {
+            this(modId, ModTab.OVERVIEW, "");
+        }
+    }
+
+    /** A registered block, item or entity type, described by the captured pack catalog. */
+    record Definition(SubjectRef.Definition subject) implements NavigationTarget {
+        public Definition {
+            Objects.requireNonNull(subject, "subject");
+        }
+    }
+
+    /** A runtime module's node in the Runtime tree. */
+    record RuntimeModuleNode(String moduleId) implements NavigationTarget {
+        public RuntimeModuleNode {
+            moduleId = requireText(moduleId, "moduleId");
+        }
+    }
 
     /** A block or entity selected in the game, inspected in the session where it was selected. */
     record Inspection(InspectSubjectPayload subject) implements NavigationTarget {

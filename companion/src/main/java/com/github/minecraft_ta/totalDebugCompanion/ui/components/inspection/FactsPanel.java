@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
+
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -401,6 +403,7 @@ public final class FactsPanel extends JPanel {
             setText(next.value());
             setOpaque(changed);
             boolean linked = next.link() != null;
+            setIcon(linked ? SubjectIcons.link(next.link()) : null);
             setCursor(linked ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
             setToolTipText(linked ? next.link().target() : next.value().length() > 40 ? next.value() : null);
             hover(this.hovered);

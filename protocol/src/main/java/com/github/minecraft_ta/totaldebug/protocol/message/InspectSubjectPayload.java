@@ -25,7 +25,7 @@ public record InspectSubjectPayload(
 
     public InspectSubjectPayload {
         Objects.requireNonNull(gameSessionId, "gameSessionId");
-        SubjectRef.parse(subject);
+        SubjectRef.parseWorld(subject);
         Objects.requireNonNull(identity, "identity");
         iconModel = Objects.requireNonNullElse(iconModel, "");
         iconTints = Map.copyOf(Objects.requireNonNullElse(iconTints, Map.of()));

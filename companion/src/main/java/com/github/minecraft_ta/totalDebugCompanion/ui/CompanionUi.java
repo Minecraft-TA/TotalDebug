@@ -14,6 +14,8 @@ public interface CompanionUi {
     void refreshProfile();
     void refreshProjects();
     void runtimeChanged();
+    /** The selected project's pack catalog changed state. */
+    void catalogChanged();
     void setGameStatus(ServiceStatus status);
     void setMcpStatus(ServiceStatus status);
     void setRuntimeIndexStatus(RuntimeIndexService.Status status);

@@ -109,7 +109,7 @@ public class LazyFileJTree extends JTree {
                 if (node == null)
                     return;
                 TreeItem treeItem = node.getUserObject();
-                if (treeItem.isDirectory())
+                if (!treeItem.isActivatable())
                     return;
 
                 if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2)

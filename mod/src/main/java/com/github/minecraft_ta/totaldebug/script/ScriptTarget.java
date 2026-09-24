@@ -13,7 +13,7 @@ import java.util.Objects;
  * most specific object comes first in a captured result.
  */
 public sealed interface ScriptTarget {
-    SubjectRef subject();
+    SubjectRef.InWorld subject();
 
     Level level();
 

@@ -1,0 +1,76 @@
+package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
+
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
+import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ModTreeItemsTest {
+    @TempDir Path directory;
+
+    @Test
+    void capturedModsGroupTheirContentWithoutListingIt() throws Exception {
+        Path jar = CatalogFixtures.modJar(this.directory);
+        var snapshot = new ModTreeItems.Snapshot(
+                new PackCatalogService.Ready(new CatalogIndex(CatalogFixtures.catalog(jar))), sources(jar));
+
+        List<TreeItem> mods = ModTreeItems.children(snapshot);
+
+        assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
+        TreeItem testmod = mods.get(1);
+        assertTrue(testmod.isActivatable());
+        assertEquals(new NavigationTarget.ModPage("testmod"), ((NavigableTreeItem) testmod).navigationTarget());
+        List<TreeItem> groups = ((DirectoryTreeItem) testmod).loadChildren();
+        assertEquals(List.of("blocks", "items", "entities", "configuration", "resources"),
+                groups.stream().map(TreeItem::getName).toList());
+        assertEquals("1", groups.get(1).getPresentation().secondary());
+        assertEquals(new NavigationTarget.ModPage("testmod", ModTab.ITEMS, ""),
+                ((NavigableTreeItem) groups.get(1)).navigationTarget());
+
+        List<TreeItem> categories = ((DirectoryTreeItem) groups.get(4)).loadChildren();
+        TreeItem textures = categories.stream().filter(item -> item.getName().equals("assets/textures")).findFirst().orElseThrow();
+        assertEquals("2", textures.getPresentation().secondary());
+        assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, "assets/textures"),
+                ((NavigableTreeItem) textures).navigationTarget());
+
+        List<TreeItem> neoforge = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
+        assertTrue(neoforge.isEmpty(), "a mod without content or an existing file has no groups");
+    }
+
+    @Test
+    void beforeTheFirstCaptureModsComeFromTheRuntimeWithTheirResources() throws Exception {
+        Path jar = CatalogFixtures.modJar(this.directory);
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar));
+
+        List<TreeItem> mods = ModTreeItems.children(snapshot);
+
+        assertEquals(List.of("othermod"), mods.stream().map(TreeItem::getName).toList());
+        List<TreeItem> groups = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
+        assertEquals(List.of("resources"), groups.stream().map(TreeItem::getName).toList());
+        assertInstanceOf(NavigableTreeItem.class, groups.getFirst());
+        ModTreeItems.Root root = new ModTreeItems.Root(() -> snapshot);
+        assertEquals("not captured", root.getPresentation().secondary());
+        assertFalse(root.isActivatable());
+    }
+
+    private static RuntimeSourceCatalog sources(Path jar) {
+        return new RuntimeSourceCatalog(List.of(new RuntimeSnapshotBytecodeSource.Source(0, jar, jar.toUri().toString(),
+                new RuntimeInventory.RuntimeModule("othermod", "Other Mod", RuntimeInventory.ModuleKind.MOD))));
+    }
+}

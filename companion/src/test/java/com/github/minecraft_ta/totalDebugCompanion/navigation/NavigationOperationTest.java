@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
+import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -11,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTa
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -150,6 +152,21 @@ class NavigationOperationTest {
             var failure = assertThrows(ExecutionException.class, () -> requested.get(5, TimeUnit.SECONDS));
             assertSame(refused, failure.getCause(), "Activation errors must complete the caller's future instead of stranding it");
             assertEquals(1, activations.get());
+        }
+    }
+
+    @Test void modAndDefinitionPagesOpenOnceAndTakePartInHistory() throws Exception {
+        try (var fixture = new Fixture()) {
+            fixture.navigation.navigate(new NavigationTarget.ModPage("examplemod"), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            fixture.navigation.navigate(new NavigationTarget.ModPage("examplemod", ModTab.RESOURCES, ""), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            assertEquals(1, edt(() -> fixture.tabs.editors().stream().filter(ModView.class::isInstance).count()));
+            SubjectRef.Definition stone = new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:stone");
+            fixture.navigation.navigate(new NavigationTarget.Definition(stone), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
+            assertEquals(new NavigationTarget.Definition(stone), edt(() -> fixture.tabs.getSelectedEditor().getNavigationTarget()));
+
+            fixture.navigation.goBack().get(5, TimeUnit.SECONDS);
+
+            assertInstanceOf(ModView.class, edt(fixture.tabs::getSelectedEditor));
         }
     }
 

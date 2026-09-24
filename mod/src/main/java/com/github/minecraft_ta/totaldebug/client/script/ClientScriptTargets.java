@@ -10,7 +10,7 @@ import net.minecraft.world.entity.Entity;
 /** Resolves script targets in the client's copy of the current level. */
 final class ClientScriptTargets implements ScriptTargetResolver {
     @Override
-    public ScriptTarget resolve(SubjectRef subject) {
+    public ScriptTarget resolve(SubjectRef.InWorld subject) {
         ClientLevel level = Minecraft.getInstance().level;
         if (level == null) {
             throw new IllegalStateException("The client is not in a world");

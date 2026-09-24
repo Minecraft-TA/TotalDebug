@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.TextResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
@@ -28,7 +29,7 @@ class SearchEverywhereLayoutTest {
     @Test void longResultsStayWithinTheViewportWhenNavigatingAndResizing() throws Exception {
         try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
         SwingUtilities.invokeAndWait(() -> {
-            var popup = new SearchEverywherePopup(null, service, () -> null, ignored -> {});
+            var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), ignored -> {});
             try {
                 var catalog = SearchEverywherePopup.class.getDeclaredField("sourceCatalog");
                 catalog.setAccessible(true);

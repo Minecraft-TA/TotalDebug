@@ -73,6 +73,8 @@ Extension code runs in three places:
 | Loot-table guard, capability walking, NBT conversion | mod | Standard library module |
 | Subject references, `target()`, `facts()`, script runner, transport, permissions, scheduling | mod and protocol | Kernel |
 | Resource snapshots, `ItemIcons`, raw value capture | mod | Kernel services |
+| Pack catalog capture of mods, registries and configuration files | mod and storage | Kernel capture |
+| Mod and definition subjects, mod and definition pages, Mods tree, catalog search | protocol and Companion | Kernel |
 | Compiler, `ItemIconService`, facts renderer, inspection page shell, live refresh, editor, debugger, MCP | Companion | Kernel |
 
 ## Two API layers

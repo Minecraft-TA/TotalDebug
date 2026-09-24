@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,7 +39,7 @@ class SearchEverywherePopupProcessTest {
     public static final class Probe {
         public static void main(String[] arguments) throws Exception {
             try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
-                SwingUtilities.invokeAndWait(() -> new SearchEverywherePopup(null, service, () -> null, ignored -> {}).dispose());
+                SwingUtilities.invokeAndWait(() -> new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), ignored -> {}).dispose());
             }
             System.exit(0);
         }

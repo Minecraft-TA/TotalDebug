@@ -24,6 +24,19 @@ public final class ItemIcons {
     public record Icon(String model, Map<Integer, Integer> tints) {
     }
 
+    /** The inventory model Minecraft draws for the stack, without reading its quads. */
+    public static Optional<String> model(ItemStack stack) {
+        if (stack.isEmpty()
+                || !(Minecraft.getInstance().getItemRenderer().getItemModelShaper() instanceof RegistryAwareItemModelShaper shaper)) {
+            return Optional.empty();
+        }
+        ModelResourceLocation location = shaper.getLocation(stack);
+        if (location == null || !location.variant().equals("inventory")) {
+            return Optional.empty();
+        }
+        return Optional.of(location.id().getNamespace() + ":item/" + location.id().getPath());
+    }
+
     public static Optional<Icon> of(ItemStack stack) {
         if (stack.isEmpty()) {
             return Optional.empty();

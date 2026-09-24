@@ -8,8 +8,11 @@ import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderResource
 import javax.swing.SwingUtilities;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Draws item icons from the resource snapshot the game last published. The renderer and its archive are confined to
@@ -28,8 +36,11 @@ import java.util.concurrent.Executors;
 public final class ItemIconService implements AutoCloseable {
     private static final int MAX_CACHED = 512;
 
-    private record Snapshot(Path archive, int layers) {
+    record Snapshot(Path archive, int layers) {
     }
+
+    private static final Pattern SNAPSHOT_NAME = Pattern.compile("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\\.zip");
+    private static final Pattern LAYER = Pattern.compile("layers/(\\d+)/");
 
     private record Key(String model, Map<Integer, Integer> tints, int size) {
     }
@@ -55,12 +66,66 @@ public final class ItemIconService implements AutoCloseable {
 
     /** Adopts a newer resource snapshot; views are told on the EDT so they can draw again. */
     public void accept(String archive, int layers) {
-        Snapshot next = new Snapshot(Path.of(archive), layers);
-        if (this.closed || next.equals(this.snapshot)) {
-            return;
+        adopt(this.snapshot, new Snapshot(Path.of(archive), layers), true);
+    }
+
+    /**
+     * Adopts the newest snapshot the game saved in a project's preview directory, or none, so icons stay available
+     * without a connection and never come from another project. Blocking; not on the Swing thread.
+     */
+    public void restore(Path directory) {
+        Snapshot before = this.snapshot;
+        adopt(before, newestSnapshot(directory), false);
+    }
+
+    /** Replaces the snapshot; a restore only applies while nothing else was adopted since it started. */
+    private void adopt(Snapshot expected, Snapshot next, boolean announced) {
+        synchronized (this.listeners) {
+            if (this.closed || Objects.equals(next, this.snapshot) || !announced && this.snapshot != expected) {
+                return;
+            }
+            this.snapshot = next;
         }
-        this.snapshot = next;
         SwingUtilities.invokeLater(() -> this.listeners.forEach(Runnable::run));
+    }
+
+    static Snapshot newestSnapshot(Path directory) {
+        if (!Files.isDirectory(directory)) {
+            return null;
+        }
+        List<Path> archives;
+        try (Stream<Path> files = Files.list(directory)) {
+            archives = files.filter(file -> SNAPSHOT_NAME.matcher(file.getFileName().toString()).matches())
+                    .filter(Files::isRegularFile)
+                    .sorted(Comparator.comparing(ItemIconService::modified).reversed())
+                    .toList();
+        } catch (IOException | RuntimeException unreadable) {
+            return null;
+        }
+        for (Path archive : archives) {
+            try (ZipFile zip = new ZipFile(archive.toFile())) {
+                int layers = zip.stream()
+                        .map(ZipEntry::getName)
+                        .map(LAYER::matcher)
+                        .filter(Matcher::lookingAt)
+                        .mapToInt(matcher -> Integer.parseInt(matcher.group(1)) + 1)
+                        .max().orElse(0);
+                if (layers > 0) {
+                    return new Snapshot(archive.toAbsolutePath().normalize(), layers);
+                }
+            } catch (IOException | RuntimeException unreadable) {
+                // A partly written or damaged archive is skipped in favor of an older complete one.
+            }
+        }
+        return null;
+    }
+
+    private static FileTime modified(Path file) {
+        try {
+            return Files.getLastModifiedTime(file);
+        } catch (IOException exception) {
+            return FileTime.fromMillis(0);
+        }
     }
 
     public boolean hasSnapshot() {

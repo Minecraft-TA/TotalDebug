@@ -9,6 +9,7 @@ import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionProtocolCodecTest {
@@ -105,6 +106,21 @@ class SessionProtocolCodecTest {
         assertEquals("id", message.inventoryId());
         assertEquals("file", message.inventoryFile());
         assertEquals("", message.detail());
+    }
+
+    @Test
+    void packCatalogMatchesTheSharedGoldenBytes() {
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        PackCatalogMessage.available("id", "file").write(output);
+
+        assertArrayEquals(HEX.parseHex(GoldenMessages.PACK_CATALOG), writtenBytes(output));
+        PackCatalogMessage message = new PackCatalogMessage();
+        message.read(new ByteBufferInputStream(ByteBuffer.wrap(HEX.parseHex(GoldenMessages.PACK_CATALOG))));
+        assertEquals(PackCatalogMessage.AVAILABLE, message.state());
+        assertEquals("id", message.inventoryId());
+        assertEquals("file", message.catalogFile());
+        assertThrows(IllegalArgumentException.class, () -> PackCatalogMessage.available("id", ""));
     }
 
     @Test

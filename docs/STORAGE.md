@@ -15,6 +15,7 @@ total-debug/
     runtime/
       .lock
       inventory.json
+      catalog.json
       sources/
         manifest.json
         fabric-renderer-api-v1.jar
@@ -25,6 +26,8 @@ total-debug/
       manifest.json
       net.minecraft.world.level.block.Blocks.java
       net.minecraft.world.level.block.Blocks.debug
+    inspection-previews/
+      <uuid>.zip
 ```
 
 Files are created when needed; an empty instance does not need every directory.
@@ -32,6 +35,8 @@ Files are created when needed; an empty instance does not need every directory.
 - `scripts` contains authored methodless Java scripts. It is created when the first script is saved, not when a project is opened. Opening and closing with default state does not create `state.json`.
 - `state.json` holds watches, breakpoint definitions, mute/exception choices and the last 50 distinct evaluator inputs with imports and execution side. The [project scope](../companion/README.md#ownership) owns instance state and flushes it before retiring the project. One instance-state owner writes the whole file. Breakpoint resolution is partitioned by runtime signature.
 - The one replaceable inventory describes the Java runtime, production mode, ordered physical class sources, logical origins and module ownership. Minecraft owns this file; Companion never writes a local scan into it. Game and Companion use the same Java record, JSON format and validator.
+- `catalog.json` is the pack catalog: installed mods with their versions, dependencies, configuration files and original mod files, plus every registered block, item and entity type. Minecraft owns it like the inventory: it captures the catalog on the client thread after resources load, writes it once per inventory id and language, and announces it to Companion. Companion reads the saved file only when its inventory id matches `inventory.json`.
+- `inspection-previews` holds immutable archives of the winning models, textures and atlases that Companion uses to draw item icons. The game keeps the newest archive; Companion restores it when a project opens, so icons remain available offline.
 - The format-2 source manifest lists generated JAR names, effective-content fingerprints, sizes and output SHA-256 hashes. Physical directories and JARs are referenced in place. A virtual root reuses its original archive only after its class entries and manifest match the effective loader view. Nested archives are copied as bytes; filtered or merged views are packed with buffered, compressed ZIP output. Filenames use the artifact or Java module name; collisions receive a numeric suffix. Only changed or damaged files are regenerated, and obsolete generated JARs are removed.
 - `index.jindex` is the only index file. Its ZIP contains the native Zstd `index` entry first, followed by a format-2 `manifest.json` with source kind, identity and source-id mappings. Local manifests also store archive fingerprints and incomplete-input diagnostics. Local identity includes the Java runtime and ordered archive content hashes; runtime identity comes from the published inventory. There is no index directory, generation selector or `current.json`.
 - Decompiled filenames normally use the full binary class name. The manifest records runtime/decompiler identity and any shortened or disambiguated filenames. Reserved names are escaped, case-insensitive collisions receive a numeric suffix, and long names retain their beginning and end.

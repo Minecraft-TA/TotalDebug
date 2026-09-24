@@ -18,6 +18,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.PackCatalogMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
@@ -50,6 +51,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -59,6 +61,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.BooleanSupplier;
@@ -110,6 +113,8 @@ public final class CompanionAppClient implements AutoCloseable {
             scriptId
     );
     private volatile Runnable sessionClosedHandler = () -> { };
+    private volatile BiConsumer<String, Map<String, String>> packCatalogHandler = (inventoryId, modules) -> { };
+    private volatile RuntimeInventoryPublisher.PublishedInventory publishedInventory;
     private volatile Consumer<CompanionStartupProgress> progressListener = progress -> { };
     private volatile boolean closing;
     private volatile RuntimeInventoryMessage runtimeInventoryState = RuntimeInventoryMessage.preparing(
@@ -229,6 +234,15 @@ public final class CompanionAppClient implements AutoCloseable {
 
     public void setSessionClosedHandler(Runnable handler) {
         this.sessionClosedHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    /** Receives each available runtime inventory, with the module containing each mod, whenever Companion has it. */
+    public void setPackCatalogHandler(BiConsumer<String, Map<String, String>> handler) {
+        this.packCatalogHandler = Objects.requireNonNull(handler, "handler");
+    }
+
+    public void sendPackCatalog(PackCatalogMessage message) {
+        send(message);
     }
 
     public void setProgressListener(Consumer<CompanionStartupProgress> listener) {
@@ -492,6 +506,7 @@ public final class CompanionAppClient implements AutoCloseable {
             }
             if (!force && this.runtimeInventoryState.state() == RuntimeInventoryMessage.AVAILABLE) {
                 sendRuntimeInventoryState();
+                announceInventory();
                 return;
             }
             if (this.runtimeInventoryTask != null && !this.runtimeInventoryTask.isDone()) {
@@ -504,11 +519,13 @@ public final class CompanionAppClient implements AutoCloseable {
             this.runtimeInventoryTask = this.runtimeInventoryWorker.submit(() -> {
                 try {
                     RuntimeInventoryPublisher.PublishedInventory published = this.runtimeInventoryPublisher.publish();
+                    this.publishedInventory = published;
                     this.runtimeInventoryState = RuntimeInventoryMessage.available(
                             published.id(),
                             published.file().toString()
                     );
                     sendRuntimeInventoryState();
+                    announceInventory();
                 } catch (IOException | RuntimeException exception) {
                     TotalDebug.LOGGER.error("Unable to publish the Companion runtime inventory", exception);
                     String detail = exception.getMessage();
@@ -523,6 +540,13 @@ public final class CompanionAppClient implements AutoCloseable {
 
     private void sendRuntimeInventoryState() {
         send(this.runtimeInventoryState);
+    }
+
+    private void announceInventory() {
+        var published = this.publishedInventory;
+        if (published != null && published.id().equals(this.runtimeInventoryState.inventoryId())) {
+            this.packCatalogHandler.accept(published.id(), published.moduleByModId());
+        }
     }
 
     static InetSocketAddress sessionAddress(int port) {

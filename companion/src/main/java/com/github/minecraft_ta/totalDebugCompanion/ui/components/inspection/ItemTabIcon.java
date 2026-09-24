@@ -20,7 +20,7 @@ public final class ItemTabIcon implements Icon {
         this.fallback = Objects.requireNonNull(fallback, "fallback");
     }
 
-    void setImage(BufferedImage image) {
+    public void setImage(BufferedImage image) {
         this.image = image;
     }
 

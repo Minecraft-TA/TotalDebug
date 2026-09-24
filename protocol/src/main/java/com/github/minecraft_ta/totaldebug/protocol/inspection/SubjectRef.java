@@ -6,10 +6,12 @@ import java.util.regex.Pattern;
 
 /**
  * Names an inspected thing by where it is found, never by a retained object. Its text form is used on the wire and
- * for copying, e.g. {@code block minecraft:overworld 12 64 -3} or {@code entity <uuid>}.
+ * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>}, {@code mod mekanism} or
+ * {@code definition item mekanism:energy_tablet}.
  */
 public sealed interface SubjectRef {
     int MAX_TEXT_LENGTH = 320;
+    Pattern RESOURCE_ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
     String format();
 
@@ -36,8 +38,29 @@ public sealed interface SubjectRef {
                     throw new IllegalArgumentException("Invalid entity UUID: " + parts[1], exception);
                 }
             }
+            case "mod" -> {
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("Expected: mod <mod id>");
+                }
+                return new Mod(parts[1]);
+            }
+            case "definition" -> {
+                if (parts.length != 3) {
+                    throw new IllegalArgumentException("Expected: definition <block|item|entity_type> <registry id>");
+                }
+                return new Definition(DefinitionKind.fromWireName(parts[1]), parts[2]);
+            }
             default -> throw new IllegalArgumentException("Unknown subject kind: " + parts[0]);
         }
+    }
+
+    /** Parses a subject that game-side code can resolve in a loaded world. */
+    static InWorld parseWorld(String text) {
+        SubjectRef subject = parse(text);
+        if (subject instanceof InWorld world) {
+            return world;
+        }
+        throw new IllegalArgumentException(subject.format() + " names a mod or definition, not a block or entity in the world");
     }
 
     private static int coordinate(String text) {
@@ -48,15 +71,18 @@ public sealed interface SubjectRef {
         }
     }
 
+    /** A subject that exists in a loaded world and is resolved by the game. */
+    sealed interface InWorld extends SubjectRef permits Block, Entity {
+    }
+
     /** A block position in a dimension. */
-    record Block(String dimension, int x, int y, int z) implements SubjectRef {
-        private static final Pattern DIMENSION = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
+    record Block(String dimension, int x, int y, int z) implements InWorld {
         private static final int MAX_HORIZONTAL = 30_000_000;
         private static final int MAX_VERTICAL = 4_096;
 
         public Block {
             Objects.requireNonNull(dimension, "dimension");
-            if (dimension.length() > 256 || !DIMENSION.matcher(dimension).matches()) {
+            if (dimension.length() > 256 || !RESOURCE_ID.matcher(dimension).matches()) {
                 throw new IllegalArgumentException("Invalid dimension: " + dimension);
             }
             if (Math.abs((long) x) > MAX_HORIZONTAL || Math.abs((long) z) > MAX_HORIZONTAL
@@ -72,7 +98,7 @@ public sealed interface SubjectRef {
     }
 
     /** An entity in any loaded dimension. */
-    record Entity(UUID uuid) implements SubjectRef {
+    record Entity(UUID uuid) implements InWorld {
         public Entity {
             Objects.requireNonNull(uuid, "uuid");
         }
@@ -80,6 +106,68 @@ public sealed interface SubjectRef {
         @Override
         public String format() {
             return "entity " + this.uuid;
+        }
+    }
+
+    /** An installed mod, named by its mod id. */
+    record Mod(String modId) implements SubjectRef {
+        private static final Pattern MOD_ID = Pattern.compile("[a-z][a-z0-9_]{1,63}");
+
+        public Mod {
+            Objects.requireNonNull(modId, "modId");
+            if (!MOD_ID.matcher(modId).matches()) {
+                throw new IllegalArgumentException("Invalid mod id: " + modId);
+            }
+        }
+
+        @Override
+        public String format() {
+            return "mod " + this.modId;
+        }
+    }
+
+    enum DefinitionKind {
+        BLOCK("block"),
+        ITEM("item"),
+        ENTITY_TYPE("entity_type");
+
+        private final String wireName;
+
+        DefinitionKind(String wireName) {
+            this.wireName = wireName;
+        }
+
+        public String wireName() {
+            return this.wireName;
+        }
+
+        public static DefinitionKind fromWireName(String wireName) {
+            for (DefinitionKind kind : values()) {
+                if (kind.wireName.equals(wireName)) {
+                    return kind;
+                }
+            }
+            throw new IllegalArgumentException("Unknown definition kind: " + wireName);
+        }
+    }
+
+    /** A registered block, item or entity type, as opposed to one occurrence of it. */
+    record Definition(DefinitionKind kind, String id) implements SubjectRef {
+        public Definition {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(id, "id");
+            if (id.length() > 256 || !RESOURCE_ID.matcher(id).matches()) {
+                throw new IllegalArgumentException("Invalid registry id: " + id);
+            }
+        }
+
+        public String namespace() {
+            return this.id.substring(0, this.id.indexOf(':'));
+        }
+
+        @Override
+        public String format() {
+            return "definition " + this.kind.wireName() + " " + this.id;
         }
     }
 }

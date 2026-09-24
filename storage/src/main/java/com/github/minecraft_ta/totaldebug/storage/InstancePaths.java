@@ -40,6 +40,8 @@ public record InstancePaths(Path home) {
     public Path inventory() { return runtime().resolve("inventory.json"); }
     public Path sources() { return runtime().resolve("sources"); }
     public Path index() { return runtime().resolve("index.jindex"); }
+    public Path catalog() { return runtime().resolve("catalog.json"); }
+    public Path previews() { return cache().resolve("inspection-previews"); }
     public Path decompiled() { return cache().resolve("decompiled"); }
 
 }

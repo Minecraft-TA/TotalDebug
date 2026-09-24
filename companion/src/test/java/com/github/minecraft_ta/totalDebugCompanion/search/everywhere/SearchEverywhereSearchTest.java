@@ -23,14 +23,14 @@ class SearchEverywhereSearchTest {
             SearchEverywhereSearch search = new SearchEverywhereSearch();
 
             List<SearchEverywhereSearch.Result> classes = search.search(
-                    index, "Alpha", SearchEverywhereSearch.Category.CLASSES, 10, new int[]{10}
+                    index, null, "Alpha", SearchEverywhereSearch.Category.CLASSES, 10, new int[]{10}, null
             );
             assertEquals(1, classes.size());
             assertEquals(AlphaSearchFixture.class.getName(),
                     assertInstanceOf(SearchEverywhereSearch.ClassResult.class, classes.getFirst()).binaryName());
 
             List<SearchEverywhereSearch.Result> symbols = search.search(
-                    index, "matching", SearchEverywhereSearch.Category.SYMBOLS, 10, new int[]{10}
+                    index, null, "matching", SearchEverywhereSearch.Category.SYMBOLS, 10, new int[]{10}, null
             );
             assertEquals(2, symbols.size());
             assertTrue(symbols.stream()
@@ -38,7 +38,7 @@ class SearchEverywhereSearchTest {
                     .allMatch(result -> result.ownerBinaryName().equals(AlphaSearchFixture.class.getName())));
 
             List<SearchEverywhereSearch.Result> text = search.search(
-                    index, "selected-text", SearchEverywhereSearch.Category.TEXT, 10, new int[]{10}
+                    index, null, "selected-text", SearchEverywhereSearch.Category.TEXT, 10, new int[]{10}, null
             );
             SearchEverywhereSearch.TextResult literal = assertInstanceOf(
                     SearchEverywhereSearch.TextResult.class,
@@ -55,7 +55,7 @@ class SearchEverywhereSearchTest {
                             .sourceId()
             );
             assertTrue(search.search(
-                    index, "selected-text", SearchEverywhereSearch.Category.TEXT, 10, new int[]{20}
+                    index, null, "selected-text", SearchEverywhereSearch.Category.TEXT, 10, new int[]{20}, null
             ).isEmpty());
         }
     }

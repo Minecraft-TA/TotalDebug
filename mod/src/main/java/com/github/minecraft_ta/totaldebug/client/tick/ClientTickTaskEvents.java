@@ -23,6 +23,7 @@ final class ClientTickTaskEvents {
     @SubscribeEvent
     static void onClientTickPost(ClientTickEvent.Post event) {
         TotalDebug.get().tickTasks().drain(TickDomain.CLIENT, TickPhase.POST);
+        TotalDebugClient.current().ifPresent(TotalDebugClient::onClientTick);
     }
 
     @SubscribeEvent

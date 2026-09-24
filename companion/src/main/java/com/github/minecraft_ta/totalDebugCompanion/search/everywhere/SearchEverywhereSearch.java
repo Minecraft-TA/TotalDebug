@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.LiteralSearchResult;
@@ -15,30 +17,85 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
-/** Executes the indexed query behind Search Everywhere and converts native-backed results into immutable rows. */
+/**
+ * Executes the query behind Search Everywhere over the runtime class index and the captured pack catalog, and
+ * converts native-backed results into immutable rows.
+ */
 public final class SearchEverywhereSearch {
     public enum Category {
-        ALL("All"),
-        CLASSES("Classes"),
-        SYMBOLS("Symbols"),
-        TEXT("Text");
+        ALL("All", true, true),
+        MODS("Mods", false, true),
+        ITEMS("Items", false, true),
+        BLOCKS("Blocks", false, true),
+        ENTITIES("Entities", false, true),
+        RESOURCES("Resources", false, true),
+        CLASSES("Classes", true, false),
+        SYMBOLS("Symbols", true, false),
+        TEXT("Text", true, false);
 
         private final String label;
+        private final boolean usesIndex;
+        private final boolean usesCatalog;
 
-        Category(String label) {
+        Category(String label, boolean usesIndex, boolean usesCatalog) {
             this.label = label;
+            this.usesIndex = usesIndex;
+            this.usesCatalog = usesCatalog;
         }
 
         public String label() {
             return this.label;
         }
+
+        /** Whether the category searches the runtime class index. */
+        public boolean usesIndex() {
+            return this.usesIndex;
+        }
+
+        /** Whether the category searches the captured pack catalog. */
+        public boolean usesCatalog() {
+            return this.usesCatalog;
+        }
     }
 
-    public sealed interface Result permits ClassResult, SymbolResult, TextResult {
+    public sealed interface Result permits ClassResult, SymbolResult, TextResult, ModResult, DefinitionResult, ResourceResult {
         String searchableName();
+    }
 
-        int[] sourceIds();
+    /** An installed mod. */
+    public record ModResult(String modId, String title, String version) implements Result {
+        @Override
+        public String searchableName() {
+            return this.title;
+        }
+    }
+
+    /** A registered block, item or entity type; {@code icon} is null when it has no item to draw. */
+    public record DefinitionResult(CatalogIndex.Entry entry, String owner, CatalogIndex.ItemIcon icon) implements Result {
+        public DefinitionResult {
+            Objects.requireNonNull(entry, "entry");
+            Objects.requireNonNull(owner, "owner");
+        }
+
+        @Override
+        public String searchableName() {
+            return this.entry.title();
+        }
+    }
+
+    /** A resource shipped in a mod file. */
+    public record ResourceResult(ModResources.Resource resource, String owner) implements Result {
+        public ResourceResult {
+            Objects.requireNonNull(resource, "resource");
+            Objects.requireNonNull(owner, "owner");
+        }
+
+        @Override
+        public String searchableName() {
+            return this.resource.fileName();
+        }
     }
 
     public record ClassResult(
@@ -59,7 +116,6 @@ public final class SearchEverywhereSearch {
             return this.simpleName;
         }
 
-        @Override
         public int[] sourceIds() {
             return new int[]{this.sourceId};
         }
@@ -93,7 +149,6 @@ public final class SearchEverywhereSearch {
             return this.name;
         }
 
-        @Override
         public int[] sourceIds() {
             return new int[]{this.sourceId};
         }
@@ -110,20 +165,25 @@ public final class SearchEverywhereSearch {
             return this.value;
         }
 
-        @Override
         public int[] sourceIds() {
             return this.sourceIds.clone();
         }
     }
 
+    /**
+     * Searches the class index and the catalog for the category; either may be null when it is unavailable.
+     * {@code sourceIds} and {@code moduleIds} restrict index and catalog results to the selected modules, and are
+     * null when every module is selected.
+     */
     public List<Result> search(
             ClassIndex index,
+            CatalogSearch catalog,
             String query,
             Category category,
             int limit,
-            int[] sourceIds
+            int[] sourceIds,
+            Set<String> moduleIds
     ) {
-        Objects.requireNonNull(index, "index");
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(category, "category");
         if (limit < 1) {
@@ -139,19 +199,24 @@ public final class SearchEverywhereSearch {
                 limit
         );
         ArrayList<Result> results = new ArrayList<>(limit * 2);
-        if (category == Category.ALL || category == Category.CLASSES) {
+        if (catalog != null && category.usesCatalog()) {
+            results.addAll(catalog.search(query, category, limit, moduleIds));
+        }
+        boolean searchIndex = index != null && category.usesIndex()
+                && (category == Category.TEXT || query.chars().allMatch(character -> character < 128));
+        if (searchIndex && (category == Category.ALL || category == Category.CLASSES)) {
             IndexedClass[] classes = sourceIds == null
                     ? index.findClasses(query, options).results()
                     : index.findClasses(query, options, sourceIds).results();
             Arrays.stream(classes).map(SearchEverywhereSearch::classResult).forEach(results::add);
         }
-        if (category == Category.ALL || category == Category.SYMBOLS) {
+        if (searchIndex && (category == Category.ALL || category == Category.SYMBOLS)) {
             SymbolSearchResult[] symbols = sourceIds == null
                     ? index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD)).results()
                     : index.findSymbols(query, options, EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD), sourceIds).results();
             Arrays.stream(symbols).map(SearchEverywhereSearch::symbolResult).forEach(results::add);
         }
-        if (category == Category.TEXT) {
+        if (searchIndex && category == Category.TEXT) {
             LiteralSearchResult[] literals = sourceIds == null
                     ? index.findLiteralsContaining(query, limit).results()
                     : index.findLiteralsContaining(query, limit, sourceIds).results();
@@ -161,7 +226,7 @@ public final class SearchEverywhereSearch {
         }
 
         Comparator<Result> ranking = Comparator
-                .comparingInt((Result result) -> matchRank(result.searchableName(), query))
+                .comparingInt((Result result) -> rank(result, query))
                 .thenComparingInt(SearchEverywhereSearch::kindRank)
                 .thenComparing(Result::searchableName, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(SearchEverywhereSearch::stableIdentity);
@@ -203,11 +268,29 @@ public final class SearchEverywhereSearch {
         return 2 + Math.max(0, foldedValue.indexOf(foldedQuery));
     }
 
+    /** How well a result matches; registered content also matches by the path of its registry id. */
+    static int rank(Result result, String query) {
+        int byName = matchRank(result.searchableName(), query);
+        return switch (result) {
+            case ModResult mod -> Math.min(byName, matchRank(mod.modId(), query));
+            case DefinitionResult definition -> Math.min(byName,
+                    matchRank(definition.entry().id().substring(definition.entry().id().indexOf(':') + 1), query));
+            default -> byName;
+        };
+    }
+
     private static int kindRank(Result result) {
         return switch (result) {
-            case ClassResult ignored -> 0;
-            case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 1 : 2;
-            case TextResult ignored -> 3;
+            case ModResult ignored -> 0;
+            case DefinitionResult definition -> switch (definition.entry().kind()) {
+                case ITEM -> 1;
+                case BLOCK -> 2;
+                case ENTITY_TYPE -> 3;
+            };
+            case ClassResult ignored -> 4;
+            case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 5 : 6;
+            case TextResult ignored -> 7;
+            case ResourceResult ignored -> 8;
         };
     }
 
@@ -216,6 +299,9 @@ public final class SearchEverywhereSearch {
             case ClassResult type -> type.binaryName();
             case SymbolResult symbol -> symbol.ownerBinaryName() + '#' + symbol.name() + symbol.descriptor();
             case TextResult text -> text.value();
+            case ModResult mod -> mod.modId();
+            case DefinitionResult definition -> definition.entry().subject().format();
+            case ResourceResult resource -> resource.resource().file() + "!" + resource.resource().path();
         };
     }
 }

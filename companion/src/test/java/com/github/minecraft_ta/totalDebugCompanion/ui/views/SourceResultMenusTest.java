@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.insight.HierarchyResult;
@@ -23,7 +24,7 @@ class SourceResultMenusTest {
         try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
             SwingUtilities.invokeAndWait(() -> {
                 List<NavigationTarget> opened = new ArrayList<>();
-                var popup = new SearchEverywherePopup(null, service, () -> null, opened::add);
+                var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), opened::add);
                 try {
                     DefaultListModel<SearchEverywhereSearch.Result> model = model(popup, "resultModel");
                     model.addElement(new SearchEverywhereSearch.ClassResult("example.First", "First", "example", 0, 0));

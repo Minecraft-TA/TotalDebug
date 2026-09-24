@@ -169,7 +169,7 @@ final class ToolsPanel extends JPanel {
             source = JavaSnippetSource.body(tool.name(), tool.text());
             source.requireExecutableSize();
             execution = this.snippets.get().execute(source, side, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parse(this.subject.subject()), this.subject.gameSessionId(),
+                    new ScriptSubject(SubjectRef.parseWorld(this.subject.subject()), this.subject.gameSessionId(),
                             registryId));
         } catch (RuntimeException exception) {
             view.showFailure(exception.getMessage());

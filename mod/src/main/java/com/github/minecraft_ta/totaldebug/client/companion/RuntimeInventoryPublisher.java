@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogEntries;
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
 import com.github.minecraft_ta.totaldebug.runtime.RuntimeSourceInventory;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
@@ -42,7 +43,8 @@ final class RuntimeInventoryPublisher {
             RuntimeInventory.ModuleKind.PLATFORM
     );
 
-    record PublishedInventory(String id, Path file) {
+    /** {@code moduleByModId} names the inventory module that contains each installed mod. */
+    record PublishedInventory(String id, Path file, Map<String, String> moduleByModId) {
     }
 
     private final Path dataDirectory;
@@ -63,8 +65,9 @@ final class RuntimeInventoryPublisher {
         String id = calculateInventoryId(prepared, runtimeModules);
         InstancePaths paths = new InstancePaths(this.dataDirectory);
         Path publishedFile = paths.inventory();
+        Map<String, String> moduleByModId = PackCatalogEntries.moduleByModId(runtimeModules.values());
         if (matchesPublishedInventory(publishedFile, id)) {
-            return new PublishedInventory(id, publishedFile);
+            return new PublishedInventory(id, publishedFile, moduleByModId);
         }
 
         AtomicFiles.cleanupAbandonedStaging(paths.runtime());
@@ -77,7 +80,7 @@ final class RuntimeInventoryPublisher {
         );
         inventory.write(publishedFile);
         RuntimeInventory.read(publishedFile);
-        return new PublishedInventory(id, publishedFile);
+        return new PublishedInventory(id, publishedFile, moduleByModId);
     }
 
     static List<RuntimeInventory.Source> prepareSources(

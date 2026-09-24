@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
+import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -19,6 +21,7 @@ import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -99,18 +102,35 @@ class InspectionPanelTest {
     }
 
     @Test
-    void theIdentitySectionNamesWhereTheSubjectIsAndLinksItsClasses() {
+    void theIdentitySectionNamesWhereTheSubjectIsAndLinksItsDefinitionModAndClasses() {
         FactSection section = InspectionPanel.identitySection(CHEST,
-                SubjectRef.parse("block minecraft:overworld 12 64 -3"));
+                SubjectRef.parseWorld("block minecraft:overworld 12 64 -3"));
 
         assertEquals("Block", section.title());
         assertEquals(List.of(
-                Fact.text("ID", "minecraft:chest"),
-                Fact.text("Mod", "Minecraft"),
+                Fact.text("ID", "minecraft:chest")
+                        .withLink(FactLink.toSubject(new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:chest"))),
+                Fact.text("Mod", "Minecraft").withLink(FactLink.toSubject(new SubjectRef.Mod("minecraft"))),
                 Fact.text("Position", "12, 64, -3 in minecraft:overworld"),
                 Fact.text("Block", "ChestBlock")
                         .withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"))
         ), section.facts());
+    }
+
+    @Test
+    void theHeaderLinksTheSubjectsModAndDefinition() throws Exception {
+        List<NavigationTarget> opened = new ArrayList<>();
+        withPanel(opened::add, panel -> {
+            List<String> labels = labels(panel);
+            assertTrue(labels.containsAll(List.of("Furnace", "minecraft:furnace", "Minecraft")),
+                    labels::toString);
+            for (LinkLabel link : links(panel)) {
+                link.dispatchEvent(new MouseEvent(link, MouseEvent.MOUSE_CLICKED, 0, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
+            }
+        });
+        assertEquals(List.of(new NavigationTarget.ModPage("minecraft"),
+                new NavigationTarget.Definition(new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:furnace"))),
+                opened);
     }
 
     @Test
@@ -142,13 +162,17 @@ class InspectionPanelTest {
     }
 
     private static void withPanel(Consumer<InspectionPanel> test) throws Exception {
+        withPanel(target -> { }, test);
+    }
+
+    private static void withPanel(Consumer<NavigationTarget> navigator, Consumer<InspectionPanel> test) throws Exception {
         try (ItemIconService icons = new ItemIconService()) {
             Throwable[] failure = new Throwable[1];
             SwingUtilities.invokeAndWait(() -> {
                 InspectionPanel panel = new InspectionPanel(SUBJECT,
                         () -> { throw new IllegalStateException("Tests run no snippets"); },
                         () -> { throw new IllegalStateException("Tests have no project"); },
-                        icons, target -> { });
+                        icons, navigator);
                 try {
                     test.accept(panel);
                 } catch (Throwable throwable) {
@@ -171,6 +195,15 @@ class InspectionPanelTest {
             }
         }
         return null;
+    }
+
+    private static List<LinkLabel> links(Container container) {
+        List<LinkLabel> links = new ArrayList<>();
+        for (Component child : container.getComponents()) {
+            if (child instanceof LinkLabel link) links.add(link);
+            if (child instanceof Container nested) links.addAll(links(nested));
+        }
+        return links;
     }
 
     private static List<String> labels(Container container) {
