@@ -1,10 +1,12 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -64,8 +66,8 @@ class RuntimeInventoryTest {
                 false, List.of(new RuntimeInventory.Source(RuntimeInventory.SourceKind.ARCHIVE,
                 this.temporaryDirectory.resolve("missing.jar"), "logical:missing",
                 new RuntimeInventory.RuntimeModule("missing", "Missing", RuntimeInventory.ModuleKind.LIBRARY))));
-        com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(file, inventory.toJson());
+        JsonFiles.write(file, inventory.toJson());
 
-        assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
+        assertThrows(IOException.class, () -> RuntimeInventory.read(file));
     }
 }

@@ -5,6 +5,10 @@ import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
+import javax.swing.ListModel;
+import javax.swing.RowSorter;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.RowSorterEvent;
@@ -15,8 +19,13 @@ import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeExpansionListener;
+import javax.swing.table.TableModel;
+import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.Rectangle;
+import java.awt.event.ContainerAdapter;
+import java.awt.event.ContainerEvent;
+import java.awt.event.ContainerListener;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
 import java.util.ArrayList;
@@ -77,10 +86,10 @@ final class SpeedSearchTargets {
             }
         };
         private final PropertyChangeListener modelPropertyListener = event -> {
-            if (event.getOldValue() instanceof javax.swing.ListModel<?> previous) {
+            if (event.getOldValue() instanceof ListModel<?> previous) {
                 previous.removeListDataListener(this.modelListener);
             }
-            if (event.getNewValue() instanceof javax.swing.ListModel<?> replacement) {
+            if (event.getNewValue() instanceof ListModel<?> replacement) {
                 replacement.addListDataListener(this.modelListener);
             }
             changed();
@@ -169,10 +178,10 @@ final class SpeedSearchTargets {
             }
         };
         private final PropertyChangeListener modelPropertyListener = event -> {
-            if (event.getOldValue() instanceof javax.swing.tree.TreeModel previous) {
+            if (event.getOldValue() instanceof TreeModel previous) {
                 previous.removeTreeModelListener(this.modelListener);
             }
-            if (event.getNewValue() instanceof javax.swing.tree.TreeModel replacement) {
+            if (event.getNewValue() instanceof TreeModel replacement) {
                 replacement.addTreeModelListener(this.modelListener);
             }
             modelChanged();
@@ -191,7 +200,7 @@ final class SpeedSearchTargets {
                 Object root = this.tree.getModel().getRoot();
                 if (root != null) collectPaths(new TreePath(root));
                 // JTree clears the old selection later in this same model notification.
-                javax.swing.SwingUtilities.invokeLater(this::changed);
+                SwingUtilities.invokeLater(this::changed);
             } else {
                 changed();
             }
@@ -256,19 +265,19 @@ final class SpeedSearchTargets {
         private final TableModelListener modelListener = this::modelChanged;
         private final RowSorterListener sorterListener = this::sorterChanged;
         private final PropertyChangeListener modelPropertyListener = event -> {
-            if (event.getOldValue() instanceof javax.swing.table.TableModel previous) {
+            if (event.getOldValue() instanceof TableModel previous) {
                 previous.removeTableModelListener(this.modelListener);
             }
-            if (event.getNewValue() instanceof javax.swing.table.TableModel replacement) {
+            if (event.getNewValue() instanceof TableModel replacement) {
                 replacement.addTableModelListener(this.modelListener);
             }
             changed();
         };
         private final PropertyChangeListener sorterPropertyListener = event -> {
-            if (event.getOldValue() instanceof javax.swing.RowSorter<?> previous) {
+            if (event.getOldValue() instanceof RowSorter<?> previous) {
                 previous.removeRowSorterListener(this.sorterListener);
             }
-            if (event.getNewValue() instanceof javax.swing.RowSorter<?> replacement) {
+            if (event.getNewValue() instanceof RowSorter<?> replacement) {
                 replacement.addRowSorterListener(this.sorterListener);
             }
             changed();
@@ -338,18 +347,18 @@ final class SpeedSearchTargets {
     private static final class TabTarget extends ModelTarget implements SpeedSearchTarget {
         private final JTabbedPane tabs;
         private final IntFunction<String> text;
-        private final java.awt.event.ContainerListener containerListener = new java.awt.event.ContainerAdapter() {
+        private final ContainerListener containerListener = new ContainerAdapter() {
             @Override
-            public void componentAdded(java.awt.event.ContainerEvent event) {
+            public void componentAdded(ContainerEvent event) {
                 changed();
             }
 
             @Override
-            public void componentRemoved(java.awt.event.ContainerEvent event) {
+            public void componentRemoved(ContainerEvent event) {
                 changed();
             }
         };
-        private final javax.swing.event.ChangeListener changeListener = event -> changed();
+        private final ChangeListener changeListener = event -> changed();
 
         private TabTarget(JTabbedPane tabs, IntFunction<String> text) {
             this.tabs = Objects.requireNonNull(tabs, "tabs");

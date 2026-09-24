@@ -6,8 +6,10 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.LocalJvmDebugTargetR
 import com.github.minecraft_ta.totalDebugCompanion.debugger.MicrosoftJavaDebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.DecompilationResult;
 import com.github.minecraft_ta.totalDebugCompanion.decompiler.VineflowerDecompiler;
+import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -444,8 +446,8 @@ public final class DebuggerTestHarness implements AutoCloseable {
     private static String fixtureClasspath() {
         try {
             return Path.of(DebuggerTestHarness.class.getProtectionDomain().getCodeSource().getLocation().toURI())
-                    + java.io.File.pathSeparator
-                    + Path.of(com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge.class
+                    + File.pathSeparator
+                    + Path.of(PausedEvaluationBridge.class
                         .getProtectionDomain().getCodeSource().getLocation().toURI());
         } catch (URISyntaxException exception) {
             throw new IllegalStateException(exception);

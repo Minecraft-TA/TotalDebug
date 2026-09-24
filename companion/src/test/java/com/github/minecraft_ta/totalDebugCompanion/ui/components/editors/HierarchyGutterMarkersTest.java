@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JLayer;
+import javax.swing.text.BadLocationException;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
@@ -21,6 +22,7 @@ import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -126,7 +128,7 @@ class HierarchyGutterMarkersTest {
                 int y = (int) editor.modelToView2D(editor.getLineStartOffset(1)).getCenterY();
                 assertEquals(0, gutter.getTrackingIcons(new Point(1, y)).length,
                         "Breakpoint icons must not occupy the hierarchy icon column");
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
 
@@ -145,7 +147,7 @@ class HierarchyGutterMarkersTest {
             graphics.dispose();
 
             int[] pixels = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
-            long visiblePixels = java.util.Arrays.stream(pixels)
+            long visiblePixels = Arrays.stream(pixels)
                     .filter(pixel -> (pixel >>> 24) != 0)
                     .count();
             assertTrue(visiblePixels > 0, "The line-number component painted no visible pixels");
@@ -198,7 +200,7 @@ class HierarchyGutterMarkersTest {
                 int x = Math.max(0, lineNumbers.getWidth() / 2);
                 dispatchLeftClick(lineNumbers, x, y);
                 caretPosition.set(editor.getCaretPosition());
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
 
@@ -256,7 +258,7 @@ class HierarchyGutterMarkersTest {
                         y,
                         InputEvent.ALT_DOWN_MASK
                 );
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
 
@@ -301,7 +303,7 @@ class HierarchyGutterMarkersTest {
                         MouseEvent.BUTTON1
                 ));
                 caretPosition.set(editor.getCaretPosition());
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
         });
@@ -353,7 +355,7 @@ class HierarchyGutterMarkersTest {
                         true,
                         MouseEvent.BUTTON3
                 ));
-            } catch (javax.swing.text.BadLocationException exception) {
+            } catch (BadLocationException exception) {
                 throw new AssertionError(exception);
             }
 
@@ -479,7 +481,7 @@ class HierarchyGutterMarkersTest {
             int editorY = (int) editor.modelToView2D(editor.getLineStartOffset(displayedLine - 1)).getY();
             int y = SwingUtilities.convertPoint(editor, 0, editorY, ancestor).y;
             int height = Math.min(editor.getLineHeight(), image.getHeight() - y);
-            return java.util.Arrays.hashCode(image.getRGB(
+            return Arrays.hashCode(image.getRGB(
                     0,
                     y,
                     image.getWidth(),
@@ -488,7 +490,7 @@ class HierarchyGutterMarkersTest {
                     0,
                     image.getWidth()
             ));
-        } catch (javax.swing.text.BadLocationException exception) {
+        } catch (BadLocationException exception) {
             throw new AssertionError(exception);
         }
     }

@@ -14,7 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /** Renders the complete dark/light scenario matrix in isolated Companion processes. */
@@ -32,7 +34,7 @@ public final class UiCaptureSuite {
                 .orElse(Path.of("build", "ui-screenshots"))
                 .toAbsolutePath()
                 .normalize();
-        boolean assembleOnly = java.util.Arrays.asList(args).contains("--assemble-only");
+        boolean assembleOnly = Arrays.asList(args).contains("--assemble-only");
         Files.createDirectories(output);
 
         List<Capture> captures = new ArrayList<>();
@@ -142,8 +144,8 @@ public final class UiCaptureSuite {
         Files.writeString(target, json, StandardCharsets.UTF_8);
     }
 
-    private static java.util.Optional<String> argument(String[] args, String prefix) {
-        return java.util.Arrays.stream(args)
+    private static Optional<String> argument(String[] args, String prefix) {
+        return Arrays.stream(args)
                 .filter(argument -> argument.startsWith(prefix))
                 .map(argument -> argument.substring(prefix.length()))
                 .findFirst();

@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,8 +57,8 @@ class DebuggerHiddenFrameIntegrationTest {
                         if (line.equals("ready")) return;
                     }
                     throw new AssertionError("Debuggee exited before ready");
-                } catch (java.io.IOException exception) {
-                    throw new java.io.UncheckedIOException(exception);
+                } catch (IOException exception) {
+                    throw new UncheckedIOException(exception);
                 }
             }).get(10, TimeUnit.SECONDS);
             controller.acceptTarget(new DebugTargetDescriptor("fixture", "Method-handle debuggee", child.pid()));

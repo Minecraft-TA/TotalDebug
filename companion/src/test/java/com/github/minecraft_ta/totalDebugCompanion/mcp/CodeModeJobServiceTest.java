@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
@@ -16,10 +18,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.function.IntConsumer;
+import java.util.stream.IntStream;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class CodeModeJobServiceTest {
     @TempDir
@@ -71,7 +73,7 @@ class CodeModeJobServiceTest {
             assertEquals("[proof]\n", completed.output());
             assertTrue(completed.resultPresent());
             assertEquals(
-                    java.util.Map.of("values", List.of(BigInteger.ONE, BigInteger.TWO)),
+                    Map.of("values", List.of(BigInteger.ONE, BigInteger.TWO)),
                     completed.result()
             );
             assertTrue(service.source(submitted.jobId()).contains("logln"));
@@ -101,7 +103,7 @@ class CodeModeJobServiceTest {
             assertFalse(failed.resultPresent());
             assertEquals("java.lang.RuntimeException: boom", failed.error());
             assertEquals(
-                    java.util.Set.of("job_id", "state", "logs", "error"),
+                    Set.of("job_id", "state", "logs", "error"),
                     failed.responseMap().keySet()
             );
         }
@@ -185,7 +187,7 @@ class CodeModeJobServiceTest {
         try (CodeModeJobService service = new CodeModeJobService(
                 () -> true,
                 transport,
-                () -> java.util.Map.of(
+                () -> Map.of(
                         "profile_id", "instance-a",
                         "runtime_signature", "sha256:abc"
                 ),
@@ -216,7 +218,7 @@ class CodeModeJobServiceTest {
                     ExecutionText.empty(), null, ExecutionText.complete("Stop timed out; script is still running")));
             var pending = service.waitFor(submitted.jobId(), 1);
             assertEquals(CodeModeJobService.JobState.CANCELLING, pending.state());
-            assertEquals(null, pending.completedAt());
+            assertNull(pending.completedAt());
             assertTrue(pending.error().contains("still running"));
             service.acceptResult(submitted.scriptId(), failed("final output", null, "Script run cancelled"));
             var completed = service.get(submitted.jobId()).orElseThrow();
@@ -250,7 +252,7 @@ class CodeModeJobServiceTest {
             assertTrue(service.cancel(submitted.jobId()));
             var pending = service.waitFor(submitted.jobId(), 1);
             assertEquals(CodeModeJobService.JobState.CANCELLING, pending.state());
-            assertEquals(null, pending.completedAt());
+            assertNull(pending.completedAt());
             transport.cancelFailure = null;
             assertTrue(service.cancel(submitted.jobId()), "An explicit retry must remain possible");
             service.acceptResult(submitted.scriptId(), completed("completed despite stop", number("42")));
@@ -356,7 +358,7 @@ class CodeModeJobServiceTest {
     }
 
     private static ExecutionValue sequence(ExecutionValue... values) {
-        List<ExecutionValue.Child> children = java.util.stream.IntStream.range(0, values.length)
+        List<ExecutionValue.Child> children = IntStream.range(0, values.length)
                 .mapToObj(index -> new ExecutionValue.Child(
                         text(Integer.toString(index)),
                         ExecutionValue.ChildKind.COLLECTION_ELEMENT,
@@ -408,7 +410,7 @@ class CodeModeJobServiceTest {
         private final List<Execution> executions = new ArrayList<>();
         private final List<Integer> cancelledScriptIds = new ArrayList<>();
         private RuntimeException cancelFailure;
-        private java.util.function.IntConsumer onCancel = ignored -> { };
+        private IntConsumer onCancel = ignored -> { };
 
         @Override
         public void execute(

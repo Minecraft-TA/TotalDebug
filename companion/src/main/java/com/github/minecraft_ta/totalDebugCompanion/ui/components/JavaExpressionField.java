@@ -5,16 +5,19 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.Cust
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.ShadowedTokenTypes;
 import com.github.minecraft_ta.totalDebugCompanion.util.CodeUtils;
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
-import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
 
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JScrollPane;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -25,6 +28,7 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
 import java.awt.Color;
+import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
@@ -41,7 +45,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
     private final JScrollPane component = new JScrollPane(this);
     private final JPanel container = new JPanel(new BorderLayout());
     private final JPanel actions = new JPanel(new BorderLayout());
-    private final JPanel actionRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.TRAILING, 0, 0));
+    private final JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.TRAILING, 0, 0));
     private final FlatIconButton expand = new FlatIconButton(Icons.EXPAND_EDITOR, false);
     private boolean expandable;
     private final EventListenerList listeners = new EventListenerList();
@@ -90,8 +94,8 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.semanticTimer.setRepeats(false);
         ((AbstractDocument) getDocument()).setDocumentFilter(new SingleLineFilter());
         getDocument().addDocumentListener((DocumentChangeListener) this::documentChanged);
-        getInputMap().put(javax.swing.KeyStroke.getKeyStroke("ctrl ENTER"), "evaluateFragment");
-        getActionMap().put("evaluateFragment", new javax.swing.AbstractAction() {
+        getInputMap().put(KeyStroke.getKeyStroke("ctrl ENTER"), "evaluateFragment");
+        getActionMap().put("evaluateFragment", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent event) { postActionEvent(); }
         });
     }
@@ -117,7 +121,7 @@ public final class JavaExpressionField extends RSyntaxTextArea {
         this.actions.setVisible(expandable);
     }
 
-    public void addInlineAction(javax.swing.JButton button) {
+    public void addInlineAction(JButton button) {
         this.actionRow.add(button);
     }
 

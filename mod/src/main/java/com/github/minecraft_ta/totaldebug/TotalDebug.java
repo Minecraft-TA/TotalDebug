@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totaldebug;
 
+import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.mojang.logging.LogUtils;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
@@ -38,7 +41,7 @@ public final class TotalDebug {
             throw new IllegalStateException("TotalDebug was initialized more than once");
         }
 
-        com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge.preload();
+        PausedEvaluationBridge.preload();
         instance = this;
         this.version = Objects.requireNonNull(modContainer, "modContainer")
                 .getModInfo()
@@ -77,13 +80,13 @@ public final class TotalDebug {
 
     public synchronized PreparedRuntimeSources runtimeSources() throws IOException {
         if (this.runtimeSourceInputs == null) {
-            try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.discovery")) {
+            try (var phase = RuntimePhase.start("runtime.discovery")) {
                 this.runtimeSourceInputs = RuntimeSourceInventory.discover(TotalDebug.class, Block.class, ClassGraph.class);
             }
         }
         return RuntimeSourceMaterializer.prepare(
                 this.runtimeSourceInputs,
-                com.github.minecraft_ta.totaldebug.storage.InstancePaths.forGame(FMLPaths.GAMEDIR.get()).sources()
+                InstancePaths.forGame(FMLPaths.GAMEDIR.get()).sources()
         );
     }
 }

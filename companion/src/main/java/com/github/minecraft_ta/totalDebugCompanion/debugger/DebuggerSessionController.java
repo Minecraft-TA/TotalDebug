@@ -5,8 +5,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -180,7 +183,7 @@ public final class DebuggerSessionController implements AutoCloseable {
     }
 
     public DebuggerSessionController(SourceLoader sourceLoader, Supplier<String> classpath,
-                                    java.util.function.Function<String, String> scripts) {
+                                    Function<String, String> scripts) {
         this(() -> {
             var engine = new MicrosoftJavaDebugEngine(Objects.requireNonNull(sourceLoader, "sourceLoader"), classpath);
             engine.breakpointScriptSource(scripts);
@@ -322,8 +325,8 @@ public final class DebuggerSessionController implements AutoCloseable {
                 })));
     }
 
-    private final Map<String, EvaluationEntry> evaluations = new java.util.LinkedHashMap<>();
-    private final Map<String, DebuggerValueLease> evaluationValues = new java.util.HashMap<>();
+    private final Map<String, EvaluationEntry> evaluations = new LinkedHashMap<>();
+    private final Map<String, DebuggerValueLease> evaluationValues = new HashMap<>();
     public record EvaluationEntry(String pauseId, DebugEngine.StackFrame frame,
                                   DebuggerEvaluation<DebugEngine.EvaluationResult> operation) { }
 
@@ -1644,7 +1647,7 @@ public final class DebuggerSessionController implements AutoCloseable {
 
     private static Throwable unwrap(Throwable failure) {
         Throwable current = failure;
-        while ((current instanceof CompletionException || current instanceof java.util.concurrent.ExecutionException)
+        while ((current instanceof CompletionException || current instanceof ExecutionException)
                 && current.getCause() != null) {
             current = current.getCause();
         }

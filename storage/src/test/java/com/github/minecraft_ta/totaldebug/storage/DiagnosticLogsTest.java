@@ -2,6 +2,9 @@ package com.github.minecraft_ta.totaldebug.storage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
@@ -17,7 +20,7 @@ class DiagnosticLogsTest {
             original = first.log();
             try (var output = new DiagnosticLogs.RotatingOutput(original,
                     FileLease.acquire(original.getParent().resolve(".lock")), 16)) {
-                output.write("a".repeat(53).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.write("a".repeat(53).getBytes(StandardCharsets.UTF_8));
             }
             assertEquals(5, Files.size(original));
             assertEquals(16, Files.size(original.resolveSibling("previous.log")));
@@ -33,6 +36,6 @@ class DiagnosticLogsTest {
 
     @Test
     void rejectsLogsOutsideItsDirectory() {
-        assertThrows(java.io.IOException.class, () -> DiagnosticLogs.open(new AppPaths(this.home), this.home.resolve("bad.log")));
+        assertThrows(IOException.class, () -> DiagnosticLogs.open(new AppPaths(this.home), this.home.resolve("bad.log")));
     }
 }

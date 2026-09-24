@@ -20,9 +20,11 @@ import org.objectweb.asm.MethodVisitor;
 
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -63,7 +65,7 @@ final class SourceDocumentIntegrationTest {
         int zeroArgumentLambdas = 0;
         for (var entry : classes.entrySet()) {
             String owner = entry.getKey().replace('/', '.');
-            var bytecodeMethods = new java.util.ArrayList<Method>();
+            var bytecodeMethods = new ArrayList<Method>();
             new ClassReader(entry.getValue()).accept(new ClassVisitor(Opcodes.ASM9) {
                 @Override public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
                     bytecodeMethods.add(new Method(name, descriptor, access));
@@ -177,7 +179,7 @@ final class SourceDocumentIntegrationTest {
             if (classes.containsKey(name)) continue;
             byte[] bytes;
             try (var input = NavigationFixture.class.getResourceAsStream('/' + name + ".class")) {
-                bytes = java.util.Objects.requireNonNull(input, name).readAllBytes();
+                bytes = Objects.requireNonNull(input, name).readAllBytes();
             }
             if (stripDebug) {
                 var writer = new ClassWriter(0);

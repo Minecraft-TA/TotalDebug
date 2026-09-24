@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totaldebug.runtime;
 
 import cpw.mods.niofs.union.UnionFileSystem;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +44,7 @@ final class RuntimeSourceContents {
     static String archiveFingerprint(Path archive) throws IOException {
         Map<String, String> entries = new TreeMap<>();
         byte[] buffer = new byte[65536];
-        try (var input = new ZipInputStream(new java.io.BufferedInputStream(Files.newInputStream(archive), 65536))) {
+        try (var input = new ZipInputStream(new BufferedInputStream(Files.newInputStream(archive), 65536))) {
             for (var entry = input.getNextEntry(); entry != null; entry = input.getNextEntry()) {
                 checkInterrupted();
                 if (!entry.isDirectory() && retained(entry.getName())) {

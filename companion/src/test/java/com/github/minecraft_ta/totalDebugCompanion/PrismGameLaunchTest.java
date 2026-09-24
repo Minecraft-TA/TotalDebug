@@ -17,7 +17,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.JButton;
 import javax.swing.SwingUtilities;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;

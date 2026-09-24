@@ -6,6 +6,7 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.Proxy;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,7 @@ public final class ProjectSelectionRequest {
     /** Returns whether Companion still has an authenticated game connection after selection. */
     public static boolean send(int port, ClientHelloMessage hello) throws IOException {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid project request port");
-        var connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + PATH).toURL().openConnection(java.net.Proxy.NO_PROXY);
+        var connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + PATH).toURL().openConnection(Proxy.NO_PROXY);
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(60_000);
         connection.setInstanceFollowRedirects(false);

@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class ZipFileRootItem extends DirectoryTreeItem {
 
@@ -221,7 +222,7 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         private boolean hasClassDescendant() {
             return getChildren().stream().anyMatch(child ->
-                    child.name.toLowerCase(java.util.Locale.ROOT).endsWith(".class")
+                    child.name.toLowerCase(Locale.ROOT).endsWith(".class")
                             || child.hasClassDescendant()
             );
         }

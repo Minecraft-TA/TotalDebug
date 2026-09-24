@@ -5,6 +5,8 @@ import javax.tools.ForwardingJavaFileManager;
 import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +25,12 @@ final class InMemoryJavaFileManager extends ForwardingJavaFileManager<JavaFileMa
             String packageName,
             Set<JavaFileObject.Kind> kinds,
             boolean recurse
-    ) throws java.io.IOException {
+    ) throws IOException {
         Iterable<JavaFileObject> listed = super.list(location, packageName, kinds, recurse);
         if (!shouldRelax(location) || !kinds.contains(JavaFileObject.Kind.CLASS)) {
             return listed;
         }
-        List<JavaFileObject> relaxed = new java.util.ArrayList<>();
+        List<JavaFileObject> relaxed = new ArrayList<>();
         for (JavaFileObject file : listed) {
             relaxed.add(relax(file));
         }
@@ -37,7 +39,7 @@ final class InMemoryJavaFileManager extends ForwardingJavaFileManager<JavaFileMa
 
     @Override
     public JavaFileObject getJavaFileForInput(Location location, String className, JavaFileObject.Kind kind)
-            throws java.io.IOException {
+            throws IOException {
         JavaFileObject input = super.getJavaFileForInput(location, className, kind);
         return shouldRelax(location) && kind == JavaFileObject.Kind.CLASS ? relax(input) : input;
     }

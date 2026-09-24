@@ -11,6 +11,7 @@ import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.NodeFinder;
@@ -20,11 +21,15 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Source/JDT-backed completion for a breakpoint condition before a target is paused. */
 public final class ExpressionScopeAnalyzer {
@@ -49,7 +54,7 @@ public final class ExpressionScopeAnalyzer {
             add(proposals, proposal("this", type.getName().getIdentifier(),
                     DebuggerCompletionProposal.Kind.KEYWORD, 80));
         }
-        addTypeMembers(proposals, type, staticContext, 25, 35, null, new java.util.HashSet<>());
+        addTypeMembers(proposals, type, staticContext, 25, 35, null, new HashSet<>());
         for (Object declaration : method.parameters()) {
             add(proposals, variable((SingleVariableDeclaration) declaration, 10));
         }
@@ -93,9 +98,9 @@ public final class ExpressionScopeAnalyzer {
                     .map(proposal -> proposal.withRange(range.start(), range.end()))
                     .filter(proposal -> startsWith(proposal.label(), range.prefix()))
                     .forEach(proposal -> add(proposals, proposal));
-            java.util.Set<String> occupiedNames = proposals.values().stream()
+            Set<String> occupiedNames = proposals.values().stream()
                     .map(DebuggerCompletionProposal::label)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
             IndexedTypeCompletion.types(unit, range, occupiedNames).forEach(proposal ->
                     proposals.putIfAbsent("type\0" + proposal.insertionText(), proposal));
             return sorted(proposals).stream().limit(64).toList();
@@ -116,12 +121,12 @@ public final class ExpressionScopeAnalyzer {
         ITypeBinding ownerBinding = resolveOwnerBinding(type, owner, sourceOffset);
         if (ownerBinding != null) {
             if (owner.equals("super")) staticOwner = false;
-            addBindingMembers(result, ownerBinding, staticOwner, 20, 30, range, new java.util.HashSet<>());
+            addBindingMembers(result, ownerBinding, staticOwner, 20, 30, range, new HashSet<>());
         }
         AbstractTypeDeclaration ownerType = resolveOwnerType(type, owner, sourceOffset);
         if (owner.equals("super") && ownerType != null) staticOwner = false;
         if (ownerType != null) {
-            addTypeMembers(result, ownerType, staticOwner, 20, 30, range, new java.util.HashSet<>());
+            addTypeMembers(result, ownerType, staticOwner, 20, 30, range, new HashSet<>());
         }
         IndexedTypeCompletion.staticMembers((CompilationUnit) type.getRoot(), owner, range)
                 .forEach(proposal -> add(result, proposal));
@@ -174,11 +179,11 @@ public final class ExpressionScopeAnalyzer {
                 if (field.getName().equals(simple)) return field.getType();
             }
         }
-        org.eclipse.jdt.core.dom.CompilationUnit compilationUnit =
-                (org.eclipse.jdt.core.dom.CompilationUnit) type.getRoot();
+        CompilationUnit compilationUnit =
+                (CompilationUnit) type.getRoot();
         for (Object importObject : compilationUnit.imports()) {
-            org.eclipse.jdt.core.dom.ImportDeclaration declaration =
-                    (org.eclipse.jdt.core.dom.ImportDeclaration) importObject;
+            ImportDeclaration declaration =
+                    (ImportDeclaration) importObject;
             if (!declaration.isOnDemand()
                     && declaration.getName().getFullyQualifiedName().endsWith("." + simple)
                     && declaration.getName().resolveBinding() instanceof ITypeBinding binding) {
@@ -221,7 +226,7 @@ public final class ExpressionScopeAnalyzer {
     private static void addBindingMembers(Map<String, DebuggerCompletionProposal> result,
                                           ITypeBinding type, boolean staticOnly, int fieldRank,
                                           int methodRank, DebuggerCompletionRange range,
-                                          java.util.Set<String> visited) {
+                                          Set<String> visited) {
         if (type == null || !visited.add(type.getQualifiedName())) return;
         for (IVariableBinding field : type.getDeclaredFields()) {
             if (staticOnly && !java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
@@ -233,8 +238,8 @@ public final class ExpressionScopeAnalyzer {
         for (IMethodBinding method : type.getDeclaredMethods()) {
             if (method.isConstructor() || staticOnly && !java.lang.reflect.Modifier.isStatic(method.getModifiers())) continue;
             String insertion = method.getName() + "()";
-            String parameters = java.util.Arrays.stream(method.getParameterTypes())
-                    .map(ExpressionScopeAnalyzer::typeName).collect(java.util.stream.Collectors.joining(", "));
+            String parameters = Arrays.stream(method.getParameterTypes())
+                    .map(ExpressionScopeAnalyzer::typeName).collect(Collectors.joining(", "));
             add(result, new DebuggerCompletionProposal(
                     method.getName() + "(" + parameters + ")", insertion, DebuggerCompletionProposal.Kind.METHOD,
                     typeName(method.getReturnType()), range == null ? 0 : range.start(),
@@ -287,12 +292,12 @@ public final class ExpressionScopeAnalyzer {
     private static void addTypeMembers(Map<String, DebuggerCompletionProposal> result,
                                        AbstractTypeDeclaration type, boolean staticOnly,
                                        int fieldRank, int methodRank, DebuggerCompletionRange range,
-                                       java.util.Set<String> visited) {
+                                       Set<String> visited) {
         if (type == null || !visited.add(type.getName().getFullyQualifiedName())) return;
         ITypeBinding binding = type.resolveBinding();
         if (binding != null) {
             addBindingMembers(result, binding, staticOnly, fieldRank, methodRank, range,
-                    new java.util.HashSet<>());
+                    new HashSet<>());
         }
         addDeclaredFields(result, type, staticOnly, fieldRank, range);
         addDeclaredMethods(result, type, staticOnly, methodRank, range);

@@ -1,7 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.ScriptFileActions;
+import com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
@@ -22,6 +25,8 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -29,20 +34,27 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -67,7 +79,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         @Override public void paused(DebuggerSessionController.PausedState state) { refreshLater(); }
         private void refreshLater() { SwingUtilities.invokeLater(() -> refreshContexts()); }
     };
-    private com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> pausedExecution;
+    private DebuggerEvaluation<?> pausedExecution;
     private final FlatIconButton evaluate = new FlatIconButton(Icons.EVALUATE_EXPRESSION, false);
     private final FlatIconButton stop = new FlatIconButton(Icons.STOP, false);
     private final ScriptResultTree resultTree = new ScriptResultTree();
@@ -76,7 +88,7 @@ public final class EvaluateExpressionWindow extends JDialog {
     private final JTextPane problems = textPane();
     private final JTabbedPane results = new JTabbedPane();
     private final JLabel status = new JLabel();
-    private final javax.swing.JSplitPane editorSplit = new javax.swing.JSplitPane(javax.swing.JSplitPane.VERTICAL_SPLIT);
+    private final JSplitPane editorSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
 
     private SnippetExecutionService.Execution activeExecution;
     private JavaSnippetSource.GeneratedSource activeSource;
@@ -161,7 +173,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         FlatIconButton more = new FlatIconButton(Icons.DOWN_ARROW, false);
         more.setToolTipText("History and script actions");
         more.addActionListener(event -> {
-            javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+            JPopupMenu menu = new JPopupMenu();
             JMenuItem saveItem = new JMenuItem("Save as Script", Icons.SCRIPT_FILE);
             saveItem.setEnabled(!this.evaluationRunning && !this.expression.getText().isBlank());
             saveItem.addActionListener(ignored -> saveAsScript());
@@ -169,14 +181,14 @@ public final class EvaluateExpressionWindow extends JDialog {
             if (!this.history.entries().isEmpty()) menu.addSeparator();
             for (ExpressionHistory.Entry entry : this.history.entries()) {
                 String label = entry.expression().replace('\n', ' ').replace('\r', ' ');
-                javax.swing.JMenuItem item = new javax.swing.JMenuItem(label.length() > 70 ? label.substring(0, 67) + "..." : label);
+                JMenuItem item = new JMenuItem(label.length() > 70 ? label.substring(0, 67) + "..." : label);
                 item.setEnabled(!this.evaluationRunning);
                 item.addActionListener(ignored -> restoreHistory(entry));
                 menu.add(item);
             }
             menu.show(more, 0, more.getHeight());
         });
-        more.setMargin(new java.awt.Insets(2, 4, 2, 4));
+        more.setMargin(new Insets(2, 4, 2, 4));
         this.expression.addInlineAction(more);
         input.add(actions, BorderLayout.EAST);
         this.editorSplit.setTopComponent(input);
@@ -202,8 +214,8 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     private void configureWindow() {
         setDefaultCloseOperation(HIDE_ON_CLOSE);
-        addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override public void windowClosing(java.awt.event.WindowEvent event) { clearDebuggerResults(); }
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent event) { clearDebuggerResults(); }
         });
         setMinimumSize(new Dimension(720, 360));
         setSize(860, 500);
@@ -281,12 +293,12 @@ public final class EvaluateExpressionWindow extends JDialog {
                         this.pausedExecution = null;
                         setRunning(false);
                         if (failure != null) { showFailure(failure.getMessage()); return; }
-                        if (!java.util.Objects.equals(controller.snapshot().pauseId(), pauseId)) {
+                        if (!Objects.equals(controller.snapshot().pauseId(), pauseId)) {
                             showFailure("Evaluation result expired when its originating pause ended");
                             return;
                         }
                         if (!isVisible()) return;
-                        this.results.addTab("Result", new com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel(
+                        this.results.addTab("Result", new DebuggerResultPanel(
                                 controller, pauseId, requested, value));
                         this.status.setText("Evaluation completed in " + frame.name());
                     }));
@@ -313,14 +325,14 @@ public final class EvaluateExpressionWindow extends JDialog {
                 this.results.addTab("Result", Icons.EVALUATE_EXPRESSION, this.resultScroll);
             }
             if (!outcome.logs().text().isEmpty()) {
-                this.output.setText(com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(outcome.logs()));
+                this.output.setText(ExecutionTextDisplay.format(outcome.logs()));
                 this.results.addTab("Output", Icons.TEXT_FILE, scrollPane(this.output));
             }
             if (!outcome.error().text().isEmpty()) {
                 if (!failures.isEmpty()) {
                     failures.append(System.lineSeparator());
                 }
-                String error = com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay.format(outcome.error());
+                String error = ExecutionTextDisplay.format(outcome.error());
                 failures.append(completedSource == null
                         ? error
                         : completedSource.mapDiagnostics(error, completedLineOffset));
@@ -371,7 +383,7 @@ public final class EvaluateExpressionWindow extends JDialog {
                 KeyStroke.getKeyStroke(keyCode, InputEvent.ALT_DOWN_MASK),
                 action
         );
-        this.expression.getActionMap().put(action, new javax.swing.AbstractAction() {
+        this.expression.getActionMap().put(action, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
                 moveHistory(direction);
@@ -432,7 +444,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         if (context == null) return false;
         if (context.frame() == null) return true;
         var snapshot = editorContext.debugger().snapshot();
-        return java.util.Objects.equals(context.pauseId(), snapshot.pauseId()) && snapshot.pause() != null
+        return Objects.equals(context.pauseId(), snapshot.pauseId()) && snapshot.pause() != null
                 && snapshot.pause().frames().stream().anyMatch(frame -> frame.id() == context.frame().id());
     }
 
@@ -487,7 +499,7 @@ public final class EvaluateExpressionWindow extends JDialog {
 
     private void clearDebuggerResults() {
         for (int index = this.results.getTabCount() - 1; index >= 0; index--) {
-            if (this.results.getComponentAt(index) instanceof com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger.DebuggerResultPanel panel) {
+            if (this.results.getComponentAt(index) instanceof DebuggerResultPanel panel) {
                 panel.close();
                 this.results.removeTabAt(index);
             }
@@ -512,7 +524,7 @@ public final class EvaluateExpressionWindow extends JDialog {
         return scrollPane;
     }
 
-    private static void configureTextPane(JTextPane pane, EditorPalette palette, java.awt.Color foreground) {
+    private static void configureTextPane(JTextPane pane, EditorPalette palette, Color foreground) {
         pane.setBackground(palette.background());
         pane.setForeground(foreground);
         pane.setCaretColor(palette.caret());

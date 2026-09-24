@@ -120,10 +120,12 @@ public record SignatureHelp(int openingOffset, int argument, List<SignatureHelp.
         if (unit.findDeclaringNode(method.getMethodDeclaration()) instanceof MethodDeclaration declaration) {
             return (String[]) declaration.parameters().stream().map(parameter -> ((SingleVariableDeclaration) parameter).getName().getIdentifier()).toArray(String[]::new);
         }
-        if (!(JavaSymbolResolver.trySymbolForBinding(method) instanceof CodeSymbol.MethodSymbol symbol)) return null;
-        String[] raw = CompanionClassIndex.parameterNames(symbol.ownerClassName().replace('.', '/'), symbol.name(), symbol.descriptor());
+        if (!(JavaSymbolResolver.trySymbolForBinding(method) instanceof CodeSymbol.MethodSymbol(
+                String ownerClassName, String name, String descriptor
+        ))) return null;
+        String[] raw = CompanionClassIndex.parameterNames(ownerClassName.replace('.', '/'), name, descriptor);
         if (raw.length == 0) raw = MethodParameterNames.resolve(new MethodParameterNames.Method(
-                symbol.ownerClassName().replace('.', '/'), symbol.name(), symbol.descriptor(), method.getModifiers(), null), null);
+                ownerClassName.replace('.', '/'), name, descriptor, method.getModifiers(), null), null);
         int count = method.getParameterTypes().length;
         int prefix = method.isConstructor() ? raw.length - count : 0;
         return prefix >= 0 && raw.length >= prefix + count ? Arrays.copyOfRange(raw, prefix, prefix + count) : null;

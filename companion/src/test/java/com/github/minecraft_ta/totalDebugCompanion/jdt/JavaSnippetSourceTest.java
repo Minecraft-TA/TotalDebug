@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.jdt;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -147,9 +148,9 @@ class JavaSnippetSourceTest {
                  */
                 import java.util.List;
 
-                String text = \"\"\"
+                String text = \"""
                 import fake.TextBlockType;
-                \"\"\";
+                \""";
                 return List.of(text);
                 """;
 
@@ -169,7 +170,7 @@ class JavaSnippetSourceTest {
         );
 
         assertTrue(generated.sourceBytes() > JavaSnippetSource.MAX_SOURCE_BYTES);
-        org.junit.jupiter.api.Assertions.assertThrows(
+        Assertions.assertThrows(
                 IllegalArgumentException.class,
                 generated::requireExecutableSize
         );

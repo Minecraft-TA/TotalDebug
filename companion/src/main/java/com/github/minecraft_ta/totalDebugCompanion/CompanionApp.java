@@ -1,25 +1,25 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
-import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
-import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.fonts.inter.FlatInterFont;
 import com.formdev.flatlaf.fonts.jetbrains_mono.FlatJetBrainsMonoFont;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.semanticHighlighting.CustomJavaTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
-import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.syntax.ManifestTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.syntax.TomlTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
+import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs;
+import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.SwingUtilities;
-import javax.swing.ToolTipManager;
-import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
+
+import javax.swing.*;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -48,12 +48,12 @@ public final class CompanionApp {
             var configuration = CompanionLaunchConfiguration.parse(args, System.getenv());
             var paths = configuration.paths();
             Path executable = Path.of(CompanionApp.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            try (var executablePin = com.github.minecraft_ta.totaldebug.storage.LaunchCache.pinRunning(paths, executable)) {
-                String requestedLog = System.getProperty(com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.LOG_PROPERTY);
+            try (var executablePin = LaunchCache.pinRunning(paths, executable)) {
+                String requestedLog = System.getProperty(DiagnosticLogs.LOG_PROPERTY);
                 var reservation = requestedLog == null
-                        ? com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.reserve(paths) : null;
+                        ? DiagnosticLogs.reserve(paths) : null;
                 try (reservation;
-                     var output = com.github.minecraft_ta.totaldebug.storage.DiagnosticLogs.open(paths,
+                     var output = DiagnosticLogs.open(paths,
                              reservation == null ? Path.of(requestedLog) : reservation.log());
                      var stdout = DiagnosticConsole.stream(output, requestedLog == null ? consoleOut : null);
                      var stderr = DiagnosticConsole.stream(output, requestedLog == null ? consoleErr : null)) {

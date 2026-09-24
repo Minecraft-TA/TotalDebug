@@ -5,6 +5,8 @@ import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -32,7 +34,7 @@ class IndexCacheTest {
             }
             byte[] previous = Files.readAllBytes(file);
             var missing = new RuntimeSnapshotBytecodeSource.Source(7, this.home.resolve("missing.jar"), logical, source.module());
-            assertThrows(java.io.IOException.class, () -> IndexCache.write(file, index,
+            assertThrows(IOException.class, () -> IndexCache.write(file, index,
                     new IndexCache.Manifest("invalid", List.of(missing))));
             assertArrayEquals(previous, Files.readAllBytes(file));
             try (var children = Files.list(this.home)) {
@@ -40,7 +42,7 @@ class IndexCacheTest {
             }
             Files.delete(archive);
             assertEquals(manifest, IndexCache.read(file));
-            assertThrows(java.io.IOException.class, () -> IndexCache.requireSources(manifest));
+            assertThrows(IOException.class, () -> IndexCache.requireSources(manifest));
         }
     }
 }

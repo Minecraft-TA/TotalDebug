@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.resource;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
+import javax.swing.Icon;
 import java.util.Locale;
 import java.util.Set;
 
@@ -73,20 +74,20 @@ public final class FileTypeResolver {
         };
     }
 
-    private static ResourceFileType text(String syntaxStyle, javax.swing.Icon icon, String description) {
+    private static ResourceFileType text(String syntaxStyle, Icon icon, String description) {
         return type(ResourceFileType.Kind.TEXT, syntaxStyle, icon, description);
     }
 
     private static ResourceFileType type(
             ResourceFileType.Kind kind,
             String syntaxStyle,
-            javax.swing.Icon icon,
+            Icon icon,
             String description
     ) {
         return new ResourceFileType(kind, syntaxStyle, icon, description);
     }
 
-    private static javax.swing.Icon binaryIcon(String extension) {
+    private static Icon binaryIcon(String extension) {
         return switch (extension) {
             case "jar", "zip" -> Icons.JAR_FILE;
             case "ttf", "otf", "woff", "woff2" -> Icons.FONT_FILE;

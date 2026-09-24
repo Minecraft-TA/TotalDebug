@@ -2,8 +2,15 @@ package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
 import com.sun.jdi.ThreadReference;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /** Owns target execution until it returns, independently of caller wait limits. */
 final class DebuggerEvaluationRunner {
@@ -11,14 +18,14 @@ final class DebuggerEvaluationRunner {
     private final DebuggerEvaluationLifecycle lifecycle = new DebuggerEvaluationLifecycle();
     private final AtomicReference<DebuggerEvaluation<?>> active = new AtomicReference<>();
     private volatile Runnable changed = () -> { };
-    private final java.util.Map<String, DebuggerEvaluation<?>> history = new java.util.LinkedHashMap<>();
-    private final java.util.function.Consumer<String> discard;
+    private final Map<String, DebuggerEvaluation<?>> history = new LinkedHashMap<>();
+    private final Consumer<String> discard;
 
     DebuggerEvaluationRunner() { this(ignored -> { }); }
-    DebuggerEvaluationRunner(java.util.function.Consumer<String> discard) { this.discard = discard; }
+    DebuggerEvaluationRunner(Consumer<String> discard) { this.discard = discard; }
 
     static String currentId() {
-        return java.util.Objects.requireNonNull(CURRENT.get(), "No active evaluation").id();
+        return Objects.requireNonNull(CURRENT.get(), "No active evaluation").id();
     }
 
     DebuggerEvaluation<?> operation(String id) {
@@ -41,12 +48,12 @@ final class DebuggerEvaluationRunner {
         if (!this.active.compareAndSet(null, operation)) {
             throw new IllegalStateException("Debugger evaluation is still running; wait or request cancellation");
         }
-        java.util.List<String> discarded = new java.util.ArrayList<>();
+        List<String> discarded = new ArrayList<>();
         synchronized (this.history) {
             this.history.put(operation.id(), operation);
             while (this.history.size() > 128) {
                 String oldest = this.history.entrySet().stream().filter(entry -> !entry.getValue().running())
-                        .map(java.util.Map.Entry::getKey).findFirst().orElse(null);
+                        .map(Map.Entry::getKey).findFirst().orElse(null);
                 if (oldest == null) break;
                 this.history.remove(oldest);
                 discarded.add(oldest);

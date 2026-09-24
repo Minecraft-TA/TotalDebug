@@ -429,7 +429,7 @@ class DirectoryChainTest {
     }
 
     private static LazyTreeNode firstFolder(LazyFileJTree tree) {
-        return (LazyTreeNode) ((LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0)).getChildAt(0);
+        return (LazyTreeNode) ((LazyTreeNode) tree.getModel().getRoot()).getChildAt(0).getChildAt(0);
     }
 
     private static Path selected(LazyFileJTree tree) {

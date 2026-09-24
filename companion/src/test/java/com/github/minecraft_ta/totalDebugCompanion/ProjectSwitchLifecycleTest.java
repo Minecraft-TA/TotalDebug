@@ -1,8 +1,17 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode;
 import com.github.minecraft_ta.totalDebugCompanion.ui.views.MainWindow;
+
+import javax.swing.Icon;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.tree.DefaultMutableTreeNode;
+
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
@@ -11,12 +20,18 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
 import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.awt.Component;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
@@ -43,9 +58,9 @@ class ProjectSwitchLifecycleTest {
             var jobs = ProjectSwitchJobs.create();
             var mcp = app.startMcpServer(jobs, 0);
             String endpoint = mcp.endpointUrl();
-            var transport = io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport
+            var transport = HttpClientStreamableHttpTransport
                     .builder(endpoint.substring(0, endpoint.length() - 4)).endpoint("/mcp").build();
-            var client = io.modelcontextprotocol.client.McpClient.sync(transport).build();
+            var client = McpClient.sync(transport).build();
             client.initialize();
             var a = profile(root, "A");
             var b = profile(root, "B");
@@ -86,8 +101,8 @@ class ProjectSwitchLifecycleTest {
             assertEquals(2, app.projects().size());
             assertFalse(app.isSwitching());
             assertEquals(endpoint, mcp.endpointUrl());
-            var status = client.callTool(new io.modelcontextprotocol.spec.McpSchema.CallToolRequest("status", Map.of()));
-            assertFalse(Boolean.TRUE.equals(status.isError()), "MCP must stay initialized through switches");
+            var status = client.callTool(new McpSchema.CallToolRequest("status", Map.of()));
+            assertNotEquals(Boolean.TRUE, status.isError(), "MCP must stay initialized through switches");
             // A failed state flush is reversible, just like the editor save veto.
             Files.delete(b.dataDirectory().resolve("scripts"));
             Files.createDirectory(b.dataDirectory().resolve("scripts"));
@@ -146,19 +161,19 @@ class ProjectSwitchLifecycleTest {
     private static void verifyEditorSwitch(CompanionApplication app, CompanionProfile a, CompanionProfile b, AppPaths paths) throws Exception {
         Files.delete(b.dataDirectory().resolve("scripts"));
         Files.createDirectory(b.dataDirectory().resolve("scripts"));
-        var allowed = new java.util.concurrent.atomic.AtomicBoolean();
-        var disposed = new java.util.concurrent.atomic.AtomicBoolean();
-        var panel = new javax.swing.JPanel();
-        var editor = new com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel() {
+        var allowed = new AtomicBoolean();
+        var disposed = new AtomicBoolean();
+        var panel = new JPanel();
+        var editor = new IEditorPanel() {
             public String getTitle() { return "Unsaved A"; }
             public String getTooltip() { return "A"; }
-            public javax.swing.Icon getIcon() { return null; }
-            public java.awt.Component getComponent() { return panel; }
+            public Icon getIcon() { return null; }
+            public Component getComponent() { return panel; }
             public boolean canClose() {
                 if (!allowed.get()) return false;
                 assertEquals(a, app.currentProject(), "Save must run before selecting B");
                 try { Files.writeString(a.dataDirectory().resolve("scripts/shared.tdscript"), "saved A"); }
-                catch (java.io.IOException failure) { return false; }
+                catch (IOException failure) { return false; }
                 return true;
             }
             public void dispose() { disposed.set(true); }
@@ -212,11 +227,11 @@ class ProjectSwitchLifecycleTest {
         assertEquals("saved A", Files.readString(a.dataDirectory().resolve("scripts/shared.tdscript")));
         var treeField = window.getClass().getDeclaredField("fileTreeView");
         treeField.setAccessible(true);
-        var treeView = (javax.swing.JScrollPane) treeField.get(window);
-        javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var tree = (javax.swing.JTree) treeView.getViewport().getView();
-            var root = (javax.swing.tree.DefaultMutableTreeNode) tree.getModel().getRoot();
-            var scripts = (com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.LazyTreeNode) root.getChildAt(0);
+        var treeView = (JScrollPane) treeField.get(window);
+        SwingUtilities.invokeAndWait(() -> {
+            var tree = (JTree) treeView.getViewport().getView();
+            var root = (DefaultMutableTreeNode) tree.getModel().getRoot();
+            var scripts = (LazyTreeNode) root.getChildAt(0);
             assertEquals(b.dataDirectory().resolve("scripts").toString(), scripts.getUserObject().getTooltip());
             assertEquals(0, window.getEditorTabs().getTabCount());
         });
@@ -227,7 +242,7 @@ class ProjectSwitchLifecycleTest {
         app.openProject(b).get(10, TimeUnit.SECONDS);
         assertEquals(b, ProjectRegistry.open(paths).selected());
         verifyNavigationReset(app, window);
-        javax.swing.SwingUtilities.invokeAndWait(window::dispose);
+        SwingUtilities.invokeAndWait(window::dispose);
     }
 
     private static void verifyNavigationReset(CompanionApplication app, MainWindow window) throws Exception {
@@ -235,7 +250,7 @@ class ProjectSwitchLifecycleTest {
         var lookupStarted = new AtomicReference<CompletableFuture<Void>>();
         var lookupCount = new AtomicInteger();
         var created = new CompletableFuture<NavigationService>();
-        javax.swing.SwingUtilities.invokeAndWait(() -> {
+        SwingUtilities.invokeAndWait(() -> {
             var tree = new FileTreeView(app::currentScope, ignored -> { }) {
                 @Override public CompletableFuture<Boolean> revealLocalPath(Path path) {
                     lookupCount.incrementAndGet();
@@ -259,21 +274,21 @@ class ProjectSwitchLifecycleTest {
         var oldTraversal = navigation.goBack();
         lookupStarted.get().get(3, TimeUnit.SECONDS);
         scopeA.retire();
-        javax.swing.SwingUtilities.invokeAndWait(() -> navigation.projectChanged(scopeB));
+        SwingUtilities.invokeAndWait(() -> navigation.projectChanged(scopeB));
         assertFalse(oldTraversal.isDone(), "Old lookup is still awaiting a callback");
         for (String directory : List.of("B/one", "B/two"))
             navigation.navigate(new NavigationTarget.LocalDirectory(Path.of(directory))).get(3, TimeUnit.SECONDS);
-        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
+        SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
         var delayedB = new CompletableFuture<Boolean>();
         pending.set(delayedB);
         lookupStarted.set(new CompletableFuture<>());
         var newTraversal = navigation.goBack();
         lookupStarted.get().get(3, TimeUnit.SECONDS);
-        javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        SwingUtilities.invokeAndWait(() -> { });
         assertFalse(newTraversal.isDone());
         int activeLookups = lookupCount.get();
         var duplicate = new AtomicReference<CompletableFuture<Void>>();
-        javax.swing.SwingUtilities.invokeAndWait(() -> {
+        SwingUtilities.invokeAndWait(() -> {
             navigation.runtimeChanged();
             duplicate.set(navigation.goBack());
         });
@@ -282,24 +297,24 @@ class ProjectSwitchLifecycleTest {
         delayedA.complete(true);
         assertInstanceOf(CancellationException.class, assertThrows(ExecutionException.class,
                 () -> oldTraversal.get(3, TimeUnit.SECONDS)).getCause());
-        javax.swing.SwingUtilities.invokeAndWait(() -> duplicate.set(navigation.goBack()));
+        SwingUtilities.invokeAndWait(() -> duplicate.set(navigation.goBack()));
         duplicate.get().get(3, TimeUnit.SECONDS);
         assertEquals(activeLookups, lookupCount.get(), "Completion from A must not admit another traversal while B is still navigating");
         delayedB.complete(true);
         newTraversal.get(3, TimeUnit.SECONDS);
-        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));
+        SwingUtilities.invokeAndWait(() -> assertTrue(navigation.forwardAction().isEnabled()));
         var duringVeto = new CompletableFuture<Boolean>();
         pending.set(duringVeto);
         lookupStarted.set(new CompletableFuture<>());
         var vetoTraversal = navigation.goForward();
         lookupStarted.get().get(3, TimeUnit.SECONDS);
-        javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        SwingUtilities.invokeAndWait(() -> { });
         scopeB.beginSwitch();
         duringVeto.complete(true);
         assertThrows(ExecutionException.class, () -> vetoTraversal.get(3, TimeUnit.SECONDS));
         scopeB.cancelSwitch();
         navigation.goForward().get(3, TimeUnit.SECONDS);
-        javax.swing.SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
+        SwingUtilities.invokeAndWait(() -> assertTrue(navigation.backAction().isEnabled()));
     }
 
 }

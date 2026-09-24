@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Collects the final variable names written by Vineflower while one class is being decompiled. */
 public final class VariableNameCapture implements AutoCloseable {
@@ -158,7 +159,7 @@ public final class VariableNameCapture implements AutoCloseable {
         ));
     }
 
-    private static void forCapture(String owner, java.util.function.Consumer<VariableNameCapture> action) {
+    private static void forCapture(String owner, Consumer<VariableNameCapture> action) {
         List<VariableNameCapture> captures;
         synchronized (ACTIVE) {
             captures = List.copyOf(ACTIVE.getOrDefault(owner, List.of()));

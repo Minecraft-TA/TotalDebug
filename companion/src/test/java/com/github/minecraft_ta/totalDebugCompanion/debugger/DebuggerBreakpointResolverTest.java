@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,7 +16,7 @@ class DebuggerBreakpointResolverTest {
     @BeforeAll
     static void initializeIndex() throws Exception {
         try (var stream = Object.class.getResourceAsStream("/java/lang/Object.class")) {
-            CompanionClassIndex.set(ClassIndex.fromBytes(java.util.List.of(stream.readAllBytes())));
+            CompanionClassIndex.set(ClassIndex.fromBytes(List.of(stream.readAllBytes())));
         }
     }
 

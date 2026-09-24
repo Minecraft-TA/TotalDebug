@@ -72,22 +72,22 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
     private final CountDownLatch exitRequested = new CountDownLatch(1);
 
     private final NotificationCenter notifications = new NotificationCenter();
-    private EditorScriptRunService editorRuns;
+    private final EditorScriptRunService editorRuns;
     public NotificationCenter notifications() { return notifications; }
-    private ScriptExecutionService scriptExecutions;
-    private CompanionSession session;
+    private final ScriptExecutionService scriptExecutions;
+    private final CompanionSession session;
     private final CompanionLaunchConfiguration launchConfiguration;
     private final Object lifecycleLock = new Object();
     private volatile ProjectScope current;
     private final InstanceState emptyState = InstanceState.inMemory();
     private final CodeInsightService codeInsightService = new CodeInsightService(
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
-    private RuntimeIndexService runtimeIndexService;
+    private final RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
     private volatile CompanionMcpServer mcpServer;
     // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
     private volatile CodeModeJobService mcpJobs;
-    private volatile DebuggerSessionController debuggerController;
+    private final DebuggerSessionController debuggerController;
     private volatile CompanionUi ui;
     private ServiceStatus gameStatus;
     private ServiceStatus mcpStatus;

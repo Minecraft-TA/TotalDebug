@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
 import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,12 +16,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.Authenticator;
 import java.net.CookieHandler;
+import java.net.InetSocketAddress;
 import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -27,7 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,7 +44,7 @@ class CompanionDownloadTest {
 
     @Test
     void downloadsThePairedReleaseWhenMissing() throws Exception {
-        byte[] expected = "current release".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] expected = "current release".getBytes(StandardCharsets.UTF_8);
         CompanionRelease release = release(expected);
         Path installed = this.directory.resolve(release.artifactFileName());
         DownloadClient client = new DownloadClient(new ByteArrayInputStream(expected), expected.length);
@@ -50,7 +57,7 @@ class CompanionDownloadTest {
 
     @Test
     void badDownloadLeavesNoInstallationAndCanBeRetried() throws Exception {
-        byte[] expected = "current release".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] expected = "current release".getBytes(StandardCharsets.UTF_8);
         CompanionRelease release = release(expected);
         Path installed = this.directory.resolve(release.artifactFileName());
         DownloadClient client = new DownloadClient(new ByteArrayInputStream(new byte[]{1, 2}), 2);
@@ -93,7 +100,7 @@ class CompanionDownloadTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Timeout(5)
+    @Timeout(5)
     void stalledBodyIsClosedAndItsStagedFileIsRemoved() throws Exception {
         CompanionRelease release = release(new byte[]{1});
         StalledBody body = new StalledBody();
@@ -108,7 +115,7 @@ class CompanionDownloadTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Timeout(5)
+    @Timeout(5)
     void continuousProgressStillHasATotalDeadline() throws Exception {
         CompanionRelease release = release(new byte[]{1});
         StalledBody body = new StalledBody() {
@@ -168,12 +175,12 @@ class CompanionDownloadTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Timeout(10)
+    @Timeout(10)
     void deadlinesUnblockTheRealHttpClientBeforeHeadersAndDuringBodyReads() throws Exception {
         for (boolean sendHeaders : new boolean[]{false, true}) {
             CompanionRelease release = release(new byte[]{1, 2});
-            var releaseResponse = new java.util.concurrent.CountDownLatch(1);
-            var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+            var releaseResponse = new CountDownLatch(1);
+            var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/", exchange -> {
                 try {
                     if (sendHeaders) {
@@ -181,7 +188,7 @@ class CompanionDownloadTest {
                         exchange.getResponseBody().write(1);
                         exchange.getResponseBody().flush();
                     }
-                    releaseResponse.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                    releaseResponse.await(5, TimeUnit.SECONDS);
                 } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
                 finally { exchange.close(); }
             });
@@ -196,7 +203,7 @@ class CompanionDownloadTest {
                                 Duration.ofSeconds(3), 4));
                 IOException failure = assertThrows(IOException.class, installer::resolveOrInstall);
                 if (sendHeaders) assertTrue(failure.getMessage().contains("made no progress"), failure.toString());
-                else assertInstanceOf(java.net.http.HttpTimeoutException.class, failure);
+                else assertInstanceOf(HttpTimeoutException.class, failure);
                 assertEmptyDirectory();
             } finally {
                 releaseResponse.countDown();

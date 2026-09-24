@@ -15,14 +15,21 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.NestedBreakp
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.PauseDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.RichExpressionDebuggeeMain;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
+import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
+import com.sun.jdi.InvocationException;
 import net.minecraft.test.GeneratedNamesDebuggeeMain;
 import net.minecraft.test.LocalNameDisambiguationFixture;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -204,13 +211,13 @@ public final class DebuggerScenarios {
     }
 
     public static void richExpressions() throws Exception {
-        java.nio.file.Path path = java.nio.file.Path.of(System.getProperty("user.dir"), "src", "test", "java")
+        Path path = Path.of(System.getProperty("user.dir"), "src", "test", "java")
                 .resolve(RichExpressionDebuggeeMain.class.getName().replace('.', '/') + ".java")
                 .toAbsolutePath().normalize();
         DebugEngine.Source source = new DebugEngine.Source(
                 path.toUri(), RichExpressionDebuggeeMain.class.getName(),
-                java.nio.file.Files.readString(path),
-                com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap.empty(),
+                Files.readString(path),
+                SourceLineMap.empty(),
                 SourceVariableNames.forMethod(
                         "debugExpressions",
                         "()V",
@@ -266,7 +273,7 @@ public final class DebuggerScenarios {
                 harness.engine().evaluate("RichExpressionDebuggeeMain.Child.overridable()", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Type-qualified instance method unexpectedly invoked");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("No compatible overload"),
                         "Type-qualified instance method failure was not explicit: " + expected);
             }
@@ -284,7 +291,7 @@ public final class DebuggerScenarios {
                 harness.engine().evaluate("renamedTarget.fixed(null)", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("fixed/string-varargs null overload unexpectedly succeeded");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("Ambiguous overload"),
                         "fixed/string-varargs null overload was not ambiguous: " + expected);
             }
@@ -346,7 +353,7 @@ public final class DebuggerScenarios {
                 harness.engine().evaluate("1 - \"not-a-number\"", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Subtraction with a string operand unexpectedly succeeded");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("Primitive or wrapper value required: java.lang.String"),
                         "String operand failure was not explicit: " + expected);
             }
@@ -354,7 +361,7 @@ public final class DebuggerScenarios {
                 harness.engine().evaluate("renamedTarget.nullable.toString()", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Method invocation on a typed null value unexpectedly succeeded");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("Cannot invoke toString on null"),
                         "Typed null receiver failure was not explicit: " + expected);
             }
@@ -403,7 +410,7 @@ public final class DebuggerScenarios {
             try {
                 harness.engine().evaluate("renamedTarget.boxedLong(3)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("int-to-Long conversion unexpectedly succeeded");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("No compatible overload"), "Invalid int-to-Long conversion was accepted");
             }
             equal("\"string-null\"", value(harness.engine().evaluate("renamedTarget.nullOverload(null)", frame.id())),
@@ -411,18 +418,18 @@ public final class DebuggerScenarios {
             try {
                 harness.engine().evaluate("renamedTarget.nullUnrelated(null)", frame.id()).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Unrelated null overload unexpectedly succeeded");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.toString().contains("Ambiguous overload"), "Unrelated null overload ambiguity was not explicit");
             }
             try {
                 harness.engine().evaluate("renamedTarget.throwing()", frame.id())
                         .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
                 throw new AssertionError("Target exception unexpectedly completed evaluation");
-            } catch (java.util.concurrent.ExecutionException expected) {
+            } catch (ExecutionException expected) {
                 check(expected.getCause() != null
                                 && expected.toString().contains("java.lang.IllegalStateException")
                                 && expected.toString().contains("rich-expression-target-failure")
-                                && hasCause(expected, com.sun.jdi.InvocationException.class),
+                                && hasCause(expected, InvocationException.class),
                         "Target exception was not preserved: " + expected);
             }
             equal("\"lifecycle-probe\"",
@@ -438,7 +445,7 @@ public final class DebuggerScenarios {
         }
     }
 
-    private static String value(java.util.concurrent.CompletableFuture<DebugEngine.EvaluationResult> evaluation)
+    private static String value(CompletableFuture<DebugEngine.EvaluationResult> evaluation)
             throws Exception {
         return evaluation.get(TIMEOUT_SECONDS, TimeUnit.SECONDS).value();
     }
@@ -917,7 +924,7 @@ public final class DebuggerScenarios {
     }
 
     private static void equal(Object expected, Object actual, String subject) {
-        if (!java.util.Objects.equals(expected, actual)) {
+        if (!Objects.equals(expected, actual)) {
             throw new AssertionError(subject + ": expected <" + expected + "> but was <" + actual + ">");
         }
     }

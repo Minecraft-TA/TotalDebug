@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.naming.GeneratedVariableNames
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
@@ -41,8 +42,8 @@ final class SyntheticLambdaDebugMetadata {
                             String name,
                             String descriptor,
                             String signature,
-                            org.objectweb.asm.Label start,
-                            org.objectweb.asm.Label end,
+                            Label start,
+                            Label end,
                             int index
                     ) {
                         if (GeneratedVariableNames.matches(name)) {

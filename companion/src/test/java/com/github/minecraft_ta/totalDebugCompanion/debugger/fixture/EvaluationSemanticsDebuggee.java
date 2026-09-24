@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
 
+import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
+
 import java.io.IOException;
 
 public final class EvaluationSemanticsDebuggee {
@@ -7,7 +9,7 @@ public final class EvaluationSemanticsDebuggee {
     private static int order;
 
     public static void main(String[] args) {
-        com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge.preload();
+        PausedEvaluationBridge.preload();
         EvaluationSemanticsDebuggee receiver = new EvaluationSemanticsDebuggee();
         int local = 7;
         System.out.println(local); // EVALUATION_STOP

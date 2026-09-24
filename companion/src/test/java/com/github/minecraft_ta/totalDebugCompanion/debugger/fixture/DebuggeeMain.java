@@ -17,13 +17,6 @@ public final class DebuggeeMain {
         return value + 1;
     }
 
-    private static final class Payload {
-        private final int amount;
-        private final String label;
-
-        private Payload(int amount, String label) {
-            this.amount = amount;
-            this.label = label;
-        }
+    private record Payload(int amount, String label) {
     }
 }

@@ -5,7 +5,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jdt.core.IBuffer;
 import org.eclipse.jdt.core.IBufferChangedListener;
 import org.eclipse.jdt.core.IOpenable;
-import org.eclipse.jdt.core.JavaModelException;
 
 public interface IBufferStub extends IBuffer {
 

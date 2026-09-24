@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 final class CompanionMcpToolCatalog {
     static final String SERVER_NAME = "totaldebug-companion";
@@ -541,7 +542,7 @@ final class CompanionMcpToolCatalog {
     }
 
     private static List<McpSchema.Tool> allTools() {
-        return java.util.stream.Stream.concat(TOOLS.stream().map(ToolSpec::tool), DebuggerMcpToolCatalog.tools().stream()).toList();
+        return Stream.concat(TOOLS.stream().map(ToolSpec::tool), DebuggerMcpToolCatalog.tools().stream()).toList();
     }
 
     private static Map<String, McpSchema.Tool> indexTools() {

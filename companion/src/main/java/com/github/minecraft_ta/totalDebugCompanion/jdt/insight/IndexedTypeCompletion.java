@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Indexed type and static-member completion using the imports of one Java source file. */
 final class IndexedTypeCompletion {
@@ -154,7 +155,7 @@ final class IndexedTypeCompletion {
             Type methodType = Type.getMethodType(method.getDescriptorString());
             String parameters = Arrays.stream(methodType.getArgumentTypes())
                     .map(Type::getClassName)
-                    .collect(java.util.stream.Collectors.joining(", "));
+                    .collect(Collectors.joining(", "));
             String insertion = method.getName() + "()";
             add(result, new DebuggerCompletionProposal(
                     method.getName() + "(" + parameters + ")",

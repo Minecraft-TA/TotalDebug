@@ -56,11 +56,11 @@ class DebuggerFramesPaneTest {
             JList<?> list = list(pane);
             pane.setFrames(List.of(new DebugEngine.StackFrame(3, "Native.call()", "example.Native", null, -1, 0)));
             pane.selectFirst();
-            assertFalse(((JMenuItem) pane.createContextMenu().getComponent(0)).isEnabled());
-            assertTrue(((JMenuItem) pane.createContextMenu().getComponent(2)).isEnabled());
+            assertFalse(pane.createContextMenu().getComponent(0).isEnabled());
+            assertTrue(pane.createContextMenu().getComponent(2).isEnabled());
             invoke(list, "ENTER");
             pane.setFrames(List.of(new DebugEngine.StackFrame(4, "call", "", URI.create("file:///Unknown.java"), 5, 0)));
-            assertFalse(((JMenuItem) pane.createContextMenu().getComponent(0)).isEnabled());
+            assertFalse(pane.createContextMenu().getComponent(0).isEnabled());
             invoke(list, "F4");
             assertEquals("at call (Unknown.java:5)", DebuggerFramesPane.frameText(pane.frame(0)));
             pane.setFrames(List.of());

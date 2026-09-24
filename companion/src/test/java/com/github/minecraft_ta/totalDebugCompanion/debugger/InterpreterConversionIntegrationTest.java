@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -38,8 +39,8 @@ class InterpreterConversionIntegrationTest {
                 new Case("boxed == 7", boxed == 7),
                 new Case("boxed == boxed", boxed == boxed),
                 new Case("!flag", !flag),
-                new Case("flag && true", flag && true),
-                new Case("flag & false", flag & false),
+                new Case("flag && true", flag),
+                new Case("flag & false", false),
                 new Case("flag ? 1 : 2", flag ? 1 : 2),
                 new Case("(long) boxed", (long) boxed),
                 new Case("\"\" + boxed", "" + boxed),
@@ -65,9 +66,9 @@ class InterpreterConversionIntegrationTest {
                 new Case("true ? 1 : wideEffect()", yes ? 1 : InterpreterConversionDebuggee.wideEffect()),
                 new Case("choose(true ? 1 : 2L)", InterpreterConversionDebuggee.choose(yes ? 1 : 2L)),
                 new Case("choose(true ? \"text\" : (Object) null)", InterpreterConversionDebuggee.choose(yes ? "text" : (Object) null)),
-                new Case("choose(true ? boxed : boxed)", InterpreterConversionDebuggee.choose(yes ? Integer.valueOf(7) : Integer.valueOf(7))),
+                new Case("choose(true ? boxed : boxed)", InterpreterConversionDebuggee.choose(Integer.valueOf(7))),
                 new Case("choose(true ? boxed : 1)", InterpreterConversionDebuggee.choose(yes ? Integer.valueOf(7) : 1)),
-                new Case("true ? flag : false", yes ? Boolean.TRUE : false)
+                new Case("true ? flag : false", yes)
         );
     }
 
@@ -95,7 +96,7 @@ class InterpreterConversionIntegrationTest {
     @Test
     void nullUnboxingFailsBeforeEvaluatingTheRightOperand() throws Exception {
         withFrame((engine, frame) -> {
-            var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+            var failure = assertThrows(ExecutionException.class,
                     () -> engine.evaluate("absent + effect()", frame.id()).get(10, TimeUnit.SECONDS));
             assertInstanceOf(NullPointerException.class, failure.getCause());
             assertEquals("0", engine.evaluate("calls", frame.id()).get().value());

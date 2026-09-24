@@ -7,7 +7,6 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.CustomJavaPar
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis.Span;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.folding.Fold;
 import org.fife.ui.rsyntaxtextarea.folding.FoldType;

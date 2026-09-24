@@ -11,8 +11,10 @@ import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -25,9 +27,9 @@ final class DebuggerInlineValueHints {
     ) {
     }
 
-    record LineHint(java.util.List<ValueHint> values) {
+    record LineHint(List<ValueHint> values) {
         LineHint {
-            values = java.util.List.copyOf(values);
+            values = List.copyOf(values);
         }
     }
 
@@ -84,7 +86,7 @@ final class DebuggerInlineValueHints {
         Map<Integer, LineHint> result = new LinkedHashMap<>();
         for (Map.Entry<Integer, LinkedHashMap<String, DebuggerEditorPresentation.PresentedVariable>> entry
                 : byLine.entrySet()) {
-            java.util.List<ValueHint> hints = entry.getValue().values().stream()
+            List<ValueHint> hints = entry.getValue().values().stream()
                     .map(value -> new ValueHint(
                             snapshot.frame(),
                             value,
@@ -114,7 +116,7 @@ final class DebuggerInlineValueHints {
     }
 
     private static ASTNode enclosingExecutable(CompilationUnit unit, int offset) {
-        java.util.ArrayList<ASTNode> candidates = new java.util.ArrayList<>();
+        ArrayList<ASTNode> candidates = new ArrayList<>();
         unit.accept(new ASTVisitor() {
             @Override
             public boolean visit(MethodDeclaration node) {

@@ -52,9 +52,9 @@ public record ForwardedCompanionPayload(ResourceLocation messageId, byte[] body)
 
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof ForwardedCompanionPayload that
-                && this.messageId.equals(that.messageId)
-                && Arrays.equals(this.body, that.body);
+        return this == other || other instanceof ForwardedCompanionPayload(ResourceLocation id, byte[] body1)
+                && this.messageId.equals(id)
+                && Arrays.equals(this.body, body1);
     }
 
     @Override

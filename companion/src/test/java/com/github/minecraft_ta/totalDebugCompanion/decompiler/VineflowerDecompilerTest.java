@@ -18,12 +18,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class VineflowerDecompilerTest {
     private final JavaDecompiler decompiler = new VineflowerDecompiler();
@@ -100,7 +98,7 @@ class VineflowerDecompilerTest {
                         "blockstate1"
                 ),
                 result.source() + System.lineSeparator()
-                        + java.util.Arrays.toString(result.lineMap().originalToDisplayed())
+                        + Arrays.toString(result.lineMap().originalToDisplayed())
         );
     }
 
@@ -140,7 +138,7 @@ class VineflowerDecompilerTest {
 
     private static void assertCompiles(String binaryName, String source, Path outputDirectory) throws IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        assertTrue(compiler != null, "Tests must run on a JDK");
+        assertNotNull(compiler, "Tests must run on a JDK");
 
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         JavaFileObject sourceFile = new StringJavaFileObject(binaryName, source);

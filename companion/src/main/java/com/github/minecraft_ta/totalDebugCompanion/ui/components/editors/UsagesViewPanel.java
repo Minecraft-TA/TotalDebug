@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -19,6 +20,8 @@ import org.objectweb.asm.Type;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
@@ -51,7 +54,9 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import javax.swing.AbstractAction;
+import javax.swing.tree.TreeSelectionModel;
 
 public final class UsagesViewPanel extends JPanel {
     private static final String RESULTS_CARD = "results";
@@ -62,7 +67,7 @@ public final class UsagesViewPanel extends JPanel {
     private final Consumer<NavigationTarget> navigator;
     private final ReferenceQuery query;
     private final String targetDisplayName;
-    private final javax.swing.Icon targetIcon;
+    private final Icon targetIcon;
     private final ReferenceSearchService searchService;
     private final JLabel targetLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
@@ -97,7 +102,7 @@ public final class UsagesViewPanel extends JPanel {
     public UsagesViewPanel(
             ReferenceQuery query,
             String targetDisplayName,
-            javax.swing.Icon targetIcon,
+            Icon targetIcon,
             ReferenceSearchService searchService, Consumer<NavigationTarget> navigator
     ) {
         super(new BorderLayout());
@@ -197,7 +202,7 @@ public final class UsagesViewPanel extends JPanel {
         firstRow.add(this.cancelButton);
 
         JPanel header = new JPanel();
-        header.setLayout(new javax.swing.BoxLayout(header, javax.swing.BoxLayout.Y_AXIS));
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.add(firstRow);
         header.add(Box.createVerticalStrut(6));
         header.add(this.statusLabel);
@@ -225,7 +230,7 @@ public final class UsagesViewPanel extends JPanel {
                     ? mutable.getUserObject().toString() : "";
         });
         this.resultsTree.getSelectionModel().setSelectionMode(
-                javax.swing.tree.TreeSelectionModel.SINGLE_TREE_SELECTION
+                TreeSelectionModel.SINGLE_TREE_SELECTION
         );
         ToolTipManager.sharedInstance().registerComponent(this.resultsTree);
 
@@ -311,9 +316,9 @@ public final class UsagesViewPanel extends JPanel {
             case ReferenceLocation.ClassDeclaration ignored -> "";
             case ReferenceLocation.Field field -> "#" + field.name();
             case ReferenceLocation.RecordComponent component -> "#" + component.name();
-            case ReferenceLocation.Method method -> "#" + method.name() + '(' + java.util.Arrays.stream(
+            case ReferenceLocation.Method method -> "#" + method.name() + '(' + Arrays.stream(
                     Type.getArgumentTypes(method.descriptor())).map(Type::getClassName)
-                    .collect(java.util.stream.Collectors.joining(", ")) + ')';
+                    .collect(Collectors.joining(", ")) + ')';
         };
         return location.className() + member;
     }
@@ -457,7 +462,7 @@ public final class UsagesViewPanel extends JPanel {
     private JCheckBoxMenuItem groupingItem(
             String label,
             boolean selected,
-            java.util.function.Consumer<Boolean> selection
+            Consumer<Boolean> selection
     ) {
         JCheckBoxMenuItem item = new JCheckBoxMenuItem(label, selected);
         item.addActionListener(event -> selection.accept(item.isSelected()));
@@ -514,7 +519,7 @@ public final class UsagesViewPanel extends JPanel {
         ((CardLayout) this.resultCards.getLayout()).show(this.resultCards, card);
     }
 
-    private static javax.swing.Icon symbolIcon(CodeSymbol symbol) {
+    private static Icon symbolIcon(CodeSymbol symbol) {
         return switch (symbol) {
             case CodeSymbol.ClassSymbol ignored -> Icons.JAVA_CLASS;
             case CodeSymbol.FieldSymbol ignored -> Icons.FIELD;
@@ -524,7 +529,7 @@ public final class UsagesViewPanel extends JPanel {
         };
     }
 
-    private static javax.swing.Icon locationIcon(ReferenceLocation.Site site) {
+    private static Icon locationIcon(ReferenceLocation.Site site) {
         return switch (site) {
             case ReferenceLocation.ClassDeclaration ignored -> Icons.JAVA_CLASS;
             case ReferenceLocation.Field ignored -> Icons.FIELD;
@@ -549,7 +554,7 @@ public final class UsagesViewPanel extends JPanel {
         String relations = usage.kinds().stream()
                 .sorted()
                 .map(UsageTreeModel::relationLabel)
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
         String count = usage.occurrenceCount() == 1 ? "" : " ×" + usage.occurrenceCount();
         String owner = includeClassName
                 ? UsageTreeModel.simpleClassName(usage.location().className()) + '.'
@@ -559,10 +564,10 @@ public final class UsagesViewPanel extends JPanel {
 
     private static String methodLabel(ReferenceLocation.Method method) {
         Type methodType = Type.getMethodType(method.descriptor());
-        String arguments = java.util.Arrays.stream(methodType.getArgumentTypes())
+        String arguments = Arrays.stream(methodType.getArgumentTypes())
                 .map(Type::getClassName)
                 .map(UsagesViewPanel::simpleTypeName)
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
         return method.name() + '(' + arguments + ')';
     }
 
@@ -612,14 +617,14 @@ public final class UsagesViewPanel extends JPanel {
                     tree, value, selected, expanded, leaf, row, hasFocus
             );
             Object userValue = ((DefaultMutableTreeNode) value).getUserObject();
-            if (userValue instanceof GroupNode group) {
-                setIcon(switch (group.group().kind()) {
+            if (userValue instanceof GroupNode(UsageTreeModel.Group group1)) {
+                setIcon(switch (group1.kind()) {
                     case SCOPE, USAGE_TYPE -> Icons.SEARCH_ICON;
                     case MODULE -> Icons.MODULE;
                     case PACKAGE -> Icons.PACKAGE;
                     case CLASS -> Icons.JAVA_CLASS;
                 });
-                setToolTipText(group.group().referenceCount() + " indexed references");
+                setToolTipText(group1.referenceCount() + " indexed references");
             } else if (userValue instanceof UsageNode usage) {
                 ReferenceLocation location = usage.usage().location();
                 setIcon(locationIcon(location.site()));

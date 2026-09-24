@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.tth05.jindex.ClassIndex;
 import org.junit.jupiter.api.Test;
+import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 
 import java.io.IOException;
@@ -134,7 +135,7 @@ class McpClassSearchTest {
 
     @Test
     void symbolSearchReportsTruncationAtTheNativeLimit() {
-        var writer = new org.objectweb.asm.ClassWriter(0);
+        var writer = new ClassWriter(0);
         writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "fixture/ManySymbols", null, "java/lang/Object", null);
         for (int ordinal = 0; ordinal < CompanionMcpSearchService.RESULT_LIMIT + 1; ordinal++) {
             writer.visitField(Opcodes.ACC_PUBLIC, "match" + ordinal, "I", null, null).visitEnd();

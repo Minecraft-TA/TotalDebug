@@ -4,8 +4,11 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -97,7 +100,7 @@ class CompanionMcpToolCatalogTest {
                 .map(specification -> specification.tool())
                 .filter(tool -> !tool.name().startsWith("debugger_"))
                 .toList();
-        assertEquals(samples.keySet(), tools.stream().map(McpSchema.Tool::name).collect(java.util.stream.Collectors.toSet()));
+        assertEquals(samples.keySet(), tools.stream().map(McpSchema.Tool::name).collect(Collectors.toSet()));
 
         var validator = McpJsonDefaults.getSchemaValidator();
         for (McpSchema.Tool tool : tools) {
@@ -124,7 +127,7 @@ class CompanionMcpToolCatalogTest {
                         Map.of("code", "return 1;", "unexpected", true))));
 
         for (String tool : List.of("find_usages", "runtime_source")) {
-            List<Map<String, Object>> targets = new java.util.ArrayList<>(List.of(
+            List<Map<String, Object>> targets = new ArrayList<>(List.of(
                     Map.of("kind", "class", tool.equals("find_usages") ? "owner" : "binary_name", "example.Owner"),
                     Map.of("kind", "field", "owner", "example.Owner", "name", "value", "descriptor", "I"),
                     Map.of("kind", "method", "owner", "example.Owner", "name", "run", "descriptor", "()V")
@@ -135,7 +138,7 @@ class CompanionMcpToolCatalogTest {
             for (Map<String, Object> target : targets) {
                 CompanionMcpToolCatalog.validateRequest(request(tool, Map.of("target", target)));
                 for (String required : target.keySet()) {
-                    var incomplete = new java.util.HashMap<>(target);
+                    var incomplete = new HashMap<>(target);
                     incomplete.remove(required);
                     assertThrows(IllegalArgumentException.class,
                             () -> CompanionMcpToolCatalog.validateRequest(request(tool, Map.of("target", incomplete))),

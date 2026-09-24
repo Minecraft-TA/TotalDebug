@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +16,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 public final class CompanionAppInstaller {
     public static final String DEV_JAR_PROPERTY = "totaldebug.companionJar";
@@ -104,8 +106,8 @@ public final class CompanionAppInstaller {
             Consumer<CompanionStartupProgress> progressListener
     ) throws IOException, InterruptedException {
         Files.createDirectories(jarPath.getParent());
-        com.github.minecraft_ta.totaldebug.storage.AtomicFiles.cleanupAbandonedStaging(jarPath.getParent());
-        Path stagedJar = com.github.minecraft_ta.totaldebug.storage.AtomicFiles.temporaryFile(jarPath.getParent());
+        AtomicFiles.cleanupAbandonedStaging(jarPath.getParent());
+        Path stagedJar = AtomicFiles.temporaryFile(jarPath.getParent());
         try {
             downloadDistribution(stagedJar, progressListener);
             Files.move(
@@ -188,7 +190,7 @@ public final class CompanionAppInstaller {
         }
     }
 
-    static void copyDownload(InputStream input, OutputStream output, long maxBytes, java.util.function.LongConsumer progress)
+    static void copyDownload(InputStream input, OutputStream output, long maxBytes, LongConsumer progress)
             throws IOException {
         byte[] buffer = new byte[16 * 1024];
         long downloadedBytes = 0L;

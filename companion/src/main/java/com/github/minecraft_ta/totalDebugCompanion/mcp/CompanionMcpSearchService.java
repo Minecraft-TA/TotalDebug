@@ -18,6 +18,7 @@ import com.github.tth05.jindex.SymbolSearchResult;
 import org.objectweb.asm.Opcodes;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,7 +56,7 @@ final class CompanionMcpSearchService {
         }
 
         ClassSearchPage matches = index.findClassesByBinaryName(checkedQuery, CONTAINS);
-        return boundedList("classes", java.util.Arrays.stream(matches.results())
+        return boundedList("classes", Arrays.stream(matches.results())
                 .map(this::describeClass)
                 .toList(), matches.truncated());
     }
@@ -75,7 +76,7 @@ final class CompanionMcpSearchService {
                 CONTAINS,
                 EnumSet.of(SymbolKind.FIELD, SymbolKind.METHOD)
         );
-        return boundedList("symbols", java.util.Arrays.stream(matches.results())
+        return boundedList("symbols", Arrays.stream(matches.results())
                 .map(this::describeSymbol)
                 .toList(), matches.truncated());
     }
@@ -99,7 +100,7 @@ final class CompanionMcpSearchService {
             default -> throw new IllegalArgumentException("target.kind must be class, field, or method");
         };
         ReferenceSearchPage page = index().findReferences(referenceTarget, RESULT_LIMIT);
-        List<Map<String, Object>> usages = java.util.Arrays.stream(page.results())
+        List<Map<String, Object>> usages = Arrays.stream(page.results())
                 .map(this::describeUsage)
                 .toList();
         return boundedList("usages", usages, page.truncated());
@@ -107,7 +108,7 @@ final class CompanionMcpSearchService {
 
     Map<String, Object> searchLiterals(String query) {
         LiteralSearchPage page = index().findLiteralsContaining(requireText(query, "query"), RESULT_LIMIT);
-        List<Map<String, Object>> literals = java.util.Arrays.stream(page.results())
+        List<Map<String, Object>> literals = Arrays.stream(page.results())
                 .map(this::describeLiteral)
                 .toList();
         return boundedList("literals", literals, page.truncated());

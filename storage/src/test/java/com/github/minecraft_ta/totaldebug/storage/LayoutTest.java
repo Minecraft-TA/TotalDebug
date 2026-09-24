@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class LayoutTest {
@@ -24,13 +28,13 @@ class LayoutTest {
         Path secret = this.home.resolve("instance.key");
         AtomicFiles.writeSecret(secret, "test-secret");
         assertEquals("test-secret", Files.readString(secret));
-        var acl = Files.getFileAttributeView(secret, java.nio.file.attribute.AclFileAttributeView.class);
+        var acl = Files.getFileAttributeView(secret, AclFileAttributeView.class);
         if (acl != null) {
             assertEquals(1, acl.getAcl().size());
             assertTrue(acl.getAcl().getFirst().principal().getName().endsWith(System.getProperty("user.name")));
         } else {
-            assertEquals(java.util.Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
-                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(secret));
+            assertEquals(Set.of(PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(secret));
         }
     }
 }

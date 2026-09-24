@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
+import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
+
+import java.util.Locale;
 import java.util.function.Supplier;
-import java.util.function.Consumer;
-import java.awt.Window;
+
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -33,6 +35,7 @@ import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.tth05.jindex.SymbolKind;
 
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
@@ -232,7 +235,7 @@ public class SearchEverywherePopup extends JFrame {
         ButtonGroup group = new ButtonGroup();
         for (Category candidate : Category.values()) {
             JToggleButton button = new SearchCategoryButton(candidate.label(), candidate == this.category);
-            button.setName("searchEverywhere.category." + candidate.name().toLowerCase(java.util.Locale.ROOT));
+            button.setName("searchEverywhere.category." + candidate.name().toLowerCase(Locale.ROOT));
             button.addActionListener(event -> selectCategory(candidate));
             group.add(button);
             tabs.add(button);
@@ -251,7 +254,7 @@ public class SearchEverywherePopup extends JFrame {
 
     private JPanel createFooter() {
         JPanel footer = new JPanel(new BorderLayout());
-        footer.setBorder(new javax.swing.border.CompoundBorder(
+        footer.setBorder(new CompoundBorder(
                 DynamicMatteBorder.rule(1, 0, 0, 0),
                 BorderFactory.createEmptyBorder(5, 9, 5, 9)
         ));
@@ -633,7 +636,7 @@ public class SearchEverywherePopup extends JFrame {
                 .distinct()
                 .toList();
         List<RuntimeInventory.RuntimeModule> resultModules = sources.stream()
-                .map(com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource.Source::module)
+                .map(RuntimeSnapshotBytecodeSource.Source::module)
                 .distinct()
                 .toList();
         PrimarySecondaryText text = resultModules.size() == 1

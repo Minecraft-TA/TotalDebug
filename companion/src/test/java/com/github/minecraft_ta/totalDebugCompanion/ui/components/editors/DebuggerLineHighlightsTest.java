@@ -21,7 +21,7 @@ class DebuggerLineHighlightsTest {
                 EditorPalette.islandsDark()
         );
 
-        highlights.setBreakpointLines(java.util.List.of(2, 4));
+        highlights.setBreakpointLines(List.of(2, 4));
         highlights.showExecutionLine(4);
 
         assertEquals(2, highlights.paintedBreakpointCount());

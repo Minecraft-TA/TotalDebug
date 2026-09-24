@@ -14,11 +14,19 @@ import com.google.gson.JsonObject;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -112,7 +120,7 @@ final class DecompiledSourceStore {
                 }
             }
             int symbolCount = readCount(input, 12);
-            var symbols = new java.util.ArrayList<SourceDocument.SymbolSpan>(symbolCount);
+            var symbols = new ArrayList<SourceDocument.SymbolSpan>(symbolCount);
             for (int i = 0; i < symbolCount; i++) {
                 int kind = input.readUnsignedByte();
                 String owner = input.readUTF();
@@ -151,8 +159,8 @@ final class DecompiledSourceStore {
                 readDebug(this.directory.resolve(existing + ".debug"), binaryName, Files.readString(file));
                 return file;
             }
-            var used = new java.util.HashSet<String>();
-            classes.asMap().values().forEach(value -> used.add(value.getAsString().toLowerCase(java.util.Locale.ROOT)));
+            var used = new HashSet<String>();
+            classes.asMap().values().forEach(value -> used.add(value.getAsString().toLowerCase(Locale.ROOT)));
             String stem = CacheNames.uniqueStem(binaryName, used);
             Path file = this.directory.resolve(stem + ".java");
             AtomicFiles.writeString(file, source);
@@ -220,7 +228,7 @@ final class DecompiledSourceStore {
     }
 
     private void removeUnlistedFiles(JsonObject classes) throws IOException {
-        var retained = new java.util.HashSet<String>();
+        var retained = new HashSet<String>();
         for (var value : classes.asMap().values()) {
             String stem = CacheNames.requireFileName(value.getAsString());
             retained.add(stem + ".java");
@@ -235,13 +243,13 @@ final class DecompiledSourceStore {
 
     private List<Path> generatedFiles() throws IOException {
         try (var entries = Files.list(this.directory)) {
-            var generated = new java.util.ArrayList<Path>();
+            var generated = new ArrayList<Path>();
             for (Path entry : entries.toList()) {
                 String name = entry.getFileName().toString();
                 if (name.equals("manifest.json") || name.equals(".lock")) {
                     continue;
                 }
-                if (!Files.isRegularFile(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                if (!Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
                         || !(name.endsWith(".java") || name.endsWith(".debug"))) {
                     throw new IOException("Unsupported decompiled cache entry: " + entry
                             + ". Clear this generated cache manually before using the current layout.");
@@ -256,14 +264,14 @@ final class DecompiledSourceStore {
 
     private static String fingerprint(String... values) {
         try {
-            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            var digest = MessageDigest.getInstance("SHA-256");
             for (String value : values) {
                 byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-                digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+                digest.update(ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
                 digest.update(bytes);
             }
-            return java.util.HexFormat.of().formatHex(digest.digest());
-        } catch (java.security.NoSuchAlgorithmException impossible) {
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException impossible) {
             throw new AssertionError(impossible);
         }
     }

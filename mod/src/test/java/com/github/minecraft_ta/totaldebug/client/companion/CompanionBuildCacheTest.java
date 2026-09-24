@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.client.companion;
 
+import com.github.minecraft_ta.totaldebug.storage.AppPaths;
+import com.github.minecraft_ta.totaldebug.storage.LaunchCache;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -43,8 +45,8 @@ class CompanionBuildCacheTest {
         assertArrayEquals(new byte[]{2}, Files.readAllBytes(secondLaunch));
     }
     private static Path stage(Path home, Path source) throws Exception {
-        try (var lease = com.github.minecraft_ta.totaldebug.storage.LaunchCache.stage(
-                new com.github.minecraft_ta.totaldebug.storage.AppPaths(home), source)) {
+        try (var lease = LaunchCache.stage(
+                new AppPaths(home), source)) {
             return lease.path();
         }
     }

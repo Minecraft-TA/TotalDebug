@@ -3,11 +3,15 @@ package com.github.minecraft_ta.totalDebugCompanion.decompile;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,14 +26,14 @@ class DecompiledSourceStoreTest {
         SourceVariableNames variableNames = SourceVariableNames.forMethod(
                 "run",
                 "()V",
-                java.util.Map.of("p_1_", "level")
+                Map.of("p_1_", "level")
         );
-        Path source = store.write(new SourceDocument("sample.Target", "class Target {}", lineMap, variableNames, java.util.List.of()));
+        Path source = store.write(new SourceDocument("sample.Target", "class Target {}", lineMap, variableNames, List.of()));
 
         assertEquals(source, store.read("sample.Target").path());
         assertEquals("class Target {}", Files.readString(source));
-        assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"), fileNames(source.getParent()));
-        assertEquals(java.util.List.of("sample.Target"), store.cachedClasses());
+        assertEquals(List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"), fileNames(source.getParent()));
+        assertEquals(List.of("sample.Target"), store.cachedClasses());
         SourceLineMap restored = DecompiledSourceStore.open(directory, "runtime", "format")
                 .read("sample.Target").document().lineMap();
         assertArrayEquals(new int[]{10, 4, 20, 8, 21, 8}, restored.originalToDisplayed());
@@ -51,26 +55,26 @@ class DecompiledSourceStoreTest {
     @Test
     void replacesTheCurrentRuntimeAndRejectsLateWrites(@TempDir Path directory) throws Exception {
         var old = DecompiledSourceStore.open(directory, "first", "format");
-        Path target = old.write(new SourceDocument("sample.Target", "first", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
-        old.write(new SourceDocument("sample.Removed", "removed", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
+        Path target = old.write(new SourceDocument("sample.Target", "first", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
+        old.write(new SourceDocument("sample.Removed", "removed", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
         var current = DecompiledSourceStore.open(directory, "second", "format");
         assertNull(current.read("sample.Target"));
-        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
-                () -> old.write(new SourceDocument("sample.Late", "stale", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
-        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> old.read("sample.Target"));
-        assertEquals(target, current.write(new SourceDocument("sample.Target", "second", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
+        Assertions.assertThrows(IOException.class,
+                () -> old.write(new SourceDocument("sample.Late", "stale", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
+        Assertions.assertThrows(IOException.class, () -> old.read("sample.Target"));
+        assertEquals(target, current.write(new SourceDocument("sample.Target", "second", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
         assertEquals("second", current.read("sample.Target").document().contents());
-        assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"),
+        assertEquals(List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"),
                 fileNames(current.directory()));
     }
 
     @Test
     void disambiguatesCaseReservedAndLongNamesWithoutHashDirectories(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        for (String name : java.util.List.of("sample.Target", "sample.target", "CON", "long.".repeat(60) + "Target")) {
-            Path file = store.write(new SourceDocument(name, name, SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
+        for (String name : List.of("sample.Target", "sample.target", "CON", "long.".repeat(60) + "Target")) {
+            Path file = store.write(new SourceDocument(name, name, SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
             assertEquals(store.directory(), file.getParent());
-            org.junit.jupiter.api.Assertions.assertTrue(file.getFileName().toString().length() < 140);
+            Assertions.assertTrue(file.getFileName().toString().length() < 140);
             assertEquals(name, store.read(name).document().contents());
         }
         assertEquals("sample.target-2.java", store.read("sample.target").path().getFileName().toString());
@@ -80,23 +84,23 @@ class DecompiledSourceStoreTest {
     @Test
     void detectsMismatchedSourceAndDebugFiles(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        Path file = store.write(new SourceDocument("sample.Target", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
+        Path file = store.write(new SourceDocument("sample.Target", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
         Files.writeString(file, "different");
-        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class, () -> store.read("sample.Target"));
+        Assertions.assertThrows(IOException.class, () -> store.read("sample.Target"));
     }
 
 
     @Test
     void failedPairPublicationIsInvisibleAndItsFilesAreReclaimed(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        store.write(new SourceDocument("sample.Complete", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of()));
+        store.write(new SourceDocument("sample.Complete", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
         String invalidHeader = "x".repeat(70_000);
-        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
-                () -> store.write(new SourceDocument(invalidHeader, "incomplete", SourceLineMap.empty(), SourceVariableNames.empty(), java.util.List.of())));
+        Assertions.assertThrows(IOException.class,
+                () -> store.write(new SourceDocument(invalidHeader, "incomplete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
         assertNull(store.read(invalidHeader));
         var reopened = DecompiledSourceStore.open(directory, "runtime", "format");
         assertEquals("complete", reopened.read("sample.Complete").document().contents());
-        assertEquals(java.util.List.of(".lock", "manifest.json", "sample.Complete.debug", "sample.Complete.java"),
+        assertEquals(List.of(".lock", "manifest.json", "sample.Complete.debug", "sample.Complete.java"),
                 fileNames(reopened.directory()));
     }
 
@@ -104,12 +108,12 @@ class DecompiledSourceStoreTest {
     void unknownDirectoriesAreNotMigratedOrCleaned(@TempDir Path directory) throws Exception {
         Path unknown = Files.createDirectories(directory.resolve("cache/decompiled/unknown"));
         Files.writeString(unknown.resolve("keep"), "untouched");
-        org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException.class,
+        Assertions.assertThrows(IOException.class,
                 () -> DecompiledSourceStore.open(directory, "runtime", "format"));
         assertEquals("untouched", Files.readString(unknown.resolve("keep")));
     }
 
-    private static java.util.List<String> fileNames(Path directory) throws Exception {
+    private static List<String> fileNames(Path directory) throws Exception {
         try (var files = Files.list(directory)) {
             return files.map(path -> path.getFileName().toString()).sorted().toList();
         }

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 
 import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.GraphicsConfiguration;
@@ -30,7 +31,7 @@ public final class DebuggerWindow extends JFrame {
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void paused(DebuggerSessionController.PausedState state) {
-            javax.swing.SwingUtilities.invokeLater(() -> { if (!disposed) showWindow(); });
+            SwingUtilities.invokeLater(() -> { if (!disposed) showWindow(); });
         }
     };
     private boolean disposed;

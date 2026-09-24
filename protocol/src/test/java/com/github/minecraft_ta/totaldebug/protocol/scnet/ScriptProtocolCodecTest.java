@@ -2,6 +2,8 @@ package com.github.minecraft_ta.totaldebug.protocol.scnet;
 
 import com.github.minecraft_ta.totaldebug.protocol.GoldenMessages;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
+
+import java.util.List;
 import java.util.Map;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -13,9 +15,8 @@ import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import java.nio.ByteBuffer;
 import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ScriptProtocolCodecTest {
     private static final HexFormat HEX = HexFormat.of();
@@ -48,7 +49,7 @@ class ScriptProtocolCodecTest {
                 0,
                 0,
                 false,
-                java.util.List.of()
+                List.of()
         );
         ExecutionResult result = new ExecutionResult(
                 ExecutionStatus.RUN_COMPLETED,
@@ -90,7 +91,7 @@ class ScriptProtocolCodecTest {
         ExecutionResultMessage read = new ExecutionResultMessage();
         read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
         assertEquals(result, read.result());
-        assertEquals(false, read.result().status().terminal());
+        assertFalse(read.result().status().terminal());
     }
 
     @Test
@@ -124,7 +125,7 @@ class ScriptProtocolCodecTest {
                 0,
                 0,
                 false,
-                java.util.List.of()
+                List.of()
         );
         ExecutionResult result = new ExecutionResult(
                 ExecutionStatus.RUN_COMPLETED,

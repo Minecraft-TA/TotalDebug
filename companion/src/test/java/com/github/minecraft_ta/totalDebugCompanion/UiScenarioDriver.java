@@ -749,10 +749,10 @@ final class UiScenarioDriver {
                 for (int eventId : new int[]{MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED}) {
                     lineNumbers.dispatchEvent(new MouseEvent(lineNumbers, eventId, System.currentTimeMillis(),
                             0, x, y, count, false, MouseEvent.BUTTON1));
-                    if ((debugger.breakpoint(source.uri(), line) != null) != expected) {
+                    if ((debugger.breakpoint(source.uri(), line) == null) == expected) {
                         throw new IllegalStateException("Gutter toggle did not match press " + count);
                     }
-                    if ((lineNumbers.getToolTipText() != null) != expected) {
+                    if ((lineNumbers.getToolTipText() == null) == expected) {
                         throw new IllegalStateException("Gutter presentation did not update on press " + count);
                     }
                 }

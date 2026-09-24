@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.runtime;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -28,7 +30,7 @@ class RuntimeInventoryTest {
         for (String invalid : List.of("{\"format\":999}", "{\"format\":1,\"id\":\"abc\",\"javaVersion\":\"21\","
                 + "\"javaHome\":\"C:/jdk\",\"production\":false,\"sources\":[]}")) {
             Files.writeString(file, invalid);
-            assertThrows(java.io.IOException.class, () -> RuntimeInventory.read(file));
+            assertThrows(IOException.class, () -> RuntimeInventory.read(file));
         }
     }
 }

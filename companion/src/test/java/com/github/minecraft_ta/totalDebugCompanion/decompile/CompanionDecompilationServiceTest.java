@@ -7,6 +7,8 @@ import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import javax.swing.SwingUtilities;
+
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,9 +22,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeTestSources.bytecodeSource;
+import static org.junit.jupiter.api.Assertions.*;
 
 class CompanionDecompilationServiceTest {
     @TempDir
@@ -39,7 +40,7 @@ class CompanionDecompilationServiceTest {
                 // Assert preparation before posting to Swing, without relying on timing thresholds.
                 var syntax = source.document().getClass().getDeclaredField("unit");
                 syntax.setAccessible(true);
-                org.junit.jupiter.api.Assertions.assertNotNull(syntax.get(source.document()));
+                Assertions.assertNotNull(syntax.get(source.document()));
                 SwingUtilities.invokeAndWait(() -> source.document().classFallback(source.binaryName()));
             }
         }
@@ -71,7 +72,7 @@ class CompanionDecompilationServiceTest {
                     catch (Throwable failure) { returned.completeExceptionally(failure); }
                 });
                 var reading = returned.get(2, TimeUnit.SECONDS);
-                assertTrue(!reading.isDone(), "The read should still be waiting for its cache lock");
+                assertFalse(reading.isDone(), "The read should still be waiting for its cache lock");
                 release.countDown();
                 assertEquals(CacheFixture.class.getName(), reading.get(5, TimeUnit.SECONDS).binaryName());
             } finally { release.countDown(); blocker.get(5, TimeUnit.SECONDS); }
@@ -127,7 +128,7 @@ class CompanionDecompilationServiceTest {
                     new AtomicInteger(),
                     "second"
             )) {
-                assertTrue(!Files.exists(output));
+                assertFalse(Files.exists(output));
                 assertTrue(ignored.cachedClasses().isEmpty());
             }
         }

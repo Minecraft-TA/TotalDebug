@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import java.io.File;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,8 +104,8 @@ public record EditorLocation(String module, String moduleId, List<String> path, 
             URI sourceUri = URI.create(baseSource);
             if ("file".equalsIgnoreCase(sourceUri.getScheme())) {
                 Path sourcePath = Path.of(sourceUri).toAbsolutePath().normalize();
-                String sourceTooltip = java.nio.file.Files.isDirectory(sourcePath)
-                        ? sourcePath.resolve(classPath.replace('/', java.io.File.separatorChar)).toString()
+                String sourceTooltip = Files.isDirectory(sourcePath)
+                        ? sourcePath.resolve(classPath.replace('/', File.separatorChar)).toString()
                         : source + "!/" + classPath;
                 EditorLocation buildOutput = fromGradleBuildOutput(
                         sourcePath,

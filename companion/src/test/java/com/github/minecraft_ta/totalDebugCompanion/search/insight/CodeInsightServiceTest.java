@@ -6,12 +6,18 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import javax.swing.SwingUtilities;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,14 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CodeInsightServiceTest {
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void dropsCompletedQueriesStillQueuedOnTheEdtAfterRebindOrClose(boolean close) throws Exception {
-        var enteredEdt = new java.util.concurrent.CountDownLatch(1);
-        var releaseEdt = new java.util.concurrent.CountDownLatch(1);
+        var enteredEdt = new CountDownLatch(1);
+        var releaseEdt = new CountDownLatch(1);
         try (ClassIndex index = ClassIndex.fromSources(List.of(IndexSource.classFile(0, classBytes(String.class))));
              CodeInsightService service = new CodeInsightService(() -> index, RuntimeSourceCatalog.empty())) {
-            javax.swing.SwingUtilities.invokeLater(() -> {
+            SwingUtilities.invokeLater(() -> {
                 enteredEdt.countDown();
                 try { releaseEdt.await(5, TimeUnit.SECONDS); }
                 catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
@@ -38,14 +44,14 @@ class CodeInsightServiceTest {
                 service.locateClass("java.lang.String", listener(result));
                 var executorField = CodeInsightService.class.getDeclaredField("executor");
                 executorField.setAccessible(true);
-                var executor = (java.util.concurrent.ThreadPoolExecutor) executorField.get(service);
+                var executor = (ThreadPoolExecutor) executorField.get(service);
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
                 while (executor.getCompletedTaskCount() == 0 && System.nanoTime() < deadline) Thread.sleep(1);
                 assertEquals(1, executor.getCompletedTaskCount(), "Query must finish before changing the binding");
                 if (close) service.close();
                 else service.rebind(() -> index, RuntimeSourceCatalog.empty());
                 releaseEdt.countDown();
-                javax.swing.SwingUtilities.invokeAndWait(() -> { });
+                SwingUtilities.invokeAndWait(() -> { });
                 assertFalse(result.isDone(), "An old query must not reach its listener after rebinding or closing");
             } finally { releaseEdt.countDown(); }
         }
@@ -64,8 +70,8 @@ class CodeInsightServiceTest {
                 source(9, "strings.jar", module)
         );
         try (ClassIndex index = ClassIndex.fromSources(List.of(
-                IndexSource.classFile(7, classBytes(java.util.List.class)),
-                IndexSource.classFile(8, classBytes(java.util.Map.class)),
+                IndexSource.classFile(7, classBytes(List.class)),
+                IndexSource.classFile(8, classBytes(Map.class)),
                 IndexSource.classFile(9, classBytes(String.class))
         )); CodeInsightService service = new CodeInsightService(() -> index, new RuntimeSourceCatalog(sources))) {
             CompletableFuture<RuntimeSnapshotBytecodeSource.Source> located = new CompletableFuture<>();

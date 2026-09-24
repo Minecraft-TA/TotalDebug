@@ -2,6 +2,9 @@ package com.github.minecraft_ta.totalDebugCompanion.debugger.fixture;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.fixture.z.Blocks;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 public final class RichExpressionDebuggeeMain {
     private static final String STATIC_SECRET = "static-secret";
 
@@ -146,10 +149,10 @@ public final class RichExpressionDebuggeeMain {
         }
 
         private String waitsForWorker() throws InterruptedException {
-            java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(1);
             Thread worker = new Thread(done::countDown, "rich-expression-worker");
             worker.start();
-            if (!done.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+            if (!done.await(2, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("worker did not run during evaluation");
             }
             worker.join();

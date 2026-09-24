@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.CacheNames;
 import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
+import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -21,6 +22,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -51,7 +53,7 @@ public final class RuntimeSourceMaterializer {
     private static PreparedRuntimeSources prepareLocked(List<RuntimeSourceInventory.Source> sources, Path cache)
             throws IOException {
         List<Input> inputs;
-        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.source-identities")) {
+        try (var phase = RuntimePhase.start("runtime.source-identities")) {
             inputs = inspect(sources);
         }
         String id = fingerprint(inputs, cache);
@@ -82,7 +84,7 @@ public final class RuntimeSourceMaterializer {
                     }
                     Path destination = staged.resolve(input.file());
                     if (Files.isDirectory(input.readable())) {
-                        try (var phase = com.github.minecraft_ta.totaldebug.storage.RuntimePhase.start("runtime.pack-source")) {
+                        try (var phase = RuntimePhase.start("runtime.pack-source")) {
                             packClassDirectory(input.readable(), destination);
                         }
                         if (!input.fingerprint().equals(archiveFingerprint(destination))) {
@@ -217,7 +219,7 @@ public final class RuntimeSourceMaterializer {
             }
             String expectedHash = JsonFiles.string(entry, "sha256");
             return expectedHash.equals(fileFingerprint(file));
-        } catch (java.util.concurrent.CancellationException exception) {
+        } catch (CancellationException exception) {
             throw exception;
         } catch (IOException | RuntimeException ignored) {
             return false;

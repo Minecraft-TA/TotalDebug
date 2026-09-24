@@ -19,6 +19,8 @@ import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Optional;
 
 /** Resolves debugger values to stable semantic navigation targets. */
@@ -189,7 +191,7 @@ final class DebuggerVariableNavigation {
     }
 
     private static ASTNode enclosingExecutable(CompilationUnit unit, int offset) {
-        java.util.ArrayList<ASTNode> candidates = new java.util.ArrayList<>();
+        ArrayList<ASTNode> candidates = new ArrayList<>();
         unit.accept(new ASTVisitor() {
             @Override
             public boolean visit(MethodDeclaration node) {
@@ -217,7 +219,7 @@ final class DebuggerVariableNavigation {
             }
         });
         return candidates.stream()
-                .min(java.util.Comparator.comparingInt(ASTNode::getLength))
+                .min(Comparator.comparingInt(ASTNode::getLength))
                 .orElse(null);
     }
 }

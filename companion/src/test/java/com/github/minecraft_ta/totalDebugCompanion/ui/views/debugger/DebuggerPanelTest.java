@@ -24,6 +24,7 @@ import java.awt.Container;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -92,7 +93,7 @@ class DebuggerPanelTest {
             assertEquals("Add Watch (Shift+Enter)", addWatch.getToolTipText());
 
             Object actionKey = field.getInputMap(JComponent.WHEN_FOCUSED).get(
-                    javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK)
+                    KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK)
             );
             assertNotNull(actionKey);
             assertNotNull(field.getActionMap().get(actionKey));
@@ -561,7 +562,7 @@ class DebuggerPanelTest {
     }
 
     private static List<String> labels(Component root) {
-        java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+        ArrayList<String> labels = new ArrayList<>();
         if (root instanceof JLabel label) {
             labels.add(label.getText());
         }
@@ -574,7 +575,7 @@ class DebuggerPanelTest {
     }
 
     private static List<String> menuItems(JPopupMenu menu) {
-        java.util.ArrayList<String> items = new java.util.ArrayList<>();
+        ArrayList<String> items = new ArrayList<>();
         for (Component component : menu.getComponents()) {
             if (component instanceof JMenuItem item) {
                 items.add(item.getText());

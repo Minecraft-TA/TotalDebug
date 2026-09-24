@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JComponent;
@@ -16,7 +17,6 @@ import javax.swing.JList;
 import javax.swing.JScrollPane;
 import javax.swing.JWindow;
 import javax.swing.KeyStroke;
-import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
@@ -24,6 +24,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
@@ -86,7 +87,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
     private void configurePopup() {
         this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.list.setFixedCellHeight(ROW_HEIGHT);
-        this.list.setCellRenderer((ListCellRenderer<DebuggerCompletionProposal>) (list, value, index, selected, focus) -> {
+        this.list.setCellRenderer((list, value, index, selected, focus) -> {
             PrimarySecondaryLabel label = new PrimarySecondaryLabel();
             label.configure(
                     new PrimarySecondaryText(value.label(), value.detail()),
@@ -126,7 +127,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), ACCEPT_ENTER);
         this.field.getActionMap().put(ACCEPT_ENTER, new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 if (isCompletionVisible()) {
                     acceptSelection();
                 } else {
@@ -136,12 +137,12 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             }
         });
         this.field.setFocusTraversalKeysEnabled(false);
-        javax.swing.Action insertTab = this.field.getActionMap().get(
+        Action insertTab = this.field.getActionMap().get(
                 this.field.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("TAB")));
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("TAB"), ACCEPT_TAB);
         this.field.getActionMap().put(ACCEPT_TAB, new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 if (isCompletionVisible()) {
                     acceptSelection();
                 } else if (field.isMultiline() && insertTab != null) {
@@ -154,19 +155,19 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ctrl SPACE"), SHOW);
         this.field.getActionMap().put(SHOW, new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 updatePopup(true);
             }
         });
     }
 
     private void bind(String keyStroke, String actionKey, int direction) {
-        javax.swing.Action moveCaret = this.field.getActionMap().get(
+        Action moveCaret = this.field.getActionMap().get(
                 this.field.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke(keyStroke)));
         this.field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(keyStroke), actionKey);
         this.field.getActionMap().put(actionKey, new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent event) {
+            public void actionPerformed(ActionEvent event) {
                 if (!isCompletionVisible()) {
                     if (field.isMultiline() && moveCaret != null) moveCaret.actionPerformed(event);
                     else updatePopup(true);

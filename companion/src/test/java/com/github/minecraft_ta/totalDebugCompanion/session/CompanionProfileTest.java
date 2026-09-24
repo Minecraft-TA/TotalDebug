@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.session;
 
+import com.github.minecraft_ta.totaldebug.storage.JsonFiles;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +21,7 @@ class CompanionProfileTest {
         );
         Path profileFile = this.temporaryDirectory.resolve("profile.properties");
 
-        com.github.minecraft_ta.totaldebug.storage.JsonFiles.write(profileFile, profile.toJson());
+        JsonFiles.write(profileFile, profile.toJson());
 
         assertEquals(profile, CompanionProfile.read(profileFile));
     }

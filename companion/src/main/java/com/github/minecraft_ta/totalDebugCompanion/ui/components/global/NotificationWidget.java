@@ -25,7 +25,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -349,8 +348,8 @@ final class NotificationWidget extends JButton implements AutoCloseable {
             if (entry.source().target() instanceof NavigationTarget.LocalFile file) {
                 path = file.path();
                 directory = false;
-            } else if (entry.source().target() instanceof NavigationTarget.LocalDirectory folder) {
-                path = folder.path();
+            } else if (entry.source().target() instanceof NavigationTarget.LocalDirectory(Path path1)) {
+                path = path1;
                 directory = true;
             } else {
                 openSource.setEnabled(true);

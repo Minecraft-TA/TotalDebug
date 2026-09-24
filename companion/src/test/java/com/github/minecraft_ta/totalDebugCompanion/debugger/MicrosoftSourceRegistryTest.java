@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -122,7 +123,7 @@ class MicrosoftSourceRegistryTest {
 
     @Test
     void aSourceLoadFailureDoesNotPreventResolvingOtherFramesOrRetrying() {
-        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var attempts = new AtomicInteger();
         MicrosoftSourceRegistry registry = new MicrosoftSourceRegistry(name -> {
             if (attempts.getAndIncrement() == 0) throw new IOException("Damaged source cache");
             return new DebugEngine.Source(SOURCE_URI, "sample.Outer", SOURCE);

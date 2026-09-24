@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.script;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -33,9 +35,9 @@ public final class ExpressionHistory {
     }
 
     public record Entry(String expression, SnippetExecutionService.Side side, List<String> imports,
-                        com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode mode) {
+                        JavaSnippetSource.Mode mode) {
         public Entry(String expression, SnippetExecutionService.Side side, List<String> imports) {
-            this(expression, side, imports, com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.Mode.EXPRESSION);
+            this(expression, side, imports, JavaSnippetSource.Mode.EXPRESSION);
         }
         public Entry {
             if (Objects.requireNonNull(expression).isBlank()) {

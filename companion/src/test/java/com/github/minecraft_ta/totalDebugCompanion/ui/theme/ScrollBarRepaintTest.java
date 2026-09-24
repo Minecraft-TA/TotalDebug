@@ -9,6 +9,7 @@ import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
@@ -17,7 +18,7 @@ class ScrollBarRepaintTest {
     private static final int WIDTH = 14;
     private static final int HEIGHT = 180;
 
-    static java.util.List<CompanionTheme> themes() {
+    static List<CompanionTheme> themes() {
         return CompanionTheme.available();
     }
 

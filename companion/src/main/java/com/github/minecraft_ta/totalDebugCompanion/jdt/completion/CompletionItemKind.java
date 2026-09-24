@@ -14,5 +14,5 @@ public enum CompletionItemKind {
     CONSTRUCTOR,
     LABEL,
     TEXT,
-    IMPORT;
+    IMPORT
 }

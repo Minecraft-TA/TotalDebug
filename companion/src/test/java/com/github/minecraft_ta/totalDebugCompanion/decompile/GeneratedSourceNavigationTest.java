@@ -10,8 +10,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -20,7 +22,7 @@ final class GeneratedSourceNavigationTest {
     static void initializeIndex() throws Exception {
         var bytes = new ArrayList<byte[]>();
         for (Class<?> type : List.of(Object.class, Record.class, String.class,
-                java.lang.annotation.Annotation.class, java.util.function.Supplier.class)) {
+                Annotation.class, Supplier.class)) {
             try (var input = type.getResourceAsStream('/' + type.getName().replace('.', '/') + ".class")) {
                 bytes.add(input.readAllBytes());
             }

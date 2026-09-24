@@ -98,7 +98,7 @@ class ExpressionScopeAnalyzerTest {
         String source = """
                 class Base {
                     private int inherited;
-                    private String baseCall() { return \"base\"; }
+                    private String baseCall() { return "base"; }
                     static int BASE_STATIC;
                 }
                 class Sample extends Base {

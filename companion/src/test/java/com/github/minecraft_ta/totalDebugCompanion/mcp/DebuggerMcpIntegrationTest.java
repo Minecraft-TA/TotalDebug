@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+
+import java.util.ArrayList;
 import java.util.function.Consumer;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugTargetDescriptor;
@@ -42,7 +44,7 @@ class DebuggerMcpIntegrationTest {
 
     @BeforeAll
     static void initializeIndex() throws Exception {
-        var bytes = new java.util.ArrayList<byte[]>();
+        var bytes = new ArrayList<byte[]>();
         for (Class<?> type : List.of(Object.class, String.class, McpDebuggeeMain.class)) {
             try (var stream = type.getResourceAsStream("/" + type.getName().replace('.', '/') + ".class")) {
                 bytes.add(stream.readAllBytes());
@@ -181,7 +183,7 @@ class DebuggerMcpIntegrationTest {
 
     private static Map<String, Object> call(McpSyncClient client, String name, Map<String, Object> args) {
         var result = client.callTool(McpSchema.CallToolRequest.builder(name).arguments(args).build());
-        assertFalse(Boolean.TRUE.equals(result.isError()), result.toString());
+        assertNotEquals(Boolean.TRUE, result.isError(), result.toString());
         Map<String, Object> value = cast(result.structuredContent());
         DebuggerMcpToolCatalogTest.assertOutput(name, value);
         assertEquals(1, result.content().size());
@@ -192,7 +194,7 @@ class DebuggerMcpIntegrationTest {
 
     private static void error(McpSyncClient client, String name, Map<String, Object> args) {
         var result = client.callTool(McpSchema.CallToolRequest.builder(name).arguments(args).build());
-        assertTrue(Boolean.TRUE.equals(result.isError()), result.toString());
+        assertEquals(Boolean.TRUE, result.isError(), result.toString());
         DebuggerMcpToolCatalogTest.assertOutput(name, cast(result.structuredContent()));
     }
 

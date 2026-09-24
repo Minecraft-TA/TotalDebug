@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.JavaSymbolResolver;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
+import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -256,7 +257,7 @@ public final class SourceDocument {
         }
         // Syntax errors are distinct from a valid class whose synthetic methods were omitted.
         for (var problem : parsed.getProblems()) {
-            if (problem.isError() && (problem.getID() & org.eclipse.jdt.core.compiler.IProblem.Syntax) != 0) {
+            if (problem.isError() && (problem.getID() & IProblem.Syntax) != 0) {
                 throw new IllegalArgumentException("Unable to parse source " + this.binaryName + ": " + problem.getMessage());
             }
         }
@@ -359,8 +360,10 @@ public final class SourceDocument {
             this.declarations.putIfAbsent(new CodeSymbol.ClassSymbol(symbol.ownerClassName()),
                     new Entry(anonymous, anonymous.getStartPosition(), Kind.DECLARATION));
         }
-        if (component && symbol instanceof CodeSymbol.FieldSymbol field) {
-            this.declarations.putIfAbsent(new CodeSymbol.MethodSymbol(field.ownerClassName(), field.name(), "()" + field.descriptor()),
+        if (component && symbol instanceof CodeSymbol.FieldSymbol(
+                String ownerClassName, String name, String descriptor
+        )) {
+            this.declarations.putIfAbsent(new CodeSymbol.MethodSymbol(ownerClassName, name, "()" + descriptor),
                     new Entry(node, caret, Kind.CONSTRUCT));
         }
     }
@@ -502,11 +505,15 @@ public final class SourceDocument {
             return this.offset < 0;
         }
         @Override public boolean visit(StringLiteral literal) {
-            if (this.query instanceof ReferenceQuery.StringLiteralReference target && literal.getLiteralValue().equals(target.value())) this.offset = literal.getStartPosition();
+            if (this.query instanceof ReferenceQuery.StringLiteralReference(
+                    String value
+            ) && literal.getLiteralValue().equals(value)) this.offset = literal.getStartPosition();
             return this.offset < 0;
         }
         @Override public boolean visit(TextBlock literal) {
-            if (this.query instanceof ReferenceQuery.StringLiteralReference target && literal.getLiteralValue().equals(target.value())) this.offset = literal.getStartPosition();
+            if (this.query instanceof ReferenceQuery.StringLiteralReference(
+                    String value
+            ) && literal.getLiteralValue().equals(value)) this.offset = literal.getStartPosition();
             return this.offset < 0;
         }
         private boolean matches(IBinding binding) {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
+import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
@@ -12,8 +13,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /** MCP projection of the same debugger session used by Companion's UI. */
@@ -86,7 +91,7 @@ final class DebuggerMcpService {
     }
 
     private static Map<String, Object> operationStatus(
-            com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation.Snapshot state) {
+            DebuggerEvaluation.Snapshot state) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("operation_id", state.id());
         result.put("state", state.state());
@@ -98,15 +103,15 @@ final class DebuggerMcpService {
     }
 
     private static Map<String, Object> operation(DebuggerSessionController session,
-            com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerEvaluation<?> operation,
+            DebuggerEvaluation<?> operation,
             int waitMillis) throws InterruptedException {
         if (waitMillis < 0 || waitMillis > 120_000) throw new IllegalArgumentException("wait_ms must be between 0 and 120000");
         Object value = null;
         try {
-            value = operation.completion().get(waitMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException pending) {
+            value = operation.completion().get(waitMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException pending) {
             // Only the caller's wait expired. The same execution remains available by ID.
-        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException failed) {
+        } catch (ExecutionException | CancellationException failed) {
             // Terminal diagnostics belong to the operation response.
         }
         var state = operation.snapshot();

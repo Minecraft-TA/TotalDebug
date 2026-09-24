@@ -1,6 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
+
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.InetAddress;
 import java.util.function.Consumer;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -48,8 +52,8 @@ class CompanionMcpSidecarTest {
              PipedOutputStream clientOutput = new PipedOutputStream(sidecarInput);
              PipedInputStream clientInput = new PipedInputStream();
              PipedOutputStream sidecarOutput = new PipedOutputStream(clientInput);
-             BufferedWriter writer = new BufferedWriter(new java.io.OutputStreamWriter(clientOutput, StandardCharsets.UTF_8));
-             BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(clientInput, StandardCharsets.UTF_8));
+             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(clientOutput, StandardCharsets.UTF_8));
+             BufferedReader reader = new BufferedReader(new InputStreamReader(clientInput, StandardCharsets.UTF_8));
              ExecutorService executor = Executors.newCachedThreadPool()) {
             Future<Integer> sidecar = executor.submit(() ->
                     CompanionMcpSidecar.run(sidecarInput, sidecarOutput, endpoint));
@@ -191,7 +195,7 @@ class CompanionMcpSidecarTest {
     }
 
     private static int availablePort() throws Exception {
-        try (ServerSocket socket = new ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress())) {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             return socket.getLocalPort();
         }
     }

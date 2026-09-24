@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -13,7 +14,7 @@ class CompanionForegroundHandoffTest {
     @Test
     void queueRejectionUsesTheExistingIoFailureContract() {
         CompanionForegroundHandoff handoff = new CompanionForegroundHandoff(processId -> { });
-        var rejected = new java.util.concurrent.RejectedExecutionException("receiver is not keeping up");
+        var rejected = new RejectedExecutionException("receiver is not keeping up");
         IOException failure = assertThrows(IOException.class,
                 () -> handoff.transfer(42L, () -> { }, () -> { throw rejected; }));
         assertEquals(rejected, failure.getCause());

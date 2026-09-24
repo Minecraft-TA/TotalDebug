@@ -7,8 +7,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
@@ -28,7 +31,7 @@ class ReleasePackagingTest {
         manifest.getMainAttributes().putValue("Implementation-Version", "2.0.0");
         try (var jar = new JarOutputStream(Files.newOutputStream(project.resolve("mod.jar")), manifest)) {
             jar.putNextEntry(new JarEntry("META-INF/totaldebug/companion-release.properties"));
-            jar.write("version=2.0.0\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            jar.write("version=2.0.0\n".getBytes(StandardCharsets.UTF_8));
             jar.closeEntry();
             jar.putNextEntry(new JarEntry("META-INF/jarjar/library.jar"));
             jar.write(new byte[]{1, 2, 3, 4});
@@ -100,8 +103,8 @@ class ReleasePackagingTest {
     }
 
     private BuildResult run(boolean fail, String... tasks) {
-        var arguments = new java.util.ArrayList<>(java.util.List.of(tasks));
-        arguments.addAll(java.util.List.of("--configuration-cache", "--console=plain", "--stacktrace"));
+        var arguments = new ArrayList<>(List.of(tasks));
+        arguments.addAll(List.of("--configuration-cache", "--console=plain", "--stacktrace"));
         var runner = GradleRunner.create().withPluginClasspath().withProjectDir(project.toFile()).withArguments(arguments);
         return fail ? runner.buildAndFail() : runner.build();
     }

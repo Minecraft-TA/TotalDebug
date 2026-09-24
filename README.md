@@ -58,6 +58,7 @@ For later Companion-only changes, run `:companion:shadowJar`, close its window a
 
 ## Documentation
 
+- [Product vision and exploratory directions](VISION.md)
 - [Usage and limitations](docs/USAGE.md)
 - [Builds and publication](docs/BUILD_RELEASE.md)
 - [Storage and cache management](docs/STORAGE.md)

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 /** Per-frame expression/watch results and exactly-once submission state. */
 final class DebuggerExpressionModel {
@@ -139,7 +140,7 @@ final class DebuggerExpressionModel {
         this.outcomes = results.outcomes;
     }
 
-    java.util.function.BiFunction<Outcome, DebuggerValueLease, Boolean> completionFor(Key key) {
+    BiFunction<Outcome, DebuggerValueLease, Boolean> completionFor(Key key) {
         FrameResults destination = this.current;
         Object request = new Object();
         destination.requests.put(key, request);

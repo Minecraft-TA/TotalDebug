@@ -1,10 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.debugger.expression;
 
+import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JdtConfiguration;
 import com.github.minecraft_ta.totaldebug.evaluation.CompiledClassBundle;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 import com.sun.jdi.*;
+import com.sun.jdi.ArrayType;
 import org.eclipse.jdt.core.dom.*;
 
 import java.io.Closeable;
@@ -37,7 +39,7 @@ final class CompiledFrameEvaluator implements Closeable {
         if (preparedClasspath == null || preparedClasspath.isBlank()) {
             throw new IllegalStateException("Compiled evaluation requires the prepared runtime compiler classpath");
         }
-        com.sun.jdi.StackFrame frame = context.frame();
+        StackFrame frame = context.frame();
         ReferenceType owner = frame.location().declaringType();
         if (vm.classesByName(owner.name()).size() > 1) {
             throw new IllegalArgumentException("Compiled evaluation requires unambiguous classpath bytes for loader-specific type: " + owner.name());
@@ -76,7 +78,7 @@ final class CompiledFrameEvaluator implements Closeable {
         }
         boolean hasThis = context.thisObject() != null;
         if (hasThis) fields.append("public ").append(sourceType(owner)).append(" __tdReceiver;\n");
-        var parts = com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource.splitImports(source);
+        var parts = JavaSnippetSource.splitImports(source);
         String body = rewrite(parts.body(), localNames, owner, hasThis);
         DebuggerTypeScope scope = this.scopes.scope(owner.name());
         String generated = "package com.github.minecraft_ta.totaldebug.generated;\n"
@@ -118,7 +120,7 @@ final class CompiledFrameEvaluator implements Closeable {
             if (instance != null) {
                 try {
                     if (invoked) {
-                        com.sun.jdi.StackFrame current = context.frame();
+                        StackFrame current = context.frame();
                         for (int i = 0; i < locals.size(); i++) {
                             LocalVariable local = locals.get(i);
                             Value updated = instance.getValue(instance.referenceType().fieldByName("__tdSlot" + i));
@@ -165,7 +167,7 @@ final class CompiledFrameEvaluator implements Closeable {
     }
 
     private static String sourceType(com.sun.jdi.Type type) throws ClassNotLoadedException {
-        if (type instanceof com.sun.jdi.ArrayType array) return sourceType(array.componentType()) + "[]";
+        if (type instanceof ArrayType array) return sourceType(array.componentType()) + "[]";
         if (type instanceof ReferenceType reference && (!reference.isPublic()
                 || reference.name().contains("/") || reference.name().matches(".*\\$[0-9].*"))) {
             throw new IllegalArgumentException("Compiled evaluation cannot represent inaccessible or unnamed frame type: "

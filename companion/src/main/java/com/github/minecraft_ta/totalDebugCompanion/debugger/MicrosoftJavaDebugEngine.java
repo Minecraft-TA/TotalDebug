@@ -38,6 +38,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final AtomicInteger requestSequence = new AtomicInteger();
@@ -53,7 +55,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
     private final IDebugAdapter adapter;
 
     public MicrosoftJavaDebugEngine(DebuggerSessionController.SourceLoader sourceLoader,
-                                    java.util.function.Supplier<String> classpath) {
+                                    Supplier<String> classpath) {
         configureInitialCoreSettings();
         this.sourceRegistry = new MicrosoftSourceRegistry(sourceLoader);
 
@@ -74,7 +76,7 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         this.adapter = new DebugAdapter(new LocalProtocolServer(this::handleEvent), providers);
     }
 
-    public void breakpointScriptSource(java.util.function.Function<String, String> source) {
+    public void breakpointScriptSource(Function<String, String> source) {
         this.expressionEngine.scriptSource(source);
     }
 
@@ -767,34 +769,29 @@ public final class MicrosoftJavaDebugEngine implements DebugEngine {
         return name;
     }
 
-    private static final class LocalProtocolServer implements IProtocolServer {
-        private final Consumer<Events.DebugEvent> eventHandler;
-
-        private LocalProtocolServer(Consumer<Events.DebugEvent> eventHandler) {
-            this.eventHandler = eventHandler;
-        }
+    private record LocalProtocolServer(Consumer<Events.DebugEvent> eventHandler) implements IProtocolServer {
 
         @Override
-        public CompletableFuture<Messages.Response> sendRequest(Messages.Request request) {
-            return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                    "Debugger-initiated requests are not supported"
-            ));
-        }
+            public CompletableFuture<Messages.Response> sendRequest(Messages.Request request) {
+                return CompletableFuture.failedFuture(new UnsupportedOperationException(
+                        "Debugger-initiated requests are not supported"
+                ));
+            }
 
-        @Override
-        public CompletableFuture<Messages.Response> sendRequest(Messages.Request request, long timeout) {
-            return sendRequest(request);
-        }
+            @Override
+            public CompletableFuture<Messages.Response> sendRequest(Messages.Request request, long timeout) {
+                return sendRequest(request);
+            }
 
-        @Override
-        public void sendEvent(Events.DebugEvent event) {
-            this.eventHandler.accept(event);
-        }
+            @Override
+            public void sendEvent(Events.DebugEvent event) {
+                this.eventHandler.accept(event);
+            }
 
-        @Override
-        public void sendResponse(Messages.Response response) {
+            @Override
+            public void sendResponse(Messages.Response response) {
+            }
         }
-    }
 
     private static final class NoHotCodeReplaceProvider implements IHotCodeReplaceProvider {
         @Override
