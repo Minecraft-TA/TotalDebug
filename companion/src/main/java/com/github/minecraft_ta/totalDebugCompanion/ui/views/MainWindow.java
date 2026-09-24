@@ -269,7 +269,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     @Override public void showError(String title, String message) { JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE); }
 
     public EditorContext editorContext() {
-        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, notifications, editorRuns, this::showDebuggerValue);
+        return new EditorContext(editorTabs.astCache(), editorTabs.analysisExecutor(), this, project.get(), insights, debugger, navigation(), scripts, notifications, editorRuns, this::showDebuggerValue, this::snippetExecutions);
     }
 
     private String notificationUnavailable(Source source) {
@@ -389,12 +389,17 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         return this.breakpointsWindow;
     }
 
-    private EvaluateExpressionWindow evaluateExpressionWindow() {
+    /** The project's one snippet runner; its run ids must not collide with another instance's. */
+    private SnippetExecutionService snippetExecutions() {
         if (this.snippetExecutions == null) {
             this.snippetExecutions = new SnippetExecutionService(executions, project.get());
         }
+        return this.snippetExecutions;
+    }
+
+    private EvaluateExpressionWindow evaluateExpressionWindow() {
         if (this.evaluateExpressionWindow == null) {
-            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this.scriptFileActions);
+            this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, snippetExecutions(), editorContext(), this.scriptFileActions);
         }
         return this.evaluateExpressionWindow;
     }

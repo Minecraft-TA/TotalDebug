@@ -25,11 +25,17 @@ public final class ScriptExecutionService {
 
     public boolean run(ProjectScope project, int id, String source, boolean serverSide,
                        ScriptExecutionEnvironment environment, Consumer<ScriptCompilationService.Failure> failureHandler) {
+        return run(project, id, source, serverSide, environment, null, failureHandler);
+    }
+
+    public boolean run(ProjectScope project, int id, String source, boolean serverSide,
+                       ScriptExecutionEnvironment environment, ScriptSubject subject,
+                       Consumer<ScriptCompilationService.Failure> failureHandler) {
         if (project == null || !project.isActive() || !isConnected()) return false;
         try {
             return project.admit(() -> {
                 if (!isConnected()) return false;
-                compiler.submit(id, source, serverSide, environment, failureHandler);
+                compiler.submit(id, source, serverSide, environment, subject, failureHandler);
                 return true;
             });
         } catch (InactiveProjectException ignored) {

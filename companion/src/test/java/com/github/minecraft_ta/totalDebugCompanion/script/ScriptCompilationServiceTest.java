@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMess
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.tth05.jindex.ClassIndex;
@@ -124,6 +125,22 @@ class ScriptCompilationServiceTest {
             }
             compiler.bind(null);
             assertNotNull(snapshot.index().findClass("fixture.Api"), "Compiler closed its borrowed index");
+        }
+    }
+
+    @Test
+    void sendsTheSubjectARunIsBoundTo() throws Exception {
+        try (ReadySnapshot snapshot = fixture();
+             var compiler = new ScriptCompilationService(this.sent::add, this.requests::add)) {
+            compiler.bind(snapshot);
+            compiler.submit(8, SOURCE, false, ScriptExecutionEnvironment.POST_TICK,
+                    new ScriptSubject(SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session"),
+                    outcome -> this.failures.add(outcome.result()));
+            RunScriptMessage message = this.sent.poll(10, TimeUnit.SECONDS);
+
+            assertNotNull(message, () -> this.failures.toString());
+            assertEquals("entity 0f8fad5b-d9cb-469f-a165-70867728950e", message.subject());
+            assertEquals("game-session", message.subjectSessionId());
         }
     }
 

@@ -23,7 +23,7 @@ class ScriptViewTest {
         try {
             Path root = Files.createDirectories(project.scriptFiles().root());
             Path original = Files.writeString(root.resolve("Original.tdscript"), "return 42;");
-            var context = new EditorContext(null, null, null, project, null, null, null, null, null, null, null);
+            var context = new EditorContext(null, null, null, project, null, null, null, null, null, null, null, null);
             var view = new ScriptView(context, original);
             String editorKey = view.editorKey();
             String generated = JavaSnippetSource.body(view.compilationName(), view.getSourceText()).source();

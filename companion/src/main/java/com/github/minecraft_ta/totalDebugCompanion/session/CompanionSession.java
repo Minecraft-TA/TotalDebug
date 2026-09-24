@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totaldebug.storage.CompanionSessionDescriptor;
 import com.github.minecraft_ta.totaldebug.storage.CompanionLaunchContract;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ClientHelloMessage;
@@ -47,6 +48,8 @@ public final class CompanionSession implements AutoCloseable {
 
     public interface Listener {
         default void openClass(OpenClassMessage message) { }
+
+        default void inspectSubject(InspectSubjectMessage message) { }
 
         default void focusWindow() { }
 
@@ -205,6 +208,7 @@ public final class CompanionSession implements AutoCloseable {
         this.server.getMessageBus().listenAlways(ServerManifestMessage.class, this.listener::serverManifest);
         this.server.getMessageBus().listenAlways(DebugTargetMessage.class, this.listener::debugTarget);
         this.server.getMessageBus().listenAlways(OpenClassMessage.class, this.listener::openClass);
+        this.server.getMessageBus().listenAlways(InspectSubjectMessage.class, this.listener::inspectSubject);
         this.server.getMessageBus().listenAlways(FocusWindowMessage.class, message ->
                 SwingUtilities.invokeLater(this.listener::focusWindow));
         this.server.addConnectionListener(new IConnectionListener() {

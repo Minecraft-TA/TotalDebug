@@ -60,6 +60,11 @@ public final class ExecutionRuns implements AutoCloseable {
     /** Returns false, and forgets the run, when the current connection did not accept it. */
     public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
                           ScriptExecutionEnvironment environment) {
+        return submit(id, project, source, serverSide, environment, null);
+    }
+
+    public boolean submit(int id, ProjectScope project, String source, boolean serverSide,
+                          ScriptExecutionEnvironment environment, ScriptSubject subject) {
         if (project == null) {
             discard(id);
             return false;
@@ -71,7 +76,7 @@ public final class ExecutionRuns implements AutoCloseable {
                 if (run == null) return false;
                 boolean sent = false;
                 try {
-                    sent = this.scripts.run(project, id, source, serverSide, environment, failure -> failed(id, failure));
+                    sent = this.scripts.run(project, id, source, serverSide, environment, subject, failure -> failed(id, failure));
                     return sent;
                 } finally {
                     if (!sent) this.runs.remove(id, run);

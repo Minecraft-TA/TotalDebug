@@ -41,6 +41,16 @@ public final class SnippetExecutionService implements AutoCloseable {
             Side side,
             ScriptExecutionEnvironment environment
     ) {
+        return execute(source, side, environment, null);
+    }
+
+    /** Runs a snippet whose {@code target()} resolves {@code subject}, or has no target when null. */
+    public Execution execute(
+            JavaSnippetSource.GeneratedSource source,
+            Side side,
+            ScriptExecutionEnvironment environment,
+            ScriptSubject subject
+    ) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(side, "side");
         Objects.requireNonNull(environment, "environment");
@@ -51,7 +61,7 @@ public final class SnippetExecutionService implements AutoCloseable {
         int id = this.executions.open(this.observer);
         CompletableFuture<ExecutionResult> completion = new CompletableFuture<>();
         this.runs.put(id, completion);
-        if (!this.executions.submit(id, project, source.source(), side == Side.SERVER, environment)) {
+        if (!this.executions.submit(id, project, source.source(), side == Side.SERVER, environment, subject)) {
             this.runs.remove(id, completion);
             throw new IllegalStateException("Minecraft is not connected");
         }

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceQuery;
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.reference.ReferenceUsage;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
+import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -21,7 +22,15 @@ public sealed interface NavigationTarget permits
         NavigationTarget.SymbolUsages,
         NavigationTarget.LiteralUsages,
         NavigationTarget.RuntimePackage,
-        NavigationTarget.ModuleSearch {
+        NavigationTarget.ModuleSearch,
+        NavigationTarget.Inspection {
+
+    /** A block or entity selected in the game, inspected in the session where it was selected. */
+    record Inspection(InspectSubjectPayload subject) implements NavigationTarget {
+        public Inspection {
+            Objects.requireNonNull(subject, "subject");
+        }
+    }
 
     record RuntimeClass(String binaryName) implements NavigationTarget {
         public RuntimeClass {

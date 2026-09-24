@@ -266,6 +266,12 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
                        Consumer<Failure> failureHandler) {
+        submit(id, source, serverSide, environment, null, failureHandler);
+    }
+
+    /** Compiles and sends a run whose {@code target()} resolves {@code subject}, or has no target when null. */
+    public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
+                       ScriptSubject subject, Consumer<Failure> failureHandler) {
         ReadySnapshot selected = this.snapshot;
         if (this.closed || selected == null) {
             failureHandler.accept(failure("The runtime class index is not ready for compilation"));
@@ -283,7 +289,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
         synchronized (task) {
             try {
-                task.future = this.worker.submit(() -> compileAndSend(id, source, serverSide, environment, selected, server, task));
+                task.future = this.worker.submit(() -> compileAndSend(id, source, serverSide, environment, subject, selected, server, task));
             } catch (RuntimeException exception) {
                 this.pending.remove(id, task);
                 failureHandler.accept(failure("Unable to start compilation: " + exception.getMessage()));
@@ -292,7 +298,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     private void compileAndSend(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
-                                ReadySnapshot selected, ServerSnapshot server, Pending task) {
+                                ScriptSubject subject, ReadySnapshot selected, ServerSnapshot server, Pending task) {
         try {
             var matcher = SCRIPT_CLASS.matcher(source);
             if (!matcher.find()) throw new IllegalArgumentException(
@@ -303,7 +309,8 @@ public final class ScriptCompilationService implements AutoCloseable {
             synchronized (task) {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || (server != null && this.serverSnapshot != server) || !this.sender.test(new RunScriptMessage(
-                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId()))) {
+                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId(),
+                        subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
                 }
                 this.pending.remove(id, task);
