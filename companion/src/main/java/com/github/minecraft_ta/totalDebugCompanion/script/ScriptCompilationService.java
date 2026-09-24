@@ -58,6 +58,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     private final Predicate<ServerSourceRequestMessage> sourceRequester;
     private volatile ServerSnapshot serverSnapshot;
     private volatile String serverUnavailable = "No server handshake is available";
+    private CompletableFuture<Void> readinessChange = new CompletableFuture<>();
     private final ServerManifestMessage.Assembler manifestTransfer = new ServerManifestMessage.Assembler();
     private final ServerManifestMessage.Assembler detailTransfer = new ServerManifestMessage.Assembler();
     private long serverGeneration;
@@ -73,6 +74,29 @@ public final class ScriptCompilationService implements AutoCloseable {
             return size() > MAX_COMPILED;
         }
     };
+
+    /**
+     * Whether a run on one side can compile now, and otherwise why not. {@code changed} completes on the next change
+     * of the index, the server comparison or the connection, so a caller can wait instead of failing.
+     */
+    public record Readiness(boolean ready, String detail, CompletableFuture<Void> changed) {
+    }
+
+    public synchronized Readiness readiness(boolean serverSide) {
+        ReadySnapshot selected = this.snapshot;
+        ServerSnapshot server = this.serverSnapshot;
+        String detail = this.closed || selected == null ? "The runtime class index is not ready for compilation"
+                : serverSide && (server == null || !server.inventoryId().equals(selected.inventoryId())) ? this.serverUnavailable
+                : "";
+        return new Readiness(detail.isEmpty(), detail, this.readinessChange.copy());
+    }
+
+    /** Called with this service's lock held whenever readiness or its reason may have changed. */
+    private void readinessChanged() {
+        CompletableFuture<Void> previous = this.readinessChange;
+        this.readinessChange = new CompletableFuture<>();
+        previous.complete(null);
+    }
 
     public ScriptCompilationService(Predicate<RunScriptMessage> sender,
                                     Predicate<ServerSourceRequestMessage> sourceRequester) {
@@ -92,6 +116,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             invalidateComparison();
             this.baseline = null;
             this.serverUnavailable = message.total() == 0 ? message.detail() : "Preparing server class compatibility";
+            readinessChanged();
         }
         if (!message.baseline() && message.total() == 0) {
             failComparison(this.manifestGeneration, message.detail());
@@ -168,6 +193,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             int source = current.work().nextSource();
             if (source != -1) {
                 this.serverUnavailable = "Comparing server source " + baseline.manifest().sources().get(source).name();
+                readinessChanged();
                 if (!this.sourceRequester.test(new ServerSourceRequestMessage(baseline.sessionId(), current.requestId(), source))) {
                     throw new IOException("Minecraft disconnected before server source details could be requested");
                 }
@@ -189,6 +215,7 @@ public final class ScriptCompilationService implements AutoCloseable {
                     || this.snapshot != current.selected()) return;
             this.serverSnapshot = new ServerSnapshot(baseline.sessionId(), current.selected().inventoryId(), unsupported);
             this.comparison = null;
+            readinessChanged();
         }
     }
 
@@ -196,6 +223,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         if (generation != this.manifestGeneration) return;
         invalidateComparison();
         this.serverUnavailable = detail == null ? "Server class comparison failed" : detail;
+        readinessChanged();
     }
 
     private void invalidateComparison() {
@@ -211,6 +239,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         synchronized (this) {
             invalidateComparison();
             this.serverUnavailable = "Waiting for the current Minecraft runtime inventory";
+            readinessChanged();
         }
         for (int id : this.pending.keySet()) cancel(id);
     }
@@ -233,6 +262,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             synchronized (this) {
                 invalidateComparison();
                 this.serverUnavailable = "Waiting for the client index and server handshake comparison";
+                readinessChanged();
                 long generation = this.manifestGeneration;
                 if (!this.closed && snapshot != null && this.baseline != null) {
                     this.worker.execute(() -> prepareComparison(generation));
@@ -381,6 +411,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             invalidateComparison();
             this.baseline = null;
             this.serverUnavailable = "Minecraft disconnected";
+            readinessChanged();
         }
         for (int id : this.pending.keySet()) cancel(id);
     }

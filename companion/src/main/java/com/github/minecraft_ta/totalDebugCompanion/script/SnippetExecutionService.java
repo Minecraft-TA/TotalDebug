@@ -68,6 +68,11 @@ public final class SnippetExecutionService implements AutoCloseable {
         return new Execution(id, completion, () -> cancel(id));
     }
 
+    /** Whether a snippet on {@code side} can run now; see {@link ScriptCompilationService#readiness(boolean)}. */
+    public ScriptCompilationService.Readiness readiness(Side side) {
+        return this.executions.readiness(side == Side.SERVER);
+    }
+
     private void cancel(int id) {
         if (this.runs.containsKey(id)) {
             this.executions.stop(id);

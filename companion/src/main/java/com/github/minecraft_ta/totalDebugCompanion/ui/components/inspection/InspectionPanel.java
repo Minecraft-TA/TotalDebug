@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
@@ -309,6 +310,7 @@ public final class InspectionPanel extends JPanel {
         JavaSnippetSource.GeneratedSource source = JavaSnippetSource.body("InspectTarget",
                 readerSource((String) this.face.getSelectedItem()));
         long current = ++this.revision;
+        if (!awaitReadiness(current, selectedSide)) return;
         try {
             this.active = this.snippets.get().execute(
                     source,
@@ -336,6 +338,26 @@ public final class InspectionPanel extends JPanel {
         // A replaced subject starts its tools again while finishing; the next read waits for the run current then.
         finished.thenCompose(ignored -> this.toolRun).whenComplete((ignored, failure) ->
                 SwingUtilities.invokeLater(() -> scheduleLive(current)));
+    }
+
+    /**
+     * A tab opened from the game usually exists before the runtime index and the server comparison are ready. Until
+     * the chosen side can run the read, the page shows why and reads as soon as that changes. Returns whether the
+     * read can start now.
+     */
+    private boolean awaitReadiness(long current, Side side) {
+        ScriptCompilationService.Readiness readiness;
+        try {
+            readiness = this.snippets.get().readiness(side);
+        } catch (RuntimeException unavailable) {
+            return true;
+        }
+        if (readiness.ready()) return true;
+        readFailed(readiness.detail());
+        readiness.changed().thenRunAsync(() -> {
+            if (!this.disposed && current == this.revision) refresh();
+        }, SwingUtilities::invokeLater);
+        return false;
     }
 
     /** Queues the next live read once the current one, including tools, has finished. */
