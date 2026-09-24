@@ -19,7 +19,8 @@ public final class InspectionView implements IEditorPanel {
     public InspectionView(EditorContext context, InspectSubjectPayload subject, RuntimeBinding runtimeBinding) {
         this.runtimeBinding = runtimeBinding;
         this.subject = Objects.requireNonNull(subject, "subject");
-        this.panel = new InspectionPanel(subject, context.snippets(), context.itemIcons(), context.navigation()::navigate);
+        this.panel = new InspectionPanel(subject, context.snippets(),
+                () -> context.project().scriptFiles(), context.itemIcons(), context.navigation()::navigate);
     }
 
     public InspectSubjectPayload subject() {

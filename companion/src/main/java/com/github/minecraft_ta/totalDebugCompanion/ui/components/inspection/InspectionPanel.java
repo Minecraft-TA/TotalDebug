@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionTextDisplay;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptSubject;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService;
 import com.github.minecraft_ta.totalDebugCompanion.script.SnippetExecutionService.Side;
@@ -69,6 +70,9 @@ public final class InspectionPanel extends JPanel {
     private final JComboBox<Side> runSide = new JComboBox<>(new Side[]{Side.SERVER, Side.CLIENT});
     private final JComboBox<String> face = new JComboBox<>(FACES.toArray(String[]::new));
     private final JButton refresh = new JButton("Refresh", Icons.REFRESH);
+    private final JButton toolsButton = new JButton("Tools", Icons.SCRIPT_FILE);
+    private final ToolsPanel tools;
+    private final JPanel builtIn = new JPanel(new BorderLayout());
     private final JLabel status = new JLabel(" ");
     private final JPanel overview = new JPanel(new BorderLayout());
     private final ScriptResultTree object = new ScriptResultTree();
@@ -82,6 +86,7 @@ public final class InspectionPanel extends JPanel {
     public InspectionPanel(
             InspectSubjectPayload subject,
             Supplier<SnippetExecutionService> snippets,
+            Supplier<ScriptFiles> scripts,
             ItemIconService icons,
             Consumer<NavigationTarget> navigator
     ) {
@@ -90,6 +95,16 @@ public final class InspectionPanel extends JPanel {
         this.snippets = Objects.requireNonNull(snippets, "snippets");
         this.icons = Objects.requireNonNull(icons, "icons");
         Objects.requireNonNull(navigator, "navigator");
+        this.tools = new ToolsPanel(subject, snippets, Objects.requireNonNull(scripts, "scripts"), icons, navigator,
+                this::refresh);
+        JPanel sections = new JPanel();
+        sections.setLayout(new BoxLayout(sections, BoxLayout.Y_AXIS));
+        this.builtIn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        this.tools.setAlignmentX(Component.LEFT_ALIGNMENT);
+        this.tools.setBorder(BorderFactory.createEmptyBorder(0, 10, 8, 10));
+        sections.add(this.builtIn);
+        sections.add(this.tools);
+        this.overview.add(sections, BorderLayout.NORTH);
 
         add(header(navigator), BorderLayout.NORTH);
         JTabbedPane views = new JTabbedPane();
@@ -108,6 +123,9 @@ public final class InspectionPanel extends JPanel {
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
         this.refresh.addActionListener(event -> refresh());
+        this.toolsButton.setToolTipText("Project scripts run on this subject");
+        this.toolsButton.addActionListener(event ->
+                this.tools.menu().show(this.toolsButton, 0, this.toolsButton.getHeight()));
         this.removeIconListener = icons.addListener(this::reloadIcons);
         reloadIcons();
     }
@@ -125,6 +143,8 @@ public final class InspectionPanel extends JPanel {
         title.add(this.face);
         title.add(Box.createHorizontalStrut(6));
         title.add(this.runSide);
+        title.add(Box.createHorizontalStrut(6));
+        title.add(this.toolsButton);
         title.add(Box.createHorizontalStrut(6));
         title.add(this.refresh);
 
@@ -212,6 +232,7 @@ public final class InspectionPanel extends JPanel {
         this.refresh.setEnabled(false);
         this.status.setIcon(null);
         this.status.setText("Reading on " + sideName(selectedSide) + "…");
+        this.tools.run(selectedSide);
         this.active.completion().whenComplete((outcome, failure) -> SwingUtilities.invokeLater(() ->
                 finish(current, selectedSide, source, outcome, failure)));
     }
@@ -241,8 +262,8 @@ public final class InspectionPanel extends JPanel {
     /** Presents a completed read's sections and returned object. */
     void showOutcome(ExecutionResult outcome, Side selectedSide) {
         this.facts = new FactsPanel(outcome.facts(), this.icons);
-        this.overview.removeAll();
-        this.overview.add(this.facts, BorderLayout.NORTH);
+        this.builtIn.removeAll();
+        this.builtIn.add(this.facts, BorderLayout.CENTER);
         this.overview.revalidate();
         this.overview.repaint();
         this.object.showResult(outcome.value());
@@ -266,6 +287,7 @@ public final class InspectionPanel extends JPanel {
         if (this.facts != null) {
             this.facts.reloadIcons();
         }
+        this.tools.reloadIcons();
         this.icons.render(this.subject.iconModel(), this.subject.iconTints(), HEADER_ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (!this.disposed) this.icon.setIcon(image.map(ImageIcon::new).orElse(null));
@@ -288,6 +310,7 @@ public final class InspectionPanel extends JPanel {
         requireEdt();
         this.disposed = true;
         this.removeIconListener.run();
+        this.tools.dispose();
         cancelActive();
     }
 

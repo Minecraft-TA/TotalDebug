@@ -62,6 +62,12 @@ class FactsPanelTest {
         assertTrue(InspectionPanel.readerSource("NORTH").contains("CapabilityReader.read(target(), Direction.NORTH, facts());"));
     }
 
+    @Test
+    void suggestsAToolNameFromTheRegistryPath() {
+        assertEquals("BasicEnergyCubeTool", ToolsPanel.suggestedName("mekanism:basic_energy_cube"));
+        assertEquals("Tool2x2DoorTool", ToolsPanel.suggestedName("example:2x2_door"));
+    }
+
     private static void collect(Container container, List<String> labels, List<String> bars) {
         for (Component child : container.getComponents()) {
             if (child instanceof JLabel label) labels.add(label.getText());
