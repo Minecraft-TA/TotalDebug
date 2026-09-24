@@ -149,7 +149,9 @@ final class CompiledFrameEvaluator implements Closeable {
     }
 
     private static String captureMethods() {
-        StringBuilder methods = new StringBuilder("private Object __tdCapture(Object value) { return value; }\n");
+        // Every capture sets the kind, because a later return in a finally block overrides an earlier one.
+        StringBuilder methods = new StringBuilder(
+                "private Object __tdCapture(Object value) { this.__tdPrimitive = false; return value; }\n");
         for (String type : List.of("boolean", "byte", "short", "char", "int", "long", "float", "double")) {
             methods.append("private Object __tdCapture(").append(type)
                     .append(" value) { this.__tdPrimitive = true; return value; }\n");

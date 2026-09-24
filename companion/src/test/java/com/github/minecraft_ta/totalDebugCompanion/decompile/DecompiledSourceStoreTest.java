@@ -3,9 +3,10 @@ package com.github.minecraft_ta.totalDebugCompanion.decompile;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceLineMap;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceDocument;
 import com.github.minecraft_ta.totalDebugCompanion.source.SourceVariableNames;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,6 +17,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DecompiledSourceStoreTest {
     @Test
@@ -59,9 +62,9 @@ class DecompiledSourceStoreTest {
         old.write(new SourceDocument("sample.Removed", "removed", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
         var current = DecompiledSourceStore.open(directory, "second", "format");
         assertNull(current.read("sample.Target"));
-        Assertions.assertThrows(IOException.class,
+        assertThrows(IOException.class,
                 () -> old.write(new SourceDocument("sample.Late", "stale", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
-        Assertions.assertThrows(IOException.class, () -> old.read("sample.Target"));
+        assertThrows(IOException.class, () -> old.read("sample.Target"));
         assertEquals(target, current.write(new SourceDocument("sample.Target", "second", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
         assertEquals("second", current.read("sample.Target").document().contents());
         assertEquals(List.of(".lock", "manifest.json", "sample.Target.debug", "sample.Target.java"),
@@ -74,7 +77,7 @@ class DecompiledSourceStoreTest {
         for (String name : List.of("sample.Target", "sample.target", "CON", "long.".repeat(60) + "Target")) {
             Path file = store.write(new SourceDocument(name, name, SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
             assertEquals(store.directory(), file.getParent());
-            Assertions.assertTrue(file.getFileName().toString().length() < 140);
+            assertTrue(file.getFileName().toString().length() < 140);
             assertEquals(name, store.read(name).document().contents());
         }
         assertEquals("sample.target-2.java", store.read("sample.target").path().getFileName().toString());
@@ -82,11 +85,65 @@ class DecompiledSourceStoreTest {
     }
 
     @Test
-    void detectsMismatchedSourceAndDebugFiles(@TempDir Path directory) throws Exception {
+    void mismatchedSourceAndDebugFilesAreUnlistedForRegeneration(@TempDir Path directory) throws Exception {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
-        Path file = store.write(new SourceDocument("sample.Target", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
+        Path file = store.write(document("sample.Target", "complete"));
         Files.writeString(file, "different");
-        Assertions.assertThrows(IOException.class, () -> store.read("sample.Target"));
+
+        assertNull(store.read("sample.Target"));
+        assertEquals(List.of(), store.cachedClasses());
+        assertEquals(List.of(".lock", "manifest.json"), fileNames(store.directory()));
+        assertEquals(file, store.write(document("sample.Target", "regenerated")));
+        assertEquals("regenerated", store.read("sample.Target").document().contents());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {".java", ".debug"})
+    void missingPairFileIsRegeneratedAfterReopening(String damagedSuffix, @TempDir Path directory) throws Exception {
+        var store = DecompiledSourceStore.open(directory, "runtime", "format");
+        store.write(document("sample.Target", "complete"));
+        store.write(document("sample.Other", "other"));
+        Files.delete(store.directory().resolve("sample.Target" + damagedSuffix));
+
+        var reopened = DecompiledSourceStore.open(directory, "runtime", "format");
+        assertNull(reopened.read("sample.Target"));
+        assertEquals(List.of("sample.Other"), reopened.cachedClasses());
+        assertEquals("other", reopened.read("sample.Other").document().contents());
+        reopened.write(document("sample.Target", "regenerated"));
+        assertEquals("regenerated", reopened.read("sample.Target").document().contents());
+    }
+
+    @Test
+    void writeReplacesADamagedListedPair(@TempDir Path directory) throws Exception {
+        var store = DecompiledSourceStore.open(directory, "runtime", "format");
+        Path file = store.write(document("sample.Target", "complete"));
+        Files.write(store.directory().resolve("sample.Target.debug"), new byte[] {1, 2, 3});
+
+        assertEquals(file, store.write(document("sample.Target", "regenerated")));
+        assertEquals("regenerated", store.read("sample.Target").document().contents());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "not json",
+            "{\"format\": 2, \"id\": \"x\", \"classes\": {}}",
+            "{\"format\": 1, \"classes\": {}}",
+            "{\"format\": \"one\"}"
+    })
+    void damagedGeneratedManifestIsReplacedWhenOpening(String manifest, @TempDir Path directory) throws Exception {
+        var store = DecompiledSourceStore.open(directory, "runtime", "format");
+        store.write(document("sample.Target", "complete"));
+        Files.writeString(store.directory().resolve("manifest.json"), manifest);
+
+        var reopened = DecompiledSourceStore.open(directory, "runtime", "format");
+        assertEquals(List.of(), reopened.cachedClasses());
+        assertEquals(List.of(".lock", "manifest.json"), fileNames(reopened.directory()));
+        reopened.write(document("sample.Target", "regenerated"));
+        assertEquals("regenerated", reopened.read("sample.Target").document().contents());
+    }
+
+    private static SourceDocument document(String binaryName, String contents) {
+        return new SourceDocument(binaryName, contents, SourceLineMap.empty(), SourceVariableNames.empty(), List.of());
     }
 
 
@@ -95,7 +152,7 @@ class DecompiledSourceStoreTest {
         var store = DecompiledSourceStore.open(directory, "runtime", "format");
         store.write(new SourceDocument("sample.Complete", "complete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of()));
         String invalidHeader = "x".repeat(70_000);
-        Assertions.assertThrows(IOException.class,
+        assertThrows(IOException.class,
                 () -> store.write(new SourceDocument(invalidHeader, "incomplete", SourceLineMap.empty(), SourceVariableNames.empty(), List.of())));
         assertNull(store.read(invalidHeader));
         var reopened = DecompiledSourceStore.open(directory, "runtime", "format");
@@ -108,7 +165,7 @@ class DecompiledSourceStoreTest {
     void unknownDirectoriesAreNotMigratedOrCleaned(@TempDir Path directory) throws Exception {
         Path unknown = Files.createDirectories(directory.resolve("cache/decompiled/unknown"));
         Files.writeString(unknown.resolve("keep"), "untouched");
-        Assertions.assertThrows(IOException.class,
+        assertThrows(IOException.class,
                 () -> DecompiledSourceStore.open(directory, "runtime", "format"));
         assertEquals("untouched", Files.readString(unknown.resolve("keep")));
     }

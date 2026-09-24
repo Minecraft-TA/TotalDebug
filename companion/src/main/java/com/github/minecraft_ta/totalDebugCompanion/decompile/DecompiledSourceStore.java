@@ -51,23 +51,37 @@ final class DecompiledSourceStore {
         CacheFiles.locked(store.directory, () -> {
             AtomicFiles.cleanupAbandonedStaging(store.directory);
             store.generatedFiles();
-            Path file = store.directory.resolve("manifest.json");
-            JsonObject manifest = Files.isRegularFile(file) ? JsonFiles.read(file) : null;
-            if (manifest != null && JsonFiles.integer(manifest, "format") != 1) {
-                throw new IOException("Unsupported decompiled cache format: " + file);
-            }
-            if (manifest == null || !store.identity.equals(JsonFiles.string(manifest, "id"))) {
-                manifest = new JsonObject();
-                manifest.addProperty("format", 1);
-                manifest.addProperty("id", store.identity);
-                manifest.add("classes", new JsonObject());
+            JsonObject classes = store.reusableClasses();
+            if (classes == null) {
+                classes = new JsonObject();
                 // Invalidate old readers before replacing any files.
-                JsonFiles.write(file, manifest);
+                store.writeManifest(classes);
             }
-            store.removeUnlistedFiles(JsonFiles.object(manifest, "classes"));
+            store.removeUnlistedFiles(classes);
             return null;
         });
         return store;
+    }
+
+    /** Returns this runtime's listed classes, or null when the generated manifest must be replaced. */
+    private JsonObject reusableClasses() {
+        Path file = this.directory.resolve("manifest.json");
+        if (!Files.isRegularFile(file)) return null;
+        try {
+            JsonObject manifest = JsonFiles.read(file);
+            if (JsonFiles.integer(manifest, "format") != 1 || !this.identity.equals(JsonFiles.string(manifest, "id"))) {
+                return null;
+            }
+            JsonObject classes = JsonFiles.object(manifest, "classes");
+            for (var value : classes.asMap().values()) {
+                CacheNames.requireFileName(value.getAsString());
+            }
+            return classes;
+        } catch (IOException | IllegalArgumentException | IllegalStateException | UnsupportedOperationException
+                 | ArithmeticException damaged) {
+            // The manifest is generated data; an unreadable or unsupported one is rebuilt from current runtime sources.
+            return null;
+        }
     }
 
     Path directory() {
@@ -80,14 +94,27 @@ final class DecompiledSourceStore {
 
     StoredSource read(String binaryName) throws IOException {
         return CacheFiles.locked(this.directory, () -> {
-            String stem = stem(classes(), binaryName);
+            JsonObject classes = classes();
+            String stem = stem(classes, binaryName);
             if (stem == null) {
                 return null;
             }
-            Path file = this.directory.resolve(stem + ".java");
-            String source = Files.readString(file, StandardCharsets.UTF_8);
-            return new StoredSource(file, readDebug(this.directory.resolve(stem + ".debug"), binaryName, source));
+            SourceDocument document = readPair(classes, stem, binaryName);
+            return document == null ? null : new StoredSource(this.directory.resolve(stem + ".java"), document);
         });
+    }
+
+    /** Reads a listed pair, or unlists and removes it when either generated file is missing or damaged. */
+    private SourceDocument readPair(JsonObject classes, String stem, String binaryName) throws IOException {
+        try {
+            String source = Files.readString(this.directory.resolve(stem + ".java"), StandardCharsets.UTF_8);
+            return readDebug(this.directory.resolve(stem + ".debug"), binaryName, source);
+        } catch (IOException damaged) {
+            classes.remove(binaryName);
+            writeManifest(classes);
+            removeUnlistedFiles(classes);
+            return null;
+        }
     }
 
     private static SourceDocument readDebug(Path file, String binaryName, String source) throws IOException {
@@ -154,10 +181,8 @@ final class DecompiledSourceStore {
         return CacheFiles.locked(this.directory, () -> {
             JsonObject classes = classes();
             String existing = stem(classes, binaryName);
-            if (existing != null) {
-                Path file = this.directory.resolve(existing + ".java");
-                readDebug(this.directory.resolve(existing + ".debug"), binaryName, Files.readString(file));
-                return file;
+            if (existing != null && readPair(classes, existing, binaryName) != null) {
+                return this.directory.resolve(existing + ".java");
             }
             var used = new HashSet<String>();
             classes.asMap().values().forEach(value -> used.add(value.getAsString().toLowerCase(Locale.ROOT)));
@@ -197,13 +222,17 @@ final class DecompiledSourceStore {
                 }
             });
             classes.addProperty(binaryName, stem);
-            JsonObject manifest = new JsonObject();
-            manifest.addProperty("format", 1);
-            manifest.addProperty("id", this.identity);
-            manifest.add("classes", classes);
-            JsonFiles.write(this.directory.resolve("manifest.json"), manifest);
+            writeManifest(classes);
             return file;
         });
+    }
+
+    private void writeManifest(JsonObject classes) throws IOException {
+        JsonObject manifest = new JsonObject();
+        manifest.addProperty("format", 1);
+        manifest.addProperty("id", this.identity);
+        manifest.add("classes", classes);
+        JsonFiles.write(this.directory.resolve("manifest.json"), manifest);
     }
 
     private JsonObject classes() throws IOException {

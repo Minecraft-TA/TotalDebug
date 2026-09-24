@@ -12,10 +12,8 @@ import java.util.Objects;
 
 /**
  * Carries an explicitly identified companion message from a server to a client.
- *
- * <p>The legacy packet serialized a Java class name and reconstructed it with
- * reflection. The resource id is a stable protocol identifier instead; F4 owns
- * the registry that maps these ids to concrete companion message codecs.</p>
+ * The resource id is a stable protocol identifier; each forwarded message type
+ * decodes only payloads carrying its own id.
  */
 public record ForwardedCompanionPayload(ResourceLocation messageId, byte[] body) implements CustomPacketPayload {
     public static final int MAX_BODY_BYTES = 1_048_576;

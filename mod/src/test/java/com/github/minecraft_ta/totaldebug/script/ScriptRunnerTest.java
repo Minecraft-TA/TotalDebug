@@ -546,8 +546,9 @@ public class ScriptRunnerTest {
     }
 
     public static final class SecretFixture {
-        private static final String prefix = "initial";
-        private final String value;
+        // Written by the dynamically compiled private-access test above.
+        private static String prefix = "initial";
+        private String value;
 
         private SecretFixture(String value) {
             this.value = value;

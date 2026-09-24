@@ -18,7 +18,6 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,15 +30,12 @@ public final class SnippetExpressionSupport {
 
     private final String className;
     private volatile List<String> imports = List.of();
-    private volatile JavaSnippetSource.Mode mode = JavaSnippetSource.Mode.EXPRESSION;
     private boolean automaticMode;
 
     public void setAutomaticMode(boolean automaticMode) { this.automaticMode = automaticMode; }
     private JavaSnippetSource.Mode mode(String source) {
-        return this.automaticMode ? JavaSnippetSource.detectMode(source) : this.mode;
+        return this.automaticMode ? JavaSnippetSource.detectMode(source) : JavaSnippetSource.Mode.EXPRESSION;
     }
-
-    public void setMode(JavaSnippetSource.Mode mode) { this.mode = Objects.requireNonNull(mode); }
 
     public SnippetExpressionSupport(String className) {
         this.className = className;
