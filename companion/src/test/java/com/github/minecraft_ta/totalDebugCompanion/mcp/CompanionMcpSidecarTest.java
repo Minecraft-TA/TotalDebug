@@ -1,7 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
-import java.util.function.Consumer;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -108,8 +108,13 @@ class CompanionMcpSidecarTest {
             CompletableFuture<Integer> submitted = new CompletableFuture<>();
             CodeModeJobService.Transport waitingTransport = new CodeModeJobService.Transport() {
                 @Override
+                public int open(ExecutionRuns.Observer observer) {
+                    return 1;
+                }
+
+                @Override
                 public void execute(int id, String source, CodeModeJobService.ExecutionSide side,
-                                    CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler) {
+                                    CodeModeJobService.ExecutionEnvironment environment) {
                     submitted.complete(id);
                 }
 
@@ -218,12 +223,19 @@ class CompanionMcpSidecarTest {
     }
 
     private static final class NoOpTransport implements CodeModeJobService.Transport {
+        private int lastScriptId;
+
+        @Override
+        public int open(ExecutionRuns.Observer observer) {
+            return ++this.lastScriptId;
+        }
+
         @Override
         public void execute(
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
+                CodeModeJobService.ExecutionEnvironment environment
         ) {
         }
 

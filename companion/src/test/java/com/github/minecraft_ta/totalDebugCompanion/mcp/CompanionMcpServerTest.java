@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
-import java.util.function.Consumer;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import org.junit.jupiter.api.Test;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
@@ -245,12 +244,19 @@ class CompanionMcpServerTest {
     }
 
     private static final class NoOpTransport implements CodeModeJobService.Transport {
+        private int lastScriptId;
+
+        @Override
+        public int open(ExecutionRuns.Observer observer) {
+            return ++this.lastScriptId;
+        }
+
         @Override
         public void execute(
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
+                CodeModeJobService.ExecutionEnvironment environment
         ) {
         }
 

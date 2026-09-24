@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCent
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.ProjectSelector;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectControls;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
@@ -15,7 +16,6 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.search.insight.CodeInsightService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.concurrent.CompletableFuture;
@@ -93,14 +93,14 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
     private final NotificationCenter notifications;
     private final EditorScriptRunService editorRuns;
     private final ScriptExecutionService scripts;
-    private final CompanionSession session;
+    private final ExecutionRuns executions;
     private final RuntimeIndexService indexLoader;
     private final FrameNavigation frameNavigation;
     private final ProjectControls projects;
     private boolean gameConnected;
 
     public MainWindow(Supplier<ProjectScope> project, DebuggerSessionController debugger, CodeInsightService insights,
-                      ScriptExecutionService scripts, CompanionSession session, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
+                      ScriptExecutionService scripts, ExecutionRuns executions, NotificationCenter notifications, EditorScriptRunService editorRuns, RuntimeIndexService indexLoader, FrameNavigation frameNavigation, Runnable exit,
                       ProjectControls projects, Consumer<Boolean> toggleMcp) {
         this.projects = projects;
         this.notifications = notifications;
@@ -110,7 +110,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         this.debugger = debugger;
         this.insights = insights;
         this.scripts = scripts;
-        this.session = session;
+        this.executions = executions;
         this.indexLoader = indexLoader;
         this.frameNavigation = frameNavigation;
         setAutoRequestFocus(false);
@@ -391,7 +391,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
 
     private EvaluateExpressionWindow evaluateExpressionWindow() {
         if (this.snippetExecutions == null) {
-            this.snippetExecutions = new SnippetExecutionService(session, scripts, project.get());
+            this.snippetExecutions = new SnippetExecutionService(executions, project.get());
         }
         if (this.evaluateExpressionWindow == null) {
             this.evaluateExpressionWindow = new EvaluateExpressionWindow(this, this.snippetExecutions, editorContext(), this.scriptFileActions);
@@ -587,9 +587,6 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         gameConnected = status.state() == ServiceStatus.State.AVAILABLE;
         this.statusBar.setGameStatus(status);
         refreshGameIdentity();
-        if (!projects.isConnected() && this.snippetExecutions != null) {
-            this.snippetExecutions.runtimeDisconnected();
-        }
         refreshActions();
     }
 

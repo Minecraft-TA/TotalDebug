@@ -3,14 +3,12 @@ package com.github.minecraft_ta.totalDebugCompanion.mcp;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
 import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionValuePresentation;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
-import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
-import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
+import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,37 +20,52 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-import java.util.function.Consumer;
 
 /** Owns asynchronous MCP code jobs while execution remains inside the Minecraft JVM. */
 public final class CodeModeJobService implements AutoCloseable {
     static final int MAX_RETAINED_JOBS = 256;
     static final int MAX_WAIT_MILLISECONDS = 120_000;
 
-    private final CompanionSession session;
-    private Consumer<ExecutionResultMessage> resultListener;
     private final ExecutorService statusExecutor;
     private final BooleanSupplier available;
     private final Transport transport;
     private final Supplier<Map<String, Object>> runtimeContext;
     private final Clock clock;
-    private final AtomicInteger nextScriptId = new AtomicInteger(-1);
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Map<Integer, String> jobsByScriptId = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
+    private final ExecutionRuns.Observer observer = new ExecutionRuns.Observer() {
+        @Override public void result(int scriptId, ExecutionResult result) {
+            // Minecraft's status messages are applied in order, away from the transport thread.
+            if (statusExecutor == null) {
+                acceptResult(scriptId, result);
+                return;
+            }
+            try {
+                statusExecutor.execute(() -> acceptResult(scriptId, result));
+            } catch (RejectedExecutionException ignored) {
+            }
+        }
+
+        @Override public void failed(int scriptId, ScriptCompilationService.Failure failure) {
+            acceptResult(scriptId, failure.result());
+        }
+
+        @Override public void disconnected(int scriptId, boolean expected) {
+            disconnect(scriptId);
+        }
+    };
+
     public CodeModeJobService(
-            CompanionSession session,
-            ScriptExecutionService scripts,
+            ExecutionRuns runs,
             Supplier<ProjectScope> project,
             BooleanSupplier available,
             Supplier<Map<String, Object>> runtimeContext
     ) {
         this(
-                Objects.requireNonNull(session, "session"),
                 Executors.newSingleThreadExecutor(runnable -> {
                     Thread thread = new Thread(runnable, "Companion code-mode status");
                     thread.setDaemon(true);
@@ -61,20 +74,18 @@ public final class CodeModeJobService implements AutoCloseable {
                 available,
                 new Transport() {
                     @Override
-                    public void execute(
-                            int scriptId,
-                            String source,
-                            ExecutionSide side,
-                            ExecutionEnvironment environment,
-                            Consumer<ExecutionResult> failureHandler
-                    ) {
-                        boolean sent = scripts.run(
-                                project.get(),
+                    public int open(ExecutionRuns.Observer observer) {
+                        return runs.open(observer);
+                    }
+
+                    @Override
+                    public void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment) {
+                        boolean sent = runs.submit(
                                 scriptId,
+                                project.get(),
                                 source,
                                 side == ExecutionSide.SERVER,
-                                environment.toWireValue(),
-                                failure -> failureHandler.accept(failure.result())
+                                environment.toWireValue()
                         );
                         if (!sent) {
                             throw new IllegalStateException("Minecraft disconnected while the code job was submitted");
@@ -83,7 +94,7 @@ public final class CodeModeJobService implements AutoCloseable {
 
                     @Override
                     public void cancel(int scriptId) {
-                        if (!scripts.stop(scriptId)) {
+                        if (!runs.stop(scriptId)) {
                             throw new IllegalStateException("Minecraft disconnected before cancellation was sent");
                         }
                     }
@@ -91,15 +102,6 @@ public final class CodeModeJobService implements AutoCloseable {
                 runtimeContext,
                 Clock.systemUTC()
         );
-        this.resultListener = message -> {
-            int scriptId = message.scriptId();
-            ExecutionResult result = message.result();
-            try {
-                this.statusExecutor.execute(() -> acceptResult(scriptId, result));
-            } catch (RejectedExecutionException ignored) {
-            }
-        };
-        session.addExecutionResultListener(this.resultListener);
     }
 
     CodeModeJobService(
@@ -118,7 +120,6 @@ public final class CodeModeJobService implements AutoCloseable {
     ) {
         this(
                 null,
-                null,
                 available,
                 transport,
                 runtimeContext,
@@ -127,14 +128,12 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     private CodeModeJobService(
-            CompanionSession session,
             ExecutorService statusExecutor,
             BooleanSupplier available,
             Transport transport,
             Supplier<Map<String, Object>> runtimeContext,
             Clock clock
     ) {
-        this.session = session;
         this.statusExecutor = statusExecutor;
         this.available = Objects.requireNonNull(available, "available");
         this.transport = Objects.requireNonNull(transport, "transport");
@@ -159,7 +158,7 @@ public final class CodeModeJobService implements AutoCloseable {
         }
         evictCompletedJobs();
 
-        int scriptId = nextScriptId();
+        int scriptId = this.transport.open(this.observer);
         CodeModeSourceBuilder.GeneratedSource generated = CodeModeSourceBuilder.build(
                 scriptId,
                 code,
@@ -180,7 +179,7 @@ public final class CodeModeJobService implements AutoCloseable {
         this.jobsByScriptId.put(scriptId, jobId);
 
         try {
-            this.transport.execute(scriptId, generated.source(), side, environment, result -> acceptResult(scriptId, result));
+            this.transport.execute(scriptId, generated.source(), side, environment);
         } catch (RuntimeException exception) {
             job.finish(
                     JobState.FAILED,
@@ -309,7 +308,7 @@ public final class CodeModeJobService implements AutoCloseable {
         this.jobs.values().stream()
                 .filter(job -> job.snapshot().state().terminal())
                 .sorted(Comparator.comparing((Job job) -> job.snapshot().completedAt())
-                        .thenComparing(Comparator.comparingInt(Job::scriptId).reversed()))
+                        .thenComparingInt(Job::scriptId))
                 .limit(excess)
                 .forEach(job -> this.jobs.remove(job.jobId(), job));
     }
@@ -318,36 +317,19 @@ public final class CodeModeJobService implements AutoCloseable {
         return Map.copyOf(Objects.requireNonNull(this.runtimeContext.get(), "runtimeContext returned null"));
     }
 
-    public void runtimeDisconnected() {
-        markRuntimeDisconnected();
-    }
-
     public void prepareProjectSwitch() {
         var scriptIds = List.copyOf(this.jobsByScriptId.keySet());
-        markRuntimeDisconnected();
+        scriptIds.forEach(this::disconnect);
         for (int scriptId : scriptIds) {
             try { this.transport.cancel(scriptId); }
             catch (RuntimeException ignored) { /* Disconnected jobs already report that target code may still be running. */ }
         }
     }
 
-    private void markRuntimeDisconnected() {
-        Instant now = this.clock.instant();
-        for (Job job : new ArrayList<>(this.jobs.values())) {
-            if (job.disconnect(now)) {
-                this.jobsByScriptId.remove(job.scriptId(), job.jobId());
-            }
-        }
-    }
-
-    private int nextScriptId() {
-        int scriptId = this.nextScriptId.getAndUpdate(current -> current == Integer.MIN_VALUE
-                ? Integer.MIN_VALUE
-                : current - 1);
-        if (scriptId == Integer.MIN_VALUE) {
-            throw new IllegalStateException("Code-mode script id space is exhausted");
-        }
-        return scriptId;
+    private void disconnect(int scriptId) {
+        String jobId = this.jobsByScriptId.remove(scriptId);
+        Job job = jobId == null ? null : this.jobs.get(jobId);
+        if (job != null) job.disconnect(this.clock.instant());
     }
 
     private static String requireJobId(String jobId) {
@@ -361,14 +343,10 @@ public final class CodeModeJobService implements AutoCloseable {
             return;
         }
         this.closed = true;
-        if (this.session != null) {
-            this.session.removeExecutionResultListener(this.resultListener);
-        }
         if (this.statusExecutor != null) {
             this.statusExecutor.shutdownNow();
         }
-        runtimeDisconnected();
-        this.jobsByScriptId.clear();
+        List.copyOf(this.jobsByScriptId.keySet()).forEach(this::disconnect);
     }
 
     public enum ExecutionSide {
@@ -447,8 +425,10 @@ public final class CodeModeJobService implements AutoCloseable {
     }
 
     interface Transport {
-        void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment,
-                     Consumer<ExecutionResult> failureHandler);
+        /** Allocates the script id and registers the observer for its results before the source is built. */
+        int open(ExecutionRuns.Observer observer);
+
+        void execute(int scriptId, String source, ExecutionSide side, ExecutionEnvironment environment);
 
         void cancel(int scriptId);
     }

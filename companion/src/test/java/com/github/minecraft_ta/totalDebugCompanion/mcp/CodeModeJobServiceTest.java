@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.mcp;
 
-import java.util.function.Consumer;
+import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
+import java.util.function.IntConsumer;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
@@ -38,7 +39,7 @@ class CodeModeJobServiceTest {
             );
 
             assertEquals(CodeModeJobService.JobState.COMPILING, submitted.state());
-            assertEquals(-1, submitted.scriptId());
+            assertEquals(1, submitted.scriptId());
             assertEquals(1, transport.executions.size());
             assertTrue(transport.executions.getFirst().source.contains("import java.util.List;"));
             assertTrue(transport.executions.getFirst().source.contains(
@@ -56,14 +57,14 @@ class CodeModeJobServiceTest {
                 assertEquals(0, files.count());
             }
 
-            service.acceptResult(-1, progress());
+            service.acceptResult(1, progress());
             assertEquals(
                     CodeModeJobService.JobState.RUNNING,
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
             service.acceptResult(
-                    -1,
+                    1,
                     completed("[proof]\n", stringMap("values", sequence(number("1"), number("2"))))
             );
             CodeModeJobService.JobSnapshot completed = service.get(submitted.jobId()).orElseThrow();
@@ -89,9 +90,9 @@ class CodeModeJobServiceTest {
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
 
-            service.acceptResult(-1, progress());
+            service.acceptResult(1, progress());
             service.acceptResult(
-                    -1,
+                    1,
                     failed("before", null, "java.lang.RuntimeException: boom")
             );
 
@@ -120,8 +121,8 @@ class CodeModeJobServiceTest {
             AtomicReference<CodeModeJobService.JobSnapshot> waited = new AtomicReference<>();
             Thread waiter = Thread.startVirtualThread(() -> waited.set(service.waitFor(submitted.jobId(), 5_000)));
 
-            service.acceptResult(-1, progress());
-            service.acceptResult(-1, completed("", number("42")));
+            service.acceptResult(1, progress());
+            service.acceptResult(1, completed("", number("42")));
             waiter.join();
 
             assertEquals(CodeModeJobService.JobState.SUCCEEDED, waited.get().state());
@@ -145,14 +146,14 @@ class CodeModeJobServiceTest {
             );
 
             assertTrue(service.cancel(submitted.jobId()));
-            assertEquals(List.of(-1), transport.cancelledScriptIds);
+            assertEquals(List.of(1), transport.cancelledScriptIds);
             assertEquals(
                     CodeModeJobService.JobState.CANCELLING,
                     service.get(submitted.jobId()).orElseThrow().state()
             );
 
             service.acceptResult(
-                    -1,
+                    1,
                     failed("partial output", null, "Script run cancelled")
             );
             CodeModeJobService.JobSnapshot cancelled = service.get(submitted.jobId()).orElseThrow();
@@ -199,7 +200,7 @@ class CodeModeJobServiceTest {
             );
 
             assertEquals("instance-a", submitted.runtime().get("profile_id"));
-            service.runtimeDisconnected();
+            transport.observer.disconnected(submitted.scriptId(), false);
             CodeModeJobService.JobSnapshot disconnected = service.get(submitted.jobId()).orElseThrow();
             assertEquals(CodeModeJobService.JobState.DISCONNECTED, disconnected.state());
             assertTrue(disconnected.error().contains("disconnected"));
@@ -277,7 +278,7 @@ class CodeModeJobServiceTest {
                     CodeModeJobService.ExecutionEnvironment.THREAD
             );
             String retained = "x".repeat(300_000);
-            service.acceptResult(-1, new ExecutionResult(
+            service.acceptResult(1, new ExecutionResult(
                     ExecutionStatus.RUN_COMPLETED,
                     new ExecutionText(retained, 400_000, true),
                     null,
@@ -408,14 +409,22 @@ class CodeModeJobServiceTest {
         private final List<Execution> executions = new ArrayList<>();
         private final List<Integer> cancelledScriptIds = new ArrayList<>();
         private RuntimeException cancelFailure;
-        private java.util.function.IntConsumer onCancel = ignored -> { };
+        private IntConsumer onCancel = ignored -> { };
+        private ExecutionRuns.Observer observer;
+        private int lastScriptId;
+
+        @Override
+        public int open(ExecutionRuns.Observer observer) {
+            this.observer = observer;
+            return ++this.lastScriptId;
+        }
 
         @Override
         public void execute(
                 int scriptId,
                 String source,
                 CodeModeJobService.ExecutionSide side,
-                CodeModeJobService.ExecutionEnvironment environment, Consumer<ExecutionResult> failureHandler
+                CodeModeJobService.ExecutionEnvironment environment
         ) {
             this.executions.add(new Execution(scriptId, source, side, environment));
         }
