@@ -14,6 +14,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.FactsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.MonogramIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
@@ -71,6 +72,10 @@ import java.util.function.Supplier;
  */
 public final class ModPanel extends JPanel {
     private static final int LIST_ICON_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
+    /** Room around a header logo for the plate that keeps a light or dark logo visible. */
+    private static final int LOGO_PADDING = 4;
+    static final String MINECRAFT = "minecraft";
+    static final String GRASS_BLOCK = "minecraft:grass_block";
 
     private final String modId;
     private final PackCatalogService catalog;
@@ -173,7 +178,7 @@ public final class ModPanel extends JPanel {
         this.listIcons.clear();
         if (this.summary == null) {
             this.header.setTitle(this.modId);
-            this.header.setIcon(Icons.MOD);
+            this.header.setIcon(new MonogramIcon(this.modId, SubjectHeader.ICON_SIZE));
             this.header.setSubtitle(List.of(SubjectHeader.text(this.modId)));
             this.browseCode.setVisible(false);
             String unavailable = CatalogMessages.unavailable(state);
@@ -187,12 +192,14 @@ public final class ModPanel extends JPanel {
         }
         PackCatalog.Mod mod = this.summary.mod();
         this.header.setTitle(this.summary.title());
-        this.header.setIcon(Icons.MOD);
+        this.header.setIcon(new MonogramIcon(this.summary.title(), SubjectHeader.ICON_SIZE));
         List<JComponent> subtitle = new ArrayList<>();
         subtitle.add(SubjectHeader.text(this.summary.id()));
         if (!this.summary.version().isEmpty()) subtitle.add(SubjectHeader.text(this.summary.version()));
         this.header.setSubtitle(subtitle);
-        if (mod != null && !mod.logo().isEmpty()) loadLogo(mod.logo());
+        List<ModLogoIcons.Source> logo = ModLogoIcons.sources(this.summary);
+        if (!logo.isEmpty()) loadLogo(logo);
+        else if (MINECRAFT.equals(this.summary.id())) showGrassBlock();
 
         List<PackCatalog.ConfigFile> configFiles = mod == null ? List.of() : mod.configs();
         this.configs.setFiles(configFiles);
@@ -296,11 +303,13 @@ public final class ModPanel extends JPanel {
             List<Fact> dependencies = new ArrayList<>();
             for (PackCatalog.Dependency dependency : mod.dependencies()) {
                 Optional<PackCatalog.Mod> installed = this.index == null ? Optional.empty() : this.index.mod(dependency.modId());
+                // A dependency on a mod that is not installed, such as an incompatibility, changes nothing about this pack.
+                if (installed.isEmpty()) continue;
                 String type = dependency.type().name().toLowerCase(Locale.ROOT);
                 StringBuilder value = new StringBuilder(Character.toUpperCase(type.charAt(0)) + type.substring(1));
-                if (!dependency.versionRange().isEmpty()) value.append(", ").append(DependencyVersions.describe(dependency.versionRange()));
+                String versions = DependencyVersions.describe(dependency.versionRange());
+                if (!versions.equals(DependencyVersions.ANY)) value.append(", ").append(versions);
                 if (dependency.side() != PackCatalog.Side.BOTH) value.append(", ").append(dependency.side().name().toLowerCase(Locale.ROOT)).append(" only");
-                if (installed.isEmpty() && dependency.type() == PackCatalog.DependencyType.OPTIONAL) value.append(", not installed");
                 Fact fact = Fact.text(installed.map(PackCatalog.Mod::title).orElse(dependency.modId()), value.toString());
                 if (installed.isPresent()) fact = fact.withLink(FactLink.toSubject(new SubjectRef.Mod(dependency.modId())));
                 dependencies.add(fact);
@@ -365,45 +374,50 @@ public final class ModPanel extends JPanel {
         }));
     }
 
-    private void loadLogo(String logo) {
-        List<Path> files = this.summary.files();
-        if (files.isEmpty()) return;
-        Path file = files.getFirst();
-        CompletableFuture.supplyAsync(() -> readLogo(file, logo)).thenAccept(image -> SwingUtilities.invokeLater(() -> {
+    private void loadLogo(List<ModLogoIcons.Source> logo) {
+        CompletableFuture.supplyAsync(() -> readLogo(logo)).thenAccept(image -> SwingUtilities.invokeLater(() -> {
             if (!this.disposed && image != null) this.header.setIcon(image);
         }));
     }
 
-    static Icon readLogo(Path file, String logo) {
+    /** Minecraft declares no logo; its grass block stands for it, drawn from the resource snapshot. */
+    private void showGrassBlock() {
+        CatalogIndex.ItemIcon grass = this.icons.itemIcon(GRASS_BLOCK);
+        this.icons.render(grass.model(), grass.tints(), SubjectHeader.ICON_SIZE)
+                .thenAccept(image -> SwingUtilities.invokeLater(() -> {
+                    if (!this.disposed && image.isPresent() && this.summary != null && MINECRAFT.equals(this.summary.id())) {
+                        this.header.setIcon(new ImageIcon(image.get()));
+                    }
+                }));
+    }
+
+    /**
+     * A mod's logo fitted into the header, at most three times as wide as it is tall. Transparency is kept; a logo
+     * that would disappear against the page gets a plate.
+     */
+    static Icon readLogo(List<ModLogoIcons.Source> logo) {
         try {
-            BufferedImage image = ModLogoIcons.read(file, logo);
+            BufferedImage image = ModLogoIcons.read(logo);
             if (image == null) return null;
-            double scale = Math.min(3.0 * SubjectHeader.ICON_SIZE / image.getWidth(),
-                    (double) SubjectHeader.ICON_SIZE / image.getHeight());
+            int box = SubjectHeader.ICON_SIZE - 2 * LOGO_PADDING;
+            double scale = Math.min(3.0 * box / image.getWidth(), (double) box / image.getHeight());
+            // Small pixel-art logos grow by whole numbers only, so their pixels stay even.
+            if (scale >= 1) scale = Math.floor(scale);
             int width = Math.max(1, (int) Math.round(image.getWidth() * scale));
             int height = Math.max(1, (int) Math.round(image.getHeight() * scale));
-            // Logos often have white or black lettering on transparency. Keep it readable in either theme.
-            long brightness = 0;
-            long alpha = 0;
-            for (int y = 0; y < image.getHeight(); y++) {
-                for (int x = 0; x < image.getWidth(); x++) {
-                    int pixel = image.getRGB(x, y);
-                    int a = pixel >>> 24;
-                    brightness += (long) a * (((pixel >>> 16) & 255) + ((pixel >>> 8) & 255) + (pixel & 255));
-                    alpha += a;
-                }
-            }
-            BufferedImage fitted = new BufferedImage(width + 8, height + 8, BufferedImage.TYPE_INT_ARGB);
+            BufferedImage fitted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = fitted.createGraphics();
             try {
-                graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                graphics.setColor(brightness > alpha * 3 * 128 ? new Color(0x2B2D30) : new Color(0xF2F3F5));
-                graphics.fillRoundRect(0, 0, fitted.getWidth(), fitted.getHeight(), 6, 6);
-                graphics.drawImage(image.getScaledInstance(width, height, Image.SCALE_SMOOTH), 4, 4, null);
+                if (scale >= 1) {
+                    graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                    graphics.drawImage(image, 0, 0, width, height, null);
+                } else {
+                    graphics.drawImage(image.getScaledInstance(width, height, Image.SCALE_SMOOTH), 0, 0, null);
+                }
             } finally {
                 graphics.dispose();
             }
-            return new ImageIcon(fitted);
+            return new ContrastLogo(fitted, image, LOGO_PADDING);
         } catch (IOException | RuntimeException unreadable) {
             return null;
         }

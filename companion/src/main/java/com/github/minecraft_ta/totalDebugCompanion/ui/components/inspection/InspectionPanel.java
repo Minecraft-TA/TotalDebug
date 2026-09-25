@@ -493,7 +493,7 @@ public final class InspectionPanel extends JPanel {
 
     private void showProblemNotice(String text, String details) {
         this.problemNotice.setText(text);
-        this.problemNotice.setForeground(ThemeColors.text());
+        ThemeColors.keepForeground(this.problemNotice, ThemeColors::text);
         String bounded = details.length() > 4_000 ? details.substring(0, 4_000) + "…" : details;
         this.problemNotice.setToolTipText(bounded.isBlank() ? null
                 : "<html><pre>" + escape(bounded.strip()) + "</pre></html>");

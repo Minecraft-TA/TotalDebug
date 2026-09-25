@@ -216,7 +216,7 @@ final class ConfigPanel extends JPanel {
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         bar.add(left, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
-        this.notice.setForeground(ThemeColors.secondaryText());
+        ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
         this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
         this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());

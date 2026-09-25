@@ -258,7 +258,7 @@ public final class FactsPanel extends JPanel {
             header.add(rule, BorderLayout.CENTER);
             if (section.omittedFacts() > 0) {
                 JLabel omitted = new JLabel(section.omittedFacts() + " more not shown");
-                omitted.setForeground(ThemeColors.mutedText());
+                ThemeColors.keepForeground(omitted, ThemeColors::mutedText);
                 header.add(omitted, BorderLayout.EAST);
             }
             header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -310,7 +310,7 @@ public final class FactsPanel extends JPanel {
 
         private void addRow(int row, String text, JComponent value) {
             JLabel label = new JLabel(text);
-            label.setForeground(ThemeColors.mutedText());
+            ThemeColors.keepForeground(label, ThemeColors::secondaryText);
             label.setToolTipText(text.isEmpty() ? null : text);
             this.labels.add(label);
             GridBagConstraints constraints = new GridBagConstraints();
@@ -331,7 +331,7 @@ public final class FactsPanel extends JPanel {
                 case PROBLEM -> {
                     JLabel problem = new JLabel(fact.value(), Icons.ERROR, JLabel.LEADING);
                     problem.setToolTipText(fact.value());
-                    problem.setForeground(ThemeColors.error());
+                    ThemeColors.keepForeground(problem, ThemeColors::error);
                     yield problem;
                 }
                 case TEXT, STACK -> new ValueLabel(fact);
@@ -424,6 +424,13 @@ public final class FactsPanel extends JPanel {
         Fact fact() {
             return this.fact;
         }
+
+        /** A restyle resets the foreground to the default text color; the link color and font come back here. */
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            if (this.fact != null) hover(this.hovered);
+        }
     }
 
     /** A bar with its amount beside it, and for fluids the fluid's name and texture. */
@@ -436,7 +443,7 @@ public final class FactsPanel extends JPanel {
         private AmountRow(Fact fact) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
             this.bar = new AmountBar(fact.amount(), fact.capacity());
-            this.amount.setForeground(ThemeColors.mutedText());
+            ThemeColors.keepForeground(this.amount, ThemeColors::mutedText);
             add(this.bar);
             add(Box.createHorizontalStrut(10));
             add(this.name);
@@ -457,12 +464,12 @@ public final class FactsPanel extends JPanel {
         private void describe() {
             if (this.fact.kind() == Fact.Kind.FLUID) {
                 this.name.setText(this.fact.id().isEmpty() ? "Empty" : this.fact.value());
-                this.name.setForeground(this.fact.id().isEmpty() ? ThemeColors.mutedText() : ThemeColors.text());
+                ThemeColors.keepForeground(this.name, this.fact.id().isEmpty() ? ThemeColors::mutedText : ThemeColors::text);
                 this.amount.setText(amounts(this.fact.amount(), this.fact.capacity(), this.fact.unit()));
                 this.name.setToolTipText(this.fact.id().isEmpty() ? null : this.fact.id());
             } else {
                 this.name.setText(amounts(this.fact.amount(), this.fact.capacity(), this.fact.unit()));
-                this.name.setForeground(ThemeColors.text());
+                ThemeColors.keepForeground(this.name, ThemeColors::text);
                 this.amount.setText(this.fact.capacity() > 0
                         ? Math.round(this.bar.fraction() * 100) + "%" : "");
             }
@@ -495,9 +502,9 @@ public final class FactsPanel extends JPanel {
         private DataRow(String section, Fact fact) {
             super(new FlowLayout(FlowLayout.LEFT, 0, 0));
             this.summary.setBackground(ChangeMarks.tint());
-            this.summary.setForeground(ThemeColors.text());
+            ThemeColors.keepForeground(this.summary, ThemeColors::text);
             JLabel open = new JLabel("Open in Data");
-            open.setForeground(ThemeColors.link());
+            ThemeColors.keepForeground(open, ThemeColors::link);
             open.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             open.addMouseListener(new MouseAdapter() {
                 @Override

@@ -78,7 +78,7 @@ public final class SubjectHeader extends JPanel {
         for (JComponent part : parts) {
             if (this.subtitle.getComponentCount() > 0) this.subtitle.add(Box.createHorizontalStrut(12));
             if (part instanceof JLabel label && !(part instanceof LinkLabel)) {
-                label.setForeground(ThemeColors.secondaryText());
+                ThemeColors.keepForeground(label, ThemeColors::secondaryText);
             }
             this.subtitle.add(part);
         }

@@ -8,10 +8,13 @@ import java.util.regex.Pattern;
 final class DependencyVersions {
     private static final Pattern RANGE = Pattern.compile("([\\[(])([^\\[\\]()]*)([\\])])");
 
+    static final String ANY = "Any version";
+    private static final Pattern ZERO = Pattern.compile("0+(\\.0+)*");
+
     private DependencyVersions() { }
 
     static String describe(String range) {
-        if (range.isBlank()) return "Any version";
+        if (range.isBlank()) return ANY;
         if (!range.startsWith("[") && !range.startsWith("(")) return range + " preferred";
         var matcher = RANGE.matcher(range);
         List<String> alternatives = new ArrayList<>();
@@ -26,7 +29,7 @@ final class DependencyVersions {
             } else if (bounds.length == 2) {
                 String lower = bounds[0].strip();
                 String upper = bounds[1].strip();
-                if (lower.isEmpty() && upper.isEmpty()) alternatives.add("Any version");
+                if (upper.isEmpty() && (lower.isEmpty() || lowerInclusive && ZERO.matcher(lower).matches())) alternatives.add(ANY);
                 else if (lower.isEmpty()) alternatives.add(upperInclusive ? upper + " or older" : "Earlier than " + upper);
                 else if (upper.isEmpty()) alternatives.add(lowerInclusive ? lower + " or newer" : "Later than " + lower);
                 else if (lowerInclusive && upperInclusive) alternatives.add(lower.equals(upper) ? lower : lower + " through " + upper);

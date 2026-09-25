@@ -21,6 +21,8 @@ class DependencyVersionsTest {
             (1,2) | Later than 1, before 2
             (,1],[2,) | 1 or older or 2 or newer
             (,) | Any version
+            [0,) | Any version
+            [0.0.1,) | 0.0.1 or newer
             1.2 | 1.2 preferred
             [invalid | [invalid
             """)

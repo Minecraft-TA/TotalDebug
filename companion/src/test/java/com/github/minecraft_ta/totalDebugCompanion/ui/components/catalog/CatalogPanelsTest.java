@@ -49,7 +49,7 @@ class CatalogPanelsTest {
             graphics.dispose();
         }
         ImageIO.write(banner, "png", this.directory.resolve("logo.png").toFile());
-        Icon logo = ModPanel.readLogo(this.directory, "logo.png");
+        Icon logo = ModPanel.readLogo(List.of(new ModLogoIcons.Source(this.directory.toUri(), "logo.png")));
         assertNotNull(logo);
         assertTrue(logo.getIconWidth() > logo.getIconHeight() * 2, "A banner must keep its wide aspect ratio");
         onEdt(() -> {
@@ -121,9 +121,8 @@ class CatalogPanelsTest {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
                     assertEquals(List.of(
-                            Fact.text("NeoForge", "Required, 21 or newer").withLink(FactLink.toSubject(new SubjectRef.Mod("neoforge"))),
-                            Fact.text("jei", "Optional, client only, not installed")
-                    ), sections.get(1).facts());
+                            Fact.text("NeoForge", "Required, 21 or newer").withLink(FactLink.toSubject(new SubjectRef.Mod("neoforge")))
+                    ), sections.get(1).facts(), "Dependencies on mods that are not installed are left out");
                 } finally {
                     settle(panel.resourceLoad());
                     panel.dispose();

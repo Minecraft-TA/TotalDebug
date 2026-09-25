@@ -151,6 +151,12 @@ final class ModTreeItems {
             return new NavigationTarget.ModPage(this.summary.id());
         }
 
+        /** A mod with nothing registered, no configuration and no file of its own has no arrow to expand. */
+        @Override
+        protected boolean isInitiallyEmpty() {
+            return loadChildren().isEmpty();
+        }
+
         @Override
         public List<TreeItem> loadChildren() {
             List<TreeItem> children = new ArrayList<>();

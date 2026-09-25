@@ -1,7 +1,9 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.theme;
 
+import javax.swing.JComponent;
 import javax.swing.UIManager;
 import java.awt.Color;
+import java.util.function.Supplier;
 
 /**
  * Named roles for the chrome colours this app paints itself.
@@ -12,7 +14,25 @@ import java.awt.Color;
  */
 public final class ThemeColors {
 
+    private static final String FOREGROUND_ROLE = "ThemeColors.foregroundRole";
+
     private ThemeColors() {
+    }
+
+    /**
+     * Gives a component the foreground of a color role and keeps it when the look and feel restyles the component.
+     * Theme colors are UI resources, which a restyle would otherwise replace with the default text color.
+     */
+    public static void keepForeground(JComponent component, Supplier<Color> role) {
+        boolean installed = component.getClientProperty(FOREGROUND_ROLE) != null;
+        component.putClientProperty(FOREGROUND_ROLE, role);
+        component.setForeground(role.get());
+        if (installed) return;
+        component.addPropertyChangeListener("UI", event -> {
+            if (component.getClientProperty(FOREGROUND_ROLE) instanceof Supplier<?> current) {
+                component.setForeground((Color) current.get());
+            }
+        });
     }
 
     /** Borders and rules between regions. */

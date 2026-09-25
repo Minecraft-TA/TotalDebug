@@ -326,7 +326,7 @@ public final class DefinitionPanel extends JPanel {
             JLabel tile = new JLabel(String.join(", ", texture.variables()), preview, SwingConstants.CENTER);
             tile.setVerticalTextPosition(SwingConstants.BOTTOM);
             tile.setHorizontalTextPosition(SwingConstants.CENTER);
-            tile.setForeground(ThemeColors.secondaryText());
+            ThemeColors.keepForeground(tile, ThemeColors::secondaryText);
             tile.setToolTipText(texture.id());
             tile.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             tile.addMouseListener(new MouseAdapter() {
@@ -345,7 +345,7 @@ public final class DefinitionPanel extends JPanel {
         if (!appearance.loaders().isEmpty()) {
             JLabel loaders = new JLabel("Custom model loader " + String.join(", ", appearance.loaders())
                     + "; it may draw textures that are not listed");
-            loaders.setForeground(ThemeColors.secondaryText());
+            ThemeColors.keepForeground(loaders, ThemeColors::secondaryText);
             body.add(loaders, BorderLayout.SOUTH);
         }
         return body;
@@ -381,7 +381,7 @@ public final class DefinitionPanel extends JPanel {
         for (int row = 0; row < files.size(); row++) {
             FileLink file = files.get(row);
             JLabel role = new JLabel(file.role());
-            role.setForeground(ThemeColors.mutedText());
+            ThemeColors.keepForeground(role, ThemeColors::secondaryText);
             GridBagConstraints constraints = new GridBagConstraints();
             constraints.gridy = row;
             constraints.anchor = GridBagConstraints.WEST;
