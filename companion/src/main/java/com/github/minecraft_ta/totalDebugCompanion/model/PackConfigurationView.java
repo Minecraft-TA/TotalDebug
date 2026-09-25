@@ -3,17 +3,17 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModifiedSettingsPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.PackConfigurationPanel;
 
 import javax.swing.Icon;
 import java.awt.Component;
 
-/** A tab listing every setting of the pack that differs from its default. */
-public final class ModifiedSettingsView implements IEditorPanel {
-    private final ModifiedSettingsPanel panel;
+/** A tab listing the settings of every mod in the pack. */
+public final class PackConfigurationView implements IEditorPanel {
+    private final PackConfigurationPanel panel;
 
-    public ModifiedSettingsView(EditorContext context) {
-        this.panel = new ModifiedSettingsPanel(context.project().catalog(), context.project().profile().workspaceDirectory(),
+    public PackConfigurationView(EditorContext context) {
+        this.panel = new PackConfigurationPanel(context.project().catalog(), context.project().profile().workspaceDirectory(),
                 context.project().configChanges(), context.navigation()::navigate);
     }
 
@@ -24,12 +24,12 @@ public final class ModifiedSettingsView implements IEditorPanel {
 
     @Override
     public String getTitle() {
-        return "Modified settings";
+        return "Configuration";
     }
 
     @Override
     public String getTooltip() {
-        return "Settings that differ from their default";
+        return "Settings of every mod";
     }
 
     @Override
@@ -44,7 +44,7 @@ public final class ModifiedSettingsView implements IEditorPanel {
 
     @Override
     public NavigationTarget getNavigationTarget() {
-        return new NavigationTarget.ModifiedSettings();
+        return new NavigationTarget.PackConfiguration();
     }
 
     @Override

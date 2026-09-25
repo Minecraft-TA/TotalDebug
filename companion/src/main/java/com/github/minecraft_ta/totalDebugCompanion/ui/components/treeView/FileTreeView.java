@@ -306,9 +306,9 @@ public class FileTreeView extends JScrollPane {
         return revealRuntimeDirectory(source.module(), path);
     }
 
-    /** Selects a mod's node, or the group of the requested tab, in the Mods tree. */
+    /** Selects a mod's node, or the group of the requested tab, under Mods in the Modpack tree. */
     public CompletableFuture<Boolean> revealModPage(NavigationTarget.ModPage page) {
-        List<String> path = new ArrayList<>();
+        List<String> path = new ArrayList<>(List.of(ModTreeItems.MODS));
         var scope = project.get();
         var index = scope == null ? null : scope.catalog().index().orElse(null);
         if (index != null && index.mod(page.modId()).isEmpty() && index.otherNamespaces().contains(page.modId())) {
@@ -321,9 +321,9 @@ public class FileTreeView extends JScrollPane {
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
     }
 
-    /** Selects the Modified settings row of the Mods tree. */
-    public CompletableFuture<Boolean> revealModifiedSettings() {
-        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.MODIFIED_SETTINGS));
+    /** Selects the Configuration row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealPackConfiguration() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONFIGURATION));
     }
 
     /** Selects a runtime module's node in the Runtime tree. */

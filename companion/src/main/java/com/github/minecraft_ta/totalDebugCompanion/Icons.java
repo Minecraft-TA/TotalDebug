@@ -57,6 +57,7 @@ public class Icons {
     public static final FlatSVGIcon RESOURCE_BUNDLE = new FlatSVGIcon("icons/resourceBundle.svg");
     public static final FlatSVGIcon MODULE = new FlatSVGIcon("icons/module.svg");
     public static final FlatSVGIcon MOD = new FlatSVGIcon("icons/mod.svg");
+    public static final FlatSVGIcon MODPACK = new FlatSVGIcon("icons/modpack.svg");
     public static final FlatSVGIcon BLOCK = new FlatSVGIcon("icons/block.svg");
     public static final FlatSVGIcon ITEM = new FlatSVGIcon("icons/item.svg");
     public static final FlatSVGIcon ENTITY = new FlatSVGIcon("icons/entity.svg");

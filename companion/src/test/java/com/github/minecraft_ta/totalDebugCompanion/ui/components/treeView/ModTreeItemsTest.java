@@ -35,10 +35,12 @@ class ModTreeItemsTest {
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
-        assertEquals(List.of(ModTreeItems.MODIFIED_SETTINGS, "neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES),
-                mods.stream().map(TreeItem::getName).toList());
-        assertEquals(new NavigationTarget.ModifiedSettings(), ((NavigableTreeItem) mods.getFirst()).navigationTarget());
-        TreeItem testmod = mods.get(2);
+        List<TreeItem> pack = ModTreeItems.packChildren(snapshot);
+        assertEquals(List.of(ModTreeItems.MODS, ModTreeItems.CONFIGURATION), pack.stream().map(TreeItem::getName).toList());
+        assertEquals("2", pack.getFirst().getPresentation().secondary());
+        assertEquals(new NavigationTarget.PackConfiguration(), ((NavigableTreeItem) pack.get(1)).navigationTarget());
+        assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
+        TreeItem testmod = mods.get(1);
         assertTrue(testmod.isActivatable());
         assertEquals(new NavigationTarget.ModPage("testmod"), ((NavigableTreeItem) testmod).navigationTarget());
         List<TreeItem> groups = ((DirectoryTreeItem) testmod).loadChildren();
@@ -54,7 +56,7 @@ class ModTreeItemsTest {
         assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, ""),
                 ((NavigableTreeItem) resources).navigationTarget());
 
-        List<TreeItem> neoforge = ((DirectoryTreeItem) mods.get(1)).loadChildren();
+        List<TreeItem> neoforge = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
         assertTrue(neoforge.isEmpty(), "a mod without content or an existing file has no groups");
     }
 
@@ -71,6 +73,8 @@ class ModTreeItemsTest {
         assertInstanceOf(NavigableTreeItem.class, groups.getFirst());
         ModTreeItems.Root root = new ModTreeItems.Root(() -> snapshot);
         assertEquals("not captured", root.getPresentation().secondary());
+        assertEquals(List.of(ModTreeItems.MODS), root.loadChildren().stream().map(TreeItem::getName).toList(),
+                "Configuration waits for the catalog that describes the settings");
         assertFalse(root.isActivatable());
     }
 

@@ -26,7 +26,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.ModuleSearch,
         NavigationTarget.Inspection,
         NavigationTarget.ModPage,
-        NavigationTarget.ModifiedSettings,
+        NavigationTarget.PackConfiguration,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
 
@@ -46,8 +46,8 @@ public sealed interface NavigationTarget permits
         }
     }
 
-    /** Every setting of the pack that differs from its default. */
-    record ModifiedSettings() implements NavigationTarget {
+    /** The settings of every mod in the pack. */
+    record PackConfiguration() implements NavigationTarget {
     }
 
     /** A registered block, item or entity type, described by the captured pack catalog. */

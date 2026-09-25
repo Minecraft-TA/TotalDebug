@@ -4,6 +4,7 @@ Most icons use JetBrains' New UI (`expui`) icon set, taken from intellij-communi
 See [INTELLIJ_LICENSE.txt](INTELLIJ_LICENSE.txt).
 
 `mod.svg` and `mod_dark.svg` are custom extension-piece icons.
+`modpack.svg` and `modpack_dark.svg` are custom as well: the extension piece rising out of an open box.
 `item.svg` and `item_dark.svg` are custom item-tag icons. `grid.svg` (the image viewer's pixel grid) and `pause.svg` (pausing texture animations) are custom as well. All of them use the existing icon set's stroke weights and palette.
 
 Completion modifier/visibility icons (`finalMark`, `staticMark`, `accessPrivate`, `accessProtected`,

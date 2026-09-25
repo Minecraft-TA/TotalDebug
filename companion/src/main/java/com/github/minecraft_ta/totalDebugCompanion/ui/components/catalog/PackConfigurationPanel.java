@@ -15,6 +15,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.BorderFactory;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -40,15 +41,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Every setting of the pack that differs from its default, under its mod and file, edited like on a mod's
- * Configuration tab. A server configuration is read from the world that changed it last. Files are read again whenever
- * the page is shown, the catalog changes or an edit is written.
+ * The settings of every mod under their mod, file and sections, edited like on a mod's Configuration tab. Only the
+ * settings that differ from their default are shown at first. A server configuration is read from the world that
+ * changed it last. Files are read again whenever the page is shown, the catalog changes or an edit is written.
  */
-public final class ModifiedSettingsPanel extends JPanel {
+public final class PackConfigurationPanel extends JPanel {
     private static final String TABLE_CARD = "table";
     private static final String MESSAGE_CARD = "message";
 
-    /** A file whose modified settings are listed; {@code source} names the world of a server configuration. */
+    /** A file whose settings are listed; {@code source} names the world of a server configuration. */
     private record Listed(PackCatalog.Mod mod, PackCatalog.ConfigFile file, ConfigSources.Source source) {
     }
 
@@ -62,6 +63,7 @@ public final class ModifiedSettingsPanel extends JPanel {
     private final ConfigWriter writer;
     private final Runnable removeCatalogListener;
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
+    private final JCheckBox modifiedOnly = new JCheckBox("Modified", true);
     private final JLabel notice = new JLabel();
     private final ConfigSettingsTable table = new ConfigSettingsTable();
     private final JLabel message = new JLabel();
@@ -71,10 +73,12 @@ public final class ModifiedSettingsPanel extends JPanel {
     /** The mod or file of each section row, by row path. */
     private Map<String, Listed> sections = Map.of();
     private String problem = "";
+    /** Why nothing could be read at all, such as a catalog that is not captured yet. */
+    private String unavailable = "";
     private String status = "";
     private long generation;
 
-    public ModifiedSettingsPanel(PackCatalogService catalog, Path workspace, ConfigChanges changes,
+    public PackConfigurationPanel(PackCatalogService catalog, Path workspace, ConfigChanges changes,
                                  Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -88,9 +92,12 @@ public final class ModifiedSettingsPanel extends JPanel {
             @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
         });
-        JPanel bar = new JPanel(new BorderLayout());
+        this.modifiedOnly.setToolTipText("Only settings that differ from their default");
+        this.modifiedOnly.addActionListener(event -> applyFilter());
+        JPanel bar = new JPanel(new BorderLayout(10, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         bar.add(this.filter, BorderLayout.CENTER);
+        bar.add(this.modifiedOnly, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
         this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
         this.notice.setVisible(false);
@@ -118,9 +125,9 @@ public final class ModifiedSettingsPanel extends JPanel {
         this.table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                int row = ModifiedSettingsPanel.this.table.rowAtPoint(event.getPoint());
+                int row = PackConfigurationPanel.this.table.rowAtPoint(event.getPoint());
                 if (row >= 0 && event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)) {
-                    open(ModifiedSettingsPanel.this.table.row(row));
+                    open(PackConfigurationPanel.this.table.row(row));
                 }
             }
         });
@@ -154,7 +161,7 @@ public final class ModifiedSettingsPanel extends JPanel {
         }));
     }
 
-    /** The modified settings of every mod, mods by name and files by name. Blocking. */
+    /** The settings of every mod, mods by name. Blocking. */
     private Loaded read(CatalogIndex index) {
         List<ConfigSettingsTable.Row> rows = new ArrayList<>();
         Map<String, ConfigWriter.Target> targets = new HashMap<>();
@@ -176,16 +183,17 @@ public final class ModifiedSettingsPanel extends JPanel {
                     problems.add(exception.getMessage());
                     continue;
                 }
+                // Row paths nest the file's own keys under the mod and file, so filtering keeps the rows above a match.
                 String filePath = mod.id() + "." + file.fileName();
-                List<ConfigSettingsTable.Row> modified = new ArrayList<>();
+                List<ConfigSettingsTable.Row> settings = new ArrayList<>();
                 for (ConfigSettingsTable.Row row : ConfigSettingsTable.rows(file, values)) {
-                    if (!row.modified()) continue;
-                    ConfigSettingsTable.Row listed = new ConfigSettingsTable.Row(2, filePath + "." + row.path(), row.path(),
-                            row.comment(), row.setting(), row.value(), row.literal());
-                    modified.add(listed);
-                    targets.put(listed.path(), new ConfigWriter.Target(source.path(), file.type(), row.setting()));
+                    ConfigSettingsTable.Row listed = new ConfigSettingsTable.Row(row.depth() + 2, filePath + "." + row.path(),
+                            row.name(), row.comment(), row.setting(), row.value(), row.literal());
+                    settings.add(listed);
+                    if (row.setting() != null) {
+                        targets.put(listed.path(), new ConfigWriter.Target(source.path(), file.type(), row.setting()));
+                    }
                 }
-                if (modified.isEmpty()) continue;
                 if (!modShown) {
                     rows.add(new ConfigSettingsTable.Row(0, mod.id(), mod.name(), "", null, "", null));
                     sections.put(mod.id(), new Listed(mod, null, null));
@@ -193,7 +201,7 @@ public final class ModifiedSettingsPanel extends JPanel {
                 }
                 rows.add(new ConfigSettingsTable.Row(1, filePath, file.fileName(), "", null, "", null));
                 sections.put(filePath, new Listed(mod, file, source));
-                rows.addAll(modified);
+                rows.addAll(settings);
             }
         }
         return new Loaded(rows, targets, sections, problems);
@@ -202,13 +210,11 @@ public final class ModifiedSettingsPanel extends JPanel {
     private void show(Loaded loaded, String problem) {
         this.targets = loaded.targets();
         this.sections = loaded.sections();
-        this.problem = !problem.isEmpty() ? problem
-                : loaded.problems().isEmpty() ? "" : String.join("; ", loaded.problems());
+        this.problem = String.join("; ", loaded.problems());
         showNotice();
         this.table.show(loaded.rows(), true, true);
+        this.unavailable = problem;
         applyFilter();
-        this.message.setText(loaded.rows().isEmpty() && problem.isEmpty() ? "No setting differs from its default." : problem);
-        ((CardLayout) this.cards.getLayout()).show(this.cards, loaded.rows().isEmpty() ? MESSAGE_CARD : TABLE_CARD);
     }
 
     private void edit(ConfigSettingsTable.Row row, String literal) {
@@ -245,7 +251,12 @@ public final class ModifiedSettingsPanel extends JPanel {
     }
 
     private void applyFilter() {
-        this.table.filter(this.filter.getText(), false);
+        this.table.filter(this.filter.getText(), this.modifiedOnly.isSelected());
+        boolean empty = this.table.getRowCount() == 0;
+        this.message.setText(!this.unavailable.isEmpty() ? this.unavailable
+                : !this.filter.getText().isBlank() ? "No setting matches the filter."
+                : this.modifiedOnly.isSelected() ? "No setting differs from its default." : "No mod has settings.");
+        ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABLE_CARD);
     }
 
     /** The field that filters the settings. */

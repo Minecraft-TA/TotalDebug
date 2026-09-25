@@ -29,13 +29,15 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * The Mods tree: one node per installed mod with logical groups for what it registered, its configuration and its
- * resources. Individual blocks and items are not nodes; a group opens the matching tab of the mod's page.
+ * The Modpack tree (see docs/MODPACK.md): the pack's mods and its configuration. Mods has one node per installed mod
+ * with logical groups for what it registered, its configuration and its resources. Individual blocks and items are
+ * not nodes; a group opens the matching tab of the mod's page.
  */
 final class ModTreeItems {
-    static final String ROOT = "mods";
+    static final String ROOT = "modpack";
+    static final String MODS = "mods";
+    static final String CONFIGURATION = "configuration";
     static final String OTHER_NAMESPACES = "other-namespaces";
-    static final String MODIFIED_SETTINGS = "modified-settings";
     private static final Set<String> PLATFORM = Set.of("minecraft", "neoforge");
 
     private ModTreeItems() {
@@ -53,6 +55,7 @@ final class ModTreeItems {
         }
     }
 
+    /** The Modpack root; its status tells whether the pack's catalog is captured. */
     static final class Root extends DirectoryTreeItem {
         private final Supplier<Snapshot> snapshot;
 
@@ -60,19 +63,52 @@ final class ModTreeItems {
             super(ROOT);
             this.snapshot = snapshot;
             String status = CatalogMessages.status(snapshot.get().state());
-            setPresentation(new PrimarySecondaryText("Mods", status));
-            setIcon(Icons.MOD);
+            setPresentation(new PrimarySecondaryText("Modpack", status));
+            setIcon(Icons.MODPACK);
         }
 
         @Override
         public String getTooltip() {
             String unavailable = CatalogMessages.unavailable(this.snapshot.get().state());
-            return unavailable.isEmpty() ? "Installed mods" : unavailable;
+            return unavailable.isEmpty() ? "The pack's mods and configuration" : unavailable;
         }
 
         @Override
         public List<TreeItem> loadChildren() {
-            return children(this.snapshot.get());
+            return packChildren(this.snapshot.get());
+        }
+    }
+
+    /** The rows under Modpack: Mods, and Configuration once the catalog describes the settings. */
+    static List<TreeItem> packChildren(Snapshot snapshot) {
+        List<TreeItem> children = new ArrayList<>();
+        children.add(new Mods(snapshot));
+        if (snapshot.index() != null) children.add(new Configuration());
+        return children;
+    }
+
+    /** The installed mods, and the namespaces registered without a mod. */
+    static final class Mods extends DirectoryTreeItem {
+        private final Snapshot snapshot;
+
+        Mods(Snapshot snapshot) {
+            super(MODS);
+            this.snapshot = snapshot;
+            CatalogIndex index = snapshot.index();
+            setPresentation(new PrimarySecondaryText("Mods",
+                    index == null ? "" : NumberFormat.getIntegerInstance(Locale.ROOT).format(index.mods().size())));
+            setIcon(Icons.MOD);
+            setSortPriority(0);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Installed mods";
+        }
+
+        @Override
+        public List<TreeItem> loadChildren() {
+            return children(this.snapshot);
         }
     }
 
@@ -80,7 +116,6 @@ final class ModTreeItems {
         List<TreeItem> children = new ArrayList<>();
         CatalogIndex index = snapshot.index();
         if (index != null) {
-            children.add(new ModifiedSettings());
             for (PackCatalog.Mod mod : index.mods()) {
                 ModSummary.resolve(mod.id(), index, snapshot.sources())
                         .ifPresent(summary -> children.add(new Mod(summary, index)));
@@ -219,23 +254,23 @@ final class ModTreeItems {
         }
     }
 
-    /** Opens the settings of every mod that differ from their default. */
-    static final class ModifiedSettings extends TreeItem implements NavigableTreeItem {
-        ModifiedSettings() {
-            super(MODIFIED_SETTINGS);
-            setPresentation(PrimarySecondaryText.primary("Modified settings"));
+    /** Opens the settings of every mod, those that differ from their default first. */
+    static final class Configuration extends TreeItem implements NavigableTreeItem {
+        Configuration() {
+            super(CONFIGURATION);
+            setPresentation(PrimarySecondaryText.primary("Configuration"));
             setIcon(Icons.CONFIG_FILE);
-            setSortPriority(-1);
+            setSortPriority(1);
         }
 
         @Override
         public String getTooltip() {
-            return "Settings that differ from their default";
+            return "Settings of every mod";
         }
 
         @Override
         public NavigationTarget navigationTarget() {
-            return new NavigationTarget.ModifiedSettings();
+            return new NavigationTarget.PackConfiguration();
         }
     }
 

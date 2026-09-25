@@ -120,6 +120,7 @@ Everything convenient is an ordinary module that can be hot-reloaded, read and f
 | `SubjectView` | The page for a subject kind; the facts page is the default |
 | `FactPresenter` | A widget for an extension-defined fact kind |
 | Window or panel | Declarative views first, Swing when needed |
+| Modpack row | A row in the Modpack tree and the page it opens, such as shader packs; see [MODPACK.md](MODPACK.md) |
 | `ModelLoader` | An offline renderer for a model format |
 | `OfflineReader`, `Simulator` | Answers from the offline store without a running game |
 | Command, context action, MCP tool | Entry points into an extension |

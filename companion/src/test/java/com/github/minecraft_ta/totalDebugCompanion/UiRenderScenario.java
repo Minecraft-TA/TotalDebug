@@ -56,7 +56,7 @@ enum UiRenderScenario {
     MOD_CONFIGURATION("mod-configuration", "Configuration settings with a modified value"),
     MOD_RESOURCES("mod-resources", "Mod resources listed by category"),
     DEFINITION_PAGE("definition-page", "Block definition page with its files"),
-    MODIFIED_SETTINGS("modified-settings", "Every modified setting of the pack under its mod and file");
+    PACK_CONFIGURATION("pack-configuration", "Every modified setting of the pack under its mod and file");
 
     private final String id;
     private final String description;
