@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.resource;
 
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import javax.imageio.ImageIO;
@@ -13,12 +14,14 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Optional;
 
 public final class ResourceLoader {
 
     public static final int MAXIMUM_TEXT_BYTES = 16 * 1024 * 1024;
     public static final int MAXIMUM_PNG_BYTES = 64 * 1024 * 1024;
     public static final long MAXIMUM_IMAGE_PIXELS = 32L * 1024 * 1024;
+    private static final int MAXIMUM_METADATA_BYTES = 1024 * 1024;
 
     private static final byte[] PNG_SIGNATURE = {
             (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
@@ -37,9 +40,29 @@ public final class ResourceLoader {
                 : MAXIMUM_TEXT_BYTES;
         byte[] bytes = source.read(limit);
         if (fileType.kind() == ResourceFileType.Kind.PNG || isPng(bytes)) {
-            return loadPng(bytes, source.displayName());
+            return withAnimation(loadPng(bytes, source.displayName()), source);
         }
         return loadText(bytes, fileType, source.displayName());
+    }
+
+    /** Adds the animation a texture's {@code .mcmeta} declares; an unusable file is reported, not fatal. */
+    private static LoadedResource.Image withAnimation(LoadedResource.Image image, ContentSource source) throws IOException {
+        Optional<byte[]> metadata = source.readAdjacent(".mcmeta", MAXIMUM_METADATA_BYTES);
+        if (metadata.isEmpty()) {
+            return image;
+        }
+        BufferedImage value = image.value();
+        try {
+            TextureAnimation animation = TextureAnimation.read(metadata.get(), value.getWidth(), value.getHeight())
+                    .orElse(null);
+            if (animation != null && animation.frames().stream().noneMatch(frame -> animation.contains(frame.index()))) {
+                return new LoadedResource.Image(value, image.byteCount(), null, "Animation frames lie outside the texture");
+            }
+            return new LoadedResource.Image(value, image.byteCount(), animation, "");
+        } catch (RuntimeException exception) {
+            return new LoadedResource.Image(value, image.byteCount(), null,
+                    "Invalid animation metadata: " + exception.getMessage());
+        }
     }
 
     static LoadedResource.Text loadText(byte[] bytes, ResourceFileType fileType, String displayName)

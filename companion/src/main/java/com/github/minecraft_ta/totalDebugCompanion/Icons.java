@@ -128,6 +128,8 @@ public class Icons {
     public static final FlatSVGIcon ZOOM_OUT = new FlatSVGIcon("icons/zoomOut.svg");
     public static final FlatSVGIcon FIT_CONTENT = new FlatSVGIcon("icons/fitContent.svg");
     public static final FlatSVGIcon ACTUAL_ZOOM = new FlatSVGIcon("icons/actualZoom.svg");
+    public static final FlatSVGIcon PIXEL_GRID = new FlatSVGIcon("icons/grid.svg");
+    public static final FlatSVGIcon PAUSE = new FlatSVGIcon("icons/pause.svg");
     public static final FlatSVGIcon REFORMAT_CODE = new FlatSVGIcon("icons/reformatCode.svg");
     public static final FlatSVGIcon FIELD = new FlatSVGIcon("icons/field.svg");
 

@@ -6,6 +6,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class ArchiveEntrySource implements ContentSource {
 
@@ -49,6 +50,19 @@ public final class ArchiveEntrySource implements ContentSource {
             }
             try (var stream = archive.getInputStream(entry)) {
                 return ContentSources.readBounded(stream, maximumBytes, displayName());
+            }
+        }
+    }
+
+    @Override
+    public Optional<byte[]> readAdjacent(String suffix, int maximumBytes) throws IOException {
+        try (ZipFile archive = ZipFile.builder().setPath(this.archivePath).get()) {
+            var entry = archive.getEntry(this.entryName + suffix);
+            if (entry == null || entry.isDirectory()) {
+                return Optional.empty();
+            }
+            try (var stream = archive.getInputStream(entry)) {
+                return Optional.of(ContentSources.readBounded(stream, maximumBytes, displayName() + suffix));
             }
         }
     }

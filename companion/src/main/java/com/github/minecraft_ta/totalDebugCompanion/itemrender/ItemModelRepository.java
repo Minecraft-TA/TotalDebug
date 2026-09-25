@@ -13,6 +13,7 @@ import com.google.gson.JsonParser;
 
 import javax.imageio.ImageIO;
 import javax.imageio.stream.MemoryCacheImageInputStream;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -883,33 +884,10 @@ final class ItemModelRepository {
             if (!root.has("animation")) {
                 return TextureRegion.full(toArgb(image));
             }
-            JsonObject animation = requiredObject(root, "animation");
-            int frameWidth = optionalInt(animation, "width", -1);
-            int frameHeight = optionalInt(animation, "height", -1);
-            if (frameWidth < 1 && frameHeight < 1) {
-                frameWidth = Math.min(image.getWidth(), image.getHeight());
-                frameHeight = frameWidth;
-            } else if (frameWidth < 1) {
-                frameWidth = image.getWidth();
-            } else if (frameHeight < 1) {
-                frameHeight = image.getHeight();
-            }
-            if (frameWidth < 1 || frameHeight < 1 || image.getWidth() % frameWidth != 0 || image.getHeight() % frameHeight != 0) {
-                throw new JsonParseException("animation frame size does not divide the texture");
-            }
-
-            int frameIndex = firstFrameIndex(animation);
-            int columns = image.getWidth() / frameWidth;
-            int rows = image.getHeight() / frameHeight;
-            if (frameIndex < 0 || frameIndex >= columns * rows) {
-                throw new JsonParseException("animation frame index is outside the texture");
-            }
-            return TextureRegion.full(toArgb(image.getSubimage(
-                    frameIndex % columns * frameWidth,
-                    frameIndex / columns * frameHeight,
-                    frameWidth,
-                    frameHeight
-            )));
+            TextureAnimation animation = TextureAnimation.parse(requiredObject(root, "animation"),
+                    image.getWidth(), image.getHeight());
+            Rectangle frame = animation.region(animation.frames().getFirst().index());
+            return TextureRegion.full(toArgb(image.getSubimage(frame.x, frame.y, frame.width, frame.height)));
         } catch (RuntimeException exception) {
             throw new ItemRenderException(
                     ItemRenderException.Kind.RESOURCE_ERROR,
@@ -918,18 +896,6 @@ final class ItemModelRepository {
                     exception
             );
         }
-    }
-
-    private static int firstFrameIndex(JsonObject animation) {
-        if (!animation.has("frames")) {
-            return 0;
-        }
-        JsonArray frames = requiredArray(animation, "frames");
-        if (frames.isEmpty()) {
-            return 0;
-        }
-        JsonElement first = frames.get(0);
-        return first.isJsonObject() ? requiredInt(first.getAsJsonObject(), "index") : first.getAsInt();
     }
 
     private static BufferedImage toArgb(BufferedImage source) {
@@ -999,13 +965,6 @@ final class ItemModelRepository {
             throw new JsonParseException(name + " must be a string");
         }
         return json.get(name).getAsString();
-    }
-
-    private static int requiredInt(JsonObject json, String name) {
-        if (!json.has(name)) {
-            throw new JsonParseException("missing " + name);
-        }
-        return json.get(name).getAsInt();
     }
 
     private static int optionalInt(JsonObject json, String name, int fallback) {
