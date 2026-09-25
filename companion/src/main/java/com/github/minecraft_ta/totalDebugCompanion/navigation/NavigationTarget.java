@@ -27,6 +27,7 @@ public sealed interface NavigationTarget permits
         NavigationTarget.Inspection,
         NavigationTarget.ModPage,
         NavigationTarget.PackConfiguration,
+        NavigationTarget.Changes,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
 
@@ -44,6 +45,10 @@ public sealed interface NavigationTarget permits
         public ModPage(String modId) {
             this(modId, ModTab.OVERVIEW, "");
         }
+    }
+
+    /** What Companion changed in the pack. */
+    record Changes() implements NavigationTarget {
     }
 
     /** The settings of every mod in the pack. */

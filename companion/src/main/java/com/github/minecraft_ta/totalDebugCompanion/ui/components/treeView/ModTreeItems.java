@@ -37,6 +37,7 @@ final class ModTreeItems {
     static final String ROOT = "modpack";
     static final String MODS = "mods";
     static final String CONFIGURATION = "configuration";
+    static final String CHANGES = "changes";
     static final String OTHER_NAMESPACES = "other-namespaces";
     private static final Set<String> PLATFORM = Set.of("minecraft", "neoforge");
 
@@ -48,8 +49,11 @@ final class ModTreeItems {
         return tab.name().toLowerCase(Locale.ROOT);
     }
 
-    /** What the tree shows now: the captured catalog when ready, otherwise the runtime's modules. */
-    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources) {
+    /**
+     * What the tree shows now: the captured catalog when ready, otherwise the runtime's modules, and how many changes
+     * Companion made that are still in effect.
+     */
+    record Snapshot(PackCatalogService.State state, RuntimeSourceCatalog sources, int changes) {
         CatalogIndex index() {
             return this.state instanceof PackCatalogService.Ready ready ? ready.index() : null;
         }
@@ -79,11 +83,15 @@ final class ModTreeItems {
         }
     }
 
-    /** The rows under Modpack: Mods, and Configuration once the catalog describes the settings. */
+    /**
+     * The rows under Modpack: Mods, Configuration once the catalog describes the settings, and Changes while Companion
+     * has changes in effect.
+     */
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
         children.add(new Mods(snapshot));
         if (snapshot.index() != null) children.add(new Configuration());
+        if (snapshot.changes() > 0) children.add(new Changes(snapshot.changes()));
         return children;
     }
 
@@ -271,6 +279,26 @@ final class ModTreeItems {
         @Override
         public NavigationTarget navigationTarget() {
             return new NavigationTarget.PackConfiguration();
+        }
+    }
+
+    /** Opens what Companion changed in the pack. */
+    static final class Changes extends TreeItem implements NavigableTreeItem {
+        Changes(int count) {
+            super(CHANGES);
+            setPresentation(new PrimarySecondaryText("Changes", NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setIcon(Icons.CHANGES);
+            setSortPriority(2);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "What Companion changed in the pack";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.Changes();
         }
     }
 

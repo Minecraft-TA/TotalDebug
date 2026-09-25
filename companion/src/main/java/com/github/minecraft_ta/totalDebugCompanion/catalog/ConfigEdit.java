@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -176,6 +177,108 @@ public final class ConfigEdit {
             }
         }
         return quoted.append('"').toString();
+    }
+
+    /** A setting whose value an edit of the file's text changed, as the file writes it before and after. */
+    public record TextChange(PackCatalog.ConfigSetting setting, String before, String after) {
+    }
+
+    /**
+     * Checks an edited text of a file the way NeoForge checks it on load, against the text it replaces. The text must
+     * be TOML; with a specification in {@code settings}, every setting must still be there and no other key added; and
+     * every changed value must be one its setting accepts.
+     *
+     * @throws IllegalArgumentException naming the first problem and its key or line
+     */
+    public static void checkText(String saved, String edited, List<PackCatalog.ConfigSetting> settings) {
+        Map<String, String> editedLiterals = TomlText.of(edited).literals();
+        try {
+            ConfigValues.parse(edited, "The text");
+        } catch (IOException notToml) {
+            throw new IllegalArgumentException(notToml.getMessage(), notToml);
+        }
+        Map<String, String> savedLiterals = literals(saved);
+        Map<String, PackCatalog.ConfigSetting> described = new HashMap<>();
+        for (PackCatalog.ConfigSetting setting : settings) {
+            described.put(setting.path(), setting);
+            if (!editedLiterals.containsKey(setting.path())) {
+                throw new IllegalArgumentException(setting.path() + " is missing; NeoForge would write its default back");
+            }
+        }
+        for (Map.Entry<String, String> entry : editedLiterals.entrySet()) {
+            String key = entry.getKey();
+            if (!settings.isEmpty() && !described.containsKey(key)) {
+                throw new IllegalArgumentException(key + " is not a setting of this file; NeoForge would remove it");
+            }
+            String before = savedLiterals.get(key);
+            if (before == null || sameValue(before, entry.getValue())) continue;
+            checkLiteral(key, before, described.get(key), entry.getValue());
+        }
+    }
+
+    /** The settings whose values differ between two texts of a file; keys only one text has are left out. */
+    public static List<TextChange> changes(String before, String after, List<PackCatalog.ConfigSetting> settings) {
+        Map<String, String> beforeLiterals = literals(before);
+        Map<String, String> afterLiterals = literals(after);
+        Map<String, PackCatalog.ConfigSetting> described = new HashMap<>();
+        for (PackCatalog.ConfigSetting setting : settings) described.put(setting.path(), setting);
+        List<TextChange> changes = new ArrayList<>();
+        for (Map.Entry<String, String> entry : afterLiterals.entrySet()) {
+            String previous = beforeLiterals.get(entry.getKey());
+            if (previous == null || sameValue(previous, entry.getValue())) continue;
+            PackCatalog.ConfigSetting setting = described.getOrDefault(entry.getKey(), new PackCatalog.ConfigSetting(
+                    entry.getKey(), "", "", "", List.of(), PackCatalog.Restart.NONE));
+            changes.add(new TextChange(setting, previous, entry.getValue()));
+        }
+        return changes;
+    }
+
+    private static Map<String, String> literals(String text) {
+        try {
+            return TomlText.of(text).literals();
+        } catch (IllegalArgumentException notToml) {
+            return Map.of();
+        }
+    }
+
+    /** Whether two literals stand for the same value, such as a list written over one or several lines. */
+    private static boolean sameValue(String first, String second) {
+        if (first.equals(second)) return true;
+        try {
+            return PackCatalog.ConfigSetting.display(ConfigValues.value(first))
+                    .equals(PackCatalog.ConfigSetting.display(ConfigValues.value(second)));
+        } catch (IllegalArgumentException notAValue) {
+            return false;
+        }
+    }
+
+    /** Checks a value written as {@code literal} in place of {@code before}, naming {@code key} in the problem. */
+    private static void checkLiteral(String key, String before, PackCatalog.ConfigSetting setting, String literal) {
+        Kind was = kind(before);
+        Kind now = kind(literal);
+        if (was == Kind.OTHER) return;
+        if (was != now) {
+            throw new IllegalArgumentException(key + ": " + switch (was) {
+                case STRING -> "Write a quoted string";
+                case BOOLEAN -> "Write true or false";
+                case INTEGER -> "Write a whole number";
+                case FLOAT -> "Write a number with a decimal point, such as 2.0";
+                case LIST -> "Write a TOML array, such as [\"a\", \"b\"]";
+                case OTHER -> "Write the value as before";
+            });
+        }
+        Object value;
+        try {
+            value = ConfigValues.value(literal);
+        } catch (IllegalArgumentException notAValue) {
+            throw new IllegalArgumentException(key + ": " + notAValue.getMessage(), notAValue);
+        }
+        try {
+            // The same checks as typing the value into the table.
+            if (now != Kind.LIST) literal(before, setting, PackCatalog.ConfigSetting.display(value));
+        } catch (IllegalArgumentException refused) {
+            throw new IllegalArgumentException(key + ": " + refused.getMessage(), refused);
+        }
     }
 
     /**

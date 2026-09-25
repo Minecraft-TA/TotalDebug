@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** Where a configuration's values are read from and written to in the game directory. */
 public final class ConfigSources {
@@ -23,7 +24,41 @@ public final class ConfigSources {
         }
     }
 
+    /** A mod's configuration file and the mod it belongs to. */
+    public record Owner(PackCatalog.Mod mod, PackCatalog.ConfigFile file) {
+    }
+
     private ConfigSources() {
+    }
+
+    /**
+     * The mod configuration file {@code path} holds: the loaded file itself, or for a file of the same name a world's
+     * server configuration or the defaults for new worlds.
+     */
+    public static Optional<Owner> owner(CatalogIndex index, Path workspace, Path path) {
+        Path file = path.toAbsolutePath().normalize();
+        for (PackCatalog.Mod mod : index.mods()) {
+            for (PackCatalog.ConfigFile config : mod.configs()) {
+                if (config.path() != null && config.path().toAbsolutePath().normalize().equals(file)) {
+                    return Optional.of(new Owner(mod, config));
+                }
+                if (workspace != null && copyOf(workspace.toAbsolutePath().normalize(), config, file)) {
+                    return Optional.of(new Owner(mod, config));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Whether {@code file} is {@code config} in the defaults for new worlds or, for a server configuration, in a world. */
+    private static boolean copyOf(Path workspace, PackCatalog.ConfigFile config, Path file) {
+        if (file.equals(workspace.resolve("defaultconfigs").resolve(config.fileName()).normalize())) return true;
+        if (config.type() != PackCatalog.ConfigType.SERVER) return false;
+        Path saves = workspace.resolve("saves");
+        for (Path world = file.getParent(); world != null; world = world.getParent()) {
+            if (saves.equals(world.getParent())) return file.equals(world.resolve("serverconfig").resolve(config.fileName()).normalize());
+        }
+        return false;
     }
 
     /**

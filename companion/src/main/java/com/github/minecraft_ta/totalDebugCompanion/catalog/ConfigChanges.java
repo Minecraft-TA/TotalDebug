@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -20,9 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * When configuration edits take effect in the game, and the edits the running game has not applied yet. NeoForge
  * reloads a changed file of a running game unless its config watcher is off; a setting that needs the world rejoined
- * waits until the world it was edited in closes, and one that needs a restart until the game disconnects. It also
- * keeps the value each setting had before it was first edited while Companion runs, so edits stand apart from values
- * that already differed.
+ * waits until the world it was edited in closes, and one that needs a restart until the game disconnects. Every edit
+ * is also entered in the instance's {@link ChangeRecord}, which keeps the value a setting had before Companion first
+ * changed it.
  */
 public final class ConfigChanges {
     /** When an edit takes effect. */
@@ -61,14 +62,18 @@ public final class ConfigChanges {
     }
 
     private final Path workspace;
+    private final ChangeRecord record;
     private final Map<Key, Pending> pending = new ConcurrentHashMap<>();
-    /** The value each edited setting had before its first edit. */
-    private final Map<Key, String> originals = new ConcurrentHashMap<>();
     private volatile boolean gameRunning;
 
-    /** {@code workspace} is the game directory. */
-    public ConfigChanges(Path workspace) {
+    /** {@code workspace} is the game directory, and {@code record} keeps every edit. */
+    public ConfigChanges(Path workspace, ChangeRecord record) {
         this.workspace = workspace;
+        this.record = Objects.requireNonNull(record, "record");
+    }
+
+    public ChangeRecord record() {
+        return this.record;
     }
 
     public void gameConnected() {
@@ -81,10 +86,6 @@ public final class ConfigChanges {
         this.pending.clear();
     }
 
-    public boolean gameRunning() {
-        return this.gameRunning;
-    }
-
     /** Where a configuration file is: a world's server configuration, the defaults for new worlds, or the config folder. */
     public Location location(Path file) {
         if (this.workspace == null) return Location.CONFIG;
@@ -94,16 +95,15 @@ public final class ConfigChanges {
     }
 
     /**
-     * Records that {@code setting} of {@code file} changed from {@code previous} to {@code written} and tells when the
-     * game uses the new value. Blocking; it looks at the game directory.
+     * Records that {@code target} changed from {@code previous} to {@code written} and tells when the game uses the new
+     * value. Blocking; it looks at the game directory.
      */
-    public Effect edited(Path file, PackCatalog.ConfigType type, String setting, PackCatalog.Restart restart,
+    public Effect edited(ChangeRecord.Setting target, PackCatalog.ConfigType type, PackCatalog.Restart restart,
                          String previous, String written) {
-        Key key = new Key(file.toAbsolutePath().normalize(), setting);
-        String original = this.originals.computeIfAbsent(key, ignored -> previous);
-        if (original.equals(written)) this.originals.remove(key);
+        this.record.changed(target, previous, written);
+        Key key = new Key(target.file(), target.setting());
         Pending earlier = this.pending.get(key);
-        Location location = location(file);
+        Location location = location(target.file());
         Path world = location == Location.WORLD ? world(key.file()) : null;
         Effect effect = effect(type, restart, location, world);
         if (!effect.pending()) {
@@ -136,9 +136,9 @@ public final class ConfigChanges {
         return entry == null ? null : entry.effect();
     }
 
-    /** The value a setting had before it was first edited while Companion runs, or null when it was not edited. */
+    /** The value a setting had before Companion first changed it, or null when Companion did not change it. */
     public String original(Path file, String setting) {
-        return this.originals.get(new Key(file.toAbsolutePath().normalize(), setting));
+        return this.record.original(file, setting);
     }
 
     /** Drops rejoin edits whose world has closed since. Blocking; it looks at the worlds' locks. */

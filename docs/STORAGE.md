@@ -11,6 +11,7 @@ total-debug/
   scripts/
     Example.tdscript
   state.json
+  changes.json
   cache/
     runtime/
       .lock
@@ -34,6 +35,7 @@ Files are created when needed; an empty instance does not need every directory.
 
 - `scripts` contains authored methodless Java scripts. It is created when the first script is saved, not when a project is opened. Opening and closing with default state does not create `state.json`.
 - `state.json` holds watches, breakpoint definitions, mute/exception choices and the last 50 distinct evaluator inputs with imports and execution side. The [project scope](../companion/README.md#ownership) owns instance state and flushes it before retiring the project. One instance-state owner writes the whole file. Breakpoint resolution is partitioned by runtime signature.
+- `changes.json` records what Companion changed in the pack and is still in effect: for each configuration setting, the mod, file, value before the first change, value written last and when. It is user data, written by one owner like `state.json`, and only once something changed. See [the Modpack tree](MODPACK.md#the-change-record).
 - The one replaceable inventory describes the Java runtime, production mode, ordered physical class sources, logical origins and module ownership. Minecraft owns this file; Companion never writes a local scan into it. Game and Companion use the same Java record, JSON format and validator.
 - `catalog.json` is the pack catalog: installed mods with their versions, dependencies, configuration files and original mod files, plus every registered block, item and entity type. Minecraft owns it like the inventory: it captures the catalog on the client thread after resources load, writes it once per inventory id and language, and announces it to Companion. Companion reads the saved file only when its inventory id matches `inventory.json`.
 - `inspection-previews` holds immutable archives of the winning models, textures and atlases that Companion uses to draw item icons. The game keeps the newest archive; Companion restores it when a project opens, so icons remain available offline.

@@ -1,6 +1,6 @@
 # The Modpack tree
 
-Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods and Configuration. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
+Status: design recorded 2026-09-25. Implemented: the Modpack root with Mods, Configuration and Changes; the change record holds configuration settings. Every other row below arrives with the feature that gives it content; the tree never shows a row with nothing behind it.
 
 ## Purpose
 
@@ -47,7 +47,7 @@ Changes becomes the one record of what Companion wrote, replacing per-view undo 
 
 - **Entry:** what changed (a setting, a resource, a texture), the level it was written at (the running game's memory, the managed pack, a mod JAR), when, the value it replaced and the value written.
 - **Revert:** writes the replaced value back at the same level. A JAR entry reverts from its backup.
-- **Storage:** kept per instance in Companion's instance state, so it survives restarts of Companion and the game.
+- **Storage:** kept per instance in `total-debug/changes.json`, so it survives restarts of Companion and the game.
 - **Views read from it:** the configuration table marks values edited by the user from this record, and the game's pending restarts are derived from it.
 
 Editing a configuration file as text records one entry per setting it changed.

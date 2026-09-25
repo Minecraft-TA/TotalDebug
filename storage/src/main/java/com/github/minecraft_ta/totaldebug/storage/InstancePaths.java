@@ -35,6 +35,7 @@ public record InstancePaths(Path home) {
 
     public Path scripts() { return home.resolve("scripts"); }
     public Path state() { return home.resolve("state.json"); }
+    public Path changes() { return home.resolve("changes.json"); }
     public Path cache() { return home.resolve("cache"); }
     public Path runtime() { return cache().resolve("runtime"); }
     public Path inventory() { return runtime().resolve("inventory.json"); }

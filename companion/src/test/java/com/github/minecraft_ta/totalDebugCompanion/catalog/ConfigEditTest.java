@@ -125,6 +125,40 @@ class ConfigEditTest {
         assertEquals(FILE, Files.readString(file));
     }
 
+    @Test
+    void anEditedTextIsCheckedLikeNeoForgeChecksTheFile() {
+        List<PackCatalog.ConfigSetting> settings = List.of(
+                new PackCatalog.ConfigSetting("widgets.speed", "", "4", "1 ~ 16", List.of(), PackCatalog.Restart.NONE),
+                new PackCatalog.ConfigSetting("widgets.ratio", "", "0.5", "0.0 ~ 1.0", List.of(), PackCatalog.Restart.NONE),
+                new PackCatalog.ConfigSetting("widgets.mode", "", "FAST", "", List.of("FAST", "SLOW"), PackCatalog.Restart.WORLD));
+        String saved = """
+                [widgets]
+                \t#How fast
+                \tspeed = 9
+                \tratio = 0.5
+                \tmode = "SLOW"
+                """;
+
+        ConfigEdit.checkText(saved, saved.replace("speed = 9", "speed = 12").replace("#How fast", "#Spins"), settings);
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("\"SLOW\"", "\"SLOW"), settings)).getMessage().contains("line 5"));
+        assertEquals("widgets.speed: Accepts 1 to 16", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("speed = 9", "speed = 20"), settings)).getMessage());
+        assertEquals("widgets.ratio: Write a number with a decimal point, such as 2.0", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("ratio = 0.5", "ratio = 1"), settings)).getMessage());
+        assertEquals("widgets.mode: Accepts FAST, SLOW", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("\"SLOW\"", "\"MEDIUM\""), settings)).getMessage());
+        assertEquals("widgets.speed is missing; NeoForge would write its default back", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("\tspeed = 9\n", ""), settings)).getMessage());
+        assertEquals("widgets.extra is not a setting of this file; NeoForge would remove it", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved + "\textra = 1\n", settings)).getMessage());
+
+        List<ConfigEdit.TextChange> changes = ConfigEdit.changes(saved,
+                saved.replace("speed = 9", "speed = 12").replace("\"SLOW\"", "'SLOW'"), settings);
+        assertEquals(1, changes.size(), "the same string in other quotes is the same value");
+        assertEquals(new ConfigEdit.TextChange(settings.getFirst(), "9", "12"), changes.getFirst());
+    }
+
     private static PackCatalog.ConfigSetting setting(String range, List<String> allowed) {
         return new PackCatalog.ConfigSetting("widgets.value", "", "", range, allowed, PackCatalog.Restart.NONE);
     }

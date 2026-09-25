@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.Test;
 import java.nio.file.Path;
@@ -11,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectScopeTest {
     private ProjectScope scope() {
-        return new ProjectScope(new Object(), new CompanionProfile("test", Path.of("data"), Path.of("game")), InstanceState.inMemory());
+        return new ProjectScope(new Object(), new CompanionProfile("test", Path.of("data"), Path.of("game")), InstanceState.inMemory(), ChangeRecord.inMemory());
     }
 
     @Test void vetoReopensAdmissionButRetirementIsTerminal() throws Exception {

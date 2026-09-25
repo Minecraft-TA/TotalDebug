@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
+import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
@@ -122,6 +125,7 @@ public final class NavigationService {
                     .anyMatch(source -> source.path().equals(entry.archive().toAbsolutePath().normalize()));
             case NavigationTarget.ModPage ignored -> true;
             case NavigationTarget.PackConfiguration ignored -> true;
+            case NavigationTarget.Changes ignored -> true;
             case null, default -> false;
         };
         if (!available) return null;
@@ -136,6 +140,7 @@ public final class NavigationService {
                     case NavigationTarget.RuntimeClass type -> revealRuntimePath(type.binaryName(), type.binaryName().replace('.', '/') + ".class");
                     case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
+                    case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -295,6 +300,11 @@ public final class NavigationService {
                         view -> true,
                         () -> new PackConfigurationView(editors.get())
                 ).thenAccept(PackConfigurationView::refresh), activation);
+                case NavigationTarget.Changes ignored -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        ChangesView.class,
+                        view -> true,
+                        () -> new ChangesView(editors.get())
+                ).thenAccept(ChangesView::refresh), activation);
                 case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         DefinitionView.class,
                         view -> view.subject().equals(definition.subject()),
@@ -595,6 +605,20 @@ public final class NavigationService {
                 view.navigateToOffset(target.offset());
             }, SwingUtilities::invokeLater), activation);
         }
+        // A mod's configuration file is edited, with the checks its Configuration tab applies.
+        ProjectScope project = requireProject();
+        var owner = project.catalog().index().flatMap(index ->
+                ConfigSources.owner(index, project.profile().workspaceDirectory(), path));
+        if (owner.isPresent()) {
+            return dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                    ConfigFileView.class,
+                    view -> view.getPath().equals(path),
+                    () -> new ConfigFileView(editors.get(), path, owner.get())
+            ).thenAcceptAsync(view -> {
+                if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
+                if (target.offset() > 0) view.navigateToOffset(target.offset());
+            }, SwingUtilities::invokeLater), activation);
+        }
         return openResource(new LocalFileSource(path), activation);
     }
 
@@ -736,6 +760,7 @@ public final class NavigationService {
             case NavigationTarget.Inspection inspection -> inspection.subject().subject();
             case NavigationTarget.ModPage page -> "mod " + page.modId();
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
+            case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.Definition definition -> definition.subject().format();
             case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };

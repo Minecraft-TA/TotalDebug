@@ -12,6 +12,7 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.LocalModSources;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import java.io.IOException;
@@ -41,6 +42,9 @@ public final class ProjectScope implements AutoCloseable {
     public ScriptFiles scriptFiles() { return scriptFiles; }
     private final PackCatalogService catalog;
     public PackCatalogService catalog() { return catalog; }
+    private final ChangeRecord changes;
+    /** What Companion changed in the pack, kept with the instance. */
+    public ChangeRecord changes() { return changes; }
     private final ConfigChanges configChanges;
     public ConfigChanges configChanges() { return configChanges; }
     private final List<PendingNavigation> pending = new ArrayList<>();
@@ -49,13 +53,14 @@ public final class ProjectScope implements AutoCloseable {
     private volatile RuntimeSourceCatalog localSources = RuntimeSourceCatalog.empty();
     private boolean closed;
 
-    public ProjectScope(Object lock, CompanionProfile profile, InstanceState state) {
+    public ProjectScope(Object lock, CompanionProfile profile, InstanceState state, ChangeRecord changes) {
         this.lock = Objects.requireNonNull(lock);
         this.profile = Objects.requireNonNull(profile);
         this.state = Objects.requireNonNull(state);
         this.scriptFiles = new ScriptFiles(paths().scripts());
         this.catalog = new PackCatalogService(paths());
-        this.configChanges = new ConfigChanges(profile.workspaceDirectory());
+        this.changes = Objects.requireNonNull(changes);
+        this.configChanges = new ConfigChanges(profile.workspaceDirectory(), changes);
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {
@@ -64,7 +69,12 @@ public final class ProjectScope implements AutoCloseable {
         catch (IOException ignored) {
             // The loader reports local discovery failures after trying the saved runtime.
         }
-        var scope = new ProjectScope(lock, profile, InstanceState.open(new InstancePaths(profile.dataDirectory())));
+        var paths = new InstancePaths(profile.dataDirectory());
+        var state = InstanceState.open(paths);
+        ChangeRecord changes;
+        try { changes = ChangeRecord.open(paths); }
+        catch (IOException failure) { state.close(); throw failure; }
+        var scope = new ProjectScope(lock, profile, state, changes);
         scope.localSources = sources;
         return scope;
     }
@@ -133,7 +143,7 @@ public final class ProjectScope implements AutoCloseable {
             closed = true;
             pending.clear();
         }
-        try { closeRuntime(); } finally { state.close(); }
+        try { closeRuntime(); } finally { try { state.close(); } finally { changes.close(); } }
     }
 
     public String loadBreakpointScript(String name) {

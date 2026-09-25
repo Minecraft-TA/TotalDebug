@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.script.ExecutionRuns;
 import org.junit.jupiter.api.Test;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -150,7 +151,7 @@ class CompanionMcpServerTest {
                 this.temporaryDirectory.resolve("data"),
                 jobs,
                 0, new DebuggerMcpService(() -> null, name -> null),
-                () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory()), new TestProjectControls()
+                () -> new ProjectScope(new Object(), new CompanionProfile("test", temporaryDirectory, temporaryDirectory), InstanceState.inMemory(), ChangeRecord.inMemory()), new TestProjectControls()
         );
         try (jobs; server; HttpClient client = HttpClient.newHttpClient()) {
             server.start();

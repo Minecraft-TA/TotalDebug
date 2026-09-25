@@ -31,7 +31,7 @@ class ModTreeItemsTest {
     void capturedModsGroupTheirContentWithoutListingIt() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
         var snapshot = new ModTreeItems.Snapshot(
-                new PackCatalogService.Ready(new CatalogIndex(CatalogFixtures.catalog(jar))), sources(jar));
+                new PackCatalogService.Ready(new CatalogIndex(CatalogFixtures.catalog(jar))), sources(jar), 0);
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
@@ -39,6 +39,9 @@ class ModTreeItemsTest {
         assertEquals(List.of(ModTreeItems.MODS, ModTreeItems.CONFIGURATION), pack.stream().map(TreeItem::getName).toList());
         assertEquals("2", pack.getFirst().getPresentation().secondary());
         assertEquals(new NavigationTarget.PackConfiguration(), ((NavigableTreeItem) pack.get(1)).navigationTarget());
+        List<TreeItem> changed = ModTreeItems.packChildren(new ModTreeItems.Snapshot(snapshot.state(), snapshot.sources(), 3));
+        assertEquals(ModTreeItems.CHANGES, changed.getLast().getName(), "Changes appears once Companion changed something");
+        assertEquals("3", changed.getLast().getPresentation().secondary());
         assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
         TreeItem testmod = mods.get(1);
         assertTrue(testmod.isActivatable());
@@ -63,7 +66,7 @@ class ModTreeItemsTest {
     @Test
     void beforeTheFirstCaptureModsComeFromTheRuntimeWithTheirResources() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
-        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar));
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0);
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
@@ -87,7 +90,7 @@ class ModTreeItemsTest {
             zip.putNextEntry(new ZipEntry("icon.png"));
             zip.closeEntry();
         }
-        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar));
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar), 0);
 
         DirectoryTreeItem mod = (DirectoryTreeItem) ModTreeItems.children(snapshot).getFirst();
 

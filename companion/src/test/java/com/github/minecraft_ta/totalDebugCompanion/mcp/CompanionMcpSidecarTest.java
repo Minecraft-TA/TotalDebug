@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -194,7 +195,7 @@ class CompanionMcpSidecarTest {
                 Clock.systemUTC()
         );
         jobServices.add(jobs);
-        var scope = new ProjectScope(new Object(), new CompanionProfile(instance, temporaryDirectory, temporaryDirectory), InstanceState.inMemory());
+        var scope = new ProjectScope(new Object(), new CompanionProfile(instance, temporaryDirectory, temporaryDirectory), InstanceState.inMemory(), ChangeRecord.inMemory());
         return new CompanionMcpServer(
                 this.temporaryDirectory.resolve(instance).resolve("data"),
                 jobs,

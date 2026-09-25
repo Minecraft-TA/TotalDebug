@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totalDebugCompanion.script;
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionSession;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -20,7 +21,7 @@ class ScriptExecutionServiceTest {
 
     @Test
     void connectedWithoutRuntimeReportsCompilationReadinessThroughTheFailureHandler() throws Exception {
-        var project = new ProjectScope(new Object(), new CompanionProfile("test", directory, directory), InstanceState.inMemory());
+        var project = new ProjectScope(new Object(), new CompanionProfile("test", directory, directory), InstanceState.inMemory(), ChangeRecord.inMemory());
         try (var session = new CompanionSession("test-token-1234567890abcdef");
              var compiler = new ScriptCompilationService(message -> fail("Must not send local code"), message -> false)) {
             var scripts = new ScriptExecutionService(session, compiler, () -> true);

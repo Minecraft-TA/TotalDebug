@@ -11,7 +11,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ThinSplitPane;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ReadOnlyTextPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -58,13 +57,15 @@ import java.util.function.Consumer;
  * A mod's configuration files. A file shows its settings with the current value beside the default and what the
  * setting accepts, or its text. Values are read from the file whenever the tab is shown, so edits appear without a new
  * capture. Server configurations live in each world; the newest world's file is shown first. An edited value is
- * written to the file at once, where NeoForge reloads it in a running game; Ctrl+Z undoes it.
+ * written to the file at once, where NeoForge reloads it in a running game; Ctrl+Z undoes it. The file's text is edited
+ * too and saved with Ctrl+S, after the same checks; settings wait while the text has unsaved changes.
  */
 final class ConfigPanel extends JPanel {
     private static final String SETTINGS_CARD = "settings";
     private static final String TEXT_CARD = "text";
     private static final String MESSAGE_CARD = "message";
 
+    private final String modId;
     private final Path workspace;
     private final ConfigWriter writer;
     private final Consumer<NavigationTarget> navigator;
@@ -91,17 +92,22 @@ final class ConfigPanel extends JPanel {
     private final JButton open = new JButton("Open", Icons.JUMP_TO_SOURCE);
     private final JLabel notice = new JLabel();
     private final ConfigSettingsTable table = new ConfigSettingsTable();
-    private final ReadOnlyTextPanel text = new ReadOnlyTextPanel(FileTypeResolver.SYNTAX_STYLE_TOML);
+    private final ConfigTextEditor textEditor;
     private final JLabel message = new JLabel();
     private final JPanel cards = new JPanel(new CardLayout());
     private long generation;
     private long sourceGeneration;
     private boolean updating;
+    /** The world whose file is shown, restored when leaving unsaved text is cancelled. */
+    private Object shownSource;
 
-    ConfigPanel(Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
+    /** {@code modId} is the mod whose files are shown. */
+    ConfigPanel(String modId, Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
+        this.modId = Objects.requireNonNull(modId, "modId");
         this.workspace = workspace;
         this.writer = new ConfigWriter(changes, this::setStatus, this::load);
+        this.textEditor = new ConfigTextEditor(this.writer, this::setStatus, this::load);
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         configureFiles();
         this.content.add(toolbar(), BorderLayout.NORTH);
@@ -110,7 +116,7 @@ final class ConfigPanel extends JPanel {
         tableScroll.setBorder(BorderFactory.createEmptyBorder());
         settings.add(tableScroll, BorderLayout.CENTER);
         this.cards.add(settings, SETTINGS_CARD);
-        this.cards.add(this.text, TEXT_CARD);
+        this.cards.add(this.textEditor.component(), TEXT_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
         this.message.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
         this.cards.add(this.message, MESSAGE_CARD);
@@ -171,6 +177,10 @@ final class ConfigPanel extends JPanel {
                 this.fileList.setSelectedIndex(next);
                 return;
             }
+            if (index != this.lastFileIndex && !confirmLeave()) {
+                selectQuietly(this.lastFileIndex);
+                return;
+            }
             this.lastFileIndex = index;
             this.status = "";
             showFile();
@@ -209,7 +219,8 @@ final class ConfigPanel extends JPanel {
         this.modifiedOnly.addActionListener(event -> applyFilter());
         this.modifiedOnly.setToolTipText("Only settings that differ from their default");
         this.settingsMode.setToolTipText("Settings with their values, defaults and accepted values");
-        this.textMode.setToolTipText("The file as it is saved");
+        this.textMode.setToolTipText("The file's text; Ctrl+S saves an edit");
+
         ButtonGroup modes = new ButtonGroup();
         modes.add(this.settingsMode);
         modes.add(this.textMode);
@@ -220,7 +231,18 @@ final class ConfigPanel extends JPanel {
         }
         this.source.setToolTipText("World whose server configuration is shown");
         this.source.addActionListener(event -> {
-            if (!this.updating) load();
+            if (this.updating) return;
+            if (!this.textEditor.modified() || confirmLeave()) {
+                this.shownSource = this.source.getSelectedItem();
+                load();
+            } else {
+                this.updating = true;
+                try {
+                    this.source.setSelectedItem(this.shownSource);
+                } finally {
+                    this.updating = false;
+                }
+            }
         });
         this.open.setToolTipText("Open the file in an editor tab");
         this.open.addActionListener(event -> {
@@ -235,6 +257,8 @@ final class ConfigPanel extends JPanel {
         right.add(this.source);
         right.add(this.settingsMode);
         right.add(this.textMode);
+        right.add(this.textEditor.saveButton());
+        right.add(this.textEditor.discardButton());
         right.add(this.open);
         JPanel bar = new JPanel(new BorderLayout(12, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
@@ -326,6 +350,7 @@ final class ConfigPanel extends JPanel {
             this.sourceModel.removeAllElements();
             found.forEach(this.sourceModel::addElement);
             this.source.setVisible(file != null && file.type() == PackCatalog.ConfigType.SERVER && !found.isEmpty());
+            this.shownSource = this.source.getSelectedItem();
         } finally {
             this.updating = false;
         }
@@ -371,8 +396,12 @@ final class ConfigPanel extends JPanel {
     private void show(PackCatalog.ConfigFile file, ConfigValues values, String fileText, String problem) {
         this.problem = problem;
         showNotice();
-        this.text.setContent(fileText);
-        this.textMode.setEnabled(!fileText.isEmpty());
+        Path path = selectedPath();
+        this.textEditor.setDocument(path == null ? null : new ConfigTextEditor.Document(
+                new ConfigWriter.FileTarget(this.modId, file.fileName(), path, file.type()), file.settings()));
+        // Unsaved text stays; saving compares it with the file and asks when the file changed meanwhile.
+        this.textEditor.load(fileText);
+        this.textMode.setEnabled(!fileText.isEmpty() || this.textEditor.modified());
         boolean empty = file.settings().isEmpty() && (values == null || values.settings().isEmpty());
         this.message.setText(empty && problem.isEmpty() ? "This file has no settings." : "");
         this.table.show(ConfigSettingsTable.rows(file, values), !file.settings().isEmpty(),
@@ -396,7 +425,29 @@ final class ConfigPanel extends JPanel {
     private void edit(ConfigSettingsTable.Row row, String literal) {
         Path path = selectedPath();
         PackCatalog.ConfigFile file = selectedFile();
-        if (path != null && file != null) this.writer.edit(new ConfigWriter.Target(path, file.type(), row.setting()), row.literal(), literal);
+        if (this.textEditor.modified()) {
+            setStatus("Save or discard the changes to the file's text first");
+            return;
+        }
+        if (path != null && file != null) {
+            this.writer.edit(new ConfigWriter.Target(this.modId, file.fileName(), path, file.type(), row.setting()),
+                    row.literal(), literal);
+        }
+    }
+
+    /** Whether the shown file can be left: its text has no unsaved changes, or they were discarded after asking. */
+    boolean confirmLeave() {
+        return this.textEditor.confirmLeave();
+    }
+
+    private void selectQuietly(int index) {
+        this.updating = true;
+        try {
+            if (index >= 0) this.fileList.setSelectedIndex(index);
+            else this.fileList.clearSelection();
+        } finally {
+            this.updating = false;
+        }
     }
 
     private void applyFilter() {

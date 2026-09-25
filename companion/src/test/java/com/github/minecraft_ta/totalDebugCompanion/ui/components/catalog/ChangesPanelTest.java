@@ -8,12 +8,9 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.swing.JCheckBox;
 import javax.swing.SwingUtilities;
-
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.event.MouseEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,61 +20,46 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class PackConfigurationPanelTest {
+class ChangesPanelTest {
     @TempDir Path directory;
 
     @Test
-    void listsModifiedSettingsUnderTheirModFileAndSectionThenAll() throws Exception {
+    void listsRecordedChangesUntilTheFileHoldsTheOriginalAgain() throws Exception {
         Path jar = CatalogFixtures.modJar(this.directory);
         Path file = jar.resolveSibling("testmod-common.toml");
         Files.writeString(file, """
                 [widgets]
-                \tspeed = 9
+                \tspeed = 12
                 \tmode = "FAST"
                 """);
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
         CatalogFixtures.catalog(jar).write(paths.catalog());
         PackCatalogService catalog = new PackCatalogService(paths);
         catalog.accept(CatalogFixtures.INVENTORY, paths.catalog(), Runnable::run);
-        PackConfigurationPanel[] panel = new PackConfigurationPanel[1];
-        SwingUtilities.invokeAndWait(() -> panel[0] = new PackConfigurationPanel(catalog, this.directory,
-                new ConfigChanges(this.directory, ChangeRecord.inMemory()), target -> { }));
+        ChangeRecord record = ChangeRecord.inMemory();
+        record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
+        ChangesPanel[] panel = new ChangesPanel[1];
+        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog,
+                new ConfigChanges(this.directory, record), target -> { }));
         ConfigSettingsTable table = table(panel[0]);
         try {
-            awaitOnSwing(() -> table.getRowCount() == 4);
+            awaitOnSwing(() -> table.getRowCount() == 3);
             SwingUtilities.invokeAndWait(() -> {
-                assertEquals(List.of("Test Mod", "testmod-common.toml", "widgets", "speed"),
-                        List.of(table.row(0).name(), table.row(1).name(), table.row(2).name(), table.row(3).name()));
-                assertEquals("9", table.row(3).value());
-                assertTrue(table.getToolTipText(new MouseEvent(table, 0, 0, 0, 5,
-                        table.getCellRect(1, 0, true).y + 2, 0, false)).contains("testmod-common.toml"));
-                table.reset(table.row(3));
+                assertEquals(List.of("Test Mod", "testmod-common.toml", "widgets.speed"),
+                        List.of(table.row(0).name(), table.row(1).name(), table.row(2).name()));
+                assertEquals("12", table.row(2).value());
+                String tooltip = ConfigSettingsTable.tooltip(table.row(2), null, "9");
+                assertTrue(tooltip.contains("Before your edit"), tooltip);
             });
-            // The reset setting no longer differs, so nothing is left to list.
+
+            // Written back outside Companion: the change is over.
+            Files.writeString(file, Files.readString(file).replace("speed = 12", "speed = 9"));
+            SwingUtilities.invokeAndWait(panel[0]::load);
             awaitOnSwing(() -> table.getRowCount() == 0);
-            assertTrue(Files.readString(file).contains("\tspeed = 4\n"));
-
-            SwingUtilities.invokeAndWait(() -> table.getActionMap().get("undoConfigEdit").actionPerformed(null));
-            awaitOnSwing(() -> table.getRowCount() == 4);
-            assertTrue(Files.readString(file).contains("\tspeed = 9\n"));
-
-            // Without the Modified filter every setting is listed.
-            SwingUtilities.invokeAndWait(() -> component(panel[0], JCheckBox.class).doClick());
-            awaitOnSwing(() -> table.getRowCount() == 5 && "mode".equals(table.row(4).name()));
+            assertEquals(0, record.size());
         } finally {
             SwingUtilities.invokeAndWait(panel[0]::dispose);
         }
-    }
-
-    private static <T extends Component> T component(Container root, Class<T> type) {
-        for (Component child : root.getComponents()) {
-            if (type.isInstance(child)) return type.cast(child);
-            if (child instanceof Container container) {
-                T found = component(container, type);
-                if (found != null) return found;
-            }
-        }
-        return null;
     }
 
     private static ConfigSettingsTable table(Container root) {

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -20,7 +21,7 @@ class ConfigChangesTest {
 
     @Test
     void aClosedGameUsesEditsWhenItStarts() {
-        ConfigChanges changes = new ConfigChanges(this.directory);
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
 
         assertEquals(ConfigChanges.Effect.GAME_STARTS, edit(changes, config(), PackCatalog.Restart.GAME, "1", "2"));
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, world("World").resolve("serverconfig/testmod-server.toml"),
@@ -32,7 +33,7 @@ class ConfigChangesTest {
 
     @Test
     void aRunningGameReloadsFilesAndWaitsForARestartWhereTheSettingSaysSo() {
-        ConfigChanges changes = new ConfigChanges(this.directory);
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
         changes.gameConnected();
 
         assertEquals(ConfigChanges.Effect.NOW, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
@@ -57,7 +58,7 @@ class ConfigChangesTest {
     void aDisabledConfigWatcherMeansEveryEditWaitsForARestart() throws Exception {
         Files.createDirectories(this.directory.resolve("config"));
         Files.writeString(this.directory.resolve("config/fml.toml"), "disableConfigWatcher = true\n");
-        ConfigChanges changes = new ConfigChanges(this.directory);
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
         changes.gameConnected();
 
         assertEquals(ConfigChanges.Effect.RESTART, edit(changes, config(), PackCatalog.Restart.NONE, "1", "2"));
@@ -67,7 +68,7 @@ class ConfigChangesTest {
     void aSettingThatNeedsARejoinWaitsUntilTheOpenWorldCloses() throws Exception {
         Path world = world("World");
         Path file = world.resolve("serverconfig/testmod-server.toml");
-        ConfigChanges changes = new ConfigChanges(this.directory);
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
         changes.gameConnected();
         assertEquals(ConfigChanges.Location.WORLD, changes.location(file));
         assertEquals(ConfigChanges.Effect.WORLD_OPENS, edit(changes, file, PackCatalog.Restart.WORLD, "1", "2"));
@@ -103,6 +104,7 @@ class ConfigChangesTest {
     private static ConfigChanges.Effect edit(ConfigChanges changes, Path file, PackCatalog.Restart restart, String before,
                                              String after) {
         PackCatalog.ConfigType type = file.toString().contains("server") ? PackCatalog.ConfigType.SERVER : PackCatalog.ConfigType.COMMON;
-        return changes.edited(file, type, "speed", restart, before, after);
+        return changes.edited(new ChangeRecord.Setting("testmod", file.getFileName().toString(), file, "speed"), type,
+                restart, before, after);
     }
 }

@@ -229,7 +229,8 @@ public class FileTreeView extends JScrollPane {
             scripts.setIcon(FileTreeIcons.forRootDirectory("scripts"));
             rootItems.add(scripts);
         }
-        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources()));
+        var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
+                scope.changes().size()));
         if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent()) {
             rootItems.add(mods);
         }
@@ -324,6 +325,11 @@ public class FileTreeView extends JScrollPane {
     /** Selects the Configuration row of the Modpack tree. */
     public CompletableFuture<Boolean> revealPackConfiguration() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONFIGURATION));
+    }
+
+    /** Selects the Changes row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealChanges() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CHANGES));
     }
 
     /** Selects a runtime module's node in the Runtime tree. */

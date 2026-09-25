@@ -44,9 +44,6 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
-import java.awt.Image;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
@@ -110,7 +107,7 @@ public final class ModPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
-        this.configs = new ConfigPanel(workspace, changes, navigator);
+        this.configs = new ConfigPanel(modId, workspace, changes, navigator);
 
         this.header.addControl(this.browseCode);
         this.browseCode.setToolTipText("Show the mod's classes in the Project tree");
@@ -448,6 +445,11 @@ public final class ModPanel extends JPanel {
     /** The listing of this page's resources that runs or ran last; mod files stay open while it runs. */
     CompletableFuture<?> resourceLoad() {
         return this.resourceLoad;
+    }
+
+    /** Whether the page can close: no configuration text has unsaved changes, or they were discarded after asking. */
+    public boolean canClose() {
+        return this.configs.confirmLeave();
     }
 
     public void dispose() {

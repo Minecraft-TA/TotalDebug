@@ -733,6 +733,9 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         scope.catalog().addListener(() -> {
             if (currentScope() == scope) onUi(CompanionUi::catalogChanged);
         });
+        scope.changes().addListener(() -> {
+            if (currentScope() == scope) onUi(CompanionUi::changesRecorded);
+        });
         itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));
         // Independent tasks: unreadable icon archives must not keep the catalog from loading.
         itemIcons.restore(scope.paths().previews());
@@ -1114,7 +1117,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (view != null) {
             if (!SwingUtilities.isEventDispatchThread()) { SwingUtilities.invokeLater(this::exit); return; }
             if (!view.canExit()) return;
-            try { GlobalConfig.getInstance().saveNow(); instanceState().saveNow(); }
+            try {
+                GlobalConfig.getInstance().saveNow();
+                instanceState().saveNow();
+                ProjectScope scope = current;
+                if (scope != null) scope.changes().saveNow();
+            }
             catch (IOException failure) { view.showError("Unable to save state", failure.getMessage()); return; }
         }
         exitRequested.countDown();

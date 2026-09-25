@@ -217,6 +217,14 @@ final class ConfigSettingsTable extends JTable {
             Action reset = ContextMenus.action("Reset to default", null, null, () -> reset(row));
             reset.setEnabled(this.model.isCellEditable(viewRow, 1) && row.modified());
             menu.add(reset);
+            String original = this.original.apply(row);
+            if (original != null) {
+                String before = literal(row.kind(), before(row));
+                Action revert = ContextMenus.action(before.length() <= 24 ? "Revert to " + before : "Revert", null, null,
+                        () -> this.edited.accept(row, original));
+                revert.setEnabled(this.model.isCellEditable(viewRow, 1));
+                menu.add(revert);
+            }
             menu.addSeparator();
             menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", row.value())));
         }

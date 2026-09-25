@@ -16,6 +16,8 @@ public interface CompanionUi {
     void runtimeChanged();
     /** The selected project's pack catalog changed state. */
     void catalogChanged();
+    /** Companion's record of its changes to the pack changed. */
+    void changesRecorded();
     void setGameStatus(ServiceStatus status);
     void setMcpStatus(ServiceStatus status);
     void setRuntimeIndexStatus(RuntimeIndexService.Status status);

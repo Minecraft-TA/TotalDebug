@@ -22,7 +22,6 @@ import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.event.HierarchyEvent;
@@ -191,7 +190,8 @@ public final class PackConfigurationPanel extends JPanel {
                             row.name(), row.comment(), row.setting(), row.value(), row.literal());
                     settings.add(listed);
                     if (row.setting() != null) {
-                        targets.put(listed.path(), new ConfigWriter.Target(source.path(), file.type(), row.setting()));
+                        targets.put(listed.path(), new ConfigWriter.Target(mod.id(), file.fileName(), source.path(),
+                                file.type(), row.setting()));
                     }
                 }
                 if (!modShown) {
@@ -257,11 +257,6 @@ public final class PackConfigurationPanel extends JPanel {
                 : !this.filter.getText().isBlank() ? "No setting matches the filter."
                 : this.modifiedOnly.isSelected() ? "No setting differs from its default." : "No mod has settings.");
         ((CardLayout) this.cards.getLayout()).show(this.cards, empty ? MESSAGE_CARD : TABLE_CARD);
-    }
-
-    /** The field that filters the settings. */
-    public JTextComponent filterField() {
-        return this.filter;
     }
 
     public void dispose() {

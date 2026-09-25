@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
@@ -87,7 +88,7 @@ class CatalogPanelsTest {
         List<NavigationTarget> opened = new ArrayList<>();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory), opened::add);
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()), opened::add);
                 try {
                     assertEquals("Test Mod", panel.title());
                     assertTrue(labels(panel).contains("1.2.3"), labels(panel)::toString);
@@ -116,7 +117,7 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory), target -> { });
+                ModPanel panel = new ModPanel("testmod", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()), target -> { });
                 try {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
@@ -136,7 +137,7 @@ class CatalogPanelsTest {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory), target -> { });
+                ModPanel panel = new ModPanel("absent", catalog, RuntimeSourceCatalog::empty, icons, this.directory, new ConfigChanges(this.directory, ChangeRecord.inMemory()), target -> { });
                 try {
                     assertTrue(labels(panel).contains("absent is not an installed mod"), labels(panel)::toString);
                     assertEquals(1, panel.tabs().getTabCount(), "Only the Overview has something to show");

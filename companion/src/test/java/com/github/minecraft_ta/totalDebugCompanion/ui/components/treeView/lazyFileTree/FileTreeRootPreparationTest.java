@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyF
 
 import com.github.minecraft_ta.totalDebugCompanion.project.ProjectScope;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionProfile;
+import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.FileTreeView;
 import org.junit.jupiter.api.io.TempDir;
@@ -107,7 +108,7 @@ class FileTreeRootPreparationTest {
     }
 
     private ProjectScope scope(String name) throws Exception {
-        return new ProjectScope(new Object(), CompanionProfile.forGame(Files.createDirectory(directory.resolve(name))), InstanceState.inMemory());
+        return new ProjectScope(new Object(), CompanionProfile.forGame(Files.createDirectory(directory.resolve(name))), InstanceState.inMemory(), ChangeRecord.inMemory());
     }
 
     private static final class HeldFactory extends FileTreeItemFactory {

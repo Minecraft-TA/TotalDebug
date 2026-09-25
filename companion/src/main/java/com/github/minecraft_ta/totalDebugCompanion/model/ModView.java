@@ -53,6 +53,11 @@ public final class ModView implements IEditorPanel {
     }
 
     @Override
+    public boolean canClose() {
+        return this.panel.canClose();
+    }
+
+    @Override
     public void dispose() {
         this.panel.dispose();
     }
