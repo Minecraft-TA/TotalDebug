@@ -108,7 +108,7 @@ class PackCatalogTest {
     void displaysDefaultsAndFileValuesAlike() {
         assertEquals("FAST", ConfigSetting.display("FAST"));
         assertEquals("GAME", ConfigSetting.display(Restart.GAME));
-        assertEquals("[a, 3, true]", ConfigSetting.display(List.of("a", 3, true)));
+        assertEquals("[\"a\", 3, true, \"GAME\"]", ConfigSetting.display(List.of("a", 3, true, Restart.GAME)));
         assertEquals("0.5", ConfigSetting.display(0.5));
         assertEquals("", ConfigSetting.display(null));
     }

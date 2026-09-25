@@ -187,6 +187,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                         if (executionRuns != null) executionRuns.disconnected(connection,
                                 closed || reconnect != null || current == null || current.phase() == ProjectScope.Phase.RETIRED);
                         scriptCompiler.runtimeDisconnected();
+                        if (current != null) current.configChanges().gameDisconnected();
                         if (reconnect != null)
                             updateGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for the selected Minecraft instance to connect."));
                         else if (launch != null)
@@ -560,6 +561,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         synchronized (lifecycleLock) {
             if (closed || switching || !session.isConnected() || reconnect != null && !reconnect.resetComplete) return;
             updateGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected and authenticated."));
+            if (current != null) current.configChanges().gameConnected();
             if (reconnect != null && reconnect.project == current) {
                 var completed = reconnect;
                 reconnect = null;

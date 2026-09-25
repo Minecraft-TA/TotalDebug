@@ -35,6 +35,7 @@ import java.util.function.Supplier;
 final class ModTreeItems {
     static final String ROOT = "mods";
     static final String OTHER_NAMESPACES = "other-namespaces";
+    static final String MODIFIED_SETTINGS = "modified-settings";
     private static final Set<String> PLATFORM = Set.of("minecraft", "neoforge");
 
     private ModTreeItems() {
@@ -79,6 +80,7 @@ final class ModTreeItems {
         List<TreeItem> children = new ArrayList<>();
         CatalogIndex index = snapshot.index();
         if (index != null) {
+            children.add(new ModifiedSettings());
             for (PackCatalog.Mod mod : index.mods()) {
                 ModSummary.resolve(mod.id(), index, snapshot.sources())
                         .ifPresent(summary -> children.add(new Mod(summary, index)));
@@ -214,6 +216,26 @@ final class ModTreeItems {
         @Override
         public NavigationTarget navigationTarget() {
             return new NavigationTarget.ModPage(this.modId, this.tab, "");
+        }
+    }
+
+    /** Opens the settings of every mod that differ from their default. */
+    static final class ModifiedSettings extends TreeItem implements NavigableTreeItem {
+        ModifiedSettings() {
+            super(MODIFIED_SETTINGS);
+            setPresentation(PrimarySecondaryText.primary("Modified settings"));
+            setIcon(Icons.CONFIG_FILE);
+            setSortPriority(-1);
+        }
+
+        @Override
+        public String getTooltip() {
+            return "Settings that differ from their default";
+        }
+
+        @Override
+        public NavigationTarget navigationTarget() {
+            return new NavigationTarget.ModifiedSettings();
         }
     }
 

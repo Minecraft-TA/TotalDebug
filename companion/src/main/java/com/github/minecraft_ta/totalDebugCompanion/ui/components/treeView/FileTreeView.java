@@ -321,6 +321,11 @@ public class FileTreeView extends JScrollPane {
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
     }
 
+    /** Selects the Modified settings row of the Mods tree. */
+    public CompletableFuture<Boolean> revealModifiedSettings() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.MODIFIED_SETTINGS));
+    }
+
     /** Selects a runtime module's node in the Runtime tree. */
     public CompletableFuture<Boolean> revealRuntimeModule(String moduleId) {
         return sourceCatalog().modules().stream()

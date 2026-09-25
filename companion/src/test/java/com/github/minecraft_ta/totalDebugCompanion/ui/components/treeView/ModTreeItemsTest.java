@@ -35,8 +35,10 @@ class ModTreeItemsTest {
 
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
-        assertEquals(List.of("neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES), mods.stream().map(TreeItem::getName).toList());
-        TreeItem testmod = mods.get(1);
+        assertEquals(List.of(ModTreeItems.MODIFIED_SETTINGS, "neoforge", "testmod", ModTreeItems.OTHER_NAMESPACES),
+                mods.stream().map(TreeItem::getName).toList());
+        assertEquals(new NavigationTarget.ModifiedSettings(), ((NavigableTreeItem) mods.getFirst()).navigationTarget());
+        TreeItem testmod = mods.get(2);
         assertTrue(testmod.isActivatable());
         assertEquals(new NavigationTarget.ModPage("testmod"), ((NavigableTreeItem) testmod).navigationTarget());
         List<TreeItem> groups = ((DirectoryTreeItem) testmod).loadChildren();
@@ -52,7 +54,7 @@ class ModTreeItemsTest {
         assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, ""),
                 ((NavigableTreeItem) resources).navigationTarget());
 
-        List<TreeItem> neoforge = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
+        List<TreeItem> neoforge = ((DirectoryTreeItem) mods.get(1)).loadChildren();
         assertTrue(neoforge.isEmpty(), "a mod without content or an existing file has no groups");
     }
 

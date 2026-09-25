@@ -29,6 +29,7 @@ record NavigationEntry(
             case NavigationTarget.ArchiveEntry ignored -> false;
             case NavigationTarget.ArchiveDirectory ignored -> false;
             case NavigationTarget.ModPage ignored -> false;
+            case NavigationTarget.ModifiedSettings ignored -> false;
             case NavigationTarget.Definition ignored -> false;
             case NavigationTarget.RuntimeModuleNode ignored -> false;
             default -> true;

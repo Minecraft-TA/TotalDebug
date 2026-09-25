@@ -127,16 +127,25 @@ public record PackCatalog(
             return this.path.substring(this.path.lastIndexOf('.') + 1);
         }
 
-        /** The text of a configuration value, the same for a captured default and a value read from the file. */
+        /**
+         * The text of a configuration value, the same for a captured default and a value read from the file. A list
+         * reads as a TOML array, with its strings quoted.
+         */
         public static String display(Object value) {
             if (value == null) return "";
             if (value instanceof Enum<?> constant) return constant.name();
             if (value instanceof Collection<?> values) {
                 StringJoiner joined = new StringJoiner(", ", "[", "]");
-                for (Object element : values) joined.add(display(element));
+                for (Object element : values) {
+                    joined.add(element instanceof CharSequence || element instanceof Enum<?> ? quoted(display(element)) : display(element));
+                }
                 return joined.toString();
             }
             return String.valueOf(value);
+        }
+
+        private static String quoted(String text) {
+            return '"' + text.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
         }
     }
 

@@ -4,6 +4,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -95,9 +96,12 @@ public final class ModPanel extends JPanel {
     private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
     private boolean disposed;
 
-    /** {@code workspace} is the game directory, where server configurations of each world are found. */
+    /**
+     * {@code workspace} is the game directory, where server configurations of each world are found, and
+     * {@code changes} tracks configuration edits the running game has not applied yet.
+     */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                    ItemIconService icons, Path workspace, Consumer<NavigationTarget> navigator) {
+                    ItemIconService icons, Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -106,7 +110,7 @@ public final class ModPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
-        this.configs = new ConfigPanel(workspace, navigator);
+        this.configs = new ConfigPanel(workspace, changes, navigator);
 
         this.header.addControl(this.browseCode);
         this.browseCode.setToolTipText("Show the mod's classes in the Project tree");

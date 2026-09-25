@@ -1,6 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigEdit;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.EditorPalette;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -8,11 +12,20 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import javax.swing.AbstractAction;
+import javax.swing.AbstractCellEditor;
+import javax.swing.Action;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -20,9 +33,10 @@ import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellEditor;
+
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Point;
@@ -32,32 +46,40 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.EventObject;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * A configuration file's settings under their sections. Values are colored by kind like code literals, a value that
  * differs from its default is marked at the row's edge with the default beside it, sections collapse from their
- * chevron, and a row's tooltip holds its description.
+ * chevron, and a row's tooltip holds its description. A value is edited in place: double-click, Enter or F2 opens a
+ * field, or a list of the accepted values, and a value the setting does not accept is refused before it is written.
  */
 final class ConfigSettingsTable extends JTable {
     private static final int CHEVRON_WIDTH = 16;
     private static final Pattern NUMBER = Pattern.compile("-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?");
-    private static final Pattern RANGE = Pattern.compile("(\\S+) ~ (\\S+)");
 
     /** How a value is colored, the way the code editor colors literals of the same kind. */
     enum ValueKind { NUMBER, BOOLEAN, STRING, CHOICE, LIST, TEXT }
 
-    /** One row: a section heading when {@code setting} is null. */
-    record Row(int depth, String path, String name, String comment, PackCatalog.ConfigSetting setting, String value) {
+    /**
+     * One row: a section heading when {@code setting} is null. {@code literal} is the value as the file writes it, null
+     * when the file does not set it.
+     */
+    record Row(int depth, String path, String name, String comment, PackCatalog.ConfigSetting setting, String value,
+               String literal) {
         boolean modified() {
             return this.setting != null && !this.setting.defaultValue().isEmpty() && !this.value.isEmpty()
                     && !this.value.equals(this.setting.defaultValue());
@@ -65,7 +87,7 @@ final class ConfigSettingsTable extends JTable {
 
         String accepts() {
             if (this.setting == null) return "";
-            return this.setting.allowed().isEmpty() ? readableRange(this.setting.range()) : String.join(", ", this.setting.allowed());
+            return this.setting.allowed().isEmpty() ? ConfigEdit.readableRange(this.setting.range()) : String.join(", ", this.setting.allowed());
         }
 
         /** What kind of value the setting holds, from its accepted values, its default, or the value itself. */
@@ -87,6 +109,16 @@ final class ConfigSettingsTable extends JTable {
     }
 
     private final SettingsModel model = new SettingsModel();
+    private final ValueEditor editor = new ValueEditor();
+    /** Receives an accepted edit as the setting's row and the value to write. */
+    private BiConsumer<Row, String> edited = (row, literal) -> { };
+    /** Receives why a typed value was refused, and an empty text once nothing is refused. */
+    private Consumer<String> refused = problem -> { };
+    private Function<Row, ConfigChanges.Effect> pending = row -> null;
+    /** The value a setting had before it was first edited while Companion runs, as the file writes it, or null. */
+    private Function<Row, String> original = row -> null;
+    /** A section row's own tooltip, or null for its key and comment. */
+    private Function<Row, String> sectionTooltip = row -> null;
 
     ConfigSettingsTable() {
         setModel(this.model);
@@ -95,35 +127,110 @@ final class ConfigSettingsTable extends JTable {
         setFillsViewportHeight(true);
         getTableHeader().setReorderingAllowed(false);
         setDefaultRenderer(Object.class, new SettingRenderer());
+        setDefaultEditor(Object.class, this.editor);
+        // Typing filters the settings instead of starting an edit, and leaving an edit keeps what was typed.
+        putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
+        putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         ToolTipManager.sharedInstance().registerComponent(this);
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
                 int row = rowAtPoint(event.getPoint());
-                if (row >= 0 && SwingUtilities.isLeftMouseButton(event) && onChevron(row, event.getPoint())) {
+                if (row < 0 || !SwingUtilities.isLeftMouseButton(event)) return;
+                if (onChevron(row, event.getPoint())) {
                     toggleSection(row, null);
+                } else if (event.getClickCount() == 2 && columnAtPoint(event.getPoint()) != 1) {
+                    // A double-click anywhere on a setting edits its value.
+                    edit(row);
                 }
             }
         });
-        for (int key : new int[]{KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_ENTER}) {
-            Boolean expand = key == KeyEvent.VK_ENTER ? null : key == KeyEvent.VK_RIGHT;
+        for (int key : new int[]{KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_ENTER, KeyEvent.VK_F2}) {
+            Boolean expand = key == KeyEvent.VK_LEFT ? Boolean.FALSE : key == KeyEvent.VK_RIGHT ? Boolean.TRUE : null;
+            boolean edits = key == KeyEvent.VK_ENTER || key == KeyEvent.VK_F2;
             String name = "configSection" + key;
             getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(key, 0), name);
             getActionMap().put(name, new AbstractAction() {
                 @Override
                 public void actionPerformed(ActionEvent event) {
                     int row = getSelectedRow();
-                    if (row >= 0) toggleSection(row, expand);
+                    if (row < 0) return;
+                    if (edits && ConfigSettingsTable.this.model.shown.get(row).setting() != null) edit(row);
+                    else if (key != KeyEvent.VK_F2) toggleSection(row, expand);
                 }
             });
         }
+        ContextMenus.installTable(this, this::rowMenu);
     }
 
-    /** Shows the rows of a file; whether it has a specification decides if Accepts is shown. */
-    void show(List<Row> rows, boolean described) {
+    /**
+     * Shows the rows of a file; whether it has a specification decides if Accepts is shown, and {@code editable}
+     * whether values can be edited.
+     */
+    void show(List<Row> rows, boolean described, boolean editable) {
+        if (isEditing()) getCellEditor().cancelCellEditing();
         this.model.collapsed.clear();
+        this.model.editable = editable;
         this.model.setColumns(described);
         this.model.setRows(rows);
+    }
+
+    /**
+     * Where edits go: {@code edited} writes an accepted value, {@code refused} shows why a value was refused, and
+     * {@code pending} tells what the running game waits for before it uses a setting's edited value, and
+     * {@code original} the value a setting had before it was first edited, as the file wrote it.
+     */
+    void setEditing(BiConsumer<Row, String> edited, Consumer<String> refused, Function<Row, ConfigChanges.Effect> pending,
+                    Function<Row, String> original) {
+        this.edited = Objects.requireNonNull(edited, "edited");
+        this.refused = Objects.requireNonNull(refused, "refused");
+        this.pending = Objects.requireNonNull(pending, "pending");
+        this.original = Objects.requireNonNull(original, "original");
+    }
+
+    void setSectionTooltip(Function<Row, String> sectionTooltip) {
+        this.sectionTooltip = Objects.requireNonNull(sectionTooltip, "sectionTooltip");
+    }
+
+    /** The shown row at a view index. */
+    Row row(int viewRow) {
+        return this.model.shown.get(viewRow);
+    }
+
+    /** Opens the value of a setting row for editing, when the file allows it. */
+    boolean edit(int viewRow) {
+        if (!this.model.isCellEditable(viewRow, 1) || !editCellAt(viewRow, 1)) return false;
+        setRowSelectionInterval(viewRow, viewRow);
+        Component component = getEditorComponent();
+        if (component != null) component.requestFocusInWindow();
+        return true;
+    }
+
+    private JPopupMenu rowMenu(int viewRow) {
+        if (viewRow < 0) return null;
+        Row row = this.model.shown.get(viewRow);
+        JPopupMenu menu = new JPopupMenu();
+        if (row.setting() != null) {
+            Action edit = ContextMenus.action("Edit value", null, "Enter", () -> edit(viewRow));
+            edit.setEnabled(this.model.isCellEditable(viewRow, 1));
+            menu.add(edit);
+            Action reset = ContextMenus.action("Reset to default", null, null, () -> reset(row));
+            reset.setEnabled(this.model.isCellEditable(viewRow, 1) && row.modified());
+            menu.add(reset);
+            menu.addSeparator();
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", row.value())));
+        }
+        menu.add(ContextMenus.copyAction("Copy key", row.path()));
+        return menu;
+    }
+
+    /** Writes the setting's default in place of its value. */
+    void reset(Row row) {
+        try {
+            this.edited.accept(row, ConfigEdit.literal(row.literal(), row.setting(), row.setting().defaultValue()));
+        } catch (IllegalArgumentException refusal) {
+            this.refused.accept("The default of " + row.name() + " cannot be written: " + refusal.getMessage());
+        }
     }
 
     /** Shows the settings matching {@code query}, and with {@code modifiedOnly} only those that differ from their default. */
@@ -139,7 +246,11 @@ final class ConfigSettingsTable extends JTable {
     @Override
     public String getToolTipText(MouseEvent event) {
         int row = rowAtPoint(event.getPoint());
-        return row < 0 ? null : tooltip(this.model.shown.get(row));
+        if (row < 0) return null;
+        Row entry = this.model.shown.get(row);
+        String own = entry.setting() == null ? this.sectionTooltip.apply(entry) : null;
+        if (own != null || entry.setting() == null) return own != null ? own : tooltip(entry, null, null);
+        return tooltip(entry, this.pending.apply(entry), before(entry));
     }
 
     /** Clicking a section selects it for reading; only its chevron collapses it. */
@@ -191,52 +302,36 @@ final class ConfigSettingsTable extends JTable {
                 prefix.append(parts[depth]);
                 String section = prefix.toString();
                 if (opened.add(section)) {
-                    rows.add(new Row(depth, section, parts[depth], sectionComments.getOrDefault(section, ""), null, ""));
+                    rows.add(new Row(depth, section, parts[depth], sectionComments.getOrDefault(section, ""), null, "", null));
                 }
             }
             String value = values == null ? setting.defaultValue() : values.values().getOrDefault(setting.path(), "");
-            rows.add(new Row(parts.length - 1, setting.path(), setting.name(), setting.comment(), setting, value));
+            String literal = values == null ? null : values.literals().get(setting.path());
+            rows.add(new Row(parts.length - 1, setting.path(), setting.name(), setting.comment(), setting, value, literal));
         }
         return rows;
     }
 
-    /**
-     * A NeoForge range in words. Its {@code > 1} means at least 1, and a bound at the type's limit, such as
-     * {@code 9223372036854775807}, is no bound at all.
-     */
-    static String readableRange(String range) {
-        if (range.startsWith("> ")) return "at least " + number(range.substring(2));
-        if (range.startsWith("< ")) return "at most " + number(range.substring(2));
-        Matcher bounds = RANGE.matcher(range);
-        if (!bounds.matches()) return range;
-        boolean noMinimum = unbounded(bounds.group(1), false);
-        boolean noMaximum = unbounded(bounds.group(2), true);
-        if (noMinimum && noMaximum) return "";
-        if (noMaximum) return "at least " + number(bounds.group(1));
-        if (noMinimum) return "at most " + number(bounds.group(2));
-        return number(bounds.group(1)) + " to " + number(bounds.group(2));
-    }
-
-    private static boolean unbounded(String bound, boolean upper) {
+    /** The value a setting had before it was first edited, in the form values are shown in, or null. */
+    private String before(Row row) {
+        String literal = this.original.apply(row);
+        if (literal == null) return null;
         try {
-            double value = Double.parseDouble(bound);
-            return upper ? value >= Integer.MAX_VALUE : value <= Integer.MIN_VALUE;
-        } catch (NumberFormatException notANumber) {
-            return false;
+            return PackCatalog.ConfigSetting.display(ConfigValues.value(literal));
+        } catch (IllegalArgumentException notAValue) {
+            return literal;
         }
-    }
-
-    /** Drops a floating-point value's empty fraction, so {@code 4000000.0} reads as {@code 4000000}. */
-    private static String number(String value) {
-        return value.endsWith(".0") ? value.substring(0, value.length() - 2) : value;
     }
 
     /**
      * A row's description: its key, its comment wrapped to a readable width, and for a setting its default, what it
-     * accepts and what must restart after a change.
+     * accepts and what must restart after a change. {@code before} is the value the setting had before it was edited,
+     * and {@code pending} what the game waits for before using the edit.
      */
-    static String tooltip(Row row) {
-        Tooltip tooltip = Tooltip.of("").detail(row.path()).text(row.comment());
+    static String tooltip(Row row, ConfigChanges.Effect pending, String before) {
+        Tooltip tooltip = Tooltip.of("").detail(row.setting() == null ? row.path() : row.setting().path()).text(row.comment());
+        if (before != null) tooltip.fact("Before your edit", literal(row.kind(), before), color(row.kind()));
+        if (pending != null) tooltip.fact("Edited value", pending.description());
         PackCatalog.ConfigSetting setting = row.setting();
         if (setting != null) {
             if (!setting.defaultValue().isEmpty()) {
@@ -277,6 +372,13 @@ final class ConfigSettingsTable extends JTable {
         private final Set<String> collapsed = new HashSet<>();
         private Predicate<Row> keep = row -> true;
         private boolean filtering;
+        private boolean editable;
+
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            Row entry = this.shown.get(row);
+            return this.editable && column == 1 && entry.setting() != null && ConfigEdit.editable(entry.literal());
+        }
 
         void setColumns(boolean described) {
             if (this.described == described) return;
@@ -363,14 +465,19 @@ final class ConfigSettingsTable extends JTable {
      */
     private final class SettingRenderer extends DefaultTableCellRenderer {
         private final SettingCell name = new SettingCell();
-        private final JPanel valueCell = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        private final JPanel valueCell = new JPanel();
         private final JLabel value = new JLabel();
         private final JLabel defaultHint = new JLabel();
+        private final JLabel pendingMark = new JLabel(Icons.REFRESH);
 
         private SettingRenderer() {
+            // Centered in the row like the name beside it.
+            this.valueCell.setLayout(new BoxLayout(this.valueCell, BoxLayout.X_AXIS));
             this.valueCell.add(this.value);
             this.valueCell.add(this.defaultHint);
+            this.valueCell.add(this.pendingMark);
             this.defaultHint.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+            this.pendingMark.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
             this.valueCell.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
         }
 
@@ -381,7 +488,10 @@ final class ConfigSettingsTable extends JTable {
             Color background = selected ? table.getSelectionBackground() : table.getBackground();
             Color foreground = selected ? table.getSelectionForeground() : ThemeColors.text();
             if (column == 0) {
-                this.name.configure(row, ConfigSettingsTable.this.model.isCollapsed(row), table.getFont(), foreground, background);
+                String before = row.setting() == null ? null : before(row);
+                // Your edits are marked in the accent color; values that already differed from their default in grey.
+                Color bar = before != null ? ThemeColors.accent() : row.modified() ? ThemeColors.mutedText() : null;
+                this.name.configure(row, ConfigSettingsTable.this.model.isCollapsed(row), table.getFont(), foreground, background, bar);
                 return this.name;
             }
             if (column == 1 && row.setting() != null) {
@@ -389,9 +499,12 @@ final class ConfigSettingsTable extends JTable {
                 this.value.setFont(table.getFont());
                 // The themes' selection is a soft tint, so values keep their colors on it like code does.
                 this.value.setForeground(row.kind() == ValueKind.LIST || row.kind() == ValueKind.TEXT ? foreground : color(row.kind()));
-                this.defaultHint.setText(row.modified() ? "default " + literal(row.kind(), row.setting().defaultValue()) : "");
+                String before = before(row);
+                this.defaultHint.setText(before != null ? "was " + literal(row.kind(), before)
+                        : row.modified() ? "default " + literal(row.kind(), row.setting().defaultValue()) : "");
                 this.defaultHint.setFont(table.getFont());
                 this.defaultHint.setForeground(ThemeColors.secondaryText());
+                this.pendingMark.setVisible(ConfigSettingsTable.this.pending.apply(row) != null);
                 this.valueCell.setBackground(background);
                 return this.valueCell;
             }
@@ -404,13 +517,115 @@ final class ConfigSettingsTable extends JTable {
         }
     }
 
-    /** The name cell: a chevron for sections, indentation by depth, and the modified bar at the left edge. */
+    /**
+     * Edits a value: a list of the accepted values for a choice or a boolean, a field otherwise. The typed text is
+     * checked as NeoForge checks the file, and an edit that changes nothing writes nothing.
+     */
+    private final class ValueEditor extends AbstractCellEditor implements TableCellEditor {
+        private final JTextField field = new JTextField();
+        private final JComboBox<String> choices = new JComboBox<>();
+        private JComponent active = this.field;
+        private Row row;
+        private boolean configuring;
+
+        private ValueEditor() {
+            this.field.setBorder(BorderFactory.createEmptyBorder(0, 3, 0, 3));
+            this.field.addActionListener(event -> stopCellEditing());
+            this.choices.putClientProperty("JComboBox.isTableCellEditor", Boolean.TRUE);
+            // The offered values keep the color of their kind, like the value they replace.
+            this.choices.setRenderer(new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected,
+                                                              boolean focused) {
+                    super.getListCellRendererComponent(list, value, index, selected, focused);
+                    if (ValueEditor.this.row != null) setForeground(color(ValueEditor.this.row.kind()));
+                    return this;
+                }
+            });
+            this.choices.addActionListener(event -> {
+                if (!this.configuring) stopCellEditing();
+            });
+        }
+
+        @Override
+        public boolean isCellEditable(EventObject event) {
+            return !(event instanceof MouseEvent mouse) || mouse.getClickCount() >= 2;
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean selected, int viewRow, int column) {
+            this.row = ConfigSettingsTable.this.model.shown.get(viewRow);
+            this.field.putClientProperty("JComponent.outline", null);
+            List<String> options = options(this.row);
+            if (options.isEmpty()) {
+                this.field.setFont(table.getFont());
+                ValueKind kind = this.row.kind();
+                // Typed text keeps the color the value is shown in.
+                this.field.setForeground(kind == ValueKind.LIST || kind == ValueKind.TEXT ? ThemeColors.text() : color(kind));
+                this.field.setText(this.row.value());
+                this.field.selectAll();
+                this.active = this.field;
+            } else {
+                this.configuring = true;
+                try {
+                    this.choices.setFont(table.getFont());
+                    // FlatLaf paints the chosen value in the combo box's own foreground.
+                    this.choices.setForeground(color(this.row.kind()));
+                    this.choices.setModel(new DefaultComboBoxModel<>(options.toArray(String[]::new)));
+                    this.choices.setSelectedItem(options.stream().filter(this.row.value()::equalsIgnoreCase).findFirst().orElse(null));
+                } finally {
+                    this.configuring = false;
+                }
+                this.active = this.choices;
+                SwingUtilities.invokeLater(() -> {
+                    if (this.choices.isShowing()) this.choices.showPopup();
+                });
+            }
+            return this.active;
+        }
+
+        @Override
+        public Object getCellEditorValue() {
+            return this.active == this.choices ? Objects.toString(this.choices.getSelectedItem(), "") : this.field.getText();
+        }
+
+        @Override
+        public boolean stopCellEditing() {
+            Row editing = this.row;
+            String literal;
+            try {
+                literal = ConfigEdit.literal(editing.literal(), editing.setting(), (String) getCellEditorValue());
+            } catch (IllegalArgumentException refusal) {
+                this.field.putClientProperty("JComponent.outline", "error");
+                ConfigSettingsTable.this.refused.accept(editing.name() + ": " + refusal.getMessage());
+                return false;
+            }
+            ConfigSettingsTable.this.refused.accept("");
+            fireEditingStopped();
+            if (!literal.equals(editing.literal())) ConfigSettingsTable.this.edited.accept(editing, literal);
+            return true;
+        }
+
+        @Override
+        public void cancelCellEditing() {
+            ConfigSettingsTable.this.refused.accept("");
+            super.cancelCellEditing();
+        }
+    }
+
+    /** The values offered in a list: the accepted values of a choice, or true and false. */
+    private static List<String> options(Row row) {
+        if (!row.setting().allowed().isEmpty()) return row.setting().allowed();
+        return ConfigEdit.kind(row.literal()) == ConfigEdit.Kind.BOOLEAN ? List.of("true", "false") : List.of();
+    }
+
+    /** The name cell: a chevron for sections, indentation by depth, and a bar at the left edge for a changed value. */
     private static final class SettingCell extends JLabel {
         private static final int BAR_WIDTH = 3;
-        private boolean modified;
+        private Color bar;
 
-        void configure(Row row, boolean collapsed, Font font, Color foreground, Color background) {
-            this.modified = row.modified();
+        void configure(Row row, boolean collapsed, Font font, Color foreground, Color background, Color bar) {
+            this.bar = bar;
             setOpaque(true);
             setBackground(background);
             setForeground(foreground);
@@ -425,8 +640,8 @@ final class ConfigSettingsTable extends JTable {
         @Override
         protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);
-            if (this.modified) {
-                graphics.setColor(ThemeColors.accent());
+            if (this.bar != null) {
+                graphics.setColor(this.bar);
                 graphics.fillRect(0, 1, BAR_WIDTH, getHeight() - 2);
             }
         }
