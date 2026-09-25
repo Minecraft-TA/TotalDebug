@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemModelId;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderBackend;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderRequest;
@@ -22,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -58,6 +60,7 @@ public final class ItemIconService implements AutoCloseable {
     };
     private final Map<String, Optional<BufferedImage>> fluids = new LinkedHashMap<>();
     private volatile Snapshot snapshot;
+    private volatile Function<String, Optional<CatalogIndex.ItemIcon>> itemLookup = itemId -> Optional.empty();
     private Snapshot opened;
     private Snapshot fluidsOpened;
     private FluidTextures fluidTextures;
@@ -181,6 +184,19 @@ public final class ItemIconService implements AutoCloseable {
                 return Optional.empty();
             }
         });
+    }
+
+    /** Sets where the model and tints of an item id come from; the project's captured pack catalog provides them. */
+    public void setItemLookup(Function<String, Optional<CatalogIndex.ItemIcon>> lookup) {
+        this.itemLookup = Objects.requireNonNull(lookup, "lookup");
+    }
+
+    /**
+     * The model and tints the game draws an item id with, as captured for its default stack. Before a capture only the
+     * conventional model is known, without tints.
+     */
+    public CatalogIndex.ItemIcon itemIcon(String itemId) {
+        return this.itemLookup.apply(itemId).orElseGet(() -> new CatalogIndex.ItemIcon(itemModel(itemId), Map.of()));
     }
 
     /** The conventional inventory model of an item registry id: {@code ns:path} becomes {@code ns:item/path}. */

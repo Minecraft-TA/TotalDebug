@@ -2,12 +2,16 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.bytecode.RuntimeSnapshotBytecodeSource;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.CatalogSearch;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 
@@ -56,6 +60,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -72,6 +77,8 @@ import java.util.stream.Collectors;
 
 public class SearchEverywherePopup extends JFrame {
     private static final int RESULT_LIMIT = 160;
+    private static final int CODE_ROW_HEIGHT = 32;
+    private static final int PREVIEW_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
     private static final String RESULTS_CARD = "results";
     private static final String MESSAGE_CARD = "message";
     private static final String NEXT_CATEGORY_ACTION = "searchEverywhere.nextCategory";
@@ -139,6 +146,7 @@ public class SearchEverywherePopup extends JFrame {
     private final CatalogIcons catalogIcons;
     private final Consumer<NavigationTarget> navigator;
     private CatalogSearch catalogSearch;
+    private final Map<String, Icon> modLogos = new HashMap<>();
     private String resultNote = "";
     SearchEverywherePopup(Window owner, RuntimeIndexService indexLoader, Supplier<RuntimeBinding> runtime,
                           Supplier<PackCatalogService> catalog, ItemIconService itemIcons,
@@ -151,7 +159,7 @@ public class SearchEverywherePopup extends JFrame {
         this.indexLoader = indexLoader;
         this.runtime = runtime;
         this.catalog = Objects.requireNonNull(catalog, "catalog");
-        this.catalogIcons = new CatalogIcons(itemIcons, 16);
+        this.catalogIcons = new CatalogIcons(itemIcons, PREVIEW_SIZE);
         this.navigator = navigator;
         this.moduleFilterPopup = new ModuleFilterPopup(
                 this.modules,
@@ -238,6 +246,7 @@ public class SearchEverywherePopup extends JFrame {
     @Override
     public void dispose() {
         this.catalogIcons.dispose();
+        this.modLogos.clear();
         indexLoader.removeStatusListener(this.indexStatusListener);
         ThemeManager.removeThemeChangeListener(this.themeListener);
         this.searchGeneration.incrementAndGet();
@@ -298,7 +307,7 @@ public class SearchEverywherePopup extends JFrame {
         installCategoryCycling(this.resultList);
         this.resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         this.resultList.setCellRenderer(new SearchResultRenderer());
-        this.resultList.setFixedCellHeight(32);
+        this.resultList.setFixedCellHeight(CODE_ROW_HEIGHT);
         this.resultList.addListSelectionListener(event -> {
             if (event.getValueIsAdjusting()) {
                 return;
@@ -458,6 +467,7 @@ public class SearchEverywherePopup extends JFrame {
             this.catalogSearch = null;
         } else if (this.catalogSearch == null || this.catalogSearch.index() != index) {
             this.catalogSearch = new CatalogSearch(index);
+            this.modLogos.clear();
         }
         return this.catalogSearch;
     }
@@ -589,6 +599,9 @@ public class SearchEverywherePopup extends JFrame {
                 ? null
                 : identity(this.resultList.getSelectedValue());
         this.resultModel.clear();
+        // Items, blocks and mods show larger previews; code results keep compact rows.
+        this.resultList.setFixedCellHeight(results.stream().anyMatch(SearchEverywherePopup::hasPreview)
+                ? PREVIEW_SIZE + 8 : CODE_ROW_HEIGHT);
         this.resultModel.addAll(results);
         this.resultCount.setText(results.size() + (results.size() == 1 ? " result" : " results") + this.resultNote);
         if (results.isEmpty()) {
@@ -824,12 +837,13 @@ public class SearchEverywherePopup extends JFrame {
                 }
                 case ModResult mod -> {
                     presentation = new PrimarySecondaryText(mod.title(), (mod.modId() + "  " + mod.version()).strip());
-                    icon = Icons.MOD;
+                    icon = modLogo(mod.modId());
                 }
                 case DefinitionResult definition -> {
                     presentation = new PrimarySecondaryText(definition.entry().title(), definition.entry().id());
                     Icon drawn = catalogIcons.icon(definition.icon(), list);
-                    icon = drawn == null ? SubjectIcons.definition(definition.entry().kind()) : drawn;
+                    icon = drawn == null
+                            ? new CenteredIcon(SubjectIcons.definition(definition.entry().kind()), PREVIEW_SIZE) : drawn;
                 }
                 case ResourceResult resource -> {
                     presentation = new PrimarySecondaryText(resource.resource().fileName(), resource.resource().path());
@@ -863,6 +877,15 @@ public class SearchEverywherePopup extends JFrame {
     }
 
     private record ModuleSummary(PrimarySecondaryText text, String tooltip) {
+    }
+
+    private static boolean hasPreview(Result result) {
+        return result instanceof ModResult || result instanceof DefinitionResult;
+    }
+
+    private Icon modLogo(String modId) {
+        return this.modLogos.computeIfAbsent(modId, id -> ModLogoIcons.icon(ModSummary.resolve(id,
+                this.catalogSearch == null ? null : this.catalogSearch.index(), this.sourceCatalog).orElse(null), PREVIEW_SIZE));
     }
 
     private static final class SearchCategoryButton extends JToggleButton {

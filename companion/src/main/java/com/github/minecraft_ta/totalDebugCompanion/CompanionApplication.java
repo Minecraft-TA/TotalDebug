@@ -731,6 +731,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         scope.catalog().addListener(() -> {
             if (currentScope() == scope) onUi(CompanionUi::catalogChanged);
         });
+        itemIcons.setItemLookup(itemId -> scope.catalog().index().flatMap(index -> index.itemIcon(itemId)));
         // Independent tasks: unreadable icon archives must not keep the catalog from loading.
         CompletableFuture.runAsync(() -> itemIcons.restore(scope.paths().previews()));
         CompletableFuture.runAsync(scope.catalog()::restore);

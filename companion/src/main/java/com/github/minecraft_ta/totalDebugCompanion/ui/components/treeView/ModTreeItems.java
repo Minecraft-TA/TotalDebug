@@ -8,7 +8,9 @@ import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
@@ -130,7 +132,7 @@ final class ModTreeItems {
             this.summary = summary;
             this.index = index;
             setPresentation(PrimarySecondaryText.primary(summary.title()));
-            setIcon(Icons.MOD);
+            setIcon(ModLogoIcons.icon(summary, UiMetrics.previewPixels(UiMetrics.ROW_ICON_SIZE)));
             setSortPriority(PLATFORM.contains(summary.id()) ? 0 : 10);
         }
 

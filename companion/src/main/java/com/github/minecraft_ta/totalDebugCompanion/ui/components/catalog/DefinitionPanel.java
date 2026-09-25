@@ -199,6 +199,10 @@ public final class DefinitionPanel extends JPanel {
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
                     this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(SubjectIcons.definition(this.subject.kind())));
+                }));
+        this.icons.render(icon.get().model(), icon.get().tints(), this.tabIcon.size())
+                .thenAccept(image -> SwingUtilities.invokeLater(() -> {
+                    if (this.disposed) return;
                     this.tabIcon.setImage(image.orElse(null));
                     Component tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, this);
                     if (tabs != null) tabs.repaint();

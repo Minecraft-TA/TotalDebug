@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -59,8 +61,8 @@ import java.util.regex.Pattern;
  */
 public final class FactsPanel extends JPanel {
     static final int SLOT_COLUMNS = 9;
-    private static final int SLOT_SIZE = 40;
-    private static final int ICON_SIZE = 32;
+    private static final int ICON_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
+    private static final int SLOT_SIZE = ICON_SIZE + 8;
     private static final int MIN_LABEL_WIDTH = 96;
     private static final int MAX_LABEL_WIDTH = 240;
     private static final Pattern NUMBER = Pattern.compile("[+-]?\\d[\\d,.]*(?:[eE][+-]?\\d+)?[bBsSlLfFdD%]?");
@@ -555,7 +557,8 @@ public final class FactsPanel extends JPanel {
                 return;
             }
             String id = this.stack.id();
-            FactsPanel.this.icons.render(ItemIconService.itemModel(id), Map.of(), ICON_SIZE)
+            CatalogIndex.ItemIcon item = FactsPanel.this.icons.itemIcon(id);
+            FactsPanel.this.icons.render(item.model(), item.tints(), ICON_SIZE)
                     .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                         if (!id.equals(this.stack.id())) return;
                         this.icon = image.orElse(null);

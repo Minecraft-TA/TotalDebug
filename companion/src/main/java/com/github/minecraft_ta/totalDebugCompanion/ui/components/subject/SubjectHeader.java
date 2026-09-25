@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.subject;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
@@ -23,7 +24,7 @@ import java.util.List;
  * on the right.
  */
 public final class SubjectHeader extends JPanel {
-    public static final int ICON_SIZE = 48;
+    public static final int ICON_SIZE = UiMetrics.previewPixels(UiMetrics.HEADER_ICON_SIZE);
 
     private final JLabel icon = new JLabel();
     private final JLabel title = new JLabel();

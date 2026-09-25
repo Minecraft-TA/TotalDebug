@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.JavaSnippetSource;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -76,8 +77,6 @@ public final class InspectionPanel extends JPanel {
     static final List<Integer> LIVE_INTERVALS_MS = List.of(500, 1_000, 2_000, 5_000);
     private static final String RESULT_CARD = "result";
     private static final String PROBLEM_CARD = "problem";
-    private static final int HEADER_ICON_SIZE = SubjectHeader.ICON_SIZE;
-    private static final int TAB_ICON_SIZE = 32;
 
     private final InspectSubjectPayload subject;
     private final Consumer<NavigationTarget> navigator;
@@ -520,16 +519,18 @@ public final class InspectionPanel extends JPanel {
             this.facts.reloadIcons();
         }
         this.tools.reloadIcons();
-        // The client's icon has the selected item's tints; after a replacement only the plain item model is known.
+        // The client's icon has the selected stack's tints; after a replacement the captured default stack's are used.
         boolean selectedItem = this.identity.iconItem().equals(this.subject.identity().iconItem());
-        String model = selectedItem ? this.subject.iconModel()
-                : this.identity.iconItem().isEmpty() ? "" : ItemIconService.itemModel(this.identity.iconItem());
-        Map<Integer, Integer> tints = selectedItem ? this.subject.iconTints() : Map.of();
-        this.icons.render(model, tints, HEADER_ICON_SIZE)
+        CatalogIndex.ItemIcon replacement = selectedItem || this.identity.iconItem().isEmpty()
+                ? null : this.icons.itemIcon(this.identity.iconItem());
+        String model = selectedItem ? this.subject.iconModel() : replacement == null ? "" : replacement.model();
+        Map<Integer, Integer> tints = selectedItem ? this.subject.iconTints()
+                : replacement == null ? Map.of() : replacement.tints();
+        this.icons.render(model, tints, SubjectHeader.ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (!this.disposed) this.header.setIcon(image.map(ImageIcon::new).orElse(null));
                 }));
-        this.icons.render(model, tints, TAB_ICON_SIZE)
+        this.icons.render(model, tints, this.tabIcon.size())
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
                     if (this.disposed) return;
                     this.tabIcon.setImage(image.orElse(null));

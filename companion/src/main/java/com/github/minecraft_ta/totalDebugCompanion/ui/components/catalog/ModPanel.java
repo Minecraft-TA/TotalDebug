@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.FactsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
@@ -21,7 +22,6 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
-import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
@@ -49,7 +49,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,14 +64,13 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.zip.ZipFile;
 
 /**
  * An installed mod's page: what it is and depends on, what it registered, its configuration files and its resources.
  * A namespace without a mod shows its registered content; a mod seen before the first capture shows its resources.
  */
 public final class ModPanel extends JPanel {
-    private static final int LIST_ICON_SIZE = 32;
+    private static final int LIST_ICON_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
 
     private final String modId;
     private final PackCatalogService catalog;
@@ -374,20 +372,9 @@ public final class ModPanel extends JPanel {
 
     static Icon readLogo(Path file, String logo) {
         try {
-            BufferedImage image;
-            if (Files.isDirectory(file)) {
-                image = ImageIO.read(file.resolve(logo).toFile());
-            } else {
-                try (ZipFile zip = new ZipFile(file.toFile())) {
-                    var entry = zip.getEntry(logo);
-                    if (entry == null) return null;
-                    try (InputStream input = zip.getInputStream(entry)) {
-                        image = ImageIO.read(input);
-                    }
-                }
-            }
+            BufferedImage image = ModLogoIcons.read(file, logo);
             if (image == null) return null;
-            double scale = Math.min(144.0 / image.getWidth(),
+            double scale = Math.min(3.0 * SubjectHeader.ICON_SIZE / image.getWidth(),
                     (double) SubjectHeader.ICON_SIZE / image.getHeight());
             int width = Math.max(1, (int) Math.round(image.getWidth() * scale));
             int height = Math.max(1, (int) Math.round(image.getHeight() * scale));
