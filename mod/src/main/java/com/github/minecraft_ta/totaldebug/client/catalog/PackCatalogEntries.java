@@ -56,6 +56,22 @@ public final class PackCatalogEntries {
                 range.isEmpty() || range.equals("[,)") ? "" : range, PackCatalog.Side.valueOf(side)));
     }
 
+    /**
+     * A setting's or section's comment without the lines NeoForge adds for its default, range and allowed values,
+     * which the catalog records separately.
+     */
+    static String configComment(String comment) {
+        if (comment == null) return "";
+        StringBuilder kept = new StringBuilder();
+        for (String line : comment.split("\\R")) {
+            String text = line.strip();
+            if (text.startsWith("Default:") || text.startsWith("Range:") || text.startsWith("Allowed Values:")) continue;
+            if (!kept.isEmpty()) kept.append('\n');
+            kept.append(text);
+        }
+        return kept.toString().strip();
+    }
+
     static PackCatalog.ConfigType configType(String type) {
         return PackCatalog.ConfigType.valueOf(type.toUpperCase(Locale.ROOT));
     }

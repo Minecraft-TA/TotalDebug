@@ -2,12 +2,15 @@ package com.github.minecraft_ta.totaldebug.storage;
 
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.BlockEntry;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigFile;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigSection;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigSetting;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ConfigType;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Dependency;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.DependencyType;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.EntityTypeEntry;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.ItemEntry;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Mod;
+import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Restart;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog.Side;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,8 +38,13 @@ class PackCatalogTest {
                         Map.of("display", "https://example.invalid", "issues", "https://example.invalid/issues"),
                         "logo.png", "mekanism", this.directory.resolve("Mekanism.jar").toUri(),
                         List.of(new Dependency("neoforge", DependencyType.REQUIRED, "[21.1,)", Side.BOTH)),
-                        List.of(new ConfigFile("mekanism-common.toml", ConfigType.COMMON, config),
-                                new ConfigFile("mekanism-world.toml", ConfigType.SERVER, null)))),
+                        List.of(new ConfigFile("mekanism-common.toml", ConfigType.COMMON, config,
+                                        List.of(new ConfigSection("machines", "Machine settings")),
+                                        List.of(new ConfigSetting("machines.maxEnergy", "Energy a machine stores",
+                                                        "40000", "1 ~ 2147483647", List.of(), Restart.WORLD),
+                                                new ConfigSetting("machines.mode", "", "FAST", "",
+                                                        List.of("FAST", "SLOW"), Restart.NONE))),
+                                new ConfigFile("mekanism-world.toml", ConfigType.SERVER, null, List.of(), List.of())))),
                 List.of(new BlockEntry("mekanism:metallurgic_infuser", "Metallurgic Infuser",
                         "mekanism.common.block.BlockMachine", "mekanism:metallurgic_infuser", "mekanism:metallurgic_infuser")),
                 List.of(new ItemEntry("mekanism:energy_tablet", "Energy Tablet", "mekanism.common.item.ItemEnergized",
@@ -58,16 +66,16 @@ class PackCatalogTest {
     @Test
     void rejectsAnotherFormat() throws Exception {
         Path file = this.directory.resolve("catalog.json");
-        Files.writeString(file, "{\"format\":2,\"inventoryId\":\"a\",\"language\":\"en_us\"}");
+        Files.writeString(file, "{\"format\":1,\"inventoryId\":\"a\",\"language\":\"en_us\"}");
 
         IOException failure = assertThrows(IOException.class, () -> PackCatalog.readHeader(file));
-        assertTrue(failure.getMessage().contains("Unsupported pack catalog format 2"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("Unsupported pack catalog format 1"), failure.getMessage());
         assertThrows(IOException.class, () -> PackCatalog.read(file));
     }
 
     @Test
     void rejectsInvalidContent() throws Exception {
-        assertInvalid("{\"format\":1,\"inventoryId\":\" \",\"language\":\"en_us\"}", "Blank inventory id");
+        assertInvalid("{\"format\":2,\"inventoryId\":\" \",\"language\":\"en_us\"}", "Blank inventory id");
         assertInvalid(catalogJson("\"items\":[{\"id\":\"a:b\"},{\"id\":\"a:b\"}]"), "Duplicate item id a:b");
         assertInvalid(catalogJson("\"blocks\":[{\"id\":\"Not An Id\"}]"), "Invalid block id");
         assertInvalid(catalogJson("\"mods\":[{\"id\":\"M\",\"module\":\"m\",\"file\":\"file:///m.jar\"}]"), "Invalid mod id");
@@ -96,8 +104,17 @@ class PackCatalogTest {
         assertEquals(catalog, PackCatalog.read(file));
     }
 
+    @Test
+    void displaysDefaultsAndFileValuesAlike() {
+        assertEquals("FAST", ConfigSetting.display("FAST"));
+        assertEquals("GAME", ConfigSetting.display(Restart.GAME));
+        assertEquals("[a, 3, true]", ConfigSetting.display(List.of("a", 3, true)));
+        assertEquals("0.5", ConfigSetting.display(0.5));
+        assertEquals("", ConfigSetting.display(null));
+    }
+
     private static String catalogJson(String content) {
-        return "{\"format\":1,\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
+        return "{\"format\":2,\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
     }
 
     private void assertInvalid(String json, String message) throws IOException {

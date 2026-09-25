@@ -93,6 +93,20 @@ class ModResourcesTest {
     }
 
     @Test
+    void resourcesKnowTheirPathInsideTheirCategory() {
+        ModResources.Resource texture = new ModResources.Resource(this.directory, false,
+                "assets/framedblocks/textures/block/framed_slab.png", new ModResources.Category("assets", "textures"));
+        ModResources.Resource sounds = new ModResources.Resource(this.directory, false,
+                "assets/framedblocks/sounds.json", new ModResources.Category("assets", "sounds"));
+
+        assertEquals("framedblocks", texture.namespace());
+        assertEquals("block/framed_slab.png", texture.relativePath());
+        assertEquals("block", texture.folder());
+        assertEquals("sounds.json", sounds.relativePath());
+        assertEquals("", sounds.folder());
+    }
+
+    @Test
     void categoriesComeFromTheNamespacesFirstFolder() {
         assertEquals(new ModResources.Category("assets", "textures"), ModResources.category("assets/ns/textures/a.png"));
         assertEquals(new ModResources.Category("assets", "sounds"), ModResources.category("assets/ns/sounds.json"));

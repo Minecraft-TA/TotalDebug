@@ -80,14 +80,12 @@ public final class ModPanel extends JPanel {
     private final CatalogIcons listIcons;
     private final Runnable removeCatalogListener;
     private final SubjectHeader header = new SubjectHeader();
-    private final JButton configuration = new JButton("Configuration", Icons.CONFIG_FILE);
     private final JButton browseCode = new JButton("Browse code", Icons.JAVA_CLASS);
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<ModTab, Component> tabContent = new EnumMap<>(ModTab.class);
     private final JPanel overview = new JPanel(new BorderLayout());
     private final Map<ModTab, CatalogEntryTable> entryTables = new EnumMap<>(ModTab.class);
-    private final ConfigTableModel configs = new ConfigTableModel();
-    private final JTable configTable = new JTable(this.configs);
+    private final ConfigPanel configs;
     private final ResourceBrowser resources;
     private ModSummary summary;
     private CatalogIndex index;
@@ -95,8 +93,9 @@ public final class ModPanel extends JPanel {
     private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
     private boolean disposed;
 
+    /** {@code workspace} is the game directory, where server configurations of each world are found. */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                    ItemIconService icons, Consumer<NavigationTarget> navigator) {
+                    ItemIconService icons, Path workspace, Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -105,10 +104,9 @@ public final class ModPanel extends JPanel {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
+        this.configs = new ConfigPanel(workspace, navigator);
 
-        this.header.addControl(this.configuration);
         this.header.addControl(this.browseCode);
-        this.configuration.addActionListener(event -> openConfiguration());
         this.browseCode.addActionListener(event -> {
             if (this.summary != null && !this.summary.moduleId().isEmpty()) {
                 this.navigator.accept(new NavigationTarget.RuntimeModuleNode(this.summary.moduleId()));
@@ -120,17 +118,7 @@ public final class ModPanel extends JPanel {
         entryTab(ModTab.BLOCKS, "Filter blocks");
         entryTab(ModTab.ITEMS, "Filter items");
         entryTab(ModTab.ENTITIES, "Filter entity types");
-        this.configTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        this.configTable.setShowGrid(false);
-        this.configTable.setFillsViewportHeight(true);
-        this.configTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                int row = ModPanel.this.configTable.rowAtPoint(event.getPoint());
-                if (event.getClickCount() == 2 && row >= 0) openConfig(ModPanel.this.configs.files.get(row));
-            }
-        });
-        this.tabContent.put(ModTab.CONFIGURATION, new JScrollPane(this.configTable));
+        this.tabContent.put(ModTab.CONFIGURATION, this.configs);
         this.tabContent.put(ModTab.RESOURCES, this.resources);
         for (ModTab tab : ModTab.values()) {
             this.tabs.addTab(tab.title(), SubjectIcons.tab(tab), this.tabContent.get(tab));
@@ -187,12 +175,13 @@ public final class ModPanel extends JPanel {
             this.header.setTitle(this.modId);
             this.header.setIcon(Icons.MOD);
             this.header.setSubtitle(List.of(SubjectHeader.text(this.modId)));
-            this.configuration.setVisible(false);
             this.browseCode.setVisible(false);
             String unavailable = CatalogMessages.unavailable(state);
             showOverview(message(this.index == null && !unavailable.isEmpty() ? unavailable
                     : this.modId + " is not an installed mod"), null);
-            for (ModTab tab : ModTab.values()) this.tabs.setEnabledAt(this.tabs.indexOfComponent(this.tabContent.get(tab)), tab == ModTab.OVERVIEW);
+            for (ModTab tab : ModTab.values()) {
+                if (tab != ModTab.OVERVIEW) setTab(tab, 0);
+            }
             refreshTitle();
             return;
         }
@@ -206,9 +195,7 @@ public final class ModPanel extends JPanel {
         if (mod != null && !mod.logo().isEmpty()) loadLogo(mod.logo());
 
         List<PackCatalog.ConfigFile> configFiles = mod == null ? List.of() : mod.configs();
-        this.configs.files = configFiles;
-        this.configs.fireTableDataChanged();
-        this.configuration.setVisible(!configFiles.isEmpty());
+        this.configs.setFiles(configFiles);
         this.browseCode.setVisible(!this.summary.moduleId().isEmpty() && hasModule(this.summary.moduleId()));
 
         String unavailable = this.summary.captured() ? "" : CatalogMessages.unavailable(state);
@@ -228,11 +215,25 @@ public final class ModPanel extends JPanel {
         setTab(tab, entries.size());
     }
 
+    /** Shows a tab with its count, or hides it while it has nothing to show. */
     private void setTab(ModTab tab, int count) {
-        int index = this.tabs.indexOfComponent(this.tabContent.get(tab));
-        this.tabs.setTitleAt(index, count == 0 ? tab.title() : tab.title() + " " + NumberFormat.getIntegerInstance(Locale.ROOT).format(count));
-        this.tabs.setEnabledAt(index, count > 0);
-        if (count == 0 && this.tabs.getSelectedIndex() == index) this.tabs.setSelectedIndex(0);
+        Component content = this.tabContent.get(tab);
+        int index = this.tabs.indexOfComponent(content);
+        if (count == 0) {
+            if (index > 0) this.tabs.removeTabAt(index);
+            return;
+        }
+        String title = tab.title() + " " + NumberFormat.getIntegerInstance(Locale.ROOT).format(count);
+        if (index < 0) {
+            int position = 0;
+            for (ModTab earlier : ModTab.values()) {
+                if (earlier == tab) break;
+                if (this.tabs.indexOfComponent(this.tabContent.get(earlier)) >= 0) position++;
+            }
+            this.tabs.insertTab(title, SubjectIcons.tab(tab), content, null, position);
+        } else {
+            this.tabs.setTitleAt(index, title);
+        }
     }
 
     private JComponent overviewContent(PackCatalog.Mod mod, String unavailable) {
@@ -322,9 +323,12 @@ public final class ModPanel extends JPanel {
             }));
         }
         if (mod != null) {
-            mod.configs().stream().filter(config -> config.path() != null).findFirst().ifPresent(config -> {
-                footer.add(new LinkLabel(config.fileName(), Icons.CONFIG_FILE, config.path().toString(), () -> openConfig(config)));
-            });
+            for (PackCatalog.ConfigFile config : mod.configs()) {
+                footer.add(new LinkLabel(config.fileName(), Icons.CONFIG_FILE, "Configuration " + config.fileName(), () -> {
+                    this.configs.select(config.fileName());
+                    this.tabs.setSelectedComponent(this.tabContent.get(ModTab.CONFIGURATION));
+                }));
+            }
         }
         return footer.getComponentCount() == 0 ? null : footer;
     }
@@ -405,20 +409,6 @@ public final class ModPanel extends JPanel {
         }
     }
 
-    private void openConfiguration() {
-        List<PackCatalog.ConfigFile> files = this.configs.files;
-        List<PackCatalog.ConfigFile> openable = files.stream().filter(config -> config.path() != null).toList();
-        if (openable.size() == 1 && files.size() == 1) {
-            openConfig(openable.getFirst());
-        } else {
-            this.tabs.setSelectedComponent(this.tabContent.get(ModTab.CONFIGURATION));
-        }
-    }
-
-    private void openConfig(PackCatalog.ConfigFile config) {
-        if (config.path() != null) this.navigator.accept(new NavigationTarget.LocalFile(config.path()));
-    }
-
     private boolean hasModule(String moduleId) {
         return this.sources.get().modules().stream().anyMatch(module -> module.id().equals(moduleId));
     }
@@ -462,6 +452,7 @@ public final class ModPanel extends JPanel {
         this.disposed = true;
         this.removeCatalogListener.run();
         this.listIcons.dispose();
+        this.resources.dispose();
     }
 
     JTabbedPane tabs() {
@@ -472,36 +463,7 @@ public final class ModPanel extends JPanel {
         return this.entryTables.get(tab);
     }
 
-    private static final class ConfigTableModel extends AbstractTableModel {
-        private List<PackCatalog.ConfigFile> files = List.of();
-
-        @Override
-        public int getRowCount() {
-            return this.files.size();
-        }
-
-        @Override
-        public int getColumnCount() {
-            return 3;
-        }
-
-        @Override
-        public String getColumnName(int column) {
-            return switch (column) {
-                case 0 -> "File";
-                case 1 -> "Type";
-                default -> "Path";
-            };
-        }
-
-        @Override
-        public Object getValueAt(int row, int column) {
-            PackCatalog.ConfigFile file = this.files.get(row);
-            return switch (column) {
-                case 0 -> file.fileName();
-                case 1 -> file.type().name().toLowerCase(Locale.ROOT);
-                default -> file.path() == null ? "Per world" : file.path().toString();
-            };
-        }
+    ConfigPanel configPanel() {
+        return this.configs;
     }
 }

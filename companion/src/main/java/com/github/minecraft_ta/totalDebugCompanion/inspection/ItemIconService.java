@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemModelId;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderBackend;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderRequest;
 import com.github.minecraft_ta.totalDebugCompanion.itemrender.ItemRenderResourceRoot;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.ModelAppearance;
 
 import javax.swing.SwingUtilities;
 import java.awt.image.BufferedImage;
@@ -205,10 +206,29 @@ public final class ItemIconService implements AutoCloseable {
         return separator < 0 ? "" : itemId.substring(0, separator) + ":item/" + itemId.substring(separator + 1);
     }
 
-    private Optional<BufferedImage> renderOnWorker(Key key) {
+    /**
+     * The blockstate, models and textures that draw a block and an item in the latest snapshot; either id may be
+     * empty. Empty before a snapshot arrives.
+     */
+    public CompletableFuture<Optional<ModelAppearance>> appearance(String blockId, String itemModel) {
+        if (this.closed || this.snapshot == null) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        return CompletableFuture.supplyAsync(() -> {
+            if (!openBackend()) return Optional.empty();
+            try {
+                return Optional.of(this.backend.appearance(blockId, itemModel));
+            } catch (IOException | RuntimeException unreadable) {
+                return Optional.empty();
+            }
+        }, this.worker);
+    }
+
+    /** Opens the renderer on the latest snapshot unless it already is. Worker thread only. */
+    private boolean openBackend() {
         Snapshot current = this.snapshot;
         if (this.closed || current == null) {
-            return Optional.empty();
+            return false;
         }
         if (!current.equals(this.opened)) {
             closeBackend();
@@ -223,8 +243,15 @@ public final class ItemIconService implements AutoCloseable {
             } catch (IOException exception) {
                 System.getLogger(ItemIconService.class.getName()).log(System.Logger.Level.WARNING,
                         "Unable to open item icon resources " + current.archive(), exception);
-                return Optional.empty();
+                return false;
             }
+        }
+        return true;
+    }
+
+    private Optional<BufferedImage> renderOnWorker(Key key) {
+        if (!openBackend()) {
+            return Optional.empty();
         }
         return this.cache.computeIfAbsent(key, ignored -> {
             try {

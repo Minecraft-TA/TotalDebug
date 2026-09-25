@@ -40,4 +40,12 @@ class PackCatalogEntriesTest {
         assertEquals(Optional.empty(), PackCatalogEntries.dependency("Bad-Id", "OPTIONAL", "[1,)", "CLIENT"));
         assertEquals(PackCatalog.ConfigType.SERVER, PackCatalogEntries.configType("server"));
     }
+
+    @Test
+    void dropsTheValueLinesNeoForgeAddsToComments() {
+        assertEquals("Energy a machine stores\nPer tick", PackCatalogEntries.configComment(
+                " Energy a machine stores\n Per tick\n Default: 40000\n Range: 1 ~ 2147483647"));
+        assertEquals("", PackCatalogEntries.configComment("Allowed Values: FAST, SLOW"));
+        assertEquals("", PackCatalogEntries.configComment(null));
+    }
 }

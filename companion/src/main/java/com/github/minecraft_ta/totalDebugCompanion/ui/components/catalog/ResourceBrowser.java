@@ -4,135 +4,180 @@ import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
+import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryText;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
+import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.JComboBox;
+import javax.swing.DefaultListModel;
+import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
-import javax.swing.RowFilter;
+import javax.swing.SwingConstants;
+import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
-/** A mod's resources, narrowed by category and path; opening one shows it in a resource tab. */
+/**
+ * A mod's resources by kind. Categories are listed with their counts; files show their path inside the category, and
+ * textures show as a grid of pixel-exact previews. Opening a resource shows it in a resource tab.
+ */
 public final class ResourceBrowser extends JPanel {
     private static final String ALL = "";
+    private static final String TEXTURES = "assets/textures";
+    private static final int CELL_WIDTH = 92;
+    private static final int CELL_HEIGHT = 84;
+    private static final Icon ANIMATED = Icons.RUN.derive(12, 12);
 
-    private final DefaultComboBoxModel<String> categories = new DefaultComboBoxModel<>();
-    private final JComboBox<String> category = new JComboBox<>(this.categories);
+    private record Category(String key, String label, int count) {
+    }
+
+    private final DefaultListModel<Category> categories = new DefaultListModel<>();
+    private final JList<Category> categoryList = new JList<>(this.categories);
+    private final JScrollPane categoryScroll = new JScrollPane(this.categoryList);
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
-    private final ResourceModel model = new ResourceModel();
-    private final JTable table = new JTable(this.model);
-    private final TableRowSorter<ResourceModel> sorter = new TableRowSorter<>(this.model);
+    private final DefaultListModel<ModResources.Resource> shown = new DefaultListModel<>();
+    private final JList<ModResources.Resource> list = new JList<>(this.shown);
     private final JLabel empty = new JLabel();
+    private final TextureThumbnails thumbnails = new TextureThumbnails(UiMetrics.previewPixels(UiMetrics.THUMBNAIL_SIZE));
+    private final Consumer<String> categoryChanged;
+    private List<ModResources.Resource> resources = List.of();
+    private Set<String> animated = Set.of();
     private String pendingCategory = ALL;
     private boolean updating;
 
     public ResourceBrowser(Consumer<NavigationTarget> navigator, Consumer<String> categoryChanged) {
         super(new BorderLayout());
         Objects.requireNonNull(navigator, "navigator");
-        Objects.requireNonNull(categoryChanged, "categoryChanged");
-        this.category.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected,
-                                                          boolean focused) {
-                String key = (String) value;
-                String text = key == null || key.isEmpty() ? "All categories" : label(key);
-                return super.getListCellRendererComponent(list, text, index, selected, focused);
-            }
+        this.categoryChanged = Objects.requireNonNull(categoryChanged, "categoryChanged");
+        this.categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        this.categoryList.setCellRenderer((list, category, index, selected, focused) -> {
+            PrimarySecondaryLabel label = new PrimarySecondaryLabel();
+            label.configure(new PrimarySecondaryText(category.label(),
+                            NumberFormat.getIntegerInstance(Locale.ROOT).format(category.count())), null, list.getFont(),
+                    selected, selected ? list.getSelectionForeground() : ThemeColors.text(),
+                    selected ? list.getSelectionBackground() : list.getBackground());
+            label.setOpaque(true);
+            label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
+            label.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+            return label;
         });
-        this.category.addActionListener(event -> {
-            if (this.updating) return;
+        this.categoryList.addListSelectionListener(event -> {
+            if (event.getValueIsAdjusting() || this.updating) return;
             applyFilter();
-            categoryChanged.accept(selectedCategory());
+            this.categoryChanged.accept(selectedCategory());
         });
-        this.filter.putClientProperty("JTextField.placeholderText", "Filter paths");
+        this.categoryScroll.setBorder(DynamicMatteBorder.rule(0, 0, 0, 1));
+        this.categoryScroll.setPreferredSize(new Dimension(190, 0));
+        add(this.categoryScroll, BorderLayout.WEST);
+
+        this.filter.putClientProperty("JTextField.placeholderText", "Filter resources");
         this.filter.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void removeUpdate(DocumentEvent event) { applyFilter(); }
             @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
         });
-        this.table.setRowSorter(this.sorter);
-        this.table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        this.table.setShowGrid(false);
-        this.table.setFillsViewportHeight(true);
-        this.table.getColumnModel().getColumn(0).setCellRenderer(new DefaultTableCellRenderer() {
-            @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
-                                                           boolean focused, int row, int column) {
-                super.getTableCellRendererComponent(table, value, selected, false, row, column);
-                setIcon(FileTypeResolver.resolve(String.valueOf(value)).icon());
-                return this;
-            }
-        });
-        this.table.addMouseListener(new MouseAdapter() {
+        this.list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        this.list.setCellRenderer(this::render);
+        ToolTipManager.sharedInstance().registerComponent(this.list);
+        this.list.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                int row = ResourceBrowser.this.table.rowAtPoint(event.getPoint());
-                if (event.getClickCount() == 2 && row >= 0) navigator.accept(resourceAt(row).target());
+                int row = ResourceBrowser.this.list.locationToIndex(event.getPoint());
+                if (event.getClickCount() == 2 && row >= 0 && ResourceBrowser.this.list.getCellBounds(row, row).contains(event.getPoint())) {
+                    navigator.accept(ResourceBrowser.this.shown.get(row).target());
+                }
             }
         });
-        this.table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openResource");
-        this.table.getActionMap().put("openResource", new AbstractAction() {
+        this.list.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openResource");
+        this.list.getActionMap().put("openResource", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                int row = ResourceBrowser.this.table.getSelectedRow();
-                if (row >= 0) navigator.accept(resourceAt(row).target());
+                ModResources.Resource selected = ResourceBrowser.this.list.getSelectedValue();
+                if (selected != null) navigator.accept(selected.target());
             }
         });
-        JPanel top = new JPanel(new BorderLayout(8, 0));
+        ContextMenus.installList(this.list, this::menu);
+
+        JPanel top = new JPanel(new BorderLayout());
         top.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
-        top.add(this.category, BorderLayout.WEST);
         top.add(this.filter, BorderLayout.CENTER);
-        add(top, BorderLayout.NORTH);
-        add(new JScrollPane(this.table), BorderLayout.CENTER);
+        JScrollPane listScroll = new JScrollPane(this.list);
+        listScroll.setBorder(BorderFactory.createEmptyBorder());
+        listScroll.getVerticalScrollBar().setUnitIncrement(16);
+        JPanel content = new JPanel(new BorderLayout());
+        content.add(top, BorderLayout.NORTH);
+        content.add(listScroll, BorderLayout.CENTER);
         this.empty.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
         this.empty.setVisible(false);
-        add(this.empty, BorderLayout.SOUTH);
+        content.add(this.empty, BorderLayout.SOUTH);
+        add(content, BorderLayout.CENTER);
     }
 
-    /** The category's folder, with its root when both assets and data could have it. */
+    private JPopupMenu menu(int row) {
+        ModResources.Resource resource = this.shown.get(row);
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(ContextMenus.copyAction("Copy path", resource.path()));
+        menu.add(ContextMenus.copyAction("Copy resource id", resource.namespace() + ":" + resource.relativePath()));
+        return menu;
+    }
+
+    /** The category's folder in words, with its root when both assets and data could have it. */
     static String label(String key) {
         ModResources.Category category = ModResources.Category.parse(key);
-        return category.root().equals("data") ? category.folder() + " (data)" : category.folder();
+        String words = category.folder().replace('_', ' ');
+        words = words.isEmpty() ? words : Character.toUpperCase(words.charAt(0)) + words.substring(1);
+        return category.root().equals("data") ? words + " (data)" : words;
     }
 
     public void setResources(List<ModResources.Resource> resources) {
+        this.resources = List.copyOf(resources);
+        Set<String> animated = new HashSet<>();
+        for (ModResources.Resource resource : resources) {
+            if (resource.path().endsWith(".png.mcmeta")) animated.add(resource.path().substring(0, resource.path().length() - 7));
+        }
+        this.animated = animated;
         this.updating = true;
         try {
-            this.model.resources = List.copyOf(resources);
-            this.model.fireTableDataChanged();
-            List<String> keys = new ArrayList<>();
-            keys.add(ALL);
-            ModResources.categories(resources).forEach(category -> keys.add(category.key()));
-            this.category.removeAllItems();
-            keys.forEach(this.category::addItem);
-            this.category.setVisible(keys.size() > 2);
-            this.category.setSelectedItem(keys.contains(this.pendingCategory) ? this.pendingCategory : ALL);
+            this.categories.clear();
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            for (ModResources.Category category : ModResources.categories(resources)) counts.put(category.key(), 0);
+            for (ModResources.Resource resource : resources) counts.merge(resource.category().key(), 1, Integer::sum);
+            this.categories.addElement(new Category(ALL, "All", resources.size()));
+            counts.forEach((key, count) -> this.categories.addElement(new Category(key, label(key), count)));
+            this.categoryScroll.setVisible(counts.size() > 1);
+            selectKey(this.pendingCategory);
         } finally {
             this.updating = false;
         }
@@ -147,63 +192,117 @@ public final class ResourceBrowser extends JPanel {
 
     public void selectCategory(String key) {
         this.pendingCategory = key == null ? ALL : key;
-        if (this.categories.getIndexOf(this.pendingCategory) >= 0) {
-            this.category.setSelectedItem(this.pendingCategory);
+        selectKey(this.pendingCategory);
+    }
+
+    private void selectKey(String key) {
+        for (int index = 0; index < this.categories.size(); index++) {
+            if (this.categories.get(index).key().equals(key)) {
+                this.categoryList.setSelectedIndex(index);
+                return;
+            }
         }
+        if (!this.categories.isEmpty()) this.categoryList.setSelectedIndex(0);
     }
 
     public String selectedCategory() {
-        Object selected = this.category.getSelectedItem();
-        return selected == null ? ALL : (String) selected;
+        Category selected = this.categoryList.getSelectedValue();
+        return selected == null ? this.pendingCategory : selected.key();
     }
 
     public int rowCount() {
-        return this.table.getRowCount();
+        return this.shown.size();
     }
 
-    ModResources.Resource resourceAt(int viewRow) {
-        return this.model.resources.get(this.table.convertRowIndexToModel(viewRow));
+    ModResources.Resource resourceAt(int row) {
+        return this.shown.get(row);
+    }
+
+    boolean showsTextures() {
+        return TEXTURES.equals(selectedCategory());
     }
 
     private void applyFilter() {
         String key = selectedCategory();
-        this.pendingCategory = key;
+        if (!this.updating) this.pendingCategory = key;
+        boolean textures = TEXTURES.equals(key);
         String text = this.filter.getText().strip().toLowerCase(Locale.ROOT);
-        if (key.isEmpty() && text.isEmpty()) {
-            this.sorter.setRowFilter(null);
-            return;
+        List<ModResources.Resource> matching = new ArrayList<>();
+        for (ModResources.Resource resource : this.resources) {
+            if (!key.isEmpty() && !resource.category().key().equals(key)) continue;
+            if (textures && !resource.path().endsWith(".png")) continue;
+            if (!text.isEmpty() && !resource.path().toLowerCase(Locale.ROOT).contains(text)) continue;
+            matching.add(resource);
         }
-        this.sorter.setRowFilter(new RowFilter<>() {
-            @Override
-            public boolean include(Entry<? extends ResourceModel, ? extends Integer> row) {
-                ModResources.Resource resource = ResourceBrowser.this.model.resources.get(row.getIdentifier());
-                return (key.isEmpty() || resource.category().key().equals(key))
-                        && (text.isEmpty() || resource.path().toLowerCase(Locale.ROOT).contains(text));
-            }
-        });
+        matching.sort(Comparator.comparing(ModResources.Resource::relativePath)
+                .thenComparing(ModResources.Resource::path));
+        this.list.setLayoutOrientation(textures ? JList.HORIZONTAL_WRAP : JList.VERTICAL);
+        this.list.setVisibleRowCount(textures ? -1 : 8);
+        this.list.setFixedCellWidth(textures ? CELL_WIDTH : -1);
+        this.list.setFixedCellHeight(textures ? CELL_HEIGHT : -1);
+        this.shown.clear();
+        this.shown.addAll(matching);
     }
 
-    private static final class ResourceModel extends AbstractTableModel {
-        private List<ModResources.Resource> resources = List.of();
+    private Component render(JList<? extends ModResources.Resource> list, ModResources.Resource resource, int index,
+                             boolean selected, boolean focused) {
+        if (showsTextures()) return new TextureCell(resource, selected, list);
+        PrimarySecondaryLabel label = new PrimarySecondaryLabel();
+        String secondary = resource.folder();
+        if (selectedCategory().isEmpty()) secondary = (label(resource.category().key()) + "  " + secondary).strip();
+        label.configure(new PrimarySecondaryText(resource.fileName(), secondary),
+                FileTypeResolver.resolve(resource.fileName()).icon(), list.getFont(), selected,
+                selected ? list.getSelectionForeground() : ThemeColors.text(),
+                selected ? list.getSelectionBackground() : list.getBackground());
+        label.setOpaque(true);
+        label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
+        label.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
+        label.setToolTipText(resource.path());
+        return label;
+    }
 
+    /** A texture preview with its name below; animated textures carry a small play mark. */
+    private final class TextureCell extends JPanel {
+        private TextureCell(ModResources.Resource texture, boolean selected, JList<?> list) {
+            super(new BorderLayout(0, 2));
+            setOpaque(true);
+            setBackground(selected ? list.getSelectionBackground() : list.getBackground());
+            setBorder(BorderFactory.createEmptyBorder(6, 4, 4, 4));
+            Icon preview = ResourceBrowser.this.thumbnails.icon(texture, list);
+            int size = ResourceBrowser.this.thumbnails.size();
+            Icon shown = preview == null ? new CenteredIcon(Icons.IMAGE_FILE, size) : preview;
+            boolean moving = ResourceBrowser.this.animated.contains(texture.path());
+            JLabel image = new JLabel(moving ? new AnimatedMark(shown) : shown, SwingConstants.CENTER);
+            add(image, BorderLayout.CENTER);
+            String stem = texture.fileName().substring(0, texture.fileName().length() - 4);
+            JLabel name = new JLabel(stem, SwingConstants.CENTER);
+            name.setFont(list.getFont().deriveFont(list.getFont().getSize2D() - 1f));
+            name.setForeground(selected ? list.getSelectionForeground() : ThemeColors.secondaryText());
+            add(name, BorderLayout.SOUTH);
+            setToolTipText(texture.relativePath() + (moving ? ", animated" : ""));
+        }
+    }
+
+    /** Draws a small play triangle over the corner of an animated texture's preview. */
+    private record AnimatedMark(Icon preview) implements Icon {
         @Override
-        public int getRowCount() {
-            return this.resources.size();
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            this.preview.paintIcon(component, graphics, x, y);
+            ANIMATED.paintIcon(component, graphics, x + getIconWidth() - 12, y + getIconHeight() - 12);
         }
 
         @Override
-        public int getColumnCount() {
-            return 1;
+        public int getIconWidth() {
+            return this.preview.getIconWidth();
         }
 
         @Override
-        public String getColumnName(int column) {
-            return "Path";
+        public int getIconHeight() {
+            return this.preview.getIconHeight();
         }
+    }
 
-        @Override
-        public Object getValueAt(int row, int column) {
-            return this.resources.get(row).path();
-        }
+    public void dispose() {
+        this.thumbnails.dispose();
     }
 }

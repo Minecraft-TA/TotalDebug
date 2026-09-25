@@ -65,6 +65,12 @@ public final class ItemRenderBackend implements AutoCloseable {
         return copy(cached);
     }
 
+    /** The files and textures that draw a block and an item; either id may be empty. */
+    public synchronized ModelAppearance appearance(String blockId, String itemModel) throws IOException {
+        ensureOpen();
+        return ModelAppearance.resolve(this.resources, blockId, itemModel);
+    }
+
     /** Finds every item-model JSON visible in the supplied resource roots. */
     public synchronized List<ItemModelId> discoverItemModels() throws IOException {
         ensureOpen();

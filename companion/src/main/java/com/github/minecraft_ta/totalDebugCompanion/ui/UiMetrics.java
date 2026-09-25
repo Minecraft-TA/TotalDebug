@@ -14,6 +14,8 @@ public final class UiMetrics {
     public static final int ITEM_ICON_SIZE = 32;
     /** Item, block and mod previews at the top of a subject page. */
     public static final int HEADER_ICON_SIZE = 64;
+    /** Texture thumbnails in resource grids and on definition pages. */
+    public static final int THUMBNAIL_SIZE = 48;
 
     private UiMetrics() {
     }

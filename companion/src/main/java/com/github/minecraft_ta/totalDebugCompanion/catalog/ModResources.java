@@ -52,6 +52,25 @@ public final class ModResources {
             return this.path.substring(this.path.lastIndexOf('/') + 1);
         }
 
+        /** The namespace folder, such as {@code framedblocks} in {@code assets/framedblocks/textures/...}. */
+        public String namespace() {
+            String[] parts = this.path.split("/", 3);
+            return parts.length < 2 ? "" : parts[1];
+        }
+
+        /** The path inside its category, such as {@code block/framed_slab.png} for a texture. */
+        public String relativePath() {
+            String prefix = this.category.root() + "/" + namespace() + "/" + this.category.folder() + "/";
+            return this.path.startsWith(prefix) ? this.path.substring(prefix.length()) : fileName();
+        }
+
+        /** The folders between the category and the file, such as {@code block}; empty directly in the category. */
+        public String folder() {
+            String relative = relativePath();
+            int separator = relative.lastIndexOf('/');
+            return separator < 0 ? "" : relative.substring(0, separator);
+        }
+
         /** The file name without its extension, used to match resources to registry ids. */
         public String stem() {
             String name = fileName();

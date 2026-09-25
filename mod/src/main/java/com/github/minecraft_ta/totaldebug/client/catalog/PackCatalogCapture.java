@@ -129,8 +129,10 @@ public final class PackCatalogCapture {
         }
         List<PackCatalog.ConfigFile> configs = new ArrayList<>();
         for (ModConfig config : ModConfigs.getModConfigs(info.getModId())) {
+            ConfigSpecs.Spec spec = ConfigSpecs.of(config);
             configs.add(new PackCatalog.ConfigFile(config.getFileName(),
-                    PackCatalogEntries.configType(config.getType().name()), loadedPath(config)));
+                    PackCatalogEntries.configType(config.getType().name()), loadedPath(config), spec.sections(),
+                    spec.settings()));
         }
         return new PackCatalog.Mod(
                 info.getModId(),

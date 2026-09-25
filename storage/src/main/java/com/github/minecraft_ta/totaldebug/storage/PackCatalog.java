@@ -13,12 +13,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 
@@ -34,13 +36,15 @@ public record PackCatalog(
         List<ItemEntry> items,
         List<EntityTypeEntry> entityTypes
 ) {
-    public static final int FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 2;
     public static final long MAX_FILE_BYTES = 64L * 1024 * 1024;
 
     private static final Pattern MOD_ID = Pattern.compile("[a-z][a-z0-9_]{1,63}");
     private static final Pattern REGISTRY_ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
     public enum ConfigType { COMMON, CLIENT, SERVER, STARTUP }
+    /** What must restart before a changed setting takes effect. */
+    public enum Restart { NONE, WORLD, GAME }
     public enum DependencyType { REQUIRED, OPTIONAL, INCOMPATIBLE, DISCOURAGED }
     public enum Side { CLIENT, SERVER, BOTH }
 
@@ -78,11 +82,61 @@ public record PackCatalog(
         }
     }
 
-    /** {@code path} is null for a configuration that is not loaded, such as a server configuration outside a world. */
-    public record ConfigFile(String fileName, ConfigType type, Path path) {
+    /**
+     * A mod's configuration file. {@code path} is null for a configuration that is not loaded, such as a server
+     * configuration outside a world. {@code sections} and {@code settings} come from its specification and are empty
+     * when the mod declares the file without a NeoForge specification.
+     */
+    public record ConfigFile(String fileName, ConfigType type, Path path, List<ConfigSection> sections,
+                             List<ConfigSetting> settings) {
         public ConfigFile {
             requireText(fileName, "config file name");
             Objects.requireNonNull(type, "config type");
+            sections = List.copyOf(sections);
+            settings = List.copyOf(settings);
+            unique(settings.stream().map(ConfigSetting::path).toList(), "setting");
+        }
+    }
+
+    /** A group of settings, such as {@code general}, with the comment its specification gives it. */
+    public record ConfigSection(String path, String comment) {
+        public ConfigSection {
+            requireText(path, "config section path");
+            comment = text(comment);
+        }
+    }
+
+    /**
+     * One setting as its specification declares it. {@code path} is its dotted key in the file and
+     * {@code defaultValue} its default in {@link #display(Object)} form. {@code range} is the accepted range, such as
+     * {@code 1 ~ 64}, and {@code allowed} lists the accepted values of a choice; both are empty when unrestricted.
+     */
+    public record ConfigSetting(String path, String comment, String defaultValue, String range, List<String> allowed,
+                                Restart restart) {
+        public ConfigSetting {
+            requireText(path, "config setting path");
+            comment = text(comment);
+            defaultValue = text(defaultValue);
+            range = text(range);
+            allowed = List.copyOf(allowed);
+            Objects.requireNonNull(restart, "restart of " + path);
+        }
+
+        /** The last part of the path, such as {@code maxEnergy} for {@code machines.maxEnergy}. */
+        public String name() {
+            return this.path.substring(this.path.lastIndexOf('.') + 1);
+        }
+
+        /** The text of a configuration value, the same for a captured default and a value read from the file. */
+        public static String display(Object value) {
+            if (value == null) return "";
+            if (value instanceof Enum<?> constant) return constant.name();
+            if (value instanceof Collection<?> values) {
+                StringJoiner joined = new StringJoiner(", ", "[", "]");
+                for (Object element : values) joined.add(display(element));
+                return joined.toString();
+            }
+            return String.valueOf(value);
         }
     }
 
@@ -234,6 +288,21 @@ public record PackCatalog(
                     writer.name("fileName").value(config.fileName());
                     writer.name("type").value(config.type().name());
                     if (config.path() != null) writer.name("path").value(config.path().toUri().toASCIIString());
+                    if (!config.sections().isEmpty()) {
+                        writer.name("sections").beginArray();
+                        for (ConfigSection section : config.sections()) {
+                            writer.beginObject();
+                            writer.name("path").value(section.path());
+                            optional(writer, "comment", section.comment());
+                            writer.endObject();
+                        }
+                        writer.endArray();
+                    }
+                    if (!config.settings().isEmpty()) {
+                        writer.name("settings").beginArray();
+                        for (ConfigSetting setting : config.settings()) writeSetting(writer, setting);
+                        writer.endArray();
+                    }
                     writer.endObject();
                 }
                 writer.endArray();
@@ -339,14 +408,50 @@ public record PackCatalog(
             for (JsonElement value : JsonFiles.array(json, "configs")) {
                 JsonObject config = value.getAsJsonObject();
                 String path = optional(config, "path");
+                List<ConfigSection> sections = new ArrayList<>();
+                if (config.has("sections")) {
+                    for (JsonElement section : JsonFiles.array(config, "sections")) {
+                        JsonObject entry = section.getAsJsonObject();
+                        sections.add(new ConfigSection(JsonFiles.string(entry, "path"), optional(entry, "comment")));
+                    }
+                }
+                List<ConfigSetting> settings = new ArrayList<>();
+                if (config.has("settings")) {
+                    for (JsonElement setting : JsonFiles.array(config, "settings")) settings.add(setting(setting.getAsJsonObject()));
+                }
                 configs.add(new ConfigFile(JsonFiles.string(config, "fileName"),
                         ConfigType.valueOf(JsonFiles.string(config, "type")),
-                        path.isEmpty() ? null : fileUri(path)));
+                        path.isEmpty() ? null : fileUri(path), sections, settings));
             }
         }
         return new Mod(JsonFiles.string(json, "id"), optional(json, "name"), optional(json, "version"),
                 optional(json, "description"), authors, optional(json, "license"), urls, optional(json, "logo"),
                 JsonFiles.string(json, "module"), URI.create(JsonFiles.string(json, "file")), dependencies, configs);
+    }
+
+    private static void writeSetting(JsonWriter writer, ConfigSetting setting) throws IOException {
+        writer.beginObject();
+        writer.name("path").value(setting.path());
+        optional(writer, "comment", setting.comment());
+        writer.name("default").value(setting.defaultValue());
+        optional(writer, "range", setting.range());
+        if (!setting.allowed().isEmpty()) {
+            writer.name("allowed").beginArray();
+            for (String value : setting.allowed()) writer.value(value);
+            writer.endArray();
+        }
+        if (setting.restart() != Restart.NONE) writer.name("restart").value(setting.restart().name());
+        writer.endObject();
+    }
+
+    private static ConfigSetting setting(JsonObject json) {
+        List<String> allowed = new ArrayList<>();
+        if (json.has("allowed")) {
+            for (JsonElement value : JsonFiles.array(json, "allowed")) allowed.add(value.getAsString());
+        }
+        String restart = optional(json, "restart");
+        return new ConfigSetting(JsonFiles.string(json, "path"), optional(json, "comment"), optional(json, "default"),
+                optional(json, "range"), allowed, restart.isEmpty() ? Restart.NONE : Restart.valueOf(restart));
     }
 
     private static BlockEntry block(JsonObject json) {

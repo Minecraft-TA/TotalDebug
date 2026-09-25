@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 
 import javax.imageio.ImageIO;
 import javax.swing.CellRendererPane;
@@ -9,9 +10,6 @@ import javax.swing.Icon;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Image;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -74,40 +72,12 @@ public final class ModLogoIcons {
         }
     }
 
-    /**
-     * The logo fitted into a {@code size} square, or empty when it is a banner. Small logos are enlarged by whole
-     * numbers only, so pixel-art logos stay sharp; larger ones are reduced smoothly.
-     */
+    /** The logo fitted into a {@code size} square, or empty when it is a banner. */
     static Optional<BufferedImage> square(BufferedImage logo, int size) {
         int width = logo.getWidth();
         int height = logo.getHeight();
         if (width > height * MAXIMUM_ASPECT || height > width * MAXIMUM_ASPECT) return Optional.empty();
-        double scale = (double) size / Math.max(width, height);
-        int drawnWidth;
-        int drawnHeight;
-        if (scale >= 1) {
-            int factor = (int) Math.floor(scale);
-            drawnWidth = width * factor;
-            drawnHeight = height * factor;
-        } else {
-            drawnWidth = Math.max(1, (int) Math.round(width * scale));
-            drawnHeight = Math.max(1, (int) Math.round(height * scale));
-        }
-        BufferedImage square = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = square.createGraphics();
-        try {
-            int x = (size - drawnWidth) / 2;
-            int y = (size - drawnHeight) / 2;
-            if (scale >= 1) {
-                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                graphics.drawImage(logo, x, y, drawnWidth, drawnHeight, null);
-            } else {
-                graphics.drawImage(logo.getScaledInstance(drawnWidth, drawnHeight, Image.SCALE_AREA_AVERAGING), x, y, null);
-            }
-        } finally {
-            graphics.dispose();
-        }
-        return Optional.of(square);
+        return Optional.of(PixelImages.fit(logo, size));
     }
 
     private static CompletableFuture<Optional<BufferedImage>> logo(Key key) {
