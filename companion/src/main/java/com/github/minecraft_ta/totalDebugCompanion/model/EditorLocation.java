@@ -1,16 +1,22 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+
 import java.io.File;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/** A module-relative editor location. The full source location is retained for the tooltip. */
-public record EditorLocation(String module, String moduleId, List<String> path, String tooltip) {
+/**
+ * A module-relative editor location. {@code location} is the full source location that Copy location copies; the
+ * tooltip shows a short form of it.
+ */
+public record EditorLocation(String module, String moduleId, List<String> path, String location) {
     private static final String SEPARATOR = "  ›  ";
 
     public EditorLocation {
@@ -19,11 +25,32 @@ public record EditorLocation(String module, String moduleId, List<String> path, 
         path = List.copyOf(Objects.requireNonNull(path, "path").stream()
                 .filter(segment -> segment != null && !segment.isBlank())
                 .toList());
-        tooltip = Objects.requireNonNullElse(tooltip, "");
+        location = Objects.requireNonNullElse(location, "");
     }
 
-    public EditorLocation(String module, List<String> path, String tooltip) {
-        this(module, "", path, tooltip);
+    public EditorLocation(String module, List<String> path, String location) {
+        this(module, "", path, location);
+    }
+
+    /**
+     * The location made short enough to read: an entry inside an archive with the archive's name below it, or the
+     * last parts of a path.
+     */
+    public String tooltip() {
+        if (this.location.isBlank()) return "";
+        int nested = this.location.lastIndexOf("!/");
+        if (nested >= 0) {
+            String container = this.location.substring(0, nested).replaceFirst("%23\\d+$", "");
+            String name = container.substring(Math.max(container.lastIndexOf('/'), container.lastIndexOf('\\')) + 1);
+            return Tooltip.of(this.location.substring(nested + 2)).detail("in " + name).html();
+        }
+        try {
+            return Tooltip.of(Tooltip.shortPath(Path.of(this.location))).html();
+        } catch (InvalidPathException notAPath) {
+            String[] parts = this.location.split("/");
+            return Tooltip.of(parts.length <= 3 ? this.location
+                    : "…/" + String.join("/", List.of(parts).subList(parts.length - 3, parts.length))).html();
+        }
     }
 
     public static EditorLocation empty() {

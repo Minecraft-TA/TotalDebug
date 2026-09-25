@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EditorLocationTest {
     @TempDir
@@ -28,7 +29,7 @@ class EditorLocationTest {
         );
         assertEquals(
                 classes.resolve("com/github/example/Sample.java").toString(),
-                location.tooltip()
+                location.location()
         );
     }
 
@@ -39,7 +40,9 @@ class EditorLocationTest {
         EditorLocation location = EditorLocation.forArchiveEntry(archive, "META-INF/mods.toml");
 
         assertEquals("example-mod.jar  ›  META-INF  ›  mods.toml", location.breadcrumb());
-        assertEquals(archive.toAbsolutePath().normalize() + "!/META-INF/mods.toml", location.tooltip());
+        assertEquals(archive.toAbsolutePath().normalize() + "!/META-INF/mods.toml", location.location());
+        assertTrue(location.tooltip().contains("META-INF/mods.toml") && location.tooltip().contains("in "
+                + archive.getFileName()), location.tooltip());
     }
 
     @Test

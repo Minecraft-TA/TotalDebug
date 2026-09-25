@@ -7,6 +7,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,6 +79,16 @@ public record TextureAnimation(int frameWidth, int frameHeight, int columns, int
             }
         }
         return new TextureAnimation(frameWidth, frameHeight, columns, rows, frames);
+    }
+
+    /**
+     * The top square of an image taller than wide by a whole number of squares, which is how animated textures store
+     * their frames; any other image as it is. Used where no metadata says how the frames are laid out.
+     */
+    public static BufferedImage firstFrameOfStrip(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        return height > width && height % width == 0 ? image.getSubimage(0, 0, width, width) : image;
     }
 
     public boolean contains(int index) {

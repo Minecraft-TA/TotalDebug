@@ -223,10 +223,6 @@ public final class ResourceBrowser extends JPanel {
         return this.shown.size();
     }
 
-    ModResources.Resource resourceAt(int row) {
-        return this.shown.get(row);
-    }
-
     boolean showsTextures() {
         return TEXTURES.equals(selectedCategory());
     }

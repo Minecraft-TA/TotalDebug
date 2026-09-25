@@ -51,7 +51,11 @@ enum UiRenderScenario {
     USAGES_MENU("usages-menu", "Find Usages with the keyboard context menu open"),
     SETTINGS("settings", "Settings controls"),
     SERVICE_STATUS("service-status", "Published Game and MCP states with the MCP detail popup"),
-    INDEXING("indexing", "Runtime index activity in the status bar");
+    INDEXING("indexing", "Runtime index activity in the status bar"),
+    MOD_PAGE("mod-page", "Mod page overview with its logo, facts and dependencies"),
+    MOD_CONFIGURATION("mod-configuration", "Configuration settings with a modified value"),
+    MOD_RESOURCES("mod-resources", "Mod resources listed by category"),
+    DEFINITION_PAGE("definition-page", "Block definition page with its files");
 
     private final String id;
     private final String description;

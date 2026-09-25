@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.SubjectLinks;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.PixelImages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.global.EditorTabs;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.FactsPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
@@ -36,25 +37,18 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
-import javax.swing.JTable;
 import javax.swing.JTextArea;
-import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
-import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.Image;
-import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -406,23 +400,7 @@ public final class ModPanel extends JPanel {
             BufferedImage image = ModLogoIcons.read(logo);
             if (image == null) return null;
             int box = SubjectHeader.ICON_SIZE - 2 * LOGO_PADDING;
-            double scale = Math.min(3.0 * box / image.getWidth(), (double) box / image.getHeight());
-            // Small pixel-art logos grow by whole numbers only, so their pixels stay even.
-            if (scale >= 1) scale = Math.floor(scale);
-            int width = Math.max(1, (int) Math.round(image.getWidth() * scale));
-            int height = Math.max(1, (int) Math.round(image.getHeight() * scale));
-            BufferedImage fitted = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D graphics = fitted.createGraphics();
-            try {
-                if (scale >= 1) {
-                    graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                    graphics.drawImage(image, 0, 0, width, height, null);
-                } else {
-                    graphics.drawImage(image.getScaledInstance(width, height, Image.SCALE_SMOOTH), 0, 0, null);
-                }
-            } finally {
-                graphics.dispose();
-            }
+            BufferedImage fitted = PixelImages.fitWithin(image, 3 * box, box);
             return new ContrastLogo(fitted, image, LOGO_PADDING);
         } catch (IOException | RuntimeException unreadable) {
             return null;

@@ -166,10 +166,7 @@ public record ModelAppearance(List<File> files, List<Texture> textures, List<Str
         Optional<byte[]> bytes = resources.read(resourcePath, MAXIMUM_TEXTURE_BYTES);
         if (bytes.isEmpty()) return null;
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes.get()));
-        if (image == null) return null;
-        int width = image.getWidth();
-        int height = image.getHeight();
-        return height > width && height % width == 0 ? image.getSubimage(0, 0, width, width) : image;
+        return image == null ? null : TextureAnimation.firstFrameOfStrip(image);
     }
 
     private static String modelPath(String model) {

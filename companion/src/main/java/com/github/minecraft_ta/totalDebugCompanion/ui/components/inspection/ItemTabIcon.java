@@ -32,10 +32,6 @@ public final class ItemTabIcon implements Icon {
         this.image = image;
     }
 
-    boolean hasImage() {
-        return this.image != null;
-    }
-
     @Override
     public void paintIcon(Component component, Graphics graphics, int x, int y) {
         BufferedImage current = this.image;

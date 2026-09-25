@@ -32,39 +32,39 @@ class ConfigPanelTest {
         ConfigValues values = new ConfigValues(Map.of("widgets.speed", "9", "widgets.mode", "FAST", "enabled", "true"),
                 List.of(), List.of());
 
-        List<ConfigPanel.Row> rows = ConfigPanel.rows(FILE, values);
+        List<ConfigSettingsTable.Row> rows = ConfigSettingsTable.rows(FILE, values);
 
         assertEquals(List.of("widgets", "widgets.speed", "widgets.mode", "enabled"),
-                rows.stream().map(ConfigPanel.Row::path).toList());
+                rows.stream().map(ConfigSettingsTable.Row::path).toList());
         assertEquals("Widget behavior", rows.getFirst().comment());
-        assertTrue(rows.get(1).changed());
-        assertFalse(rows.get(2).changed());
+        assertTrue(rows.get(1).modified());
+        assertFalse(rows.get(2).modified());
         assertEquals("FAST, SLOW", rows.get(2).accepts());
         assertEquals("1 to 16", rows.get(1).accepts());
-        assertEquals(ConfigPanel.ValueKind.NUMBER, rows.get(1).kind());
-        assertEquals(ConfigPanel.ValueKind.CHOICE, rows.get(2).kind());
-        assertEquals(ConfigPanel.ValueKind.BOOLEAN, rows.get(3).kind());
-        String speed = ConfigPanel.tooltip(rows.get(1));
+        assertEquals(ConfigSettingsTable.ValueKind.NUMBER, rows.get(1).kind());
+        assertEquals(ConfigSettingsTable.ValueKind.CHOICE, rows.get(2).kind());
+        assertEquals(ConfigSettingsTable.ValueKind.BOOLEAN, rows.get(3).kind());
+        String speed = ConfigSettingsTable.tooltip(rows.get(1));
         assertTrue(speed.contains("widgets.speed") && speed.contains("How fast widgets spin")
                 && speed.contains("Accepts 1 to 16") && speed.contains(">4</font>"), speed);
-        assertTrue(ConfigPanel.tooltip(rows.get(2)).contains("Takes effect after rejoining the world"));
+        assertTrue(ConfigSettingsTable.tooltip(rows.get(2)).contains("Takes effect after rejoining the world"));
     }
 
     @Test
     void rangesReadAsWordsAndTypeLimitsAreNoBound() {
-        assertEquals("at least 1", ConfigPanel.readableRange("> 1"));
-        assertEquals("at least 1", ConfigPanel.readableRange("1 ~ 9223372036854775807"));
-        assertEquals("at most 5", ConfigPanel.readableRange("-2147483648 ~ 5"));
-        assertEquals("0.1 to 4000000", ConfigPanel.readableRange("0.1 ~ 4000000.0"));
-        assertEquals("", ConfigPanel.readableRange("-1.7976931348623157E308 ~ 1.7976931348623157E308"));
+        assertEquals("at least 1", ConfigSettingsTable.readableRange("> 1"));
+        assertEquals("at least 1", ConfigSettingsTable.readableRange("1 ~ 9223372036854775807"));
+        assertEquals("at most 5", ConfigSettingsTable.readableRange("-2147483648 ~ 5"));
+        assertEquals("0.1 to 4000000", ConfigSettingsTable.readableRange("0.1 ~ 4000000.0"));
+        assertEquals("", ConfigSettingsTable.readableRange("-1.7976931348623157E308 ~ 1.7976931348623157E308"));
     }
 
     @Test
     void aMissingFileShowsTheDefaults() {
-        List<ConfigPanel.Row> rows = ConfigPanel.rows(FILE, null);
+        List<ConfigSettingsTable.Row> rows = ConfigSettingsTable.rows(FILE, null);
 
         assertEquals("4", rows.get(1).value());
-        assertFalse(rows.get(1).changed());
+        assertFalse(rows.get(1).modified());
     }
 
     @Test
