@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -13,6 +14,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecond
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.DynamicMatteBorder;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
 
+import javax.swing.text.JTextComponent;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
@@ -143,6 +145,13 @@ public final class ResourceBrowser extends JPanel {
         this.empty.setVisible(false);
         content.add(this.empty, BorderLayout.SOUTH);
         add(content, BorderLayout.CENTER);
+        TypeToFilter.install(this.list, this.filter);
+        TypeToFilter.forwardTyping(this.categoryList, () -> this.filter);
+    }
+
+    /** The field that filters the resources, which typing anywhere on the page reaches. */
+    public JTextComponent filterField() {
+        return this.filter;
     }
 
     private JPopupMenu menu(int row) {

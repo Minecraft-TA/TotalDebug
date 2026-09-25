@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
@@ -23,6 +24,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
+import javax.swing.text.JTextComponent;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
@@ -129,6 +131,7 @@ public final class ModPanel extends JPanel {
             this.tabs.addTab(tab.title(), SubjectIcons.tab(tab), this.tabContent.get(tab));
         }
         add(this.tabs, BorderLayout.CENTER);
+        TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
         this.removeCatalogListener = catalog.addListener(this::rebuild);
         rebuild();
     }
@@ -475,6 +478,15 @@ public final class ModPanel extends JPanel {
 
     CatalogEntryTable entryTable(ModTab tab) {
         return this.entryTables.get(tab);
+    }
+
+    /** The filter of the selected tab, which typing on the tab strip goes to; null for the Overview. */
+    private JTextComponent selectedFilter() {
+        Component selected = this.tabs.getSelectedComponent();
+        if (selected instanceof CatalogEntryTable table) return table.filterField();
+        if (selected == this.resources) return this.resources.filterField();
+        if (selected == this.configs) return this.configs.filterField();
+        return null;
     }
 
     ConfigPanel configPanel() {

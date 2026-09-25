@@ -1,10 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 
+import javax.swing.text.JTextComponent;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -101,7 +103,16 @@ public final class CatalogEntryTable extends JPanel {
         top.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         top.add(this.filter, BorderLayout.CENTER);
         add(top, BorderLayout.NORTH);
-        add(new JScrollPane(this.table), BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(this.table);
+        // The selected row shows where focus is; a focus frame around the whole table would only add noise.
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        add(scroll, BorderLayout.CENTER);
+        TypeToFilter.install(this.table, this.filter);
+    }
+
+    /** The field that filters the entries, which typing anywhere on the page reaches. */
+    public JTextComponent filterField() {
+        return this.filter;
     }
 
     public void setEntries(List<CatalogIndex.Entry> entries) {

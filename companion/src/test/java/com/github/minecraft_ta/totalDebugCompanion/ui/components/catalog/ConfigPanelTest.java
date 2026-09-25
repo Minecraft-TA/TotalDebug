@@ -40,8 +40,23 @@ class ConfigPanelTest {
         assertTrue(rows.get(1).changed());
         assertFalse(rows.get(2).changed());
         assertEquals("FAST, SLOW", rows.get(2).accepts());
-        assertEquals("1 ~ 16", rows.get(1).accepts());
-        assertEquals("widgets.mode\nTakes effect after rejoining the world.", ConfigPanel.details(rows.get(2)));
+        assertEquals("1 to 16", rows.get(1).accepts());
+        assertEquals(ConfigPanel.ValueKind.NUMBER, rows.get(1).kind());
+        assertEquals(ConfigPanel.ValueKind.CHOICE, rows.get(2).kind());
+        assertEquals(ConfigPanel.ValueKind.BOOLEAN, rows.get(3).kind());
+        String speed = ConfigPanel.tooltip(rows.get(1));
+        assertTrue(speed.contains("widgets.speed") && speed.contains("How fast widgets spin")
+                && speed.contains("Accepts 1 to 16") && speed.contains(">4</font>"), speed);
+        assertTrue(ConfigPanel.tooltip(rows.get(2)).contains("Takes effect after rejoining the world"));
+    }
+
+    @Test
+    void rangesReadAsWordsAndTypeLimitsAreNoBound() {
+        assertEquals("at least 1", ConfigPanel.readableRange("> 1"));
+        assertEquals("at least 1", ConfigPanel.readableRange("1 ~ 9223372036854775807"));
+        assertEquals("at most 5", ConfigPanel.readableRange("-2147483648 ~ 5"));
+        assertEquals("0.1 to 4000000", ConfigPanel.readableRange("0.1 ~ 4000000.0"));
+        assertEquals("", ConfigPanel.readableRange("-1.7976931348623157E308 ~ 1.7976931348623157E308"));
     }
 
     @Test
