@@ -549,13 +549,13 @@ final class ConfigPanel extends JPanel {
             setIcon(null);
             setToolTipText(null);
             if (row.setting() == null) {
-                setFont(font.deriveFont(Font.BOLD));
+                setFont(font);
                 setBorder(BorderFactory.createEmptyBorder(0, 8 + row.depth() * 16, 0, 4));
                 if (!selected) setForeground(ThemeColors.text());
                 setToolTipText(row.comment().isEmpty() ? null : row.comment());
                 return this;
             }
-            setFont(column == 1 && row.changed() ? font.deriveFont(Font.BOLD) : font);
+            setFont(font);
             setBorder(BorderFactory.createEmptyBorder(0, column == 0 ? 8 + row.depth() * 16 : 4, 0, 4));
             if (!selected) {
                 setForeground(column == 1 && row.changed() ? ThemeColors.accent()

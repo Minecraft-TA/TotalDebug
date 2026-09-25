@@ -516,7 +516,7 @@ final class DataView extends JPanel {
             setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 6));
             setText(row.name());
             Font font = DataView.this.table.getFont();
-            setFont(row.depth() == 0 ? font.deriveFont(Font.BOLD) : font);
+            setFont(font);
             if (row.kind() != DataRows.Kind.ENTRY) {
                 setIcon(row.kind() == DataRows.Kind.OMITTED ? null : Icons.ERROR);
                 setForeground(muted(selected));

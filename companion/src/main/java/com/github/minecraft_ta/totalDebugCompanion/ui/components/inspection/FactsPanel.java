@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
@@ -225,7 +226,7 @@ public final class FactsPanel extends JPanel {
         private final List<JLabel> labels = new ArrayList<>();
         private final List<SlotCell> slots = new ArrayList<>();
         private final List<JComponent> values = new ArrayList<>();
-        private final JLabel heading = new JLabel();
+        private SectionHeading heading;
 
         private SectionView(FactSection section) {
             super(new BorderLayout());
@@ -245,38 +246,23 @@ public final class FactsPanel extends JPanel {
         }
 
         private JComponent header(FactSection section) {
-            this.heading.setText(section.title());
-            this.heading.setFont(this.heading.getFont().deriveFont(Font.BOLD));
-            this.heading.setIconTextGap(4);
-            JPanel header = new JPanel(new BorderLayout(8, 0));
-            header.add(this.heading, BorderLayout.WEST);
-            JPanel rule = new JPanel(new GridBagLayout());
-            GridBagConstraints fill = new GridBagConstraints();
-            fill.weightx = 1;
-            fill.fill = GridBagConstraints.HORIZONTAL;
-            rule.add(new JSeparator(), fill);
-            header.add(rule, BorderLayout.CENTER);
+            JLabel omitted = null;
             if (section.omittedFacts() > 0) {
-                JLabel omitted = new JLabel(section.omittedFacts() + " more not shown");
+                omitted = new JLabel(section.omittedFacts() + " more not shown");
                 ThemeColors.keepForeground(omitted, ThemeColors::mutedText);
-                header.add(omitted, BorderLayout.EAST);
             }
-            header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            header.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent event) {
-                    if (!FactsPanel.this.collapsed.remove(SectionView.this.title)) {
-                        FactsPanel.this.collapsed.add(SectionView.this.title);
-                    }
-                    showCollapsed();
+            this.heading = new SectionHeading(section.title(), omitted, () -> {
+                if (!FactsPanel.this.collapsed.remove(SectionView.this.title)) {
+                    FactsPanel.this.collapsed.add(SectionView.this.title);
                 }
+                showCollapsed();
             });
-            return header;
+            return this.heading;
         }
 
         private void showCollapsed() {
             boolean collapsed = FactsPanel.this.collapsed.contains(this.title);
-            this.heading.setIcon(UIManager.getIcon(collapsed ? "Tree.collapsedIcon" : "Tree.expandedIcon"));
+            this.heading.setCollapsed(collapsed);
             this.body.setVisible(!collapsed);
             revalidate();
         }
