@@ -59,7 +59,7 @@ final class BreadcrumbBar extends JPanel {
     private Component component(BreadcrumbSegment segment) {
         if (segment.target() == null) {
             JLabel label = new JLabel(segment.label());
-            label.setForeground(ThemeColors.mutedText());
+            label.setForeground(ThemeColors.secondaryText());
             label.setToolTipText(segment.tooltip().isBlank() ? null : segment.tooltip());
             return label;
         }
@@ -68,7 +68,7 @@ final class BreadcrumbBar extends JPanel {
         button.setBorder(BorderFactory.createEmptyBorder());
         button.setContentAreaFilled(false);
         button.setFocusable(false);
-        button.setForeground(ThemeColors.mutedText());
+        button.setForeground(ThemeColors.secondaryText());
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setToolTipText(segment.tooltip().isBlank() ? null : segment.tooltip());
         Font normalFont = button.getFont();
@@ -83,7 +83,7 @@ final class BreadcrumbBar extends JPanel {
             @Override
             public void mouseExited(MouseEvent event) {
                 button.setFont(normalFont);
-                button.setForeground(ThemeColors.mutedText());
+                button.setForeground(ThemeColors.secondaryText());
             }
         });
         button.addActionListener(event -> this.navigator.accept(segment.target()));

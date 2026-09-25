@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
@@ -14,7 +16,6 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.JLabel;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
@@ -77,14 +78,7 @@ public final class CatalogEntryTable extends JPanel {
         });
         this.table.setRowSorter(this.sorter);
         this.table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        this.table.setShowGrid(false);
-        this.table.setFillsViewportHeight(true);
-        var headerRenderer = this.table.getTableHeader().getDefaultRenderer();
-        this.table.getTableHeader().setDefaultRenderer((table, value, selected, focused, row, column) -> {
-            Component header = headerRenderer.getTableCellRendererComponent(table, value, selected, focused, row, column);
-            if (header instanceof JLabel label) label.setHorizontalAlignment(JLabel.LEADING);
-            return header;
-        });
+        Tables.configure(this.table);
         this.table.setRowHeight(Math.max(this.table.getRowHeight(), icons.size() + 6));
         this.table.setDefaultRenderer(CatalogIndex.Entry.class, new DefaultTableCellRenderer() {
             @Override
@@ -116,7 +110,7 @@ public final class CatalogEntryTable extends JPanel {
             }
         });
         JPanel top = new JPanel(new BorderLayout());
-        top.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        top.setBorder(UiMetrics.barPadding());
         top.add(this.filter, BorderLayout.CENTER);
         add(top, BorderLayout.NORTH);
         JScrollPane scroll = new JScrollPane(this.table);

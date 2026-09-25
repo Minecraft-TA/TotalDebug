@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionProposal;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerCompletionRange;
@@ -10,7 +11,6 @@ import com.github.minecraft_ta.totalDebugCompanion.util.DocumentChangeListener;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
-import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JComponent;
 import javax.swing.JList;
@@ -106,7 +106,7 @@ public final class ExpressionCompletionSupport implements AutoCloseable {
             label.setToolTipText(value.detail().isBlank()
                     ? value.label()
                     : value.label() + "  " + value.detail());
-            label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+            label.setBorder(UiMetrics.cellPadding());
             return label;
         });
         this.list.addMouseListener(new MouseAdapter() {

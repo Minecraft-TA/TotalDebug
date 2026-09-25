@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.DefinitionView;
@@ -344,7 +345,7 @@ final class UiScenarioDriver {
                 if (scenario == UiRenderScenario.TAB_REVEAL && visibleMenuPopup() != null) {
                     context.once("reveal-tab", () -> {
                         for (Component item : visibleMenuPopup().getComponents()) {
-                            if (item instanceof JMenuItem action && "Reveal in tree".equals(action.getText())) {
+                            if (item instanceof JMenuItem action && "Show in Project".equals(action.getText())) {
                                 action.doClick();
                                 return;
                             }
@@ -723,8 +724,8 @@ final class UiScenarioDriver {
             case USAGES_MENU -> visibleMenuPopup() != null;
             case SETTINGS -> findShowingWindow(SettingsWindow.class) != null;
             case SERVICE_STATUS -> visibleMenuPopup() != null
-                    && findButton(mainWindow, "Game: Connected") != null
-                    && findButton(mainWindow, "MCP: Listening") != null;
+                    && findButton(mainWindow, HtmlText.nameAndValue("Game", "Connected")) != null
+                    && findButton(mainWindow, HtmlText.nameAndValue("MCP", "Listening")) != null;
             case INDEXING -> findButton(mainWindow, "Building class index") != null;
         };
     }
@@ -858,7 +859,7 @@ final class UiScenarioDriver {
                     "MCP is listening at http://127.0.0.1:32123/mcp"
             ));
         });
-        JButton mcp = findButton(mainWindow, "MCP: Listening");
+        JButton mcp = findButton(mainWindow, HtmlText.nameAndValue("MCP", "Listening"));
         if (mcp != null) {
             context.once("open-mcp-status", () -> {
                 mcp.getModel().setRollover(true);

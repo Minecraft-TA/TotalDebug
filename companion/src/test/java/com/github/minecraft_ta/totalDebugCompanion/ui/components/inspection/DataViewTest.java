@@ -150,9 +150,9 @@ class DataViewTest {
 
             assertEquals("Copy value: 40 entries were not transferred", ((JMenuItem) root.getComponent(0)).getText());
             assertFalse(root.getComponent(0).isEnabled());
-            assertEquals(List.of("Copy value", "Copy path", "Copy key"), labels(note));
-            assertEquals("\"C:\\\\path\"", copied(note, "Copy value"));
-            assertEquals("note", copied(note, "Copy path"));
+            assertEquals(List.of("Copy Value", "Copy Path", "Copy Key"), labels(note));
+            assertEquals("\"C:\\\\path\"", copied(note, "Copy Value"));
+            assertEquals("note", copied(note, "Copy Path"));
         });
     }
 

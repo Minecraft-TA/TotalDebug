@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconTextField;
 import com.github.minecraft_ta.totalDebugCompanion.ui.presentation.PrimarySecondaryLabel;
@@ -54,7 +55,7 @@ final class KeyChooser {
                     selected ? component.getSelectionBackground() : component.getBackground());
             label.setOpaque(true);
             label.setBackground(selected ? component.getSelectionBackground() : component.getBackground());
-            label.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+            label.setBorder(UiMetrics.listRowPadding());
             return label;
         });
         Runnable refill = () -> {

@@ -273,7 +273,7 @@ class BreakpointsWindowTest {
                 source.setText("");
                 kind.setSelectedIndex(2);
                 assertFalse(source.isMultiline());
-                assertEquals("Script:", field(fixture.window, "sourceLabel", JLabel.class).getText());
+                assertEquals("Script", field(fixture.window, "sourceLabel", JLabel.class).getText());
                 var scripts = field(fixture.window, "actionScript", JComboBox.class);
                 scripts.setSelectedItem("nested/Debug.tdscript");
                 assertEquals("nested/Debug.tdscript", fixture.controller.breakpoint(fixture.source.uri(), 2).request().action().script());

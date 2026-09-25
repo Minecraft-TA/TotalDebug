@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSupport;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.ExpressionCompletionSemantics;
@@ -90,7 +91,7 @@ final class BreakpointEditorPopup {
     private void configureUi() {
         this.popup.setBorder(PopupChrome.border());
         JPanel content = new JPanel(new BorderLayout(0, 10));
-        content.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        content.setBorder(UiMetrics.messagePadding());
 
         this.title.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
         content.add(this.title, BorderLayout.NORTH);
@@ -100,13 +101,13 @@ final class BreakpointEditorPopup {
         constraints.gridx = 0;
         constraints.gridy = 0;
         constraints.anchor = GridBagConstraints.LINE_START;
-        constraints.insets = new Insets(0, 0, 5, 10);
-        fields.add(new JLabel("Condition:"), constraints);
+        constraints.insets = new Insets(0, 0, UiMetrics.FORM_ROW_GAP, UiMetrics.FORM_LABEL_GAP);
+        fields.add(new JLabel("Condition"), constraints);
 
         constraints.gridx = 1;
         constraints.weightx = 1;
         constraints.fill = GridBagConstraints.HORIZONTAL;
-        constraints.insets = new Insets(0, 0, 5, 0);
+        constraints.insets = new Insets(0, 0, UiMetrics.FORM_ROW_GAP, 0);
         this.condition.setPlaceholder("Java expression");
         fields.add(this.condition.component(), constraints);
 
@@ -114,8 +115,8 @@ final class BreakpointEditorPopup {
         constraints.gridy = 1;
         constraints.weightx = 0;
         constraints.fill = GridBagConstraints.NONE;
-        constraints.insets = new Insets(0, 0, 0, 10);
-        fields.add(new JLabel("Trigger on hit:"), constraints);
+        constraints.insets = new Insets(0, 0, 0, UiMetrics.FORM_LABEL_GAP);
+        fields.add(new JLabel("Trigger on hit"), constraints);
 
         constraints.gridx = 1;
         constraints.weightx = 1;

@@ -43,7 +43,7 @@ class NotificationPresentationTest extends StatusBarTestFixture {
         SwingUtilities.invokeAndWait(() -> widget.set(new NotificationWidget(notifications, ignored -> null, opened::complete)));
         JPanel popup = widget.get().historyPanel();
         SwingUtilities.invokeAndWait(() -> button(popup, "Run failed").doClick(0));
-        JButton open = button(popup, "Open script");
+        JButton open = button(popup, "Open Script");
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         var enabled = new AtomicReference<>(false);
         while (!enabled.get() && System.nanoTime() < deadline) {
@@ -113,9 +113,9 @@ class NotificationPresentationTest extends StatusBarTestFixture {
             bar.setMcpStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Stopped", "Stopped"));
             assertTrue(checkbox.isEnabled());
             assertFalse(field(bar, "mcpEndpoint", CopyValue.class).isVisible());
-            assertFalse(button(field(bar, "mcpEndpoint", CopyValue.class), "Copy MCP endpoint").isEnabled());
+            assertFalse(button(field(bar, "mcpEndpoint", CopyValue.class), "Copy MCP Endpoint").isEnabled());
             bar.setGameIdentity("Pack", directory);
-            JButton copyDirectory = button(field(bar, "gameDirectory", CopyValue.class), "Copy game directory");
+            JButton copyDirectory = button(field(bar, "gameDirectory", CopyValue.class), "Copy Game Directory");
             copyDirectory.getModel().setArmed(true);
             copyDirectory.getModel().setPressed(true);
             bar.setGameStatus(new ServiceStatus(ServiceStatus.State.INACTIVE, "Offline", "Disconnected"));

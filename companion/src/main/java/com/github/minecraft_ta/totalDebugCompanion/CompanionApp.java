@@ -28,6 +28,7 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.HexFormat;
@@ -43,6 +44,8 @@ public final class CompanionApp {
     private CompanionApp() { }
 
     public static void main(String[] args) {
+        // The UI is English; Swing names keys, such as Ctrl in menu shortcuts, and dialog buttons in the default locale.
+        Locale.setDefault(Locale.ENGLISH);
         int result = 1;
         var consoleOut = System.out;
         var consoleErr = System.err;
@@ -140,7 +143,8 @@ public final class CompanionApp {
         configureTokenMakers();
     }
 
-    static void configureTokenMakers() {
+    /** Maps syntax styles to Companion's token makers; every editor and expression field relies on it. */
+    public static void configureTokenMakers() {
         TokenMakerFactory factory = TokenMakerFactory.getDefaultInstance();
         if (!(factory instanceof AbstractTokenMakerFactory mappings)) {
             throw new IllegalStateException("RSyntaxTextArea token factory does not support custom mappings");

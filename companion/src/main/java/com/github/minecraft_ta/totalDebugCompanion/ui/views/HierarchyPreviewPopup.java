@@ -79,7 +79,7 @@ public final class HierarchyPreviewPopup extends JWindow {
     public void setContentFont(Font font) {
         Font contentFont = Objects.requireNonNull(font, "font");
         this.rows.setFont(contentFont);
-        this.title.setFont(contentFont.deriveFont(Font.BOLD));
+        this.title.setFont(contentFont);
     }
 
     public void hidePreview() {

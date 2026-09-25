@@ -261,10 +261,9 @@ final class ToolsPanel extends JPanel {
 
     private JComponent toolHeader(InspectionTool tool, JLabel status) {
         JLabel name = new JLabel(tool.name(), Icons.SCRIPT_FILE, JLabel.LEADING);
-        name.putClientProperty("FlatLaf.styleClass", "h4");
         JButton edit = new JButton("Edit");
         edit.putClientProperty("JButton.buttonType", "borderless");
-        edit.setToolTipText(Tooltip.of("Open the script").detail(Tooltip.shortPath(tool.path())).html());
+        edit.setToolTipText(Tooltip.of("Open Script").detail(Tooltip.shortPath(tool.path())).html());
         edit.addActionListener(event -> this.navigator.accept(new NavigationTarget.LocalFile(tool.path())));
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         header.add(name);
@@ -304,7 +303,7 @@ final class ToolsPanel extends JPanel {
             }
             menu.addSeparator();
         }
-        JMenuItem create = new JMenuItem("New tool for " + registryId + "…", Icons.SCRIPT_FILE);
+        JMenuItem create = new JMenuItem("New Tool for " + registryId + "…", Icons.SCRIPT_FILE);
         create.addActionListener(event -> createTool());
         menu.add(create);
         return menu;

@@ -410,7 +410,7 @@ public final class DefinitionPanel extends JPanel {
 
     private static JLabel message(String text) {
         JLabel label = new JLabel(text);
-        label.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        label.setBorder(UiMetrics.messagePadding());
         return label;
     }
 

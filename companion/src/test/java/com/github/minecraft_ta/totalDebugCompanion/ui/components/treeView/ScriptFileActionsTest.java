@@ -353,7 +353,7 @@ class ScriptFileActionsTest {
                 var node = (LazyTreeNode) files.tree().getSelectionPath().getLastPathComponent();
                 var menu = files.createContextMenu(node.selectedItem());
                 var copy = Arrays.stream(menu.getComponents()).filter(JMenuItem.class::isInstance).map(JMenuItem.class::cast)
-                        .filter(item -> item.getText().equals("Copy path")).findFirst().orElseThrow();
+                        .filter(item -> item.getText().equals("Copy Path")).findFirst().orElseThrow();
                 assertEquals(target.toString(), copy.getAction().getValue(Action.ACTION_COMMAND_KEY));
                 return null;
             });
@@ -494,12 +494,12 @@ class ScriptFileActionsTest {
                 assertTrue(transfer.getTransferDataFlavors()[0].isMimeTypeEqual("application/x-java-jvm-local-objectref"));
                 assertNotNull(transfer.getTransferData(transfer.getTransferDataFlavors()[0]));
                 var menu = treeView.createContextMenu(((LazyTreeNode) tree.getSelectionPath().getLastPathComponent()).getUserObject());
-                assertEquals(List.of("Rename", "Move to...", "Duplicate script", "Copy path", "Delete file"), labels(menu));
+                assertEquals(List.of("Rename", "Move to...", "Duplicate script", "Copy Path", "Delete file"), labels(menu));
                 assertEquals(KeyStroke.getKeyStroke("F2"), ((JMenuItem) menu.getComponent(0)).getAccelerator());
                 var folderMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root.resolve("One"), false));
-                assertEquals(List.of("New Script", "New Folder", "Rename", "Move to...", "Copy path", "Delete folder"), labels(folderMenu));
+                assertEquals(List.of("New Script", "New Folder", "Rename", "Move to...", "Copy Path", "Delete folder"), labels(folderMenu));
                 var rootMenu = treeView.createContextMenu(tree.getItemFactory().createFileSystemDirectoryItem(root, false));
-                assertEquals(List.of("New Script", "New Folder", "Copy path"), labels(rootMenu));
+                assertEquals(List.of("New Script", "New Folder", "Copy Path"), labels(rootMenu));
                 return null;
             });
             var firstSelection = edt(() -> treeView.tree().getSelectionPath());
@@ -507,7 +507,7 @@ class ScriptFileActionsTest {
             edt(() -> {
                 treeView.tree().addSelectionPath(firstSelection);
                 var menu = treeView.createContextMenu(treeView.tree().getItemFactory().createFileSystemFileItem(root.resolve("One/Test.tdscript")));
-                assertEquals(List.of("Move to...", "Copy path", "Delete"), labels(menu));
+                assertEquals(List.of("Move to...", "Copy Path", "Delete"), labels(menu));
                 return null;
             });
             assertNotEquals(edt(() -> window.getEditorTabs().editors().get(0).getTooltip()), edt(() -> window.getEditorTabs().editors().get(1).getTooltip()));

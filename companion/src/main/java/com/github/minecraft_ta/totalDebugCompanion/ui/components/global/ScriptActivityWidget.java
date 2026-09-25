@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
@@ -17,7 +19,6 @@ import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Insets;
 import java.awt.Rectangle;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,8 +37,7 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
     ScriptActivityWidget(EditorScriptRunService runs) {
         this.runs = runs;
         FlatIconButton.configure(this);
-        setMargin(new Insets(0, 6, 0, 6));
-        putClientProperty("html.disable", true);
+        setMargin(UiMetrics.statusWidgetMargin());
         setMaximumSize(new Dimension(220, 22));
         setToolTipText("Script activity");
         rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
@@ -51,7 +51,7 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
         if (closed) return;
         var active = runs.activeRuns();
         setVisible(!active.isEmpty());
-        setText(active.size() == 1 ? active.getFirst().source().label() + ": " + active.getFirst().state().phase().label()
+        setText(active.size() == 1 ? HtmlText.nameAndValue(active.getFirst().source().label(), active.getFirst().state().phase().label())
                 : active.size() + " scripts active");
         if (active.isEmpty()) popup.setVisible(false);
         refreshPopup();
@@ -70,7 +70,7 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
                 rows.add(created);
                 return created;
             });
-            row.label.setText(run.source().label() + ": " + run.state().phase().label());
+            row.label.setText(HtmlText.nameAndValue(run.source().label(), run.state().phase().label()));
             row.stop.setEnabled(run.state().phase() != EditorScriptRunService.Phase.STOPPING);
         }
         scroll.setPreferredSize(new Dimension(380, Math.min(180, Math.max(30, rows.getPreferredSize().height))));
@@ -90,15 +90,17 @@ final class ScriptActivityWidget extends JButton implements AutoCloseable {
         final JButton stop;
         RunRow(EditorScriptRunService.Run run) {
             super(new BorderLayout(8, 0));
-            label.putClientProperty("html.disable", true);
             label.setMinimumSize(new Dimension(0, label.getPreferredSize().height));
             add(label, BorderLayout.CENTER);
-            stop = PopupElements.icon(Icons.STOP, "Stop script", run::stop);
+            stop = PopupElements.icon(Icons.STOP, "Stop Script", run::stop);
             add(stop, BorderLayout.EAST);
             setMaximumSize(new Dimension(Integer.MAX_VALUE, stop.getPreferredSize().height));
         }
     }
-    void applyTheme() { SwingUtilities.updateComponentTreeUI(popup); }
+    void applyTheme() {
+        SwingUtilities.updateComponentTreeUI(popup);
+        refresh();
+    }
 
     @Override public void close() { closed = true; unsubscribe.run(); popup.setVisible(false); rows.removeAll(); runRows.clear(); }
 }

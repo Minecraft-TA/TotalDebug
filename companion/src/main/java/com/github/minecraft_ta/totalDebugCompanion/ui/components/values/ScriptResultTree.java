@@ -61,9 +61,9 @@ public final class ScriptResultTree extends JTree {
         JPopupMenu menu = new JPopupMenu();
         if (path == null || !(path.getLastPathComponent() instanceof SnapshotNode node)) return menu;
         ExecutionValue snapshot = node.row.snapshot();
-        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", new ExecutionValuePresentation(snapshot).displayValue(Integer.MAX_VALUE))));
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Value", new ExecutionValuePresentation(snapshot).displayValue(Integer.MAX_VALUE))));
         if (!snapshot.type().text().isBlank() && !snapshot.type().truncated()) {
-            menu.add(ContextMenus.copyAction("Copy type", snapshot.type().text()));
+            menu.add(ContextMenus.copyAction("Copy Type", snapshot.type().text()));
         }
         return menu;
     }

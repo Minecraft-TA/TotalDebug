@@ -43,7 +43,7 @@ class ContextMenusTest {
                 JPopupMenu menu = new JPopupMenu() {
                     @Override public void show(Component invoker, int x, int y) { shown.add(this); }
                 };
-                if (path != null) menu.add(ContextMenus.defaultCopy(ContextMenus.action("Copy value", null, null,
+                if (path != null) menu.add(ContextMenus.defaultCopy(ContextMenus.action("Copy Value", null, null,
                         () -> copied.add(path.getLastPathComponent().toString()))));
                 return menu;
             });
@@ -106,10 +106,10 @@ class ContextMenusTest {
         SwingUtilities.invokeAndWait(() -> {
             JTree tree = new JTree();
             int[] copies = {0};
-            Action copy = ContextMenus.defaultCopy(ContextMenus.action("Copy value", null, null, () -> copies[0]++));
+            Action copy = ContextMenus.defaultCopy(ContextMenus.action("Copy Value", null, null, () -> copies[0]++));
             ContextMenus.installTree(tree, path -> {
                 JPopupMenu menu = new JPopupMenu();
-                menu.add(ContextMenus.action("Copy value", null, null, () -> fail("Dispatched by label")));
+                menu.add(ContextMenus.action("Copy Value", null, null, () -> fail("Dispatched by label")));
                 menu.add(copy);
                 return menu;
             });

@@ -63,6 +63,17 @@ public final class ResourceBrowser extends JPanel {
     private static final Icon ANIMATED = Icons.RUN.derive(12, 12);
 
     private record Category(String key, String label, int count) {
+        /** What the category's files are, as their own icons show; All has none. */
+        Icon icon() {
+            if (this.key.isEmpty()) return Icons.NONE;
+            return switch (this.key.substring(this.key.indexOf('/') + 1)) {
+                case "textures" -> Icons.IMAGE_FILE;
+                case "sounds" -> Icons.SOUND;
+                case "lang" -> Icons.TEXT_FILE;
+                case "font" -> Icons.FONT_FILE;
+                default -> Icons.JSON_FILE;
+            };
+        }
     }
 
     private final DefaultListModel<Category> categories = new DefaultListModel<>();
@@ -87,12 +98,12 @@ public final class ResourceBrowser extends JPanel {
         this.categoryList.setCellRenderer((list, category, index, selected, focused) -> {
             PrimarySecondaryLabel label = new PrimarySecondaryLabel();
             label.configure(new PrimarySecondaryText(category.label(),
-                            NumberFormat.getIntegerInstance(Locale.ROOT).format(category.count())), null, list.getFont(),
+                            NumberFormat.getIntegerInstance(Locale.ROOT).format(category.count())), category.icon(), list.getFont(),
                     selected, selected ? list.getSelectionForeground() : ThemeColors.text(),
                     selected ? list.getSelectionBackground() : list.getBackground());
             label.setOpaque(true);
             label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
-            label.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+            label.setBorder(UiMetrics.listRowPadding());
             return label;
         });
         this.categoryList.addListSelectionListener(event -> {
@@ -133,7 +144,7 @@ public final class ResourceBrowser extends JPanel {
         ContextMenus.installList(this.list, this::menu);
 
         JPanel top = new JPanel(new BorderLayout());
-        top.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        top.setBorder(UiMetrics.barPadding());
         top.add(this.filter, BorderLayout.CENTER);
         JScrollPane listScroll = new JScrollPane(this.list);
         listScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -141,7 +152,7 @@ public final class ResourceBrowser extends JPanel {
         JPanel content = new JPanel(new BorderLayout());
         content.add(top, BorderLayout.NORTH);
         content.add(listScroll, BorderLayout.CENTER);
-        this.empty.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.empty.setBorder(UiMetrics.messagePadding());
         this.empty.setVisible(false);
         content.add(this.empty, BorderLayout.SOUTH);
         add(content, BorderLayout.CENTER);
@@ -157,8 +168,8 @@ public final class ResourceBrowser extends JPanel {
     private JPopupMenu menu(int row) {
         ModResources.Resource resource = this.shown.get(row);
         JPopupMenu menu = new JPopupMenu();
-        menu.add(ContextMenus.copyAction("Copy path", resource.path()));
-        menu.add(ContextMenus.copyAction("Copy resource id", resource.namespace() + ":" + resource.relativePath()));
+        menu.add(ContextMenus.copyAction("Copy Path", resource.path()));
+        menu.add(ContextMenus.copyAction("Copy Resource ID", resource.namespace() + ":" + resource.relativePath()));
         return menu;
     }
 
@@ -261,7 +272,7 @@ public final class ResourceBrowser extends JPanel {
                 selected ? list.getSelectionBackground() : list.getBackground());
         label.setOpaque(true);
         label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
-        label.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
+        label.setBorder(UiMetrics.listRowPadding());
         label.setToolTipText(resource.path());
         return label;
     }

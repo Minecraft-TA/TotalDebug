@@ -130,7 +130,7 @@ class UsagesViewPanelTest {
                     fixture.tree.dispatchEvent(new MouseEvent(fixture.tree, eventId, System.currentTimeMillis(),
                             0, row.x + 4, row.y + row.height / 2, 1, true, MouseEvent.BUTTON3));
                     assertEquals(second, fixture.tree.getSelectionPath());
-                    assertEquals(List.of("Open source", "Copy reference"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
+                    assertEquals(List.of("Open Source", "Copy Reference"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
                     OffscreenPopupFactory.showingMenu().setVisible(false);
                 }
                 fixture.tree.dispatchEvent(new MouseEvent(fixture.tree, MouseEvent.MOUSE_RELEASED, System.currentTimeMillis(),
@@ -140,7 +140,7 @@ class UsagesViewPanelTest {
                 KeyboardFocusManager.getCurrentKeyboardFocusManager().redispatchEvent(fixture.tree,
                         new KeyEvent(fixture.tree, KeyEvent.KEY_PRESSED, System.currentTimeMillis(),
                                 KeyEvent.SHIFT_DOWN_MASK, KeyEvent.VK_F10, KeyEvent.CHAR_UNDEFINED));
-                assertEquals(List.of("Copy results", "Expand branch", "Collapse branch"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
+                assertEquals(List.of("Copy Results", "Expand Branch", "Collapse Branch"), menuLabels(OffscreenPopupFactory.showingMenuOrNull()));
                 OffscreenPopupFactory.showingMenu().setVisible(false);
             } finally {
                 window.dispose();
@@ -155,7 +155,7 @@ class UsagesViewPanelTest {
                 TreePath path = fixture.usagePath("applySecond");
                 fixture.tree.setSelectionPath(path);
                 JPopupMenu menu = fixture.panel.createContextMenu(path);
-                assertEquals(List.of("Open source", "Copy reference"), menuLabels(menu));
+                assertEquals(List.of("Open Source", "Copy Reference"), menuLabels(menu));
                 var copyAction = ((JMenuItem) menu.getComponent(2)).getAction();
                 assertNotNull(copyAction);
                 assertEquals("sample.Bravo#applySecond(java.lang.String[], sample.Foo)",
@@ -180,7 +180,7 @@ class UsagesViewPanelTest {
                 TreePath module = first.getParentPath().getParentPath();
                 fixture.tree.setSelectionPath(module);
                 JPopupMenu menu = fixture.panel.createContextMenu(module);
-                assertEquals(List.of("Copy results", "Expand branch", "Collapse branch"), menuLabels(menu));
+                assertEquals(List.of("Copy Results", "Expand Branch", "Collapse Branch"), menuLabels(menu));
                 assertEquals("sample.Alpha#applyFirst()" + System.lineSeparator()
                                 + "sample.Bravo#applySecond(java.lang.String[], sample.Foo)",
                         ((JMenuItem) menu.getComponent(0)).getAction().getValue(Action.ACTION_COMMAND_KEY));

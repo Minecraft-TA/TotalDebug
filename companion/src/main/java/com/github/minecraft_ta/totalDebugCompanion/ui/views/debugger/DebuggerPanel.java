@@ -56,7 +56,7 @@ public final class DebuggerPanel extends JPanel {
     private final JButton stepInto;
     private final JButton stepOut;
     private final JButton detach;
-    private final JButton cancelEvaluation = new JButton("Cancel evaluation");
+    private final JButton cancelEvaluation = new JButton("Cancel Evaluation");
     private final Timer evaluationTimer = new Timer(250, event -> updateEvaluationStatus());
     private final JButton viewBreakpoints;
     private final JToggleButton muteBreakpoints;
@@ -328,7 +328,7 @@ public final class DebuggerPanel extends JPanel {
     private static JButton createViewBreakpointsButton() {
         JButton button = new JButton(Icons.VIEW_BREAKPOINTS);
         FlatIconButton.configure(button);
-        button.setToolTipText("View breakpoints");
+        button.setToolTipText("View Breakpoints");
         return button;
     }
 
@@ -336,13 +336,15 @@ public final class DebuggerPanel extends JPanel {
         JButton button = new JButton(action);
         button.setHideActionText(true);
         FlatIconButton.configure(button);
+        // The tooltip carries the shortcut as markup; the name alone is what assistive technology reads.
+        button.getAccessibleContext().setAccessibleName((String) action.getValue(Action.NAME));
         return button;
     }
 
     private static JToggleButton createMuteBreakpointsButton() {
         JToggleButton button = new JToggleButton(Icons.MUTE_BREAKPOINTS);
         FlatIconButton.configure(button);
-        button.setToolTipText("Mute breakpoints");
+        button.setToolTipText("Mute Breakpoints");
         return button;
     }
 

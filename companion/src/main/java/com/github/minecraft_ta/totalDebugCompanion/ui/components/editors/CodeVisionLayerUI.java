@@ -379,7 +379,7 @@ final class CodeVisionLayerUI extends LayerUI<JComponent> {
         @Override
         public String tooltip() {
             return switch (this.action) {
-                case USAGES -> "Find usages of " + this.entry.declaration().symbol().displayName();
+                case USAGES -> "Find Usages of " + this.entry.declaration().symbol().displayName();
                 case IMPLEMENTATIONS -> {
                     HierarchyFacet facet = this.entry.insight().descendantFacet().orElseThrow();
                     yield "Show " + HierarchyPresentation.codeVisionCount(facet.relation(), facet.count())

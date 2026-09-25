@@ -1,10 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
-import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.AbstractTextViewPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.editors.ReadOnlyTextPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.speedsearch.SpeedSearch;
@@ -39,7 +40,6 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -108,7 +108,7 @@ final class DataView extends JPanel {
             mode.addActionListener(event -> showMode());
         }
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(this.treeMode);
         bar.add(this.textMode);
         add(bar, BorderLayout.NORTH);
@@ -291,15 +291,8 @@ final class DataView extends JPanel {
     }
 
     private void configureTable() {
-        this.table.setShowGrid(false);
-        this.table.setIntercellSpacing(new Dimension(0, 0));
-        this.table.setRowHeight(UiMetrics.TREE_ROW_HEIGHT);
-        this.table.setFillsViewportHeight(true);
+        Tables.configure(this.table);
         this.table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        this.table.getTableHeader().setReorderingAllowed(false);
-        if (this.table.getTableHeader().getDefaultRenderer() instanceof JLabel header) {
-            header.setHorizontalAlignment(SwingConstants.LEADING);
-        }
         this.table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
         TableColumn key = this.table.getColumnModel().getColumn(0);
         key.setPreferredWidth(260);
@@ -361,9 +354,9 @@ final class DataView extends JPanel {
         DataRows.Row entry = this.rows.get(row);
         if (entry.kind() != DataRows.Kind.ENTRY) return menu;
         if (entry.complete()) {
-            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", NbtData.snbt(entry.tag()))));
+            menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy Value", NbtData.snbt(entry.tag()))));
             if (entry.expandable()) {
-                menu.add(ContextMenus.copyAction("Copy as indented SNBT", NbtData.prettySnbt(entry.tag())));
+                menu.add(ContextMenus.copyAction("Copy as Indented SNBT", NbtData.prettySnbt(entry.tag())));
             }
         } else {
             JMenuItem incomplete = new JMenuItem("Copy value: " + entry.omitted()
@@ -372,8 +365,8 @@ final class DataView extends JPanel {
             menu.add(incomplete);
         }
         if (!entry.path().isEmpty()) {
-            menu.add(ContextMenus.copyAction("Copy path", entry.pathText()));
-            menu.add(ContextMenus.copyAction("Copy key", entry.name()));
+            menu.add(ContextMenus.copyAction("Copy Path", entry.pathText()));
+            menu.add(ContextMenus.copyAction("Copy Key", entry.name()));
         }
         return menu;
     }
@@ -493,7 +486,7 @@ final class DataView extends JPanel {
             super.getTableCellRendererComponent(table, "", selected, false, row, column);
             DataRows.Row entry = (DataRows.Row) value;
             setIcon(null);
-            setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+            setBorder(UiMetrics.cellPadding());
             this.highlight = column != 1;
             configure(entry, selected);
             return this;

@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -29,12 +30,12 @@ public final class DebuggerActions implements AutoCloseable {
 
     public DebuggerActions(DebuggerSessionController controller) {
         this.controller = Objects.requireNonNull(controller, "controller");
-        this.attach = command("Attach", Icons.DEBUG, "Attach debugger", controller::attach);
-        this.resume = command("Continue", Icons.DEBUG_RESUME, "Continue (F9)", controller::resume);
-        this.stepOver = command("Step Over", Icons.DEBUG_STEP_OVER, "Step Over (F8)", controller::stepOver);
-        this.stepInto = command("Step Into", Icons.DEBUG_STEP_INTO, "Step Into (F7)", controller::stepInto);
-        this.stepOut = command("Step Out", Icons.DEBUG_STEP_OUT, "Step Out (Shift+F8)", controller::stepOut);
-        this.detach = command("Detach", Icons.DEBUG_DETACH, "Detach debugger", controller::detach);
+        this.attach = command("Attach", Icons.DEBUG, "Attach Debugger", controller::attach);
+        this.resume = command("Continue", Icons.DEBUG_RESUME, Tooltip.action("Continue", "F9").html(), controller::resume);
+        this.stepOver = command("Step Over", Icons.DEBUG_STEP_OVER, Tooltip.action("Step Over", "F8").html(), controller::stepOver);
+        this.stepInto = command("Step Into", Icons.DEBUG_STEP_INTO, Tooltip.action("Step Into", "F7").html(), controller::stepInto);
+        this.stepOut = command("Step Out", Icons.DEBUG_STEP_OUT, Tooltip.action("Step Out", "Shift+F8").html(), controller::stepOut);
+        this.detach = command("Detach", Icons.DEBUG_DETACH, "Detach Debugger", controller::detach);
         this.controller.addListener(this.listener);
         applyStatus(this.controller.status());
     }

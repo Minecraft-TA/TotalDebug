@@ -30,7 +30,7 @@ public final class SearchEverywhereSearch {
         MODS("Mods", false, true),
         ITEMS("Items", false, true),
         BLOCKS("Blocks", false, true),
-        ENTITIES("Entities", false, true),
+        ENTITIES("Entity types", false, true),
         RESOURCES("Resources", false, true),
         KEY_BINDINGS("Key bindings", false, true),
         CLASSES("Classes", true, false),

@@ -695,12 +695,12 @@ public class SearchEverywherePopup extends JFrame {
         if (this.searchPending || row < 0 || row >= this.resultModel.size()) return menu;
         Result result = this.resultModel.get(row);
         boolean code = result instanceof ClassResult || result instanceof SymbolResult;
-        var open = new JMenuItem(result instanceof TextResult ? "Find usages" : code ? "Open source" : "Open",
+        var open = new JMenuItem(result instanceof TextResult ? "Find Usages" : code ? "Open Source" : "Open",
                 result instanceof TextResult ? Icons.SEARCH_ICON : Icons.JUMP_TO_SOURCE);
         open.addActionListener(event -> openResult(result));
         menu.add(open);
         menu.addSeparator();
-        var copy = ContextMenus.copyAction(result instanceof TextResult ? "Copy value" : "Copy reference", resultReference(result));
+        var copy = ContextMenus.copyAction(result instanceof TextResult ? "Copy Value" : "Copy Reference", resultReference(result));
         menu.add(ContextMenus.defaultCopy(copy));
         return menu;
     }

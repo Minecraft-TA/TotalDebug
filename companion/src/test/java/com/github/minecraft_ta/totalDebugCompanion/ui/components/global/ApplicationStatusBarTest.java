@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.model.EditorLocation;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
@@ -56,8 +57,8 @@ class ApplicationStatusBarTest extends StatusBarTestFixture {
         SwingUtilities.invokeAndWait(() -> result.set(statusBar(target -> {})));
         ApplicationStatusBar bar = result.get();
 
-        assertNotNull(findButton(bar, "Game: Offline"));
-        assertNotNull(findButton(bar, "MCP: Stopped"));
+        assertNotNull(findButton(bar, HtmlText.nameAndValue("Game", "Offline")));
+        assertNotNull(findButton(bar, HtmlText.nameAndValue("MCP", "Stopped")));
 
         SwingUtilities.invokeAndWait(() -> {
             bar.setGameStatus(new ServiceStatus(
@@ -72,8 +73,8 @@ class ApplicationStatusBarTest extends StatusBarTestFixture {
             ));
         });
 
-        assertNotNull(findButton(bar, "Game: Connected"));
-        assertNotNull(findButton(bar, "MCP: Listening"));
+        assertNotNull(findButton(bar, HtmlText.nameAndValue("Game", "Connected")));
+        assertNotNull(findButton(bar, HtmlText.nameAndValue("MCP", "Listening")));
     }
 
     @Test

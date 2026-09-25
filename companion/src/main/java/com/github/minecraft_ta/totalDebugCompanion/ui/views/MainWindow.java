@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.views;
 
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupChrome;
 import com.github.minecraft_ta.totalDebugCompanion.session.ProjectRegistry;
@@ -151,7 +152,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         menuBar.add(this.projectSelector);
 
 
-        this.evaluateExpressionAction = new AbstractAction("Evaluate Expression...", Icons.EVALUATE_EXPRESSION) {
+        this.evaluateExpressionAction = new AbstractAction("Evaluate Expression…", Icons.EVALUATE_EXPRESSION) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 evaluateExpressionWindow().showWindow();
@@ -357,7 +358,7 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
             case FAILED -> available ? "Failed" : "";
             default -> "";
         });
-        this.debuggerState.setToolTipText("Debugger: " + debuggerPhaseLabel(status) + ". " + status.detail());
+        this.debuggerState.setToolTipText(Tooltip.of("Debugger").detail(debuggerPhaseLabel(status)).text(status.detail()).html());
         this.debuggerState.getAccessibleContext().setAccessibleName("Debugger");
     }
 

@@ -73,8 +73,8 @@ public final class UsagesViewPanel extends JPanel {
     private final JLabel targetLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
     private final JButton cancelButton = new JButton("Cancel");
-    private final JButton showMoreButton = new JButton("Show more");
-    private final JButton groupByButton = new JButton("Group by");
+    private final JButton showMoreButton = new JButton("Show More");
+    private final JButton groupByButton = new JButton("Group By");
     private final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
     private final DefaultTreeModel treeModel = new DefaultTreeModel(this.rootNode);
     private final JTree resultsTree = new JTree(this.treeModel);
@@ -215,7 +215,7 @@ public final class UsagesViewPanel extends JPanel {
 
         this.cancelButton.setVisible(false);
         this.showMoreButton.setVisible(false);
-        this.groupByButton.setToolTipText("Choose how usage sites are grouped");
+        this.groupByButton.setToolTipText("Group By");
         this.groupByButton.addActionListener(event -> showGroupingMenu());
         this.cancelButton.addActionListener(event -> cancelActiveSearch());
         this.showMoreButton.addActionListener(event -> showMoreResults());
@@ -246,7 +246,7 @@ public final class UsagesViewPanel extends JPanel {
         });
         this.resultsTree.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "openUsage");
-        this.resultsTree.getActionMap().put("openUsage", new AbstractAction("Open source", Icons.JUMP_TO_SOURCE) {
+        this.resultsTree.getActionMap().put("openUsage", new AbstractAction("Open Source", Icons.JUMP_TO_SOURCE) {
             @Override
             public void actionPerformed(ActionEvent event) {
                 openSelectedUsage();
@@ -276,11 +276,11 @@ public final class UsagesViewPanel extends JPanel {
             menu.addSeparator();
         }
         menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction(
-                value instanceof UsageNode ? "Copy reference" : "Copy results", copyText(path))));
+                value instanceof UsageNode ? "Copy Reference" : "Copy Results", copyText(path))));
         if (value instanceof GroupNode) {
             menu.addSeparator();
-            menu.add("Expand branch").addActionListener(event -> setBranchExpanded(path, true));
-            menu.add("Collapse branch").addActionListener(event -> setBranchExpanded(path, false));
+            menu.add("Expand Branch").addActionListener(event -> setBranchExpanded(path, true));
+            menu.add("Collapse Branch").addActionListener(event -> setBranchExpanded(path, false));
         }
         return menu;
     }
@@ -421,7 +421,7 @@ public final class UsagesViewPanel extends JPanel {
 
     private void showGroupingMenu() {
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem heading = new JMenuItem("Group by");
+        JMenuItem heading = new JMenuItem("Group By");
         heading.setEnabled(false);
         menu.add(heading);
         menu.addSeparator();

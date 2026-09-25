@@ -146,7 +146,7 @@ public final class ContextMenus {
             @Override public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
                 menu.removeAll();
                 String selected = output.getSelectedText();
-                JMenuItem copySelection = new JMenuItem(copyAction("Copy selection", selected == null ? "" : selected));
+                JMenuItem copySelection = new JMenuItem(copyAction("Copy Selection", selected == null ? "" : selected));
                 copySelection.setAccelerator(KeyStroke.getKeyStroke("ctrl C"));
                 copySelection.setEnabled(selected != null && !selected.isEmpty());
                 menu.add(copySelection);

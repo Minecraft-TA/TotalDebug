@@ -119,7 +119,7 @@ public final class PrimarySecondaryLabel extends JPanel {
                 ? this.selectionForeground
                 : ThemeColors.text();
         this.primary.setForeground(primaryColor);
-        this.secondary.setForeground(this.selected ? primaryColor : stacked ? ThemeColors.secondaryText() : ThemeColors.mutedText());
+        this.secondary.setForeground(this.selected ? primaryColor : ThemeColors.secondaryText());
         super.paintComponent(graphics);
     }
 

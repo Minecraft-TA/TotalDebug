@@ -54,7 +54,6 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -114,12 +113,12 @@ public final class BreakpointsWindow extends JDialog {
     private final JPanel completionField = new JPanel(new BorderLayout(0, 4));
     private final JLabel hitCountError = new JLabel();
     private final JLabel actionError = new JLabel();
-    private final JLabel sourceLabel = new JLabel("Java:");
+    private final JLabel sourceLabel = new JLabel("Java");
     private final JPanel sourceField = fieldWithError(this.sourceEditors, this.actionError);
-    private final Action navigate = ContextMenus.action("Open source", Icons.JUMP_TO_SOURCE, "ENTER", this::navigateSelected);
+    private final Action navigate = ContextMenus.action("Open Source", Icons.JUMP_TO_SOURCE, "ENTER", this::navigateSelected);
     private final Action remove = ContextMenus.action("Remove", Icons.DELETE, "DELETE", this::removeSelected);
     private final Action toggle = ContextMenus.action("Disable", Icons.BREAKPOINT_DISABLED, "SPACE", this::toggleSelected);
-    private final Action copy = ContextMenus.action("Copy location", Icons.COPY, "ctrl C", this::copyLocation);
+    private final Action copy = ContextMenus.action("Copy Location", Icons.COPY, "ctrl C", this::copyLocation);
     private final DebuggerSessionController.Listener listener = new DebuggerSessionController.Listener() {
         @Override
         public void breakpointsChanged(
@@ -201,7 +200,6 @@ public final class BreakpointsWindow extends JDialog {
             }
         });
 
-        this.title.setFont(this.title.getFont().deriveFont(Font.BOLD));
         this.condition.setPlaceholder("Optional Java condition");
         sourceEditors.setOpaque(false);
         sourceEditors.add(actionSource.component(), "java");
@@ -217,8 +215,8 @@ public final class BreakpointsWindow extends JDialog {
             }
         });
         scriptPicker.add(actionScript, BorderLayout.CENTER);
-        refreshScripts.setToolTipText("Refresh scripts");
-        refreshScripts.getAccessibleContext().setAccessibleName("Refresh scripts");
+        refreshScripts.setToolTipText("Refresh Scripts");
+        refreshScripts.getAccessibleContext().setAccessibleName("Refresh Scripts");
         refreshScripts.addActionListener(event -> loadScripts());
         scriptPicker.add(refreshScripts, BorderLayout.EAST);
         sourceEditors.add(scriptPicker, "script");
@@ -421,7 +419,7 @@ public final class BreakpointsWindow extends JDialog {
         actionCompletion.setCompletionProvider(kind == 1 ? currentActionCompletion : null);
         actionSource.setSemanticTokenProvider(kind == 1 && currentActionCompletion != null
                 ? expression -> ExpressionCompletionSemantics.tokens(expression, currentActionCompletion) : null);
-        this.sourceLabel.setText(kind == 2 ? "Script:" : "Java:");
+        this.sourceLabel.setText(kind == 2 ? "Script" : "Java");
         this.sourceLabel.setVisible(kind != 0);
         this.sourceField.setVisible(kind != 0);
         this.completionField.setVisible(kind != 0);
@@ -430,7 +428,7 @@ public final class BreakpointsWindow extends JDialog {
     }
 
     private void buildDetails() {
-        this.details.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        this.details.setBorder(UiMetrics.pagePadding(12, 12));
         GridBagConstraints constraints = new GridBagConstraints();
         constraints.gridx = 0;
         constraints.gridwidth = 2;
@@ -447,9 +445,9 @@ public final class BreakpointsWindow extends JDialog {
         constraints.insets = new Insets(0, 4, 18, 0);
         this.details.add(this.state, constraints);
 
-        addField(3, new JLabel("Condition:"), this.condition.component());
-        addField(4, new JLabel("Trigger on hit:"), fieldWithError(this.hitCount, this.hitCountError));
-        addField(5, new JLabel("Run on hit:"), this.actionKind);
+        addField(3, new JLabel("Condition"), this.condition.component());
+        addField(4, new JLabel("Trigger on hit"), fieldWithError(this.hitCount, this.hitCountError));
+        addField(5, new JLabel("Run on hit"), this.actionKind);
         addField(6, this.sourceLabel, this.sourceField);
         this.completionField.setOpaque(false);
         this.completionField.add(this.continueOnSuccess, BorderLayout.NORTH);
@@ -469,12 +467,12 @@ public final class BreakpointsWindow extends JDialog {
     private void addField(int row, JLabel label, Component field) {
         GridBagLayout layout = (GridBagLayout) this.details.getLayout();
         if (layout.columnWidths == null) layout.columnWidths = new int[2];
-        layout.columnWidths[0] = Math.max(layout.columnWidths[0], label.getPreferredSize().width + 12);
+        layout.columnWidths[0] = Math.max(layout.columnWidths[0], label.getPreferredSize().width + UiMetrics.FORM_LABEL_GAP);
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
         labelConstraints.gridy = row;
         labelConstraints.anchor = GridBagConstraints.NORTHWEST;
-        labelConstraints.insets = new Insets(4, 0, 12, 12);
+        labelConstraints.insets = new Insets(4, 0, UiMetrics.FORM_ROW_GAP, UiMetrics.FORM_LABEL_GAP);
         this.details.add(label, labelConstraints);
 
         GridBagConstraints fieldConstraints = new GridBagConstraints();
@@ -482,7 +480,7 @@ public final class BreakpointsWindow extends JDialog {
         fieldConstraints.gridy = row;
         fieldConstraints.weightx = 1;
         fieldConstraints.fill = GridBagConstraints.HORIZONTAL;
-        fieldConstraints.insets = new Insets(0, 0, 12, 0);
+        fieldConstraints.insets = new Insets(0, 0, UiMetrics.FORM_ROW_GAP, 0);
         this.details.add(field, fieldConstraints);
     }
 

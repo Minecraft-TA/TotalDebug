@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
@@ -118,7 +119,7 @@ final class ConfigPanel extends JPanel {
         this.cards.add(settings, SETTINGS_CARD);
         this.cards.add(this.textEditor.component(), TEXT_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         this.content.add(this.cards, BorderLayout.CENTER);
         this.split = new ThinSplitPane(this.fileScroll, new JPanel());
@@ -194,7 +195,7 @@ final class ConfigPanel extends JPanel {
         Path path = selectedPath();
         if (path == null) return null;
         JPopupMenu menu = new JPopupMenu();
-        menu.add(ContextMenus.copyAction("Copy path", path.toString()));
+        menu.add(ContextMenus.copyAction("Copy Path", path.toString()));
         menu.add(ContextMenus.action("Show in Explorer", null, null, () -> {
             try {
                 Desktop.getDesktop().browseFileDirectory(path.toFile());
@@ -219,7 +220,7 @@ final class ConfigPanel extends JPanel {
         this.modifiedOnly.addActionListener(event -> applyFilter());
         this.modifiedOnly.setToolTipText("Only settings that differ from their default");
         this.settingsMode.setToolTipText("Settings with their values, defaults and accepted values");
-        this.textMode.setToolTipText("The file's text; Ctrl+S saves an edit");
+        this.textMode.setToolTipText("The file's text");
 
         ButtonGroup modes = new ButtonGroup();
         modes.add(this.settingsMode);
@@ -261,11 +262,11 @@ final class ConfigPanel extends JPanel {
         right.add(this.textEditor.discardButton());
         right.add(this.open);
         JPanel bar = new JPanel(new BorderLayout(12, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(left, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        this.notice.setBorder(UiMetrics.noticePadding());
         this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.NORTH);

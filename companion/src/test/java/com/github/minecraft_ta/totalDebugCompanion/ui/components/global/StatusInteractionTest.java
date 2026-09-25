@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTest;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
@@ -191,7 +192,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     bar.setGameReconnect(() -> { calls.incrementAndGet(); return attempt; });
                     assertTrue(game.isEnabled());
                     assertTrue(retry.getText() == null || retry.getText().isEmpty());
-                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    assertEquals("Reconnect", retry.getToolTipText());
                     UiTestScope.show(frame);
                     game.doClick(0);
                     assertTrue(popup.isShowing());
@@ -202,12 +203,12 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     bar.setGameStatus(new ServiceStatus(ServiceStatus.State.PENDING, "Reconnecting", "Waiting for Minecraft to reconnect."));
                     attempt.complete(null);
                     assertFalse(retry.isEnabled(), "Only backend connection state can enable the pending action");
-                    assertEquals("Game: Reconnecting", game.getText());
+                    assertEquals(HtmlText.nameAndValue("Game", "Reconnecting"), game.getText());
                     assertTrue(popup.isShowing());
                     bar.setGameStatus(new ServiceStatus(ServiceStatus.State.AVAILABLE, "Connected", "Minecraft is connected."));
                     bar.setGameIdentity("All the Mods 10", Path.of("C:/Games/ATM10/minecraft"));
                     assertTrue(retry.getText() == null || retry.getText().isEmpty());
-                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    assertEquals("Reconnect", retry.getToolTipText());
                     assertTrue(retry.isEnabled());
                     assertTrue(directoryRow.isVisible());
                     capture(frame, "game-connected-" + theme.id());
@@ -215,7 +216,7 @@ class StatusInteractionTest extends StatusBarTestFixture {
                     assertTrue(popup.isShowing());
                     assertTrue(retry.isEnabled());
                     assertTrue(retry.getText() == null || retry.getText().isEmpty());
-                    assertEquals("Reconnect to the selected Minecraft instance", retry.getToolTipText());
+                    assertEquals("Reconnect", retry.getToolTipText());
                     assertFalse(directoryRow.isVisible());
                     Rectangle owner = new Rectangle(frame.getRootPane().getLocationOnScreen(), frame.getRootPane().getSize());
                     assertTrue(owner.contains(new Rectangle(popup.getLocationOnScreen(), popup.getSize())));

@@ -1,11 +1,12 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.HtmlText;
 import javax.swing.SwingUtilities;
 import javax.swing.JComponent;
 import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
-import java.awt.Insets;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
 import com.github.minecraft_ta.totalDebugCompanion.model.ServiceStatus;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -34,8 +35,7 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
         }
         this.serviceName = serviceName;
         FlatIconButton.configure(this);
-        setMargin(new Insets(0, 6, 0, 6));
-        putClientProperty("html.disable", true);
+        setMargin(UiMetrics.statusWidgetMargin());
         setRolloverEnabled(true);
         setIcon(new StatusDotIcon());
         setIconTextGap(5);
@@ -52,8 +52,9 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
     private void applyStatus(ServiceStatus status) {
         if (closed) return;
         this.status = Objects.requireNonNull(status, "status");
-        setText(this.serviceName + ": " + status.summary());
-        setToolTipText(popupAvailable ? "Show " + this.serviceName + " controls" : Tooltip.of("").text(status.detail()).html());
+        setText(HtmlText.nameAndValue(this.serviceName, status.summary()));
+        getAccessibleContext().setAccessibleName(this.serviceName + " " + status.summary());
+        setToolTipText(popupAvailable ? "Show " + this.serviceName + " Controls" : Tooltip.of("").text(status.detail()).html());
         repaint();
     }
 
@@ -72,7 +73,10 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
 
     void refreshPopup() { if (popup.isVisible()) PopupElements.showAbove(popup, this); }
 
-    void applyTheme() { SwingUtilities.updateComponentTreeUI(popup); }
+    void applyTheme() {
+        SwingUtilities.updateComponentTreeUI(popup);
+        applyStatus(status);
+    }
 
     @Override public void close() { closed = true; popup.setVisible(false); }
 

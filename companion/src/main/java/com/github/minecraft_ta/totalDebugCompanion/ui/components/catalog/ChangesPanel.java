@@ -1,5 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.TabTitles;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.Tables;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
@@ -42,7 +45,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.text.NumberFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -87,7 +89,7 @@ public final class ChangesPanel extends JPanel {
     private final ConfigWriter writer;
     private final Runnable removeRecordListener;
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
-    private final JButton revertAll = new JButton("Revert all");
+    private final JButton revertAll = new JButton("Revert All");
     private final JLabel notice = new JLabel();
     private final ConfigSettingsTable table = new ConfigSettingsTable();
     private final KeyChangesModel keyModel = new KeyChangesModel();
@@ -124,11 +126,11 @@ public final class ChangesPanel extends JPanel {
         this.revertAll.setToolTipText("Write every original value back");
         this.revertAll.addActionListener(event -> revertAll());
         JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        bar.setBorder(UiMetrics.barPadding());
         bar.add(this.filter, BorderLayout.CENTER);
         bar.add(this.revertAll, BorderLayout.EAST);
         ThemeColors.keepForeground(this.notice, ThemeColors::secondaryText);
-        this.notice.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        this.notice.setBorder(UiMetrics.noticePadding());
         this.notice.setVisible(false);
         JPanel top = new JPanel(new BorderLayout());
         top.add(bar, BorderLayout.NORTH);
@@ -140,7 +142,7 @@ public final class ChangesPanel extends JPanel {
         configureKeyTable();
         this.cards.add(this.tabs, TABS_CARD);
         this.message.setVerticalAlignment(JLabel.TOP);
-        this.message.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        this.message.setBorder(UiMetrics.messagePadding());
         this.cards.add(this.message, MESSAGE_CARD);
         add(this.cards, BorderLayout.CENTER);
 
@@ -173,9 +175,7 @@ public final class ChangesPanel extends JPanel {
 
     private void configureKeyTable() {
         this.keyTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        this.keyTable.setShowGrid(false);
-        this.keyTable.setFillsViewportHeight(true);
-        this.keyTable.getTableHeader().setReorderingAllowed(false);
+        Tables.configure(this.keyTable);
         KeyCaps caps = new KeyCaps();
         this.keyTable.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
             @Override
@@ -191,7 +191,7 @@ public final class ChangesPanel extends JPanel {
                     return caps;
                 }
                 super.getTableCellRendererComponent(table, value, selected, false, row, column);
-                setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+                setBorder(UiMetrics.cellPadding());
                 setForeground(column == 0 || selected ? foreground : ThemeColors.secondaryText());
                 return this;
             }
@@ -220,7 +220,7 @@ public final class ChangesPanel extends JPanel {
         KeyChange change = this.keyModel.shown.get(row);
         menu.add(ContextMenus.action("Revert to " + this.bindings.display(change.original()), null, null,
                 () -> revert(List.of(change))));
-        menu.add(ContextMenus.action("Show in Key bindings", null, null,
+        menu.add(ContextMenus.action("Show in Key Bindings", null, null,
                 () -> this.navigator.accept(new NavigationTarget.KeyBindings(change.name()))));
         return menu;
     }
@@ -371,14 +371,13 @@ public final class ChangesPanel extends JPanel {
         this.keyModel.setChanges(loaded.keys());
         this.revertAll.setEnabled(!loaded.changes().isEmpty() || !loaded.keys().isEmpty());
         this.tabs.removeAll();
-        NumberFormat count = NumberFormat.getIntegerInstance(Locale.ROOT);
         if (!loaded.changes().isEmpty()) {
-            this.tabs.addTab("Configuration " + count.format(loaded.changes().size()), SubjectIcons.tab(ModTab.CONFIGURATION),
-                    this.settingsScroll);
+            this.tabs.addTab("Configuration", SubjectIcons.tab(ModTab.CONFIGURATION), this.settingsScroll);
+            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Configuration", loaded.changes().size());
         }
         if (!loaded.keys().isEmpty()) {
-            this.tabs.addTab("Key bindings " + count.format(loaded.keys().size()), SubjectIcons.tab(ModTab.KEY_BINDINGS),
-                    this.keysScroll);
+            this.tabs.addTab("Key bindings", SubjectIcons.tab(ModTab.KEY_BINDINGS), this.keysScroll);
+            TabTitles.setCounted(this.tabs, this.tabs.getTabCount() - 1, "Key bindings", loaded.keys().size());
         }
         applyFilter();
     }
@@ -406,7 +405,7 @@ public final class ChangesPanel extends JPanel {
         if (total == 0) return;
         int answer = JOptionPane.showConfirmDialog(this,
                 "Put back the original value of " + total + (total == 1 ? " change?" : " changes?"),
-                "Revert all", JOptionPane.OK_CANCEL_OPTION);
+                "Revert All", JOptionPane.OK_CANCEL_OPTION);
         if (answer != JOptionPane.OK_OPTION) return;
         for (Map.Entry<String, ChangeRecord.Change> entry : this.changes.entrySet()) {
             ConfigWriter.Target target = this.targets.get(entry.getKey());

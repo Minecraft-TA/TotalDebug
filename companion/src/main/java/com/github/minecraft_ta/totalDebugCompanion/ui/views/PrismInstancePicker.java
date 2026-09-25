@@ -36,7 +36,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Window;
@@ -61,7 +60,7 @@ public final class PrismInstancePicker extends JDialog {
     private final JList<Entry> list = new JList<>(model);
     private final JLabel count = new JLabel("Loading instances…");
     private final JLabel message = new JLabel("Reading your Prism library…", SwingConstants.CENTER);
-    private final JButton open = new JButton("Open instance");
+    private final JButton open = new JButton("Open Instance");
     private final JPanel content = new JPanel(new BorderLayout());
     private final JScrollPane scroll = new JScrollPane(list);
     private final Consumer<CompanionProfile> onOpen;
@@ -230,7 +229,6 @@ public final class PrismInstancePicker extends JDialog {
             var text = new JPanel();
             text.setOpaque(false);
             text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
-            name.setFont(name.getFont().deriveFont(Font.BOLD, name.getFont().getSize2D() + 1));
             text.add(Box.createVerticalGlue());
             text.add(name);
             text.add(Box.createVerticalStrut(6));

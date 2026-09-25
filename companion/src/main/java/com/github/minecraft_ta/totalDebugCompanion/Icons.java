@@ -4,6 +4,9 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.formdev.flatlaf.extras.FlatSVGUtils;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.CompanionTheme;
 
+import javax.swing.Icon;
+import java.awt.Component;
+import java.awt.Graphics;
 import java.awt.Image;
 import java.util.List;
 
@@ -67,6 +70,22 @@ public class Icons {
     public static final FlatSVGIcon ENTITY = new FlatSVGIcon("icons/entity.svg");
     public static final FlatSVGIcon FLUID = new FlatSVGIcon("icons/fluid.svg");
     public static final FlatSVGIcon SOUND = new FlatSVGIcon("icons/sound.svg");
+    /** Draws nothing at the size of a row icon, keeping a row without an icon level with those that have one. */
+    public static final Icon NONE = new Icon() {
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+        }
+
+        @Override
+        public int getIconWidth() {
+            return BLOCK.getIconWidth();
+        }
+
+        @Override
+        public int getIconHeight() {
+            return BLOCK.getIconHeight();
+        }
+    };
     public static final FlatSVGIcon WEB = new FlatSVGIcon("icons/web.svg");
     public static final FlatSVGIcon PRISM = new FlatSVGIcon("icons/prism.svg", 16, 16);
     public static final FlatSVGIcon PRISM_INSTANCE = new FlatSVGIcon("icons/prism-instance.svg");

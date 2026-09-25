@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.script.EditorScriptRunService;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
@@ -70,9 +71,9 @@ public class ScriptPanel extends AbstractCodeViewPanel {
     private final FlatIconButton runServerButton = new FlatIconButton(Icons.RUN_SERVER, false);
     private final FlatIconButton stopButton = new FlatIconButton(Icons.STOP, false);
     {
-        runButton.setToolTipText("Run on client");
-        runServerButton.setToolTipText("Run on server");
-        stopButton.setToolTipText("Stop execution");
+        runButton.setToolTipText("Run on Client");
+        runServerButton.setToolTipText("Run on Server");
+        stopButton.setToolTipText("Stop Execution");
         stopButton.setEnabled(false);
     }
     private final JComboBox<ScriptExecutionEnvironment> executionEnvironmentComboBox = new JComboBox<>(ScriptExecutionEnvironment.values());
@@ -165,7 +166,7 @@ public class ScriptPanel extends AbstractCodeViewPanel {
         setupFormatting();
         var format = new JButton(this.editorPane.getActionMap().get("formatFile"));
         format.setHideActionText(true);
-        format.setToolTipText("Format (Ctrl+Shift+F)");
+        format.setToolTipText(Tooltip.action("Format", "Ctrl+Shift+F").html());
         format.getAccessibleContext().setAccessibleName("Format");
         FlatIconButton.configure(format);
         headerBar.add(Box.createHorizontalStrut(8));

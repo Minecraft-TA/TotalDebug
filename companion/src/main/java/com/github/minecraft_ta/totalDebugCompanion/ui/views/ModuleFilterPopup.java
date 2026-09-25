@@ -96,7 +96,7 @@ final class ModuleFilterPopup extends JPopupMenu {
 
         JPanel actions = new JPanel();
         actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
-        actions.add(new JLabel("Select:"));
+        actions.add(new JLabel("Select"));
         actions.add(Box.createHorizontalStrut(4));
         actions.add(all);
         actions.add(Box.createHorizontalStrut(4));
