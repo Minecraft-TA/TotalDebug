@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -21,6 +23,11 @@ public class FileSystemFileItem extends TreeItem {
 
     @Override
     public String getTooltip() {
-        return this.path.toString();
+        return Tooltip.of(Tooltip.shortPath(this.path)).html();
+    }
+
+    @Override
+    public String location() {
+        return this.path.toAbsolutePath().normalize().toString();
     }
 }

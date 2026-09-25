@@ -52,7 +52,7 @@ class CompactRuntimeTreeTest {
                 return null;
             });
             assertTrue(tree.revealItemPath("example.jar", List.of("com", "example")).get(5, TimeUnit.SECONDS));
-            assertEquals(jar + "!/com/example/mod/", edt(() -> selected(tree).getTooltip()));
+            assertEquals(jar + "!/com/example/mod/", edt(() -> selected(tree).location()));
             assertTrue(tree.revealItemPath("example.jar", List.of("assets", "example", "lang", "en_us.json")).get(5, TimeUnit.SECONDS));
             assertEquals("assets/example/lang", edt(() -> ((LazyTreeNode) tree.getSelectionPath().getParentPath().getLastPathComponent()).getUserObject().getPresentation().primary()));
             assertTrue(tree.revealItemPath("example.jar", List.of("empty")).get(5, TimeUnit.SECONDS));

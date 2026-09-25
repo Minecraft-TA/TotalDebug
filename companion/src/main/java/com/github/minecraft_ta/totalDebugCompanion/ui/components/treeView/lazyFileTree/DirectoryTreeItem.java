@@ -24,7 +24,10 @@ public abstract class DirectoryTreeItem extends TreeItem {
 
     /** Called only for eligible directories, on the loading worker. */
     public DirectoryTreeItem singleDirectoryChild() throws IOException { return null; }
-    public Object compactIdentity() throws IOException { return getTooltip(); }
+    public Object compactIdentity() throws IOException {
+        String location = location();
+        return location != null ? location : getName();
+    }
 
     protected static boolean ordinaryDirectory(Path path) throws IOException {
         var attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);

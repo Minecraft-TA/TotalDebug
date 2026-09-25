@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionController;
@@ -269,7 +270,7 @@ public final class BreakpointGutterMarkers {
 
     private static String tooltipFor(DebuggerSessionController.Breakpoint breakpoint, boolean muted) {
         if (breakpoint.state() == DebuggerSessionController.BreakpointState.INVALID) {
-            return breakpoint.detail();
+            return Tooltip.of("Breakpoint not valid").text(breakpoint.detail()).html();
         }
         if (muted) {
             return breakpoint.state() == DebuggerSessionController.BreakpointState.DISABLED
@@ -292,13 +293,10 @@ public final class BreakpointGutterMarkers {
                     : "Breakpoint";
             case INVALID -> throw new AssertionError("Handled above");
         };
-        if (request.condition() != null && !request.condition().isBlank()) {
-            return state + ", condition: " + request.condition();
-        }
-        if (request.hitCondition() != null && !request.hitCondition().isBlank()) {
-            return state + " after " + request.hitCondition() + " hits";
-        }
-        return state + " at line " + breakpoint.line();
+        return Tooltip.of(state + " at line " + breakpoint.line())
+                .fact("Condition", request.condition())
+                .fact("Hits before stopping", request.hitCondition())
+                .html();
     }
 
     private Rectangle rowBounds(int displayedLine, Component layer, Rectangle lineNumberBounds) {

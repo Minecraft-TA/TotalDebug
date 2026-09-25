@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
@@ -41,6 +42,11 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
     @Override
     public String getTooltip() {
+        return Tooltip.of(Tooltip.shortPath(this.path)).html();
+    }
+
+    @Override
+    public String location() {
         return this.path.toString();
     }
 
@@ -121,6 +127,11 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
+            return Tooltip.of(this.entryPath + '/').detail("in " + this.archivePath.getFileName()).html();
+        }
+
+        @Override
+        public String location() {
             return this.archivePath.toAbsolutePath().normalize() + "!/" + this.entryPath + '/';
         }
     }
@@ -147,6 +158,11 @@ public class ZipFileRootItem extends DirectoryTreeItem {
 
         @Override
         public String getTooltip() {
+            return Tooltip.of(this.entryPath).detail("in " + this.archivePath.getFileName()).html();
+        }
+
+        @Override
+        public String location() {
             return this.archivePath.toAbsolutePath().normalize() + "!/" + this.entryPath;
         }
 

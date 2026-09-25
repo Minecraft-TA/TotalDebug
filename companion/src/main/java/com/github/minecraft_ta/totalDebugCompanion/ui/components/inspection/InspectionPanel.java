@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
@@ -170,8 +171,9 @@ public final class InspectionPanel extends JPanel {
         this.runSide.setRenderer(labels(value -> value == Side.CLIENT ? "Client" : "Server"));
         this.runSide.setToolTipText("Read the server's or the client's copy of the world");
         this.face.setRenderer(labels(value -> sideLabel(value == null ? "" : value.toString())));
-        this.face.setToolTipText("<html>Side passed to capability queries.<br>None asks for the unsided handler, "
-                + "which the mod defines; it is not a combination of the six faces.</html>");
+        this.face.setToolTipText(Tooltip.of("Side passed to capability queries")
+                .text("None asks for the unsided handler, which the mod defines; it is not a combination of the six faces.")
+                .html());
         this.runSide.addActionListener(event -> refresh());
         this.face.addActionListener(event -> refresh());
         this.refresh.setToolTipText("Read again");
@@ -494,9 +496,7 @@ public final class InspectionPanel extends JPanel {
     private void showProblemNotice(String text, String details) {
         this.problemNotice.setText(text);
         ThemeColors.keepForeground(this.problemNotice, ThemeColors::text);
-        String bounded = details.length() > 4_000 ? details.substring(0, 4_000) + "…" : details;
-        this.problemNotice.setToolTipText(bounded.isBlank() ? null
-                : "<html><pre>" + escape(bounded.strip()) + "</pre></html>");
+        this.problemNotice.setToolTipText(Tooltip.of("").code(details).html());
         this.problemNotice.setVisible(true);
     }
 
@@ -509,9 +509,6 @@ public final class InspectionPanel extends JPanel {
         return text.lines().findFirst().orElse(text);
     }
 
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
 
     private void reloadIcons() {
         if (this.disposed) return;

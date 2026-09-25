@@ -232,7 +232,7 @@ class ProjectSwitchLifecycleTest {
             var tree = (JTree) treeView.getViewport().getView();
             var root = (DefaultMutableTreeNode) tree.getModel().getRoot();
             var scripts = (LazyTreeNode) root.getChildAt(0);
-            assertEquals(b.dataDirectory().resolve("scripts").toString(), scripts.getUserObject().getTooltip());
+            assertEquals(b.dataDirectory().resolve("scripts").toString(), scripts.getUserObject().location());
             assertEquals(0, window.getEditorTabs().getTabCount());
         });
         Files.delete(paths.projects().resolve("occupied"));

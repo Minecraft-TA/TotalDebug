@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.SectionHeading;
@@ -316,7 +317,7 @@ public final class FactsPanel extends JPanel {
                 case DATA -> new DataRow(section.title(), fact);
                 case PROBLEM -> {
                     JLabel problem = new JLabel(fact.value(), Icons.ERROR, JLabel.LEADING);
-                    problem.setToolTipText(fact.value());
+                    problem.setToolTipText(Tooltip.of("").text(fact.value()).html());
                     ThemeColors.keepForeground(problem, ThemeColors::error);
                     yield problem;
                 }
@@ -341,7 +342,7 @@ public final class FactsPanel extends JPanel {
                     case DataRow data -> data.set(next, changed);
                     case JLabel problem -> {
                         problem.setText(next.value());
-                        problem.setToolTipText(next.value());
+                        problem.setToolTipText(Tooltip.of("").text(next.value()).html());
                     }
                     default -> {
                     }
@@ -355,6 +356,14 @@ public final class FactsPanel extends JPanel {
                 if (value instanceof AmountRow amount) amount.loadTexture();
             });
         }
+    }
+
+    /** Where a linked value leads: a class's source or another subject to inspect. */
+    private static String linkTooltip(FactLink link) {
+        return switch (link.kind()) {
+            case CLASS -> Tooltip.of("Open source").detail(link.target()).html();
+            case SUBJECT -> Tooltip.of("Open").detail(link.target()).html();
+        };
     }
 
     /** A text value colored by what it is; a linked value opens its target when clicked. */
@@ -393,7 +402,8 @@ public final class FactsPanel extends JPanel {
             boolean linked = next.link() != null;
             setIcon(linked ? SubjectIcons.link(next.link()) : null);
             setCursor(linked ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
-            setToolTipText(linked ? next.link().target() : next.value().length() > 40 ? next.value() : null);
+            setToolTipText(linked ? linkTooltip(next.link())
+                    : next.value().length() > 40 ? Tooltip.of("").text(next.value()).html() : null);
             hover(this.hovered);
         }
 
@@ -540,9 +550,9 @@ public final class FactsPanel extends JPanel {
 
         private void describe() {
             setToolTipText(this.stack.id().isEmpty()
-                    ? this.stack.label() + ": empty"
-                    : this.stack.label() + ": " + this.stack.value() + " ×" + this.stack.amount()
-                    + "  (" + this.stack.id() + ")");
+                    ? Tooltip.of("Empty").detail(this.stack.label()).html()
+                    : Tooltip.of(this.stack.value() + " ×" + this.stack.amount())
+                    .detail(this.stack.id()).detail(this.stack.label()).html());
         }
 
         private void load() {

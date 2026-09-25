@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
@@ -114,6 +115,7 @@ public final class ModPanel extends JPanel {
         this.configs = new ConfigPanel(workspace, navigator);
 
         this.header.addControl(this.browseCode);
+        this.browseCode.setToolTipText("Show the mod's classes in the Project tree");
         this.browseCode.addActionListener(event -> {
             if (this.summary != null && !this.summary.moduleId().isEmpty()) {
                 this.navigator.accept(new NavigationTarget.RuntimeModuleNode(this.summary.moduleId()));
@@ -328,7 +330,8 @@ public final class ModPanel extends JPanel {
         List<Path> codeFiles = mod != null && "file".equalsIgnoreCase(mod.file().getScheme())
                 ? List.of(Path.of(mod.file())) : this.summary.files();
         for (Path file : codeFiles) {
-            footer.add(new LinkLabel(file.getFileName().toString(), Icons.JAR_FILE, file.toString(), () -> {
+            footer.add(new LinkLabel(file.getFileName().toString(), Icons.JAR_FILE,
+                    Tooltip.of("Browse code").detail(Tooltip.shortPath(file)).html(), () -> {
                 if (!this.summary.moduleId().isEmpty() && hasModule(this.summary.moduleId())) {
                     this.navigator.accept(new NavigationTarget.RuntimeModuleNode(this.summary.moduleId()));
                 }

@@ -20,6 +20,7 @@ import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 
+import javax.swing.ToolTipManager;
 import javax.swing.*;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -134,6 +135,8 @@ public final class CompanionApp {
             JDialog.setDefaultLookAndFeelDecorated(true);
         }
         ThemeManager.installInitialTheme();
+        // Descriptions need longer than Swing's four seconds to read; they still close when the pointer leaves.
+        ToolTipManager.sharedInstance().setDismissDelay(60_000);
         configureTokenMakers();
     }
 

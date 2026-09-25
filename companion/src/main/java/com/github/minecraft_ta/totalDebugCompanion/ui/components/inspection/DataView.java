@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
@@ -560,7 +561,7 @@ final class DataView extends JPanel {
             if (!selected && DataView.this.changed.contains(row.key())) {
                 setBackground(ChangeMarks.tint());
             }
-            setToolTipText(row.expandable() || row.value().length() < 60 ? null : row.value());
+            setToolTipText(row.expandable() || row.value().length() < 60 ? null : Tooltip.of("").code(row.value()).html());
         }
     }
 }

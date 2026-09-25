@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.util.FileUtils;
 
@@ -103,6 +104,11 @@ public class FileSystemDirectoryItem extends DirectoryTreeItem {
 
     @Override
     public String getTooltip() {
+        return Tooltip.of(Tooltip.shortPath(this.path)).html();
+    }
+
+    @Override
+    public String location() {
         return this.path.toString();
     }
 }

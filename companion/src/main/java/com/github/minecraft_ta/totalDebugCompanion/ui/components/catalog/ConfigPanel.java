@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
-import com.formdev.flatlaf.util.UIScale;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigValues;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
@@ -179,7 +179,8 @@ final class ConfigPanel extends JPanel {
             label.setOpaque(true);
             label.setBackground(selected ? list.getSelectionBackground() : list.getBackground());
             label.setBorder(BorderFactory.createEmptyBorder(4, folder(file).isEmpty() ? 8 : 16, 4, 8));
-            label.setToolTipText(file.path() == null ? file.fileName() : file.path().toString());
+            label.setToolTipText(Tooltip.of(file.fileName())
+                    .detail(file.path() == null ? "Created in each world" : Tooltip.shortPath(file.path())).html());
             return label;
         });
         this.fileList.addListSelectionListener(event -> {
@@ -229,6 +230,9 @@ final class ConfigPanel extends JPanel {
             @Override public void changedUpdate(DocumentEvent event) { applyFilter(); }
         });
         this.changedOnly.addActionListener(event -> applyFilter());
+        this.changedOnly.setToolTipText("Only settings that differ from their default");
+        this.settingsMode.setToolTipText("Settings with their values, defaults and accepted values");
+        this.textMode.setToolTipText("The file as it is saved");
         ButtonGroup modes = new ButtonGroup();
         modes.add(this.settingsMode);
         modes.add(this.textMode);
@@ -701,7 +705,6 @@ final class ConfigPanel extends JPanel {
     }
 
     private static final int CHEVRON_WIDTH = 16;
-    private static final int TOOLTIP_WIDTH = 360;
 
     /** The settings table; hovering any cell of a row shows that row's description. */
     private final class SettingsTable extends JTable {
@@ -722,42 +725,26 @@ final class ConfigPanel extends JPanel {
      * default, what it accepts and what must restart after a change.
      */
     static String tooltip(Row row) {
-        StringBuilder html = new StringBuilder("<html><div style='width:")
-                .append(UIScale.scale(TOOLTIP_WIDTH)).append("px'>");
-        html.append("<font color='").append(hex(ThemeColors.secondaryText())).append("'>")
-                .append(escape(row.path())).append("</font>");
-        if (!row.comment().isEmpty()) {
-            html.append("<p style='margin-top:4px'>").append(escape(row.comment()).replace("\n", "<br>")).append("</p>");
-        }
+        Tooltip tooltip = Tooltip.of("").detail(row.path()).text(row.comment());
         PackCatalog.ConfigSetting setting = row.setting();
         if (setting != null) {
-            List<String> facts = new ArrayList<>();
+            boolean string = row.kind() == ValueKind.STRING;
             if (!setting.defaultValue().isEmpty()) {
-                boolean string = row.kind() == ValueKind.STRING;
-                String value = string ? '"' + setting.defaultValue() + '"' : setting.defaultValue();
-                facts.add("Default <font color='" + hex(SettingRenderer.color(row.kind())) + "'>" + escape(value) + "</font>");
+                tooltip.fact("Default", string ? '"' + setting.defaultValue() + '"' : setting.defaultValue(),
+                        SettingRenderer.color(row.kind()));
             }
-            if (!row.accepts().isEmpty()) facts.add("Accepts " + escape(row.accepts()));
+            tooltip.fact("Accepts", row.accepts());
             switch (setting.restart()) {
-                case WORLD -> facts.add("Takes effect after rejoining the world");
-                case GAME -> facts.add("Takes effect after restarting the game");
+                case WORLD -> tooltip.fact("Takes effect", "after rejoining the world");
+                case GAME -> tooltip.fact("Takes effect", "after restarting the game");
                 case NONE -> {
                 }
             }
-            if (!facts.isEmpty()) {
-                html.append("<p style='margin-top:4px'>").append(String.join("<br>", facts)).append("</p>");
-            }
         }
-        return html.append("</div></html>").toString();
+        return tooltip.html();
     }
 
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
 
-    private static String hex(Color color) {
-        return String.format(Locale.ROOT, "#%06X", color.getRGB() & 0xFFFFFF);
-    }
 
     /**
      * Setting names indented under their sections, values colored by kind like code literals, and a changed value

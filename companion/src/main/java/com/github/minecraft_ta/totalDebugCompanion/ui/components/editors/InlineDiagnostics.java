@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.editors;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.diagnostics.JavaAnalysis.Problem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeColors;
@@ -90,8 +91,9 @@ final class InlineDiagnostics implements AutoCloseable {
                 if (text.isEmpty()) continue;
                 int y = (int) Math.floor(anchor.getY()) + ((int) Math.ceil(anchor.getHeight()) - metrics.getHeight()) / 2;
                 Point point = SwingUtilities.convertPoint(editor, x, y, layer);
-                String details = "<html>" + String.join("<br>", line.problems().stream()
-                        .map(problem -> escape(problem.message()).replace("\n", "<br>")).toList()) + "</html>";
+                Tooltip tooltip = Tooltip.of("");
+                line.problems().forEach(problem -> tooltip.text(problem.message()));
+                String details = tooltip.html();
                 labels.add(new Label(new Rectangle(point.x, point.y, metrics.stringWidth(text), metrics.getHeight()), text, details, primary.level()));
             } catch (BadLocationException ignored) {
                 // Document geometry may be unavailable during layout or document replacement.
@@ -136,9 +138,6 @@ final class InlineDiagnostics implements AutoCloseable {
         }
     }
 
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
-    }
 
     @Override public void close() {
         closed = true;

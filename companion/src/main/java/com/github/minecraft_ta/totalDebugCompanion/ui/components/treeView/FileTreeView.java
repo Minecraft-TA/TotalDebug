@@ -206,14 +206,7 @@ public class FileTreeView extends JScrollPane {
     }
 
     private static String location(TreeItem item) {
-        if (item instanceof FileSystemFileItem file) return file.getPath().toAbsolutePath().normalize().toString();
-        if (item instanceof ZipFileRootItem.Entry entry) {
-            return entry.getArchivePath().toAbsolutePath().normalize() + "!/" + entry.getEntryPath();
-        }
-        if (item instanceof FileSystemDirectoryItem || item instanceof ZipFileRootItem || item instanceof ZipFileRootItem.DirectoryEntry
-                || item instanceof RuntimeSourceTreeItem || item instanceof RuntimeSourceTreeItem.RuntimeDirectoryEntry
-                || item instanceof RuntimeSourceTreeItem.RuntimeFileEntry) return item.getTooltip();
-        return null;
+        return item.location();
     }
 
     private RuntimeSourceCatalog sourceCatalog() {

@@ -48,7 +48,7 @@ public final class CopyValue extends JPanel {
         if (!this.value.equals(value)) resetFeedback();
         this.value = value;
         label.setText(display);
-        label.setToolTipText(value);
+        label.setToolTipText(Tooltip.of("").text(value).html());
         copy.setEnabled(!value.isEmpty());
         setVisible(!value.isEmpty());
     }

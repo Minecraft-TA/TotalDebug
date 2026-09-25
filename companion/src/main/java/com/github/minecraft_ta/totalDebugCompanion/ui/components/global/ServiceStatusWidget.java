@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.global;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JComponent;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.PopupElements;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.FlatIconButton;
 import java.awt.Insets;
@@ -52,7 +53,7 @@ final class ServiceStatusWidget extends JButton implements AutoCloseable {
         if (closed) return;
         this.status = Objects.requireNonNull(status, "status");
         setText(this.serviceName + ": " + status.summary());
-        setToolTipText(popupAvailable ? "Show " + this.serviceName + " controls" : status.detail());
+        setToolTipText(popupAvailable ? "Show " + this.serviceName + " controls" : Tooltip.of("").text(status.detail()).html());
         repaint();
     }
 

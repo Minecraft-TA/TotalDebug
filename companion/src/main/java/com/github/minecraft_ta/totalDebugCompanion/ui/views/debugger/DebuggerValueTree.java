@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.views.debugger;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerValueText;
@@ -223,9 +224,7 @@ final class DebuggerValueTree {
                 String detail = debugValue.preview().available()
                         ? debugValue.preview().detail()
                         : debugValue.value();
-                this.valueLabel.setToolTipText(debugValue.type().isBlank()
-                        ? detail
-                        : debugValue.type() + (detail.isBlank() ? "" : "  " + detail));
+                this.valueLabel.setToolTipText(Tooltip.of("").detail(debugValue.type()).text(detail).html());
                 return this.valueLabel;
             }
             switch (node.getUserObject()) {

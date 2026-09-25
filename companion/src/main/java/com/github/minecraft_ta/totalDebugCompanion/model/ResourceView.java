@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
@@ -46,7 +47,11 @@ public final class ResourceView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return this.source.tooltip();
+        return switch (this.source) {
+            case LocalFileSource file -> Tooltip.of(Tooltip.shortPath(file.path())).html();
+            case ArchiveEntrySource entry -> Tooltip.of(entry.entryName()).detail("in " + entry.archivePath().getFileName()).html();
+            default -> this.source.displayName();
+        };
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.CatalogSearch;
+import com.github.minecraft_ta.totalDebugCompanion.ui.Tooltip;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
@@ -731,12 +732,9 @@ public class SearchEverywherePopup extends JFrame {
         PrimarySecondaryText text = resultModules.size() == 1
                 ? RuntimeModulePresentation.of(resultModules.getFirst()).text()
                 : PrimarySecondaryText.primary(RuntimeModulePresentation.compactSummary(resultModules));
-        String tooltip = sources.stream()
-                .map(RuntimeModulePresentation::of)
-                .map(RuntimeModulePresentation::tooltip)
-                .distinct()
-                .collect(Collectors.joining(" | "));
-        return new ModuleSummary(text, tooltip);
+        Tooltip tooltip = Tooltip.of("");
+        sources.stream().map(RuntimeModulePresentation::of).distinct().forEach(module -> module.describe(tooltip));
+        return new ModuleSummary(text, tooltip.html());
     }
 
     private static String identity(Result result) {
