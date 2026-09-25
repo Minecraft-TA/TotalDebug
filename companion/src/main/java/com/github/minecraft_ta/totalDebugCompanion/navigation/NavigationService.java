@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
 import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
@@ -147,7 +148,7 @@ public final class NavigationService {
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
                     case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
-                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.tab()));
+                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.registry()));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -316,7 +317,7 @@ public final class NavigationService {
                         ContentView.class,
                         view -> true,
                         () -> new ContentView(editors.get())
-                ).thenAccept(view -> view.show(content.tab())), activation);
+                ).thenAccept(view -> view.show(content.registry())), activation);
                 case NavigationTarget.KeyBindings keys -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         KeyBindingsView.class,
                         view -> true,
@@ -782,7 +783,8 @@ public final class NavigationService {
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
             case NavigationTarget.Changes ignored -> "changes";
             case NavigationTarget.KeyBindings ignored -> "key bindings";
-            case NavigationTarget.Content content -> "modpack " + content.tab().name().toLowerCase(Locale.ROOT);
+            case NavigationTarget.Content content -> "modpack " + (content.registry().isEmpty() ? "content"
+                    : ContentKinds.of(content.registry()).plural().toLowerCase(Locale.ROOT));
             case NavigationTarget.Definition definition -> definition.subject().format();
             case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };

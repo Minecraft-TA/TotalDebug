@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
@@ -84,13 +85,13 @@ class CatalogSearchTest {
 
     @Test
     void theBestMatchesAreKeptWhenMoreMatchThanTheLimit() throws Exception {
-        List<PackCatalog.ItemEntry> items = new ArrayList<>();
+        List<PackCatalog.RegistryEntry> items = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
-            items.add(new PackCatalog.ItemEntry("pack:raw_ingot_" + i, "Raw Ingot " + i, "", "", "", Map.of()));
+            items.add(new PackCatalog.RegistryEntry("pack:raw_ingot_" + i, "Raw Ingot " + i, "", "", List.of(), Map.of()));
         }
-        items.add(new PackCatalog.ItemEntry("pack:ingot", "Ingot", "", "", "", Map.of()));
+        items.add(new PackCatalog.RegistryEntry("pack:ingot", "Ingot", "", "", List.of(), Map.of()));
         CatalogSearch catalog = new CatalogSearch(new CatalogIndex(new PackCatalog("inventory", "en_us", List.of(),
-                List.of(), items, List.of(), List.of(), List.of(), Map.of())), null);
+                List.of(new PackCatalog.Registry(RegistryIds.ITEM, items)), Map.of(), List.of(), List.of(), Map.of())), null);
 
         List<Result> results = new SearchEverywhereSearch().search(null, catalog, "ingot", Category.ITEMS, 5, null, null);
 
@@ -104,10 +105,11 @@ class CatalogSearchTest {
     }
 
     private static String kind(Result result) {
-        return switch (assertInstanceOf(DefinitionResult.class, result).entry().kind()) {
-            case ITEM -> "Item";
-            case BLOCK -> "Block";
-            case ENTITY_TYPE -> "Entity";
+        return switch (assertInstanceOf(DefinitionResult.class, result).entry().registry()) {
+            case RegistryIds.ITEM -> "Item";
+            case RegistryIds.BLOCK -> "Block";
+            case RegistryIds.ENTITY_TYPE -> "Entity";
+            default -> "Other";
         };
     }
 }

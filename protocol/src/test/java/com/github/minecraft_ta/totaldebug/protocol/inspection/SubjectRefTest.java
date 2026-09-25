@@ -28,10 +28,13 @@ class SubjectRefTest {
     void modAndDefinitionTextRoundTrips() {
         assertEquals(new SubjectRef.Mod("mekanism"), SubjectRef.parse("mod mekanism"));
         assertEquals("mod mekanism", new SubjectRef.Mod("mekanism").format());
-        SubjectRef.Definition definition = new SubjectRef.Definition(SubjectRef.DefinitionKind.ENTITY_TYPE, "minecraft:zombie");
+        SubjectRef.Definition definition = new SubjectRef.Definition("minecraft:entity_type", "minecraft:zombie");
         assertEquals("definition entity_type minecraft:zombie", definition.format());
         assertEquals(definition, SubjectRef.parse(definition.format()));
         assertEquals("minecraft", definition.namespace());
+        SubjectRef.Definition modded = new SubjectRef.Definition("mekanism:chemical", "mekanism:hydrogen");
+        assertEquals("definition mekanism:chemical mekanism:hydrogen", modded.format());
+        assertEquals(modded, SubjectRef.parse(modded.format()));
     }
 
     @Test
@@ -55,7 +58,7 @@ class SubjectRefTest {
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("block minecraft:" + "a".repeat(400) + " 0 0 0"));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("mod Mekanism"));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("mod"));
-        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("definition fluid minecraft:water"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("definition Fluid minecraft:water"));
         assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("definition item stone"));
     }
 }

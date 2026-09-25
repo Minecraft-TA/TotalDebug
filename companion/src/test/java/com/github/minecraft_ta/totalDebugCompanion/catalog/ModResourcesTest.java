@@ -42,7 +42,7 @@ class ModResourcesTest {
                 .write(paths.inventory());
         new PackCatalog("inventory", "en_us", List.of(new PackCatalog.Mod("minecraft", "Minecraft", "1.21.1",
                 "", List.of(), "", Map.of(), "", "minecraft", classes.toUri(), List.of(), List.of())),
-                List.of(), List.of(), List.of(), List.of(), List.of(), Map.of()).write(paths.catalog());
+                List.of(), Map.of(), List.of(), List.of(), Map.of()).write(paths.catalog());
         var service = new PackCatalogService(paths);
         service.accept("inventory", paths.catalog(), Runnable::run);
         var summary = ModSummary.resolve("minecraft", service.index().orElseThrow(), RuntimeSourceCatalog.empty()).orElseThrow();

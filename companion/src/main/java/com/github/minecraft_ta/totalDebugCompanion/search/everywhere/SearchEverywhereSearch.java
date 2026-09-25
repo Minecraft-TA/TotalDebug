@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.tth05.jindex.ClassIndex;
 import com.github.tth05.jindex.IndexedClass;
 import com.github.tth05.jindex.LiteralSearchResult;
@@ -299,10 +300,10 @@ public final class SearchEverywhereSearch {
     private static int kindRank(Result result) {
         return switch (result) {
             case ModResult ignored -> 0;
-            case DefinitionResult definition -> switch (definition.entry().kind()) {
-                case ITEM -> 1;
-                case BLOCK -> 2;
-                case ENTITY_TYPE -> 3;
+            case DefinitionResult definition -> switch (definition.entry().registry()) {
+                case RegistryIds.ITEM -> 1;
+                case RegistryIds.BLOCK -> 2;
+                default -> 3;
             };
             case ClassResult ignored -> 4;
             case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 5 : 6;

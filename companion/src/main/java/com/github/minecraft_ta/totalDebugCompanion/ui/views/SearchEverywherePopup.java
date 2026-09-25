@@ -13,7 +13,6 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.CenteredIcon;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 
 import java.nio.file.Path;
@@ -27,6 +26,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.ContextMenus;
 import com.github.minecraft_ta.totalDebugCompanion.jdt.symbol.CodeSymbol;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.RuntimeMember;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeIndexService;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totaldebug.storage.RuntimeInventory;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch;
@@ -763,11 +763,7 @@ public class SearchEverywherePopup extends JFrame {
         PrimarySecondaryText text = switch (result) {
             case ModResult ignored -> PrimarySecondaryText.primary("Mod");
             case DefinitionResult definition -> new PrimarySecondaryText(definition.owner(),
-                    switch (definition.entry().kind()) {
-                        case ITEM -> "Item";
-                        case BLOCK -> "Block";
-                        case ENTITY_TYPE -> "Entity type";
-                    });
+                    ContentKinds.of(definition.entry().registry()).singular());
             case ResourceResult resource -> new PrimarySecondaryText(resource.owner(), "Resource");
             case KeyBindingResult key -> new PrimarySecondaryText(key.owner(), "Key binding");
             default -> PrimarySecondaryText.primary("");
@@ -852,7 +848,7 @@ public class SearchEverywherePopup extends JFrame {
                     presentation = new PrimarySecondaryText(definition.entry().title(), definition.entry().id());
                     Icon drawn = catalogIcons.icon(definition.icon(), list);
                     icon = drawn == null
-                            ? new CenteredIcon(SubjectIcons.definition(definition.entry().kind()), PREVIEW_SIZE) : drawn;
+                            ? new CenteredIcon(ContentKinds.of(definition.entry().registry()).icon(), PREVIEW_SIZE) : drawn;
                 }
                 case ResourceResult resource -> {
                     presentation = new PrimarySecondaryText(resource.resource().fileName(), resource.resource().path());

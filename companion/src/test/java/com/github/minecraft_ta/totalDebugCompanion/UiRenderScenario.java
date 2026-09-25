@@ -57,7 +57,8 @@ enum UiRenderScenario {
     MOD_RESOURCES("mod-resources", "Mod resources listed by category"),
     DEFINITION_PAGE("definition-page", "Block definition page with its files"),
     PACK_CONFIGURATION("pack-configuration", "Every modified setting of the pack under its mod and file"),
-    KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides");
+    KEY_BINDINGS("key-bindings", "The pack's key bindings with a changed key that collides"),
+    CONTENT("content", "The pack's registered content with every kind listed together");
 
     private final String id;
     private final String description;

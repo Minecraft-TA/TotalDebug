@@ -3,13 +3,13 @@ package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
-import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -67,16 +67,16 @@ public final class CatalogSearch {
                 }
             }
         }
-        SubjectRef.DefinitionKind kind = switch (category) {
-            case ITEMS -> SubjectRef.DefinitionKind.ITEM;
-            case BLOCKS -> SubjectRef.DefinitionKind.BLOCK;
-            case ENTITIES -> SubjectRef.DefinitionKind.ENTITY_TYPE;
+        String registry = switch (category) {
+            case ITEMS -> RegistryIds.ITEM;
+            case BLOCKS -> RegistryIds.BLOCK;
+            case ENTITIES -> RegistryIds.ENTITY_TYPE;
             default -> null;
         };
-        if (category == Category.ALL || kind != null) {
+        if (category == Category.ALL || registry != null) {
             for (int i = 0; i < this.entries.size(); i++) {
                 CatalogIndex.Entry entry = this.entries.get(i);
-                if (kind != null && entry.kind() != kind) continue;
+                if (registry != null && !entry.registry().equals(registry)) continue;
                 if (!this.names[i].contains(folded) && !this.ids[i].contains(folded)) continue;
                 PackCatalog.Mod owner = this.index.mod(entry.namespace()).orElse(null);
                 if (moduleIds != null && (owner == null || !moduleIds.contains(owner.module()))) continue;

@@ -85,7 +85,7 @@ public final class ModPanel extends JPanel {
     private final JTabbedPane tabs = new JTabbedPane();
     private final Map<ModTab, Component> tabContent = new EnumMap<>(ModTab.class);
     private final JPanel overview = new JPanel(new BorderLayout());
-    private final Map<ModTab, CatalogEntryTable> entryTables = new EnumMap<>(ModTab.class);
+    private final ContentBrowser content;
     private final ConfigPanel configs;
     private final KeyBindingsPanel keyBindings;
     private final ResourceBrowser resources;
@@ -112,6 +112,7 @@ public final class ModPanel extends JPanel {
         this.resources = new ResourceBrowser(navigator, category -> { });
         this.configs = new ConfigPanel(modId, workspace, changes, navigator);
         this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
+        this.content = new ContentBrowser(this.listIcons, this::iconOf, navigator, null);
 
         this.header.addControl(this.browseCode);
         this.browseCode.setToolTipText("Show the mod's classes in the Project tree");
@@ -123,9 +124,7 @@ public final class ModPanel extends JPanel {
         add(this.header, BorderLayout.NORTH);
 
         this.tabContent.put(ModTab.OVERVIEW, scroll(this.overview));
-        entryTab(ModTab.BLOCKS, "Filter blocks");
-        entryTab(ModTab.ITEMS, "Filter items");
-        entryTab(ModTab.ENTITIES, "Filter entity types");
+        this.tabContent.put(ModTab.CONTENT, this.content);
         this.tabContent.put(ModTab.CONFIGURATION, this.configs);
         this.tabContent.put(ModTab.KEY_BINDINGS, this.keyBindings);
         this.tabContent.put(ModTab.RESOURCES, this.resources);
@@ -136,13 +135,6 @@ public final class ModPanel extends JPanel {
         TypeToFilter.forwardTyping(this.tabs, this::selectedFilter);
         this.removeCatalogListener = catalog.addListener(this::rebuild);
         rebuild();
-    }
-
-    private void entryTab(ModTab tab, String placeholder) {
-        CatalogEntryTable table = new CatalogEntryTable(placeholder, this.listIcons, this::iconOf,
-                entry -> this.navigator.accept(new NavigationTarget.Definition(entry.subject())), null);
-        this.entryTables.put(tab, table);
-        this.tabContent.put(tab, table);
     }
 
     private CatalogIndex.ItemIcon iconOf(CatalogIndex.Entry entry) {
@@ -157,9 +149,10 @@ public final class ModPanel extends JPanel {
         return this.summary == null ? this.modId : this.summary.title();
     }
 
-    /** Selects the requested tab, and the category on the Resources tab. */
+    /** Selects the requested tab, and the kind on the Content tab or the category on the Resources tab. */
     public void show(NavigationTarget.ModPage page) {
-        if (page.tab() == ModTab.RESOURCES) this.resources.selectCategory(page.resourceCategory());
+        if (page.tab() == ModTab.CONTENT) this.content.select(page.section());
+        if (page.tab() == ModTab.RESOURCES) this.resources.selectCategory(page.section());
         Component content = this.tabContent.get(page.tab());
         int index = this.tabs.indexOfComponent(content);
         if (index >= 0 && this.tabs.isEnabledAt(index)) this.tabs.setSelectedIndex(index);
@@ -171,7 +164,12 @@ public final class ModPanel extends JPanel {
         for (Map.Entry<ModTab, Component> entry : this.tabContent.entrySet()) {
             if (entry.getValue() == this.tabs.getSelectedComponent()) tab = entry.getKey();
         }
-        return new NavigationTarget.ModPage(this.modId, tab, tab == ModTab.RESOURCES ? this.resources.selectedCategory() : "");
+        String section = switch (tab) {
+            case CONTENT -> this.content.selectedKind();
+            case RESOURCES -> this.resources.selectedCategory();
+            default -> "";
+        };
+        return new NavigationTarget.ModPage(this.modId, tab, section);
     }
 
     /** Shows the mod as the current catalog and runtime describe it. */
@@ -212,18 +210,12 @@ public final class ModPanel extends JPanel {
 
         String unavailable = this.summary.captured() ? "" : CatalogMessages.unavailable(state);
         showOverview(overviewContent(mod, unavailable), footer(mod));
-        for (ModTab tab : ModTab.CONTENT) setEntries(tab);
+        this.content.setContent(this.index == null || !this.summary.captured() ? Map.of() : this.index.content(this.summary.id()));
+        setTab(ModTab.CONTENT, this.content.count());
         setTab(ModTab.CONFIGURATION, configFiles.size());
         setTab(ModTab.KEY_BINDINGS, this.index == null ? 0 : this.index.keyBindings(this.summary.id()).size());
         loadResources();
         refreshTitle();
-    }
-
-    private void setEntries(ModTab tab) {
-        List<CatalogIndex.Entry> entries = this.index == null || !this.summary.captured()
-                ? List.of() : this.index.entries(this.summary.id(), tab.contentKind());
-        this.entryTables.get(tab).setEntries(entries);
-        setTab(tab, entries.size());
     }
 
     /** Shows a tab with its count, or hides it while it has nothing to show. */
@@ -468,14 +460,14 @@ public final class ModPanel extends JPanel {
         return this.tabs;
     }
 
-    CatalogEntryTable entryTable(ModTab tab) {
-        return this.entryTables.get(tab);
+    ContentBrowser contentBrowser() {
+        return this.content;
     }
 
     /** The filter of the selected tab, which typing on the tab strip goes to; null for the Overview. */
     private JTextComponent selectedFilter() {
         Component selected = this.tabs.getSelectedComponent();
-        if (selected instanceof CatalogEntryTable table) return table.filterField();
+        if (selected == this.content) return this.content.filterField();
         if (selected == this.resources) return this.resources.filterField();
         if (selected == this.configs) return this.configs.filterField();
         if (selected == this.keyBindings) return this.keyBindings.filterField();

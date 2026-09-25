@@ -35,13 +35,14 @@ public sealed interface NavigationTarget permits
 
     /**
      * An installed mod's page, or a namespace's or runtime module's page when no captured mod has that id.
-     * {@code resourceCategory} selects a resource category on the Resources tab and is empty otherwise.
+     * {@code section} selects a part of the tab: a registry such as {@code minecraft:fluid} on the Content tab, a
+     * resource category on the Resources tab; empty selects none.
      */
-    record ModPage(String modId, ModTab tab, String resourceCategory) implements NavigationTarget {
+    record ModPage(String modId, ModTab tab, String section) implements NavigationTarget {
         public ModPage {
             modId = requireText(modId, "modId");
             Objects.requireNonNull(tab, "tab");
-            resourceCategory = Objects.requireNonNullElse(resourceCategory, "");
+            section = Objects.requireNonNullElse(section, "");
         }
 
         public ModPage(String modId) {
@@ -49,12 +50,10 @@ public sealed interface NavigationTarget permits
         }
     }
 
-    /** Every block, item or entity type of the pack; {@code tab} is Blocks, Items or Entities. */
-    record Content(ModTab tab) implements NavigationTarget {
+    /** The registered content of every mod; {@code registry}, such as {@code minecraft:fluid}, selects a kind, empty all. */
+    record Content(String registry) implements NavigationTarget {
         public Content {
-            if (!ModTab.CONTENT.contains(tab)) {
-                throw new IllegalArgumentException("Content lists blocks, items or entity types, not " + tab);
-            }
+            registry = Objects.requireNonNullElse(registry, "");
         }
     }
 

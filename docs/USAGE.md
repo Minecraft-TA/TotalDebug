@@ -14,9 +14,9 @@ The index describes selected runtime archives and prepared class files. It does 
 
 ## Mods and registered content
 
-The Files view lists installed mods under **Mods**. Each mod groups its blocks, items, entity types, configuration files and resources; opening the mod or a group shows the mod's page on the matching tab. Blocks, items and entity types open their definition page, which links the owning mod, the implementing class and related definitions. An inspection opened with F6 links to its mod and definition.
+The Files view lists installed mods under **Mods**. Each mod groups its registered content by kind, its configuration files, key bindings and resources; opening the mod or a group shows the mod's page on the matching tab. Every entry of its content opens a definition page, which links the owning mod, the implementing class and related definitions. An inspection opened with F6 links to its mod and definition.
 
-Search Everywhere finds mods, items, blocks, entity types and resource paths alongside classes, symbols and text.
+Search Everywhere finds mods, registered content of every kind, key bindings and resource paths alongside classes, symbols and text.
 
 Minecraft captures the pack catalog once per runtime inventory and language after resources have loaded, and writes it to the instance cache. Companion shows the saved catalog while Minecraft is offline, together with the most recently saved item icons. Before the first capture the Mods tree lists the runtime's mod files and their resources only. The catalog records registered content, not the classes of entity types, which only exist once an entity is created. Server configuration files have a path only while a world is loaded.
 

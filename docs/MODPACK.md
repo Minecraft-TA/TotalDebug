@@ -18,7 +18,7 @@ A pack-wide view belongs under Modpack, not under one of its mods. Views about o
 |---|---|---|---|
 | Overview | Minecraft, loader and Java versions, memory settings, mod count, catalog state; later the differences between two captures of the pack | Catalog, launcher instance | Built in |
 | Mods | Installed mods and other namespaces, later disabled mods | Catalog, runtime modules | Built in |
-| Content | Every block, item and entity type with the mod that registered it | Catalog | Built in |
+| Content | Every registered block, item, entity type, fluid and sound event with the mod that registered it, by kind; later biomes, enchantments, tags, recipes and loot tables from the open world | Catalog | Built in |
 | Configuration | Every setting of every mod, modified ones by default; later `defaultconfigs` and configuration files NeoForge does not manage | Catalog, `config/`, worlds' `serverconfig/` | Built in |
 | Resource packs | Order, enabled packs, which files each pack overrides, the pack Companion manages | `resourcepacks/`, `options.txt`, captured pack stack | Built in |
 | Worlds | Server configuration and datapacks of each world, which world is open | `saves/` | Built in |
@@ -33,7 +33,13 @@ A pack-wide view belongs under Modpack, not under one of its mods. Views about o
 
 The owner follows the dividing rule in [EXTENSIBILITY.md](EXTENSIBILITY.md): vanilla and NeoForge concepts every pack has are built in; a row that exists because of one mod is an extension.
 
-Each pack-wide row that also exists per mod, such as Key bindings or the lists under Content, shows the same table as the mod's own tab, with a Mod column added.
+Each pack-wide row that also exists per mod, such as Key bindings or Content, shows the same table as the mod's own tab, with a Mod column added.
+
+## Content kinds
+
+Content is kept per registry. The game captures each listed registry in one shape: an entry's id, the name the game shows, the class of the registered object, an item that draws it, links to related entries such as a block's item or an entity type's spawn egg, and further facts by a stable key. Companion lists every captured registry the same way, under Content in the pack and on each mod's Content tab, and opens any entry on a definition page with its facts and links. Only the rendering of blocks and items on that page is specific to them.
+
+Adding a kind is one capture description in the game's `CatalogRegistries`. Companion lists a registry it has no description for under a name made from its id; `ContentKinds` gives the known ones their names and icons. Registries only a loaded world holds, such as biomes, tags and recipes, need a capture of the open world first.
 
 ## Key bindings in code
 

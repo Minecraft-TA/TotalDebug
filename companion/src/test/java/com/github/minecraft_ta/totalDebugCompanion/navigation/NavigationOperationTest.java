@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 
 import com.github.minecraft_ta.totalDebugCompanion.CompanionApplication;
 import com.github.minecraft_ta.totalDebugCompanion.GlobalConfig;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.model.JavaEditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.model.ModView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
@@ -160,7 +161,7 @@ class NavigationOperationTest {
             fixture.navigation.navigate(new NavigationTarget.ModPage("examplemod"), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
             fixture.navigation.navigate(new NavigationTarget.ModPage("examplemod", ModTab.RESOURCES, ""), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
             assertEquals(1, edt(() -> fixture.tabs.editors().stream().filter(ModView.class::isInstance).count()));
-            SubjectRef.Definition stone = new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK, "minecraft:stone");
+            SubjectRef.Definition stone = new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:stone");
             fixture.navigation.navigate(new NavigationTarget.Definition(stone), NavigationService.Activation.KEEP_CURRENT_WINDOW).get(5, TimeUnit.SECONDS);
             assertEquals(new NavigationTarget.Definition(stone), edt(() -> fixture.tabs.getSelectedEditor().getNavigationTarget()));
 

@@ -11,20 +11,10 @@ import javax.swing.Icon;
 public final class SubjectIcons {
     private SubjectIcons() { }
 
-    public static Icon definition(SubjectRef.DefinitionKind kind) {
-        return switch (kind) {
-            case BLOCK -> Icons.BLOCK;
-            case ITEM -> Icons.ITEM;
-            case ENTITY_TYPE -> Icons.ENTITY;
-        };
-    }
-
     public static Icon tab(ModTab tab) {
         return switch (tab) {
             case OVERVIEW -> Icons.MOD;
-            case BLOCKS -> Icons.BLOCK;
-            case ITEMS -> Icons.ITEM;
-            case ENTITIES -> Icons.ENTITY;
+            case CONTENT -> Icons.BLOCK;
             case CONFIGURATION -> Icons.CONFIG_FILE;
             case KEY_BINDINGS -> Icons.KEYBOARD;
             case RESOURCES -> Icons.RESOURCES_ROOT;
@@ -41,7 +31,7 @@ public final class SubjectIcons {
         }
         return switch (subject) {
             case SubjectRef.Mod ignored -> Icons.MOD;
-            case SubjectRef.Definition definition -> definition(definition.kind());
+            case SubjectRef.Definition definition -> ContentKinds.of(definition.registry()).icon();
             case SubjectRef.Block ignored -> Icons.BLOCK;
             case SubjectRef.Entity ignored -> Icons.ENTITY;
         };

@@ -268,7 +268,7 @@ class ConfigPanelTest {
         PackCatalog.Mod mod = new PackCatalog.Mod("testmod", "Test Mod", "1", "", List.of(), "", Map.of(), "", "testmod",
                 this.directory.resolve("mods/testmod.jar").toUri(), List.of(), List.of(FILE,
                 new PackCatalog.ConfigFile("testmod-common.toml", PackCatalog.ConfigType.COMMON, common, List.of(), List.of())));
-        CatalogIndex index = new CatalogIndex(new PackCatalog("inventory", "en_us", List.of(mod), List.of(), List.of(), List.of(), List.of(), List.of(),
+        CatalogIndex index = new CatalogIndex(new PackCatalog("inventory", "en_us", List.of(mod), List.of(), Map.of(), List.of(), List.of(),
                 Map.of()));
 
         assertEquals("testmod-common.toml", ConfigSources.owner(index, this.directory, common).orElseThrow().file().fileName());

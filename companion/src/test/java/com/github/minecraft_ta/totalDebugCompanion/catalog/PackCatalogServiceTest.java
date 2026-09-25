@@ -106,12 +106,18 @@ class PackCatalogServiceTest {
         CatalogIndex index = new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory)));
 
         assertEquals(List.of("c"), index.otherNamespaces());
+        assertEquals(List.of(RegistryIds.BLOCK, RegistryIds.ITEM, RegistryIds.ENTITY_TYPE, RegistryIds.FLUID),
+                List.copyOf(index.content("testmod").keySet()), "kinds follow the catalog's registry order");
         assertEquals(List.of("Widget"),
-                index.entries("testmod", SubjectRef.DefinitionKind.ITEM).stream().map(CatalogIndex.Entry::title).toList());
-        assertEquals("Widget Block", index.entry(new SubjectRef.Definition(SubjectRef.DefinitionKind.ITEM,
+                index.content("testmod").get(RegistryIds.ITEM).stream().map(CatalogIndex.Entry::title).toList());
+        assertEquals("Widget Block", index.entry(new SubjectRef.Definition(RegistryIds.ITEM,
                 "testmod:widget_block")).orElseThrow().title(), "Block item definitions remain available through explicit links");
-        assertEquals("testmod:widget_block", index.entry(new SubjectRef.Definition(SubjectRef.DefinitionKind.BLOCK,
+        assertEquals("testmod:widget_block", index.entry(new SubjectRef.Definition(RegistryIds.BLOCK,
                 "testmod:widget_block")).orElseThrow().iconItem());
+        assertEquals("monster", index.definition(new SubjectRef.Definition(RegistryIds.ENTITY_TYPE, "testmod:gremlin"))
+                .orElseThrow().facts().get("category"));
+        assertTrue(index.definition(new SubjectRef.Definition(RegistryIds.SOUND_EVENT, "testmod:spin")).isEmpty(),
+                "a registry that was not captured has no definitions");
         assertEquals(new CatalogIndex.ItemIcon("testmod:item/widget", Map.of()), index.itemIcon("testmod:widget").orElseThrow());
         assertEquals("c:item/dust", index.itemIcon("c:shared_dust").orElseThrow().model());
         assertEquals("Test Mod", index.ownerName("testmod"));

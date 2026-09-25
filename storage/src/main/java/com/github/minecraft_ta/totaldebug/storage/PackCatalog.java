@@ -26,24 +26,26 @@ import java.util.regex.Pattern;
 
 /**
  * The game-owned description of installed mods and their registered content. Minecraft writes it next to the
- * runtime inventory it belongs to; Companion only reads it, including while no game is connected.
+ * runtime inventory it belongs to; Companion only reads it, including while no game is connected. Content is kept
+ * per registry in one shape for every kind; {@code itemAppearances} holds how items are drawn where that is not
+ * their conventional model.
  */
 public record PackCatalog(
         String inventoryId,
         String language,
         List<Mod> mods,
-        List<BlockEntry> blocks,
-        List<ItemEntry> items,
-        List<EntityTypeEntry> entityTypes,
+        List<Registry> registries,
+        Map<String, ItemAppearance> itemAppearances,
         List<KeyBinding> keyBindings,
         List<KeyContext> keyContexts,
         Map<String, String> keyNames
 ) {
-    public static final int FORMAT_VERSION = 3;
+    public static final int FORMAT_VERSION = 4;
     public static final long MAX_FILE_BYTES = 64L * 1024 * 1024;
 
     private static final Pattern MOD_ID = Pattern.compile("[a-z][a-z0-9_]{1,63}");
     private static final Pattern REGISTRY_ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
+    private static final Pattern KEY = Pattern.compile("[a-z][a-z0-9_]*");
 
     public enum ConfigType { COMMON, CLIENT, SERVER, STARTUP }
     /** What must restart before a changed setting takes effect. */
@@ -152,35 +154,56 @@ public record PackCatalog(
         }
     }
 
-    public record BlockEntry(String id, String name, String className, String item, String blockEntityType) {
-        public BlockEntry {
-            requireMatch(REGISTRY_ID, id, "block id");
-            name = text(name);
-            className = text(className);
-            item = optionalId(item, "block item of " + id);
-            blockEntityType = optionalId(blockEntityType, "block entity type of " + id);
+    /** A registry the game captured, such as {@code minecraft:block}, with its entries in registry order. */
+    public record Registry(String id, List<RegistryEntry> entries) {
+        public Registry {
+            requireMatch(REGISTRY_ID, id, "registry id");
+            entries = List.copyOf(entries);
+            unique(entries.stream().map(RegistryEntry::id).toList(), id + " entry");
         }
     }
 
-    /** {@code model} is empty when the item uses its conventional {@code ns:item/path} model. */
-    public record ItemEntry(String id, String name, String className, String block, String model,
-                            Map<Integer, Integer> tints) {
-        public ItemEntry {
-            requireMatch(REGISTRY_ID, id, "item id");
+    /**
+     * One registered thing, such as a block type or a fluid. {@code name} is the name the game shows for it, empty
+     * when it has none; {@code className} the class of the registered object; {@code icon} the id of an item that
+     * draws it, empty for none. {@code links} name related entries, and {@code facts} hold further values by a stable
+     * key, such as {@code category} for an entity type; Companion names both for display.
+     */
+    public record RegistryEntry(String id, String name, String className, String icon, List<Link> links,
+                                Map<String, String> facts) {
+        public RegistryEntry {
+            requireMatch(REGISTRY_ID, id, "entry id");
             name = text(name);
             className = text(className);
-            block = optionalId(block, "block of " + id);
+            icon = optionalId(icon, "icon of " + id);
+            links = List.copyOf(links);
+            facts = Map.copyOf(facts);
+            for (String key : facts.keySet()) requireMatch(KEY, key, "fact of " + id);
+        }
+
+        /** The id of the entry {@code relation} links to, or empty. */
+        public String link(String relation) {
+            for (Link link : this.links) {
+                if (link.relation().equals(relation)) return link.id();
+            }
+            return "";
+        }
+    }
+
+    /** A related entry: {@code relation} is a stable key such as {@code spawn_egg}, {@code registry} the entry's registry. */
+    public record Link(String relation, String registry, String id) {
+        public Link {
+            requireMatch(KEY, relation, "link relation");
+            requireMatch(REGISTRY_ID, registry, "linked registry");
+            requireMatch(REGISTRY_ID, id, "linked id");
+        }
+    }
+
+    /** How an item is drawn: {@code model} is empty for its conventional {@code ns:item/path} model. */
+    public record ItemAppearance(String model, Map<Integer, Integer> tints) {
+        public ItemAppearance {
             model = text(model);
             tints = Map.copyOf(tints);
-        }
-    }
-
-    public record EntityTypeEntry(String id, String name, String category, String spawnEgg) {
-        public EntityTypeEntry {
-            requireMatch(REGISTRY_ID, id, "entity type id");
-            name = text(name);
-            category = text(category);
-            spawnEgg = optionalId(spawnEgg, "spawn egg of " + id);
         }
     }
 
@@ -231,16 +254,14 @@ public record PackCatalog(
         requireText(inventoryId, "inventory id");
         requireText(language, "language");
         mods = List.copyOf(mods);
-        blocks = List.copyOf(blocks);
-        items = List.copyOf(items);
-        entityTypes = List.copyOf(entityTypes);
+        registries = List.copyOf(registries);
+        itemAppearances = Map.copyOf(itemAppearances);
         keyBindings = List.copyOf(keyBindings);
         keyContexts = List.copyOf(keyContexts);
         keyNames = Map.copyOf(keyNames);
         unique(mods.stream().map(Mod::id).toList(), "mod");
-        unique(blocks.stream().map(BlockEntry::id).toList(), "block");
-        unique(items.stream().map(ItemEntry::id).toList(), "item");
-        unique(entityTypes.stream().map(EntityTypeEntry::id).toList(), "entity type");
+        unique(registries.stream().map(Registry::id).toList(), "registry");
+        for (String item : itemAppearances.keySet()) requireMatch(REGISTRY_ID, item, "item id");
         unique(keyBindings.stream().map(KeyBinding::name).toList(), "key binding");
         unique(keyContexts.stream().map(KeyContext::id).toList(), "key context");
         Set<String> contexts = new HashSet<>(keyContexts.stream().map(KeyContext::id).toList());
@@ -266,18 +287,16 @@ public record PackCatalog(
         try (JsonReader reader = new JsonReader(Files.newBufferedReader(file, StandardCharsets.UTF_8))) {
             Header header = header(reader, file);
             List<Mod> mods = List.of();
-            List<BlockEntry> blocks = List.of();
-            List<ItemEntry> items = List.of();
-            List<EntityTypeEntry> entityTypes = List.of();
+            List<Registry> registries = List.of();
+            Map<String, ItemAppearance> itemAppearances = Map.of();
             List<KeyBinding> keyBindings = List.of();
             List<KeyContext> keyContexts = List.of();
             Map<String, String> keyNames = Map.of();
             while (reader.hasNext()) {
                 switch (reader.nextName()) {
                     case "mods" -> mods = entries(reader, PackCatalog::mod);
-                    case "blocks" -> blocks = entries(reader, PackCatalog::block);
-                    case "items" -> items = entries(reader, PackCatalog::item);
-                    case "entityTypes" -> entityTypes = entries(reader, PackCatalog::entityType);
+                    case "registries" -> registries = entries(reader, PackCatalog::registry);
+                    case "itemAppearances" -> itemAppearances = itemAppearances(JsonParser.parseReader(reader).getAsJsonObject());
                     case "keyBindings" -> keyBindings = entries(reader, PackCatalog::keyBinding);
                     case "keyContexts" -> keyContexts = entries(reader, PackCatalog::keyContext);
                     case "keyNames" -> keyNames = strings(reader);
@@ -288,7 +307,7 @@ public record PackCatalog(
             if (reader.peek() != JsonToken.END_DOCUMENT) {
                 throw new IllegalArgumentException("Trailing content");
             }
-            return new PackCatalog(header.inventoryId(), header.language(), mods, blocks, items, entityTypes,
+            return new PackCatalog(header.inventoryId(), header.language(), mods, registries, itemAppearances,
                     keyBindings, keyContexts, keyNames);
         } catch (RuntimeException exception) {
             throw new IOException("Invalid pack catalog " + file + ": " + exception.getMessage(), exception);
@@ -372,45 +391,30 @@ public record PackCatalog(
             writer.endObject();
         }
         writer.endArray();
-        writer.name("blocks").beginArray();
-        for (BlockEntry block : blocks) {
+        writer.name("registries").beginArray();
+        for (Registry registry : registries) {
             writer.beginObject();
-            writer.name("id").value(block.id());
-            optional(writer, "name", block.name());
-            optional(writer, "class", block.className());
-            optional(writer, "item", block.item());
-            optional(writer, "blockEntityType", block.blockEntityType());
+            writer.name("id").value(registry.id());
+            writer.name("entries").beginArray();
+            for (RegistryEntry entry : registry.entries()) writeEntry(writer, entry);
+            writer.endArray();
             writer.endObject();
         }
         writer.endArray();
-        writer.name("items").beginArray();
-        for (ItemEntry item : items) {
-            writer.beginObject();
-            writer.name("id").value(item.id());
-            optional(writer, "name", item.name());
-            optional(writer, "class", item.className());
-            optional(writer, "block", item.block());
-            optional(writer, "model", item.model());
-            if (!item.tints().isEmpty()) {
+        writer.name("itemAppearances").beginObject();
+        for (var appearance : new TreeMap<>(itemAppearances).entrySet()) {
+            writer.name(appearance.getKey()).beginObject();
+            optional(writer, "model", appearance.getValue().model());
+            if (!appearance.getValue().tints().isEmpty()) {
                 writer.name("tints").beginObject();
-                for (var tint : new TreeMap<>(item.tints()).entrySet()) {
+                for (var tint : new TreeMap<>(appearance.getValue().tints()).entrySet()) {
                     writer.name(Integer.toString(tint.getKey())).value(tint.getValue());
                 }
                 writer.endObject();
             }
             writer.endObject();
         }
-        writer.endArray();
-        writer.name("entityTypes").beginArray();
-        for (EntityTypeEntry entityType : entityTypes) {
-            writer.beginObject();
-            writer.name("id").value(entityType.id());
-            optional(writer, "name", entityType.name());
-            optional(writer, "category", entityType.category());
-            optional(writer, "spawnEgg", entityType.spawnEgg());
-            writer.endObject();
-        }
-        writer.endArray();
+        writer.endObject();
         writer.name("keyBindings").beginArray();
         for (KeyBinding binding : keyBindings) {
             writer.beginObject();
@@ -439,6 +443,31 @@ public record PackCatalog(
         writer.name("keyNames").beginObject();
         for (var name : new TreeMap<>(keyNames).entrySet()) writer.name(name.getKey()).value(name.getValue());
         writer.endObject();
+        writer.endObject();
+    }
+
+    private static void writeEntry(JsonWriter writer, RegistryEntry entry) throws IOException {
+        writer.beginObject();
+        writer.name("id").value(entry.id());
+        optional(writer, "name", entry.name());
+        optional(writer, "class", entry.className());
+        optional(writer, "icon", entry.icon());
+        if (!entry.links().isEmpty()) {
+            writer.name("links").beginArray();
+            for (Link link : entry.links()) {
+                writer.beginObject();
+                writer.name("relation").value(link.relation());
+                writer.name("registry").value(link.registry());
+                writer.name("id").value(link.id());
+                writer.endObject();
+            }
+            writer.endArray();
+        }
+        if (!entry.facts().isEmpty()) {
+            writer.name("facts").beginObject();
+            for (var fact : new TreeMap<>(entry.facts()).entrySet()) writer.name(fact.getKey()).value(fact.getValue());
+            writer.endObject();
+        }
         writer.endObject();
     }
 
@@ -564,25 +593,42 @@ public record PackCatalog(
                 optional(json, "range"), allowed, restart.isEmpty() ? Restart.NONE : Restart.valueOf(restart));
     }
 
-    private static BlockEntry block(JsonObject json) {
-        return new BlockEntry(JsonFiles.string(json, "id"), optional(json, "name"), optional(json, "class"),
-                optional(json, "item"), optional(json, "blockEntityType"));
+    private static Registry registry(JsonObject json) {
+        List<RegistryEntry> entries = new ArrayList<>();
+        for (JsonElement value : JsonFiles.array(json, "entries")) entries.add(registryEntry(value.getAsJsonObject()));
+        return new Registry(JsonFiles.string(json, "id"), entries);
     }
 
-    private static ItemEntry item(JsonObject json) {
-        Map<Integer, Integer> tints = new LinkedHashMap<>();
-        if (json.has("tints")) {
-            for (var tint : JsonFiles.object(json, "tints").entrySet()) {
-                tints.put(Integer.parseInt(tint.getKey()), tint.getValue().getAsInt());
+    private static RegistryEntry registryEntry(JsonObject json) {
+        List<Link> links = new ArrayList<>();
+        if (json.has("links")) {
+            for (JsonElement value : JsonFiles.array(json, "links")) {
+                JsonObject link = value.getAsJsonObject();
+                links.add(new Link(JsonFiles.string(link, "relation"), JsonFiles.string(link, "registry"),
+                        JsonFiles.string(link, "id")));
             }
         }
-        return new ItemEntry(JsonFiles.string(json, "id"), optional(json, "name"), optional(json, "class"),
-                optional(json, "block"), optional(json, "model"), tints);
+        Map<String, String> facts = new LinkedHashMap<>();
+        if (json.has("facts")) {
+            for (var fact : JsonFiles.object(json, "facts").entrySet()) facts.put(fact.getKey(), fact.getValue().getAsString());
+        }
+        return new RegistryEntry(JsonFiles.string(json, "id"), optional(json, "name"), optional(json, "class"),
+                optional(json, "icon"), links, facts);
     }
 
-    private static EntityTypeEntry entityType(JsonObject json) {
-        return new EntityTypeEntry(JsonFiles.string(json, "id"), optional(json, "name"),
-                optional(json, "category"), optional(json, "spawnEgg"));
+    private static Map<String, ItemAppearance> itemAppearances(JsonObject json) {
+        Map<String, ItemAppearance> appearances = new LinkedHashMap<>();
+        for (var entry : json.entrySet()) {
+            JsonObject appearance = entry.getValue().getAsJsonObject();
+            Map<Integer, Integer> tints = new LinkedHashMap<>();
+            if (appearance.has("tints")) {
+                for (var tint : JsonFiles.object(appearance, "tints").entrySet()) {
+                    tints.put(Integer.parseInt(tint.getKey()), tint.getValue().getAsInt());
+                }
+            }
+            appearances.put(entry.getKey(), new ItemAppearance(optional(appearance, "model"), tints));
+        }
+        return appearances;
     }
 
     private static Path fileUri(String value) {

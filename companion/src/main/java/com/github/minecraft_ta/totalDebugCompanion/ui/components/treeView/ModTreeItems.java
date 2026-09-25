@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.ui.UiMetrics;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.CatalogMessages;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ModLogoIcons;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.ContentKinds;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectIcons;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.DirectoryTreeItem;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.treeView.lazyFileTree.TreeItem;
@@ -24,6 +25,7 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -91,7 +93,7 @@ final class ModTreeItems {
     static List<TreeItem> packChildren(Snapshot snapshot) {
         List<TreeItem> children = new ArrayList<>();
         children.add(new Mods(snapshot));
-        if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(snapshot.index()));
+        if (snapshot.index() != null && !snapshot.index().entries().isEmpty()) children.add(new Content(null, snapshot.index().content()));
         if (snapshot.index() != null) children.add(new Configuration());
         if (snapshot.index() != null && !snapshot.index().catalog().keyBindings().isEmpty()) {
             children.add(new KeyBindings(snapshot.index().catalog().keyBindings().size()));
@@ -213,7 +215,8 @@ final class ModTreeItems {
         public List<TreeItem> loadChildren() {
             List<TreeItem> children = new ArrayList<>();
             if (this.index != null && this.summary.captured()) {
-                for (ModTab tab : ModTab.CONTENT) group(children, tab, this.index.entries(this.summary.id(), tab.contentKind()).size());
+                Map<String, List<CatalogIndex.Entry>> content = this.index.content(this.summary.id());
+                if (!content.isEmpty()) children.add(new Content(this.summary.id(), content));
                 group(children, ModTab.CONFIGURATION, this.summary.mod() == null ? 0 : this.summary.mod().configs().size());
                 group(children, ModTab.KEY_BINDINGS, this.index.keyBindings(this.summary.id()).size());
             }
@@ -240,7 +243,7 @@ final class ModTreeItems {
         }
     }
 
-    /** Blocks, Items, Entity types or Configuration of one mod. */
+    /** Configuration or Key bindings of one mod. */
     static final class Group extends TreeItem implements NavigableTreeItem {
         private final String modId;
         private final ModTab tab;
@@ -249,7 +252,7 @@ final class ModTreeItems {
             super(groupName(tab));
             this.modId = modId;
             this.tab = tab;
-            setPresentation(new PrimarySecondaryText(tab.listTitle(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setPresentation(new PrimarySecondaryText(tab.title(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(SubjectIcons.tab(tab));
             setSortPriority(tab.ordinal());
         }
@@ -285,54 +288,64 @@ final class ModTreeItems {
         }
     }
 
-    /** Every block, item and entity type of the pack, as Blocks, Items and Entity types rows. */
+    /**
+     * Registered content by kind, as one row per registry: the pack's, or one mod's when {@code modId} is not null.
+     * Each row is named by its registry id, so a kind is revealed by its registry.
+     */
     static final class Content extends DirectoryTreeItem {
-        private final CatalogIndex index;
+        private final String modId;
+        private final Map<String, List<CatalogIndex.Entry>> content;
 
-        Content(CatalogIndex index) {
+        Content(String modId, Map<String, List<CatalogIndex.Entry>> content) {
             super(CONTENT);
-            this.index = index;
+            this.modId = modId;
+            this.content = content;
             setPresentation(PrimarySecondaryText.primary("Content"));
-            setIcon(Icons.BLOCK);
-            setSortPriority(1);
+            setIcon(SubjectIcons.tab(ModTab.CONTENT));
+            setSortPriority(modId == null ? 1 : ModTab.CONTENT.ordinal());
         }
 
         @Override
         public String getTooltip() {
-            return "Blocks, items and entity types of every mod";
+            return this.modId == null ? "Registered content of every mod" : "Registered content";
         }
 
         @Override
         public List<TreeItem> loadChildren() {
             List<TreeItem> children = new ArrayList<>();
-            for (ModTab tab : ModTab.CONTENT) {
-                long count = this.index.entries().stream().filter(entry -> entry.kind() == tab.contentKind()).count();
-                if (count > 0) children.add(new ContentList(tab, (int) count));
+            int position = 0;
+            for (Map.Entry<String, List<CatalogIndex.Entry>> kind : this.content.entrySet()) {
+                children.add(new ContentList(this.modId, kind.getKey(), kind.getValue().size(), position++));
             }
             return children;
         }
     }
 
-    /** Opens the pack's blocks, items or entity types. */
+    /** Opens one kind of content: the pack's, or one mod's when {@code modId} is not null. */
     static final class ContentList extends TreeItem implements NavigableTreeItem {
-        private final ModTab tab;
+        private final String modId;
+        private final String registry;
 
-        ContentList(ModTab tab, int count) {
-            super(groupName(tab));
-            this.tab = tab;
-            setPresentation(new PrimarySecondaryText(tab.listTitle(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
-            setIcon(SubjectIcons.tab(tab));
-            setSortPriority(tab.ordinal());
+        ContentList(String modId, String registry, int count, int position) {
+            super(registry);
+            this.modId = modId;
+            this.registry = registry;
+            ContentKinds.ContentKind kind = ContentKinds.of(registry);
+            setPresentation(new PrimarySecondaryText(kind.plural(), NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
+            setIcon(kind.icon());
+            setSortPriority(position);
         }
 
         @Override
         public String getTooltip() {
-            return this.tab.listTitle() + " of every mod";
+            String plural = ContentKinds.of(this.registry).plural();
+            return this.modId == null ? plural + " of every mod" : plural;
         }
 
         @Override
         public NavigationTarget navigationTarget() {
-            return new NavigationTarget.Content(this.tab);
+            return this.modId == null ? new NavigationTarget.Content(this.registry)
+                    : new NavigationTarget.ModPage(this.modId, ModTab.CONTENT, this.registry);
         }
     }
 

@@ -319,6 +319,9 @@ public class FileTreeView extends JScrollPane {
         if (page.tab() != ModTab.OVERVIEW) {
             path.add(ModTreeItems.groupName(page.tab()));
         }
+        if (page.tab() == ModTab.CONTENT && !page.section().isEmpty()) {
+            path.add(page.section());
+        }
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
     }
 
@@ -327,9 +330,10 @@ public class FileTreeView extends JScrollPane {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONFIGURATION));
     }
 
-    /** Selects the Blocks, Items or Entity types row under Content in the Modpack tree. */
-    public CompletableFuture<Boolean> revealContent(ModTab tab) {
-        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONTENT, ModTreeItems.groupName(tab)));
+    /** Selects the row of a kind under Content in the Modpack tree, or Content itself for an empty registry. */
+    public CompletableFuture<Boolean> revealContent(String registry) {
+        return this.tree.revealItemPath(ModTreeItems.ROOT,
+                registry.isEmpty() ? List.of(ModTreeItems.CONTENT) : List.of(ModTreeItems.CONTENT, registry));
     }
 
     /** Selects the Key bindings row of the Modpack tree. */

@@ -1,7 +1,6 @@
 package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
-import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentPanel;
@@ -17,8 +16,9 @@ public final class ContentView implements IEditorPanel {
         this.panel = new ContentPanel(context.project().catalog(), context.itemIcons(), context.navigation()::navigate);
     }
 
-    public void show(ModTab tab) {
-        this.panel.show(tab);
+    /** Selects a kind by its registry, such as {@code minecraft:fluid}, or All for an empty one. */
+    public void show(String registry) {
+        this.panel.show(registry);
     }
 
     @Override
@@ -28,7 +28,7 @@ public final class ContentView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return "Blocks, items and entity types of every mod";
+        return "Registered content of every mod";
     }
 
     @Override
@@ -43,7 +43,7 @@ public final class ContentView implements IEditorPanel {
 
     @Override
     public NavigationTarget getNavigationTarget() {
-        return new NavigationTarget.Content(this.panel.selectedTab());
+        return new NavigationTarget.Content(this.panel.selectedKind());
     }
 
     @Override
