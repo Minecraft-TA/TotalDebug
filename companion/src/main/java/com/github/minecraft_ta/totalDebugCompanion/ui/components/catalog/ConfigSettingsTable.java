@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.EventObject;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +67,7 @@ import java.util.regex.Pattern;
  * differs from its default is marked at the row's edge with the default beside it, sections collapse from their
  * chevron, and a row's tooltip holds its description. A value is edited in place: double-click, Enter or F2 opens a
  * field, or a list of the accepted values, and a value the setting does not accept is refused before it is written.
+ * Several settings, or a whole section, are reset or reverted together from the menu of the selection.
  */
 final class ConfigSettingsTable extends JTable {
     private static final int CHEVRON_WIDTH = 16;
@@ -122,7 +124,7 @@ final class ConfigSettingsTable extends JTable {
 
     ConfigSettingsTable() {
         setModel(this.model);
-        setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         setShowGrid(false);
         setFillsViewportHeight(true);
         getTableHeader().setReorderingAllowed(false);
@@ -208,6 +210,8 @@ final class ConfigSettingsTable extends JTable {
 
     private JPopupMenu rowMenu(int viewRow) {
         if (viewRow < 0) return null;
+        List<Row> selected = selectedSettings();
+        if (selected.size() > 1) return bulkMenu(selected);
         Row row = this.model.shown.get(viewRow);
         JPopupMenu menu = new JPopupMenu();
         if (row.setting() != null) {
@@ -229,6 +233,49 @@ final class ConfigSettingsTable extends JTable {
             menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy value", row.value())));
         }
         menu.add(ContextMenus.copyAction("Copy key", row.path()));
+        return menu;
+    }
+
+    /** The selected settings; a selected section stands for its settings that pass the filter. */
+    private List<Row> selectedSettings() {
+        Set<Row> selected = new LinkedHashSet<>();
+        for (int viewRow : getSelectedRows()) {
+            Row row = this.model.shown.get(viewRow);
+            if (row.setting() != null) {
+                selected.add(row);
+                continue;
+            }
+            for (Row member : this.model.all) {
+                if (member.setting() != null && member.path().startsWith(row.path() + ".") && this.model.keep.test(member)) {
+                    selected.add(member);
+                }
+            }
+        }
+        return List.copyOf(selected);
+    }
+
+    /** What can be done to several settings at once; each action names how many settings it changes. */
+    private JPopupMenu bulkMenu(List<Row> selected) {
+        List<Row> resettable = new ArrayList<>();
+        Map<Row, String> reverts = new LinkedHashMap<>();
+        List<String> keys = new ArrayList<>();
+        for (Row row : selected) {
+            boolean editable = this.model.editable && ConfigEdit.editable(row.literal());
+            if (editable && row.modified()) resettable.add(row);
+            String original = this.original.apply(row);
+            if (editable && original != null) reverts.put(row, original);
+            keys.add(row.setting().path());
+        }
+        JPopupMenu menu = new JPopupMenu();
+        Action reset = ContextMenus.action(resettable.isEmpty() ? "Reset to default" : "Reset " + resettable.size() + " to default",
+                null, null, () -> resettable.forEach(this::reset));
+        reset.setEnabled(!resettable.isEmpty());
+        menu.add(reset);
+        if (!reverts.isEmpty()) {
+            menu.add(ContextMenus.action("Revert " + reverts.size(), null, null, () -> reverts.forEach(this.edited)));
+        }
+        menu.addSeparator();
+        menu.add(ContextMenus.defaultCopy(ContextMenus.copyAction("Copy " + keys.size() + " keys", String.join("\n", keys))));
         return menu;
     }
 

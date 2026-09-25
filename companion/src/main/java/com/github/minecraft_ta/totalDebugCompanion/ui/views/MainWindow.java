@@ -512,6 +512,9 @@ public class MainWindow extends JFrame implements AWTEventListener, CompanionUi 
         return new SearchEverywherePopup(this, indexLoader, this::searchRuntime, () -> {
             ProjectScope scope = project.get();
             return scope == null ? null : scope.catalog();
+        }, () -> {
+            ProjectScope scope = project.get();
+            return scope == null ? null : scope.keyBindings().options();
         }, itemIcons, target -> navigation().navigate(target));
     }
 

@@ -22,13 +22,18 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * What Companion changed in the pack, kept per instance in {@code changes.json} (see docs/MODPACK.md). An entry holds a
  * target's value from before Companion first changed it and the value written last. Writing the original value back
- * removes the entry, so the record lists only changes still in effect.
+ * removes the entry, so the record lists only changes still in effect. Targets are configuration settings and key
+ * bindings.
  */
 public final class ChangeRecord implements AutoCloseable {
     private static final int FORMAT = 1;
 
+    /** Something Companion writes to. */
+    public sealed interface Target permits Setting, KeyBinding {
+    }
+
     /** A setting of a configuration file; {@code file} is where it was written, such as one world's server file. */
-    public record Setting(String modId, String fileName, Path file, String setting) {
+    public record Setting(String modId, String fileName, Path file, String setting) implements Target {
         public Setting {
             Objects.requireNonNull(modId, "modId");
             Objects.requireNonNull(fileName, "fileName");
@@ -37,8 +42,18 @@ public final class ChangeRecord implements AutoCloseable {
         }
     }
 
+    /**
+     * A key binding of the instance's {@code options.txt}, by its name such as {@code key.jump}. Its values are written
+     * as {@code options.txt} writes them: a key, with {@code :} and the modifier when there is one.
+     */
+    public record KeyBinding(String name) implements Target {
+        public KeyBinding {
+            Objects.requireNonNull(name, "name");
+        }
+    }
+
     /** A change still in effect: {@code original} is the value before the first change, {@code current} the last written. */
-    public record Change(Setting target, String original, String current, Instant firstChanged, Instant lastChanged) {
+    public record Change(Target target, String original, String current, Instant firstChanged, Instant lastChanged) {
         public Change {
             Objects.requireNonNull(target, "target");
             Objects.requireNonNull(original, "original");
@@ -50,7 +65,7 @@ public final class ChangeRecord implements AutoCloseable {
 
     private final JsonStateWriter writer;
     private final Clock clock;
-    private final Map<Setting, Change> changes = new LinkedHashMap<>();
+    private final Map<Target, Change> changes = new LinkedHashMap<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
     private ChangeRecord(JsonStateWriter writer, Clock clock) {
@@ -77,8 +92,12 @@ public final class ChangeRecord implements AutoCloseable {
             }
             for (JsonElement element : JsonFiles.array(json, "changes")) {
                 JsonObject entry = element.getAsJsonObject();
-                Setting target = new Setting(JsonFiles.string(entry, "modId"), JsonFiles.string(entry, "fileName"),
-                        Path.of(JsonFiles.string(entry, "file")), JsonFiles.string(entry, "setting"));
+                Target target = switch (JsonFiles.string(entry, "kind")) {
+                    case "setting" -> new Setting(JsonFiles.string(entry, "modId"), JsonFiles.string(entry, "fileName"),
+                            Path.of(JsonFiles.string(entry, "file")), JsonFiles.string(entry, "setting"));
+                    case "keyBinding" -> new KeyBinding(JsonFiles.string(entry, "name"));
+                    default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
+                };
                 record.changes.put(target, new Change(target, JsonFiles.string(entry, "original"),
                         JsonFiles.string(entry, "current"), Instant.parse(JsonFiles.string(entry, "firstChanged")),
                         Instant.parse(JsonFiles.string(entry, "lastChanged"))));
@@ -91,7 +110,7 @@ public final class ChangeRecord implements AutoCloseable {
     }
 
     /** Records that {@code target} changed from {@code previous} to {@code written}. */
-    public void changed(Setting target, String previous, String written) {
+    public void changed(Target target, String previous, String written) {
         synchronized (this) {
             Change earlier = this.changes.get(target);
             String original = earlier == null ? previous : earlier.original();
@@ -111,7 +130,7 @@ public final class ChangeRecord implements AutoCloseable {
      * Drops the change of {@code target} when the file holds its original value again, such as after an edit made
      * outside Companion.
      */
-    public void observed(Setting target, String literal) {
+    public void observed(Target target, String literal) {
         boolean dropped;
         synchronized (this) {
             Change change = this.changes.get(target);
@@ -128,9 +147,17 @@ public final class ChangeRecord implements AutoCloseable {
     public synchronized String original(Path file, String setting) {
         Path normalized = file.toAbsolutePath().normalize();
         for (Change change : this.changes.values()) {
-            if (change.target().file().equals(normalized) && change.target().setting().equals(setting)) return change.original();
+            if (change.target() instanceof Setting target && target.file().equals(normalized) && target.setting().equals(setting)) {
+                return change.original();
+            }
         }
         return null;
+    }
+
+    /** The value {@code target} had before Companion first changed it, or null when it is unchanged. */
+    public synchronized String original(Target target) {
+        Change change = this.changes.get(target);
+        return change == null ? null : change.original();
     }
 
     /** Changes still in effect, the most recent first. */
@@ -155,10 +182,19 @@ public final class ChangeRecord implements AutoCloseable {
         JsonArray entries = new JsonArray();
         for (Change change : this.changes.values()) {
             JsonObject entry = new JsonObject();
-            entry.addProperty("modId", change.target().modId());
-            entry.addProperty("fileName", change.target().fileName());
-            entry.addProperty("file", change.target().file().toString());
-            entry.addProperty("setting", change.target().setting());
+            switch (change.target()) {
+                case Setting setting -> {
+                    entry.addProperty("kind", "setting");
+                    entry.addProperty("modId", setting.modId());
+                    entry.addProperty("fileName", setting.fileName());
+                    entry.addProperty("file", setting.file().toString());
+                    entry.addProperty("setting", setting.setting());
+                }
+                case KeyBinding binding -> {
+                    entry.addProperty("kind", "keyBinding");
+                    entry.addProperty("name", binding.name());
+                }
+            }
             entry.addProperty("original", change.original());
             entry.addProperty("current", change.current());
             entry.addProperty("firstChanged", change.firstChanged().toString());

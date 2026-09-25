@@ -149,6 +149,6 @@ class PackCatalogPublisherTest {
     private static PackCatalog catalog(String inventoryId, String language) {
         return new PackCatalog(inventoryId, language, List.of(), List.of(),
                 List.of(new PackCatalog.ItemEntry("minecraft:stone", "Stone", "net.minecraft.world.item.BlockItem",
-                        "minecraft:stone", "", Map.of())), List.of());
+                        "minecraft:stone", "", Map.of())), List.of(), List.of(), List.of(), Map.of());
     }
 }

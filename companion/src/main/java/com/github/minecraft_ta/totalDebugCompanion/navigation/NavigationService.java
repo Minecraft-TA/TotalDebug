@@ -3,6 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.navigation;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigSources;
 import com.github.minecraft_ta.totalDebugCompanion.model.ChangesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ConfigFileView;
+import com.github.minecraft_ta.totalDebugCompanion.model.ContentView;
+import com.github.minecraft_ta.totalDebugCompanion.model.KeyBindingsView;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Source;
 import com.github.minecraft_ta.totalDebugCompanion.notification.NotificationCenter.Severity;
 import java.util.function.Predicate;
@@ -36,6 +38,7 @@ import javax.swing.SwingUtilities;
 import java.awt.event.ActionEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -126,6 +129,8 @@ public final class NavigationService {
             case NavigationTarget.ModPage ignored -> true;
             case NavigationTarget.PackConfiguration ignored -> true;
             case NavigationTarget.Changes ignored -> true;
+            case NavigationTarget.KeyBindings ignored -> true;
+            case NavigationTarget.Content ignored -> true;
             case null, default -> false;
         };
         if (!available) return null;
@@ -141,6 +146,8 @@ public final class NavigationService {
                     case NavigationTarget.ModPage page -> requireRevealed(fileTree.revealModPage(page));
                     case NavigationTarget.PackConfiguration ignored -> requireRevealed(fileTree.revealPackConfiguration());
                     case NavigationTarget.Changes ignored -> requireRevealed(fileTree.revealChanges());
+                    case NavigationTarget.KeyBindings ignored -> requireRevealed(fileTree.revealKeyBindings());
+                    case NavigationTarget.Content content -> requireRevealed(fileTree.revealContent(content.tab()));
                     default -> throw new IllegalArgumentException("Editor has no tree location");
                 };
                 reportFailure(result, target);
@@ -305,6 +312,19 @@ public final class NavigationService {
                         view -> true,
                         () -> new ChangesView(editors.get())
                 ).thenAccept(ChangesView::refresh), activation);
+                case NavigationTarget.Content content -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        ContentView.class,
+                        view -> true,
+                        () -> new ContentView(editors.get())
+                ).thenAccept(view -> view.show(content.tab())), activation);
+                case NavigationTarget.KeyBindings keys -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
+                        KeyBindingsView.class,
+                        view -> true,
+                        () -> new KeyBindingsView(editors.get())
+                ).thenAccept(view -> {
+                    view.refresh();
+                    view.show(keys.binding());
+                }), activation);
                 case NavigationTarget.Definition definition -> dispatchNavigation(() -> this.tabs.focusOrCreateIfAbsent(
                         DefinitionView.class,
                         view -> view.subject().equals(definition.subject()),
@@ -761,6 +781,8 @@ public final class NavigationService {
             case NavigationTarget.ModPage page -> "mod " + page.modId();
             case NavigationTarget.PackConfiguration ignored -> "modpack configuration";
             case NavigationTarget.Changes ignored -> "changes";
+            case NavigationTarget.KeyBindings ignored -> "key bindings";
+            case NavigationTarget.Content content -> "modpack " + content.tab().name().toLowerCase(Locale.ROOT);
             case NavigationTarget.Definition definition -> definition.subject().format();
             case NavigationTarget.RuntimeModuleNode node -> "module " + node.moduleId();
         };

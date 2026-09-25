@@ -2,6 +2,7 @@ package com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogFixtures;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -9,8 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.SwingUtilities;
-import java.awt.Component;
-import java.awt.Container;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -39,9 +38,10 @@ class ChangesPanelTest {
         ChangeRecord record = ChangeRecord.inMemory();
         record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml", file, "widgets.speed"), "9", "12");
         ChangesPanel[] panel = new ChangesPanel[1];
-        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog,
-                new ConfigChanges(this.directory, record), target -> { }));
-        ConfigSettingsTable table = table(panel[0]);
+        SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
+                new KeyBindingControl(this.directory.resolve("options.txt"), record),
+                target -> { }));
+        ConfigSettingsTable table = panel[0].settingsTable();
         try {
             awaitOnSwing(() -> table.getRowCount() == 3);
             SwingUtilities.invokeAndWait(() -> {
@@ -60,17 +60,6 @@ class ChangesPanelTest {
         } finally {
             SwingUtilities.invokeAndWait(panel[0]::dispose);
         }
-    }
-
-    private static ConfigSettingsTable table(Container root) {
-        for (Component child : root.getComponents()) {
-            if (child instanceof ConfigSettingsTable table) return table;
-            if (child instanceof Container container) {
-                ConfigSettingsTable found = table(container);
-                if (found != null) return found;
-            }
-        }
-        return null;
     }
 
     private static void awaitOnSwing(BooleanSupplier condition) throws Exception {

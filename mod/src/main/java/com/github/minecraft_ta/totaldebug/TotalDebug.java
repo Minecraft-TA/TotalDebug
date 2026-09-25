@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug;
 import com.github.minecraft_ta.totaldebug.evaluation.PausedEvaluationBridge;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
+import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingOwners;
 import com.mojang.logging.LogUtils;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.network.TotalDebugNetwork;
@@ -13,9 +14,11 @@ import com.github.minecraft_ta.totaldebug.server.script.ServerScriptService;
 import com.github.minecraft_ta.totaldebug.tick.TickTaskScheduler;
 import io.github.classgraph.ClassGraph;
 import net.minecraft.world.level.block.Block;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
@@ -50,6 +53,7 @@ public final class TotalDebug {
         this.tickTaskScheduler = new TickTaskScheduler();
         this.serverScripts = new ServerScriptService(this.tickTaskScheduler);
         this.network = new TotalDebugNetwork(Objects.requireNonNull(modEventBus, "modEventBus"));
+        if (FMLEnvironment.dist == Dist.CLIENT) KeyBindingOwners.install();
         TotalDebugConfig.register(modContainer);
 
         LOGGER.info("Initializing TotalDebug {}", this.version);

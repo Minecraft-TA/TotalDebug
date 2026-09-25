@@ -5,8 +5,11 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import java.awt.Component;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
@@ -58,6 +61,15 @@ class DebuggerShortcutsTest {
                     assertTrue(shortcuts.dispatchKeyEvent(f8(editorWindow)));
                     assertTrue(shortcuts.dispatchKeyEvent(f8(debuggerWindow)));
                     assertFalse(shortcuts.dispatchKeyEvent(f8(unrelatedWindow)));
+
+                    JPanel capturing = new JPanel();
+                    JLabel inside = new JLabel();
+                    capturing.add(inside);
+                    editorWindow.add(capturing);
+                    capturing.putClientProperty(DebuggerShortcuts.TAKES_ALL_KEYS, true);
+                    assertFalse(shortcuts.dispatchKeyEvent(f8(inside)), "a component waiting for any key gets F8");
+                    capturing.putClientProperty(DebuggerShortcuts.TAKES_ALL_KEYS, null);
+                    assertTrue(shortcuts.dispatchKeyEvent(f8(inside)));
                 } finally {
                     editorWindow.dispose();
                     debuggerWindow.dispose();
@@ -71,7 +83,7 @@ class DebuggerShortcutsTest {
         }
     }
 
-    private static KeyEvent f8(JFrame source) {
+    private static KeyEvent f8(Component source) {
         return new KeyEvent(
                 source,
                 KeyEvent.KEY_PRESSED,

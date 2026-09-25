@@ -60,14 +60,17 @@ class ChangeRecordTest {
         try (ChangeRecord record = ChangeRecord.open(paths)) {
             record.changed(setting("speed"), "9", "12");
             record.changed(setting("mode"), "\"SLOW\"", "\"FAST\"");
+            record.changed(new ChangeRecord.KeyBinding("key.jump"), "key.keyboard.space", "key.keyboard.g:CONTROL");
         }
         assertTrue(Files.isRegularFile(paths.changes()));
 
         try (ChangeRecord reopened = ChangeRecord.open(paths)) {
-            assertEquals(2, reopened.size());
+            assertEquals(3, reopened.size());
+            assertEquals("key.keyboard.space", reopened.original(new ChangeRecord.KeyBinding("key.jump")));
             assertEquals("\"SLOW\"", reopened.original(setting("mode").file(), "mode"));
             ChangeRecord.Change speed = reopened.changes().stream()
-                    .filter(change -> change.target().setting().equals("speed")).findFirst().orElseThrow();
+                    .filter(change -> change.target() instanceof ChangeRecord.Setting setting && setting.setting().equals("speed"))
+                    .findFirst().orElseThrow();
             assertEquals(new ChangeRecord.Setting("testmod", "testmod-common.toml",
                     this.directory.resolve("config/testmod-common.toml"), "speed"), speed.target());
             assertEquals("12", speed.current());

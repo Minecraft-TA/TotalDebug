@@ -51,7 +51,11 @@ class PackCatalogTest {
                         "", "", Map.of()),
                         new ItemEntry("minecraft:leather_helmet", "Leather Cap", "net.minecraft.world.item.ArmorItem",
                                 "", "minecraft:item/leather_helmet_custom", Map.of(0, 0xA06540))),
-                List.of(new EntityTypeEntry("minecraft:zombie", "Zombie", "monster", "minecraft:zombie_spawn_egg")));
+                List.of(new EntityTypeEntry("minecraft:zombie", "Zombie", "monster", "minecraft:zombie_spawn_egg")),
+                List.of(new PackCatalog.KeyBinding("key.mekanism.mode", "Mode Switch", "constants.mekanism.mod_name",
+                        "Mekanism", "mekanism", "key.keyboard.n", "SHIFT", "mekanism.Context#0")),
+                List.of(new PackCatalog.KeyContext("mekanism.Context#0", "Context", List.of("mekanism.Context#0"))),
+                Map.of("key.keyboard.n", "N", "key.keyboard.z", "Y"));
         Path file = this.directory.resolve("catalog.json");
 
         catalog.write(file);
@@ -75,7 +79,8 @@ class PackCatalogTest {
 
     @Test
     void rejectsInvalidContent() throws Exception {
-        assertInvalid("{\"format\":2,\"inventoryId\":\" \",\"language\":\"en_us\"}", "Blank inventory id");
+        assertInvalid("{\"format\":" + PackCatalog.FORMAT_VERSION + ",\"inventoryId\":\" \",\"language\":\"en_us\"}",
+                "Blank inventory id");
         assertInvalid(catalogJson("\"items\":[{\"id\":\"a:b\"},{\"id\":\"a:b\"}]"), "Duplicate item id a:b");
         assertInvalid(catalogJson("\"blocks\":[{\"id\":\"Not An Id\"}]"), "Invalid block id");
         assertInvalid(catalogJson("\"mods\":[{\"id\":\"M\",\"module\":\"m\",\"file\":\"file:///m.jar\"}]"), "Invalid mod id");
@@ -83,6 +88,8 @@ class PackCatalogTest {
                 + "\"configs\":[{\"fileName\":\"a.toml\",\"type\":\"WORLD\"}]}]"), "WORLD");
         assertInvalid(catalogJson("\"items\":[{\"id\":\"a:b\",\"block\":\"no id\"}]"), "Invalid block of a:b");
         assertInvalid(catalogJson("\"items\":[]} trailing"), "");
+        assertInvalid(catalogJson("\"keyBindings\":[{\"name\":\"key.jump\",\"defaultKey\":\"key.keyboard.space\","
+                + "\"defaultModifier\":\"NONE\",\"context\":\"missing\"}]"), "unknown context missing");
     }
 
     @Test
@@ -95,7 +102,8 @@ class PackCatalogTest {
         for (int i = 0; i < 20_000; i++) {
             blocks.add(new BlockEntry("pack:block_" + i, "Block " + i, "pack.Block", "pack:item_" + i, ""));
         }
-        PackCatalog catalog = new PackCatalog("inventory", "en_us", List.of(), blocks, items, List.of());
+        PackCatalog catalog = new PackCatalog("inventory", "en_us", List.of(), blocks, items, List.of(), List.of(), List.of(),
+                Map.of());
         Path file = this.directory.resolve("catalog.json");
 
         catalog.write(file);
@@ -114,7 +122,7 @@ class PackCatalogTest {
     }
 
     private static String catalogJson(String content) {
-        return "{\"format\":2,\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
+        return "{\"format\":" + PackCatalog.FORMAT_VERSION + ",\"inventoryId\":\"inventory\",\"language\":\"en_us\"," + content + "}";
     }
 
     private void assertInvalid(String json, String message) throws IOException {

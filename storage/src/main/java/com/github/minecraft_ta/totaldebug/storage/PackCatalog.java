@@ -34,9 +34,12 @@ public record PackCatalog(
         List<Mod> mods,
         List<BlockEntry> blocks,
         List<ItemEntry> items,
-        List<EntityTypeEntry> entityTypes
+        List<EntityTypeEntry> entityTypes,
+        List<KeyBinding> keyBindings,
+        List<KeyContext> keyContexts,
+        Map<String, String> keyNames
 ) {
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
     public static final long MAX_FILE_BYTES = 64L * 1024 * 1024;
 
     private static final Pattern MOD_ID = Pattern.compile("[a-z][a-z0-9_]{1,63}");
@@ -181,6 +184,38 @@ public record PackCatalog(
         }
     }
 
+    /**
+     * A key binding as the game registered it. {@code name} is its key in {@code options.txt}, {@code modId} the mod
+     * that registered it, or empty when no mod's registration added it. {@code defaultKey} is a Minecraft key name
+     * such as {@code key.keyboard.g}, {@code defaultModifier} one of {@code NONE}, {@code SHIFT}, {@code CONTROL} and
+     * {@code ALT}, and {@code context} the id of its {@link KeyContext}.
+     */
+    public record KeyBinding(String name, String displayName, String category, String categoryName, String modId,
+                             String defaultKey, String defaultModifier, String context) {
+        public KeyBinding {
+            requireText(name, "key binding name");
+            displayName = text(displayName);
+            category = text(category);
+            categoryName = text(categoryName);
+            modId = text(modId);
+            requireText(defaultKey, "default key of " + name);
+            requireText(defaultModifier, "default modifier of " + name);
+            requireText(context, "context of " + name);
+        }
+    }
+
+    /**
+     * Where a key binding is active, such as in the game or in screens. {@code conflicts} lists the contexts this one
+     * says it conflicts with; two bindings on one key collide when either context names the other.
+     */
+    public record KeyContext(String id, String name, List<String> conflicts) {
+        public KeyContext {
+            requireText(id, "key context id");
+            name = text(name);
+            conflicts = List.copyOf(conflicts);
+        }
+    }
+
     public record Header(int format, String inventoryId, String language) {
         public boolean matches(String inventoryId, String language) {
             return format == FORMAT_VERSION && this.inventoryId.equals(inventoryId) && this.language.equals(language);
@@ -199,10 +234,21 @@ public record PackCatalog(
         blocks = List.copyOf(blocks);
         items = List.copyOf(items);
         entityTypes = List.copyOf(entityTypes);
+        keyBindings = List.copyOf(keyBindings);
+        keyContexts = List.copyOf(keyContexts);
+        keyNames = Map.copyOf(keyNames);
         unique(mods.stream().map(Mod::id).toList(), "mod");
         unique(blocks.stream().map(BlockEntry::id).toList(), "block");
         unique(items.stream().map(ItemEntry::id).toList(), "item");
         unique(entityTypes.stream().map(EntityTypeEntry::id).toList(), "entity type");
+        unique(keyBindings.stream().map(KeyBinding::name).toList(), "key binding");
+        unique(keyContexts.stream().map(KeyContext::id).toList(), "key context");
+        Set<String> contexts = new HashSet<>(keyContexts.stream().map(KeyContext::id).toList());
+        for (KeyBinding binding : keyBindings) {
+            if (!contexts.contains(binding.context())) {
+                throw new IllegalArgumentException("Key binding " + binding.name() + " has an unknown context " + binding.context());
+            }
+        }
     }
 
     public void write(Path path) throws IOException {
@@ -223,12 +269,18 @@ public record PackCatalog(
             List<BlockEntry> blocks = List.of();
             List<ItemEntry> items = List.of();
             List<EntityTypeEntry> entityTypes = List.of();
+            List<KeyBinding> keyBindings = List.of();
+            List<KeyContext> keyContexts = List.of();
+            Map<String, String> keyNames = Map.of();
             while (reader.hasNext()) {
                 switch (reader.nextName()) {
                     case "mods" -> mods = entries(reader, PackCatalog::mod);
                     case "blocks" -> blocks = entries(reader, PackCatalog::block);
                     case "items" -> items = entries(reader, PackCatalog::item);
                     case "entityTypes" -> entityTypes = entries(reader, PackCatalog::entityType);
+                    case "keyBindings" -> keyBindings = entries(reader, PackCatalog::keyBinding);
+                    case "keyContexts" -> keyContexts = entries(reader, PackCatalog::keyContext);
+                    case "keyNames" -> keyNames = strings(reader);
                     default -> reader.skipValue();
                 }
             }
@@ -236,7 +288,8 @@ public record PackCatalog(
             if (reader.peek() != JsonToken.END_DOCUMENT) {
                 throw new IllegalArgumentException("Trailing content");
             }
-            return new PackCatalog(header.inventoryId(), header.language(), mods, blocks, items, entityTypes);
+            return new PackCatalog(header.inventoryId(), header.language(), mods, blocks, items, entityTypes,
+                    keyBindings, keyContexts, keyNames);
         } catch (RuntimeException exception) {
             throw new IOException("Invalid pack catalog " + file + ": " + exception.getMessage(), exception);
         }
@@ -358,7 +411,55 @@ public record PackCatalog(
             writer.endObject();
         }
         writer.endArray();
+        writer.name("keyBindings").beginArray();
+        for (KeyBinding binding : keyBindings) {
+            writer.beginObject();
+            writer.name("name").value(binding.name());
+            optional(writer, "displayName", binding.displayName());
+            optional(writer, "category", binding.category());
+            optional(writer, "categoryName", binding.categoryName());
+            optional(writer, "modId", binding.modId());
+            writer.name("defaultKey").value(binding.defaultKey());
+            writer.name("defaultModifier").value(binding.defaultModifier());
+            writer.name("context").value(binding.context());
+            writer.endObject();
+        }
+        writer.endArray();
+        writer.name("keyContexts").beginArray();
+        for (KeyContext context : keyContexts) {
+            writer.beginObject();
+            writer.name("id").value(context.id());
+            optional(writer, "name", context.name());
+            writer.name("conflicts").beginArray();
+            for (String conflict : context.conflicts()) writer.value(conflict);
+            writer.endArray();
+            writer.endObject();
+        }
+        writer.endArray();
+        writer.name("keyNames").beginObject();
+        for (var name : new TreeMap<>(keyNames).entrySet()) writer.name(name.getKey()).value(name.getValue());
         writer.endObject();
+        writer.endObject();
+    }
+
+    private static Map<String, String> strings(JsonReader reader) throws IOException {
+        Map<String, String> strings = new LinkedHashMap<>();
+        reader.beginObject();
+        while (reader.hasNext()) strings.put(reader.nextName(), reader.nextString());
+        reader.endObject();
+        return strings;
+    }
+
+    private static KeyBinding keyBinding(JsonObject json) {
+        return new KeyBinding(JsonFiles.string(json, "name"), optional(json, "displayName"), optional(json, "category"),
+                optional(json, "categoryName"), optional(json, "modId"), JsonFiles.string(json, "defaultKey"),
+                JsonFiles.string(json, "defaultModifier"), JsonFiles.string(json, "context"));
+    }
+
+    private static KeyContext keyContext(JsonObject json) {
+        List<String> conflicts = new ArrayList<>();
+        for (JsonElement conflict : JsonFiles.array(json, "conflicts")) conflicts.add(conflict.getAsString());
+        return new KeyContext(JsonFiles.string(json, "id"), optional(json, "name"), conflicts);
     }
 
     private static Header header(JsonReader reader, Path file) throws IOException {

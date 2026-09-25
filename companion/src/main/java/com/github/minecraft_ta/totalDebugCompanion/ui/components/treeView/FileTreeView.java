@@ -327,6 +327,16 @@ public class FileTreeView extends JScrollPane {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONFIGURATION));
     }
 
+    /** Selects the Blocks, Items or Entity types row under Content in the Modpack tree. */
+    public CompletableFuture<Boolean> revealContent(ModTab tab) {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CONTENT, ModTreeItems.groupName(tab)));
+    }
+
+    /** Selects the Key bindings row of the Modpack tree. */
+    public CompletableFuture<Boolean> revealKeyBindings() {
+        return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.KEY_BINDINGS));
+    }
+
     /** Selects the Changes row of the Modpack tree. */
     public CompletableFuture<Boolean> revealChanges() {
         return this.tree.revealItemPath(ModTreeItems.ROOT, List.of(ModTreeItems.CHANGES));

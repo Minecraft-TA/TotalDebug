@@ -66,7 +66,7 @@ class SearchEverywherePopupTest {
                      directory.resolve("index.jindex"), sources, index), directory,
                      RuntimeSnapshotBytecodeSource.fromIndexedSources(sources, index), compiler, insights)) {
             var popup = onEdt(() -> {
-                var window = new SearchEverywherePopup(null, service, () -> binding, () -> null, new ItemIconService(), ignored -> {});
+                var window = new SearchEverywherePopup(null, service, () -> binding, () -> null, () -> null, new ItemIconService(), ignored -> {});
                 show(window);
                 return window;
             });
@@ -98,7 +98,7 @@ class SearchEverywherePopupTest {
     void tabCyclesSearchCategoriesInBothDirections() throws Exception {
         try (var service = new RuntimeIndexService(new Object(), snapshot -> snapshot.close())) {
             onEdt(() -> {
-                var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), ignored -> {});
+                var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), ignored -> {});
                 try { verifyCategoryCycling(popup); }
                 finally { popup.dispose(); }
             });
@@ -115,7 +115,7 @@ class SearchEverywherePopupTest {
             for (int cycle = 0; cycle < 3; cycle++) {
                 var label = new AtomicReference<JLabel>();
                 SwingUtilities.invokeAndWait(() -> {
-                    var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, new ItemIconService(), target -> {});
+                    var popup = new SearchEverywherePopup(null, service, () -> null, () -> null, () -> null, new ItemIconService(), target -> {});
                     try {
                         assertEquals(1, ((Collection<?>) listenersField.get(service)).size());
                         label.set((JLabel) messageField.get(popup));

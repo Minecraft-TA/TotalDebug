@@ -39,16 +39,21 @@ import java.util.function.Function;
 public final class CatalogEntryTable extends JPanel {
     static final int NAME = 1;
     static final int ID = 2;
+    static final int MOD = 3;
 
     private final FlatIconTextField filter = new FlatIconTextField(Icons.SEARCH_ICON);
-    private final EntryModel model = new EntryModel();
-    private final JTable table = new JTable(this.model);
-    private final TableRowSorter<EntryModel> sorter = new TableRowSorter<>(this.model);
+    private final EntryModel model;
+    private final JTable table;
+    private final TableRowSorter<EntryModel> sorter;
 
+    /** {@code modName} names the mod of an entry in its own column, or is null where every entry is one mod's. */
     public CatalogEntryTable(String placeholder, CatalogIcons icons,
                              Function<CatalogIndex.Entry, CatalogIndex.ItemIcon> iconOf,
-                             Consumer<CatalogIndex.Entry> open) {
+                             Consumer<CatalogIndex.Entry> open, Function<CatalogIndex.Entry, String> modName) {
         super(new BorderLayout());
+        this.model = new EntryModel(modName);
+        this.table = new JTable(this.model);
+        this.sorter = new TableRowSorter<>(this.model);
         Objects.requireNonNull(icons, "icons");
         Objects.requireNonNull(iconOf, "iconOf");
         Objects.requireNonNull(open, "open");
@@ -142,13 +147,20 @@ public final class CatalogEntryTable extends JPanel {
             @Override
             public boolean include(Entry<? extends EntryModel, ? extends Integer> row) {
                 CatalogIndex.Entry entry = CatalogEntryTable.this.model.entries.get(row.getIdentifier());
-                return entry.name().toLowerCase(Locale.ROOT).contains(text) || entry.id().contains(text);
+                return entry.name().toLowerCase(Locale.ROOT).contains(text) || entry.id().contains(text)
+                        || CatalogEntryTable.this.model.modName != null
+                        && CatalogEntryTable.this.model.modName.apply(entry).toLowerCase(Locale.ROOT).contains(text);
             }
         });
     }
 
     private static final class EntryModel extends AbstractTableModel {
+        private final Function<CatalogIndex.Entry, String> modName;
         private List<CatalogIndex.Entry> entries = List.of();
+
+        EntryModel(Function<CatalogIndex.Entry, String> modName) {
+            this.modName = modName;
+        }
 
         @Override
         public int getRowCount() {
@@ -157,7 +169,7 @@ public final class CatalogEntryTable extends JPanel {
 
         @Override
         public int getColumnCount() {
-            return 3;
+            return this.modName == null ? 3 : 4;
         }
 
         @Override
@@ -165,6 +177,7 @@ public final class CatalogEntryTable extends JPanel {
             return switch (column) {
                 case NAME -> "Name";
                 case ID -> "Registry ID";
+                case MOD -> "Mod";
                 default -> "";
             };
         }
@@ -175,6 +188,7 @@ public final class CatalogEntryTable extends JPanel {
             return switch (column) {
                 case NAME -> entry.title();
                 case ID -> entry.id();
+                case MOD -> this.modName.apply(entry);
                 default -> entry;
             };
         }

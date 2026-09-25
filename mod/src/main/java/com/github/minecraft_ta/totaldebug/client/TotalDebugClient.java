@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client;
 
+import com.github.minecraft_ta.totaldebug.client.catalog.KeyBindingEdits;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogCapture;
 import com.github.minecraft_ta.totaldebug.client.catalog.PackCatalogPublisher;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
@@ -13,6 +14,7 @@ import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.network.ServerSourceRequestPayload;
 import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
@@ -80,6 +82,8 @@ public final class TotalDebugClient {
             this.snapshotRequested = true;
             this.catalogs.request(inventoryId, modules);
         });
+        companionApp.setKeyBindingHandler(message -> Minecraft.getInstance().execute(() ->
+                companionApp.sendKeyBindingResult(new KeyBindingResultMessage(KeyBindingEdits.apply(message.payload())))));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(WorldSubject subject) {

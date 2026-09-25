@@ -5,6 +5,7 @@ import com.github.minecraft_ta.totalDebugCompanion.ui.components.TypeToFilter;
 import com.github.minecraft_ta.totalDebugCompanion.Icons;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModSummary;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
@@ -86,6 +87,7 @@ public final class ModPanel extends JPanel {
     private final JPanel overview = new JPanel(new BorderLayout());
     private final Map<ModTab, CatalogEntryTable> entryTables = new EnumMap<>(ModTab.class);
     private final ConfigPanel configs;
+    private final KeyBindingsPanel keyBindings;
     private final ResourceBrowser resources;
     private ModSummary summary;
     private CatalogIndex index;
@@ -98,7 +100,8 @@ public final class ModPanel extends JPanel {
      * {@code changes} tracks configuration edits the running game has not applied yet.
      */
     public ModPanel(String modId, PackCatalogService catalog, Supplier<RuntimeSourceCatalog> sources,
-                    ItemIconService icons, Path workspace, ConfigChanges changes, Consumer<NavigationTarget> navigator) {
+                    ItemIconService icons, Path workspace, ConfigChanges changes, KeyBindingControl keyControl,
+                    Consumer<NavigationTarget> navigator) {
         super(new BorderLayout());
         this.modId = Objects.requireNonNull(modId, "modId");
         this.catalog = Objects.requireNonNull(catalog, "catalog");
@@ -108,6 +111,7 @@ public final class ModPanel extends JPanel {
         this.listIcons = new CatalogIcons(icons, LIST_ICON_SIZE);
         this.resources = new ResourceBrowser(navigator, category -> { });
         this.configs = new ConfigPanel(modId, workspace, changes, navigator);
+        this.keyBindings = new KeyBindingsPanel(catalog, keyControl, modId, navigator);
 
         this.header.addControl(this.browseCode);
         this.browseCode.setToolTipText("Show the mod's classes in the Project tree");
@@ -123,6 +127,7 @@ public final class ModPanel extends JPanel {
         entryTab(ModTab.ITEMS, "Filter items");
         entryTab(ModTab.ENTITIES, "Filter entity types");
         this.tabContent.put(ModTab.CONFIGURATION, this.configs);
+        this.tabContent.put(ModTab.KEY_BINDINGS, this.keyBindings);
         this.tabContent.put(ModTab.RESOURCES, this.resources);
         for (ModTab tab : ModTab.values()) {
             this.tabs.addTab(tab.title(), SubjectIcons.tab(tab), this.tabContent.get(tab));
@@ -135,7 +140,7 @@ public final class ModPanel extends JPanel {
 
     private void entryTab(ModTab tab, String placeholder) {
         CatalogEntryTable table = new CatalogEntryTable(placeholder, this.listIcons, this::iconOf,
-                entry -> this.navigator.accept(new NavigationTarget.Definition(entry.subject())));
+                entry -> this.navigator.accept(new NavigationTarget.Definition(entry.subject())), null);
         this.entryTables.put(tab, table);
         this.tabContent.put(tab, table);
     }
@@ -207,17 +212,16 @@ public final class ModPanel extends JPanel {
 
         String unavailable = this.summary.captured() ? "" : CatalogMessages.unavailable(state);
         showOverview(overviewContent(mod, unavailable), footer(mod));
-        setEntries(ModTab.BLOCKS, SubjectRef.DefinitionKind.BLOCK);
-        setEntries(ModTab.ITEMS, SubjectRef.DefinitionKind.ITEM);
-        setEntries(ModTab.ENTITIES, SubjectRef.DefinitionKind.ENTITY_TYPE);
+        for (ModTab tab : ModTab.CONTENT) setEntries(tab);
         setTab(ModTab.CONFIGURATION, configFiles.size());
+        setTab(ModTab.KEY_BINDINGS, this.index == null ? 0 : this.index.keyBindings(this.summary.id()).size());
         loadResources();
         refreshTitle();
     }
 
-    private void setEntries(ModTab tab, SubjectRef.DefinitionKind kind) {
+    private void setEntries(ModTab tab) {
         List<CatalogIndex.Entry> entries = this.index == null || !this.summary.captured()
-                ? List.of() : this.index.entries(this.summary.id(), kind);
+                ? List.of() : this.index.entries(this.summary.id(), tab.contentKind());
         this.entryTables.get(tab).setEntries(entries);
         setTab(tab, entries.size());
     }
@@ -457,6 +461,7 @@ public final class ModPanel extends JPanel {
         this.removeCatalogListener.run();
         this.listIcons.dispose();
         this.resources.dispose();
+        this.keyBindings.dispose();
     }
 
     JTabbedPane tabs() {
@@ -473,6 +478,7 @@ public final class ModPanel extends JPanel {
         if (selected instanceof CatalogEntryTable table) return table.filterField();
         if (selected == this.resources) return this.resources.filterField();
         if (selected == this.configs) return this.configs.filterField();
+        if (selected == this.keyBindings) return this.keyBindings.filterField();
         return null;
     }
 

@@ -540,6 +540,7 @@ final class UiScenarioDriver {
             case SERVICE_STATUS -> advanceServiceStatus(context);
             case MOD_PAGE -> context.once("mod-page", () -> navigate(new NavigationTarget.ModPage("testmod")));
             case PACK_CONFIGURATION -> context.once("pack-configuration", () -> navigate(new NavigationTarget.PackConfiguration()));
+            case KEY_BINDINGS -> context.once("key-bindings", () -> navigate(new NavigationTarget.KeyBindings("")));
             case MOD_CONFIGURATION -> context.once("mod-configuration", () ->
                     navigate(new NavigationTarget.ModPage("testmod", ModTab.CONFIGURATION, "")));
             case MOD_RESOURCES -> context.once("mod-resources", () ->
@@ -591,6 +592,7 @@ final class UiScenarioDriver {
                     && "Test Mod".equals(view.getTitle());
             case MOD_CONFIGURATION -> showsTable("Test Mod", "Setting");
             case PACK_CONFIGURATION -> showsTable("Configuration", "Setting");
+            case KEY_BINDINGS -> showsTable("Key bindings", "Action");
             case MOD_RESOURCES -> {
                 var editor = mainWindow.getEditorTabs().getSelectedEditor();
                 ResourceBrowser browser = findComponent(mainWindow, ResourceBrowser.class);

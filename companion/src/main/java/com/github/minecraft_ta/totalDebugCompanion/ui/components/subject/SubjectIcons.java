@@ -26,6 +26,7 @@ public final class SubjectIcons {
             case ITEMS -> Icons.ITEM;
             case ENTITIES -> Icons.ENTITY;
             case CONFIGURATION -> Icons.CONFIG_FILE;
+            case KEY_BINDINGS -> Icons.KEYBOARD;
             case RESOURCES -> Icons.RESOURCES_ROOT;
         };
     }

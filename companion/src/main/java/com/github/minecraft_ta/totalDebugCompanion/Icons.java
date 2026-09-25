@@ -61,6 +61,7 @@ public class Icons {
     public static final FlatSVGIcon CHANGES = new FlatSVGIcon("icons/changes.svg");
     public static final FlatSVGIcon SAVE = new FlatSVGIcon("icons/save.svg");
     public static final FlatSVGIcon REVERT = new FlatSVGIcon("icons/revert.svg");
+    public static final FlatSVGIcon KEYBOARD = new FlatSVGIcon("icons/keyboard.svg");
     public static final FlatSVGIcon BLOCK = new FlatSVGIcon("icons/block.svg");
     public static final FlatSVGIcon ITEM = new FlatSVGIcon("icons/item.svg");
     public static final FlatSVGIcon ENTITY = new FlatSVGIcon("icons/entity.svg");

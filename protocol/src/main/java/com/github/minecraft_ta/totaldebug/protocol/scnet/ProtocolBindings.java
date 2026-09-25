@@ -25,6 +25,8 @@ public final class ProtocolBindings {
         processor.registerOutgoing(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class);
         processor.registerOutgoing(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class);
         processor.registerOutgoing(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class);
+        processor.registerIncoming(CompanionProtocol.SET_KEY_BINDING, SetKeyBindingMessage.class, SetKeyBindingMessage::new);
+        processor.registerOutgoing(CompanionProtocol.KEY_BINDING_RESULT, KeyBindingResultMessage.class);
     }
 
     public static void registerCompanion(IMessageProcessor processor) {
@@ -44,5 +46,7 @@ public final class ProtocolBindings {
         processor.registerIncoming(CompanionProtocol.INSPECT_SUBJECT, InspectSubjectMessage.class, InspectSubjectMessage::new);
         processor.registerIncoming(CompanionProtocol.RESOURCE_SNAPSHOT, ResourceSnapshotMessage.class, ResourceSnapshotMessage::new);
         processor.registerIncoming(CompanionProtocol.PACK_CATALOG, PackCatalogMessage.class, PackCatalogMessage::new);
+        processor.registerOutgoing(CompanionProtocol.SET_KEY_BINDING, SetKeyBindingMessage.class);
+        processor.registerIncoming(CompanionProtocol.KEY_BINDING_RESULT, KeyBindingResultMessage.class, KeyBindingResultMessage::new);
     }
 }

@@ -38,6 +38,9 @@ public final class CatalogFixtures {
         return jar;
     }
 
+    public static final String CONTEXT_IN_GAME = "net.neoforged.neoforge.client.settings.KeyConflictContext.IN_GAME";
+    public static final String CONTEXT_GUI = "net.neoforged.neoforge.client.settings.KeyConflictContext.GUI";
+
     public static PackCatalog catalog(Path jar) {
         return new PackCatalog(INVENTORY, "en_us",
                 List.of(new PackCatalog.Mod("testmod", "Test Mod", "1.2.3", "Widgets for tests", List.of("Tester"),
@@ -61,6 +64,15 @@ public final class CatalogFixtures {
                         new PackCatalog.ItemEntry("testmod:widget_block", "Widget Block", "net.minecraft.world.item.BlockItem",
                                 "testmod:widget_block", "", Map.of()),
                         new PackCatalog.ItemEntry("c:shared_dust", "Shared Dust", "c.Dust", "", "c:item/dust", Map.of(0, 0xFF0000))),
-                List.of(new PackCatalog.EntityTypeEntry("testmod:gremlin", "Gremlin", "monster", "")));
+                List.of(new PackCatalog.EntityTypeEntry("testmod:gremlin", "Gremlin", "monster", "")),
+                List.of(new PackCatalog.KeyBinding("key.testmod.spin", "Spin widgets", "key.categories.testmod", "Test Mod",
+                                "testmod", "key.keyboard.r", "NONE", CONTEXT_IN_GAME),
+                        new PackCatalog.KeyBinding("key.drop", "Drop Selected Item", "key.categories.inventory",
+                                "Inventory", "minecraft", "key.keyboard.q", "NONE", CONTEXT_IN_GAME),
+                        new PackCatalog.KeyBinding("key.testmod.peek", "Peek into widgets", "key.categories.testmod",
+                                "Test Mod", "testmod", "key.keyboard.left.shift", "NONE", CONTEXT_GUI)),
+                List.of(new PackCatalog.KeyContext(CONTEXT_IN_GAME, "IN_GAME", List.of(CONTEXT_IN_GAME)),
+                        new PackCatalog.KeyContext(CONTEXT_GUI, "GUI", List.of(CONTEXT_GUI))),
+                Map.of("key.keyboard.q", "Q", "key.keyboard.r", "R", "key.keyboard.left.shift", "Left Shift"));
     }
 }

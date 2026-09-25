@@ -31,6 +31,7 @@ public final class SearchEverywhereSearch {
         BLOCKS("Blocks", false, true),
         ENTITIES("Entities", false, true),
         RESOURCES("Resources", false, true),
+        KEY_BINDINGS("Key bindings", false, true),
         CLASSES("Classes", true, false),
         SYMBOLS("Symbols", true, false),
         TEXT("Text", true, false);
@@ -60,7 +61,8 @@ public final class SearchEverywhereSearch {
         }
     }
 
-    public sealed interface Result permits ClassResult, SymbolResult, TextResult, ModResult, DefinitionResult, ResourceResult {
+    public sealed interface Result permits ClassResult, SymbolResult, TextResult, ModResult, DefinitionResult, ResourceResult,
+            KeyBindingResult {
         String searchableName();
     }
 
@@ -82,6 +84,21 @@ public final class SearchEverywhereSearch {
         @Override
         public String searchableName() {
             return this.entry.title();
+        }
+    }
+
+    /** A key binding: {@code name} as {@code options.txt} writes it, the action it performs, its key and its mod. */
+    public record KeyBindingResult(String name, String action, String key, String owner) implements Result {
+        public KeyBindingResult {
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(action, "action");
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(owner, "owner");
+        }
+
+        @Override
+        public String searchableName() {
+            return this.action;
         }
     }
 
@@ -291,6 +308,7 @@ public final class SearchEverywhereSearch {
             case SymbolResult symbol -> symbol.kind() == SymbolKind.METHOD ? 5 : 6;
             case TextResult ignored -> 7;
             case ResourceResult ignored -> 8;
+            case KeyBindingResult ignored -> 9;
         };
     }
 
@@ -302,6 +320,7 @@ public final class SearchEverywhereSearch {
             case ModResult mod -> mod.modId();
             case DefinitionResult definition -> definition.entry().subject().format();
             case ResourceResult resource -> resource.resource().file() + "!" + resource.resource().path();
+            case KeyBindingResult key -> key.name();
         };
     }
 }

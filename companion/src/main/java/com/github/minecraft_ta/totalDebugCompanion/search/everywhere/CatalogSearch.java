@@ -1,9 +1,11 @@
 package com.github.minecraft_ta.totalDebugCompanion.search.everywhere;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.CatalogIndex;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindings;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ModResources;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Category;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.DefinitionResult;
+import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.KeyBindingResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ModResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.ResourceResult;
 import com.github.minecraft_ta.totalDebugCompanion.search.everywhere.SearchEverywhereSearch.Result;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -29,9 +32,13 @@ public final class CatalogSearch {
     private final String[] names;
     private final String[] ids;
     private List<ModResources.Resource> resources;
+    /** Where the game keeps its keys, or null without a game directory. */
+    private final Path options;
 
-    public CatalogSearch(CatalogIndex index) {
+    /** {@code options} is the game's {@code options.txt}, read for the keys the bindings have now; null for none. */
+    public CatalogSearch(CatalogIndex index, Path options) {
         this.index = Objects.requireNonNull(index, "index");
+        this.options = options;
         this.entries = index.entries();
         this.names = new String[this.entries.size()];
         this.ids = new String[this.entries.size()];
@@ -77,6 +84,18 @@ public final class CatalogSearch {
                         entry.iconItem().isEmpty() ? null : this.index.itemIcon(entry.iconItem()).orElse(null)));
             }
         }
+        if (category == Category.ALL || category == Category.KEY_BINDINGS) {
+            KeyBindings bindings = keyBindings();
+            for (KeyBindings.Binding binding : bindings.bindings()) {
+                if (!binding.name().toLowerCase(Locale.ROOT).contains(folded) && !binding.spec().name().contains(folded)
+                        && !bindings.namesKey(binding.current(), query)) continue;
+                String ownerId = this.index.keyBindingOwner(binding.spec());
+                PackCatalog.Mod owner = this.index.mod(ownerId).orElse(null);
+                if (moduleIds != null && (owner == null || !moduleIds.contains(owner.module()))) continue;
+                results.add(new KeyBindingResult(binding.spec().name(), binding.name(), bindings.display(binding.current()),
+                        owner == null ? ownerId : owner.title()));
+            }
+        }
         if (category == Category.RESOURCES) {
             for (ModResources.Resource resource : resources()) {
                 if (!resource.path().toLowerCase(Locale.ROOT).contains(folded)) continue;
@@ -91,6 +110,20 @@ public final class CatalogSearch {
                 .sorted(Comparator.comparingInt((Result result) -> SearchEverywhereSearch.rank(result, query)))
                 .limit(limit)
                 .toList();
+    }
+
+    /** The bindings with the keys {@code options.txt} gives them now, or their defaults when it cannot be read. Blocking. */
+    private KeyBindings keyBindings() {
+        PackCatalog catalog = this.index.catalog();
+        Map<String, KeyBindings.Assignment> current = Map.of();
+        if (this.options != null) {
+            try {
+                current = KeyBindings.readOptions(this.options);
+            } catch (IOException unreadable) {
+                // The defaults stay searchable.
+            }
+        }
+        return new KeyBindings(catalog.keyBindings(), catalog.keyContexts(), current, catalog.keyNames());
     }
 
     private static boolean accepts(PackCatalog.Mod mod, Set<String> moduleIds) {

@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +32,8 @@ class CatalogSearchTest {
 
         List<Result> all = search.search(null, catalog, "widget", Category.ALL, 20, null, null);
 
-        assertEquals(List.of("Widget", "Widget Block"), all.stream().map(Result::searchableName).toList());
+        assertEquals(List.of("Widget", "Widget Block", "Spin widgets", "Peek into widgets"),
+                all.stream().map(Result::searchableName).toList(), "key bindings come after registered content");
         assertEquals("Item", kind(all.get(0)));
         assertEquals("Block", kind(all.get(1)));
         assertEquals("Test Mod", assertInstanceOf(DefinitionResult.class, all.getFirst()).owner());
@@ -50,6 +52,22 @@ class CatalogSearchTest {
         assertEquals(1, search.search(null, catalog, "shared_dust", Category.ITEMS, 20, null, null).size());
         assertTrue(search.search(null, catalog, "widget", Category.ITEMS, 20, null, Set.of("minecraft+neoforge")).isEmpty());
         assertEquals(1, search.search(null, catalog, "widget", Category.ITEMS, 20, null, Set.of("testmod")).size());
+    }
+
+    @Test
+    void findsKeyBindingsByActionAndByTheirKey() throws Exception {
+        Files.writeString(this.directory.resolve("options.txt"), "key_key.testmod.spin:key.keyboard.g:CONTROL\n");
+        CatalogSearch catalog = catalog();
+        SearchEverywhereSearch search = new SearchEverywhereSearch();
+
+        List<Result> byAction = search.search(null, catalog, "spin", Category.KEY_BINDINGS, 20, null, null);
+        List<Result> byKey = search.search(null, catalog, "ctrl+g", Category.KEY_BINDINGS, 20, null, null);
+
+        assertEquals(List.of(new SearchEverywhereSearch.KeyBindingResult("key.testmod.spin", "Spin widgets", "Ctrl + G", "Test Mod")),
+                byAction);
+        assertEquals(byAction, byKey);
+        assertEquals("Drop Selected Item", search.search(null, catalog, "q", Category.KEY_BINDINGS, 20, null, null)
+                .getFirst().searchableName());
     }
 
     @Test
@@ -72,7 +90,7 @@ class CatalogSearchTest {
         }
         items.add(new PackCatalog.ItemEntry("pack:ingot", "Ingot", "", "", "", Map.of()));
         CatalogSearch catalog = new CatalogSearch(new CatalogIndex(new PackCatalog("inventory", "en_us", List.of(),
-                List.of(), items, List.of())));
+                List.of(), items, List.of(), List.of(), List.of(), Map.of())), null);
 
         List<Result> results = new SearchEverywhereSearch().search(null, catalog, "ingot", Category.ITEMS, 5, null, null);
 
@@ -81,7 +99,8 @@ class CatalogSearchTest {
     }
 
     private CatalogSearch catalog() throws Exception {
-        return new CatalogSearch(new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory))));
+        return new CatalogSearch(new CatalogIndex(CatalogFixtures.catalog(CatalogFixtures.modJar(this.directory))),
+                this.directory.resolve("options.txt"));
     }
 
     private static String kind(Result result) {

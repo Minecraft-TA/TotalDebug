@@ -49,6 +49,7 @@ public final class CatalogIndex {
     private final Map<String, Map<SubjectRef.DefinitionKind, List<Entry>>> entriesByNamespace = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
     private final List<String> otherNamespaces;
+    private final Map<String, List<PackCatalog.KeyBinding>> keyBindingsByMod = new HashMap<>();
 
     public CatalogIndex(PackCatalog catalog) {
         this(catalog, List.of());
@@ -71,6 +72,9 @@ public final class CatalogIndex {
         TreeSet<String> namespaces = new TreeSet<>(this.entriesByNamespace.keySet());
         namespaces.removeAll(this.mods.keySet());
         this.otherNamespaces = List.copyOf(namespaces);
+        for (PackCatalog.KeyBinding binding : catalog.keyBindings()) {
+            this.keyBindingsByMod.computeIfAbsent(keyBindingOwner(binding), ignored -> new ArrayList<>()).add(binding);
+        }
     }
 
     private <T> void index(List<T> values, Map<String, T> byId, Function<T, String> id, Function<T, Entry> entry) {
@@ -97,6 +101,23 @@ public final class CatalogIndex {
 
     private static Entry entry(PackCatalog.EntityTypeEntry type) {
         return new Entry(SubjectRef.DefinitionKind.ENTITY_TYPE, type.id(), type.name(), type.spawnEgg());
+    }
+
+    /**
+     * The mod a key binding belongs to: the first installed mod its name names, such as {@code ftbchunks} for
+     * {@code key.ftbchunks.map}, otherwise the mod that registered it. Libraries like Architectury register bindings
+     * for other mods, and some bindings are added outside NeoForge's key registration and have no registering mod.
+     */
+    public String keyBindingOwner(PackCatalog.KeyBinding binding) {
+        for (String part : binding.name().split("\\.")) {
+            if (this.mods.containsKey(part)) return part;
+        }
+        return binding.modId();
+    }
+
+    /** The key bindings that belong to a mod, in registration order. */
+    public List<PackCatalog.KeyBinding> keyBindings(String modId) {
+        return List.copyOf(this.keyBindingsByMod.getOrDefault(modId, List.of()));
     }
 
     public PackCatalog catalog() {

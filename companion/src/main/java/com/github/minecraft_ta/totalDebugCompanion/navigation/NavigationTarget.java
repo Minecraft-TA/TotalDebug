@@ -28,6 +28,8 @@ public sealed interface NavigationTarget permits
         NavigationTarget.ModPage,
         NavigationTarget.PackConfiguration,
         NavigationTarget.Changes,
+        NavigationTarget.KeyBindings,
+        NavigationTarget.Content,
         NavigationTarget.Definition,
         NavigationTarget.RuntimeModuleNode {
 
@@ -44,6 +46,22 @@ public sealed interface NavigationTarget permits
 
         public ModPage(String modId) {
             this(modId, ModTab.OVERVIEW, "");
+        }
+    }
+
+    /** Every block, item or entity type of the pack; {@code tab} is Blocks, Items or Entities. */
+    record Content(ModTab tab) implements NavigationTarget {
+        public Content {
+            if (!ModTab.CONTENT.contains(tab)) {
+                throw new IllegalArgumentException("Content lists blocks, items or entity types, not " + tab);
+            }
+        }
+    }
+
+    /** The key bindings of every mod in the pack; {@code binding}, such as {@code key.jump}, is shown when not empty. */
+    record KeyBindings(String binding) implements NavigationTarget {
+        public KeyBindings {
+            binding = Objects.requireNonNullElse(binding, "");
         }
     }
 

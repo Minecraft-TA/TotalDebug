@@ -3,7 +3,10 @@ package com.github.minecraft_ta.totaldebug.client.catalog;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -18,12 +21,15 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.config.ModConfigs;
+import net.neoforged.neoforge.client.settings.IKeyConflictContext;
 import net.neoforged.neoforgespi.language.IModInfo;
 
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,6 +53,9 @@ public final class PackCatalogCapture {
     private final List<PackCatalog.BlockEntry> blocks = new ArrayList<>();
     private final List<PackCatalog.ItemEntry> items = new ArrayList<>();
     private final List<PackCatalog.EntityTypeEntry> entityTypes = new ArrayList<>();
+    private final List<PackCatalog.KeyBinding> keyBindings = new ArrayList<>();
+    private final List<PackCatalog.KeyContext> keyContexts = new ArrayList<>();
+    private final Map<String, String> keyNames = new HashMap<>();
     private final Map<Block, String> blockEntityTypes = new HashMap<>();
     private Iterator<Map.Entry<IModInfo, Path>> modCursor;
     private Iterator<Block> blockCursor;
@@ -83,6 +92,7 @@ public final class PackCatalogCapture {
                 if (this.modCursor.hasNext()) {
                     captureMod(this.modCursor.next());
                 } else if (this.blockCursor == null) {
+                    captureKeyBindings();
                     for (BlockEntityType<?> type : BuiltInRegistries.BLOCK_ENTITY_TYPE) {
                         String id = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type).toString();
                         for (Block block : type.getValidBlocks()) this.blockEntityTypes.putIfAbsent(block, id);
@@ -98,10 +108,10 @@ public final class PackCatalogCapture {
                     entityType(this.entityCursor.next());
                 } else {
                     PackCatalog catalog = new PackCatalog(this.inventoryId, this.language, this.mods, this.blocks,
-                            this.items, this.entityTypes);
-                    TotalDebug.LOGGER.info("Captured the pack catalog in {} ms: {} mods, {} blocks, {} items, {} entity types",
+                            this.items, this.entityTypes, this.keyBindings, this.keyContexts, this.keyNames);
+                    TotalDebug.LOGGER.info("Captured the pack catalog in {} ms: {} mods, {} blocks, {} items, {} entity types, {} key bindings",
                             (System.nanoTime() - this.startedAt) / 1_000_000, this.mods.size(), this.blocks.size(),
-                            this.items.size(), this.entityTypes.size());
+                            this.items.size(), this.entityTypes.size(), this.keyBindings.size());
                     this.result.complete(catalog);
                     return true;
                 }
@@ -118,6 +128,63 @@ public final class PackCatalogCapture {
             this.mods.add(mod(found.getKey(), found.getValue()));
         } catch (RuntimeException exception) {
             TotalDebug.LOGGER.warn("Leaving mod {} out of the pack catalog", found.getKey().getModId(), exception);
+        }
+    }
+
+    /**
+     * Every key binding with the mod that registered it, and every context they use with the contexts each says it
+     * conflicts with, so collisions follow for any assignment of keys.
+     */
+    private void captureKeyBindings() {
+        Map<IKeyConflictContext, String> contextIds = new IdentityHashMap<>();
+        Map<String, Integer> perClass = new HashMap<>();
+        for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) {
+            try {
+                IKeyConflictContext context = mapping.getKeyConflictContext();
+                String contextId = contextIds.computeIfAbsent(context, key -> KeyContexts.id(key, perClass));
+                this.keyBindings.add(new PackCatalog.KeyBinding(mapping.getName(), I18n.get(mapping.getName()),
+                        mapping.getCategory(), I18n.get(mapping.getCategory()), KeyBindingOwners.owner(mapping),
+                        mapping.getDefaultKey().getName(), mapping.getDefaultKeyModifier().name(), contextId));
+            } catch (RuntimeException exception) {
+                TotalDebug.LOGGER.debug("Leaving key binding {} out of the pack catalog", mapping.getName(), exception);
+            }
+        }
+        for (Map.Entry<IKeyConflictContext, String> context : contextIds.entrySet()) {
+            List<String> conflicts = new ArrayList<>();
+            for (Map.Entry<IKeyConflictContext, String> other : contextIds.entrySet()) {
+                try {
+                    if (context.getKey().conflicts(other.getKey())) conflicts.add(other.getValue());
+                } catch (RuntimeException exception) {
+                    TotalDebug.LOGGER.debug("Key context {} failed to compare with {}", context.getValue(), other.getValue(), exception);
+                }
+            }
+            this.keyContexts.add(new PackCatalog.KeyContext(context.getValue(), KeyContexts.name(context.getKey()), conflicts));
+        }
+        captureKeyNames();
+    }
+
+    /**
+     * The name the game shows for every key it knows, such as {@code Y} for {@code key.keyboard.z} on a German layout,
+     * so Companion names keys the way the controls screen does. Render thread only; GLFW names the keys.
+     */
+    @SuppressWarnings("unchecked")
+    private void captureKeyNames() {
+        Map<String, InputConstants.Key> keys;
+        try {
+            Field names = InputConstants.Key.class.getDeclaredField("NAME_MAP");
+            names.setAccessible(true);
+            keys = Map.copyOf((Map<String, InputConstants.Key>) names.get(null));
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            TotalDebug.LOGGER.warn("Key names are left to Companion", exception);
+            return;
+        }
+        for (Map.Entry<String, InputConstants.Key> key : keys.entrySet()) {
+            if (key.getValue().equals(InputConstants.UNKNOWN)) continue;
+            try {
+                this.keyNames.put(key.getKey(), key.getValue().getDisplayName().getString());
+            } catch (RuntimeException exception) {
+                TotalDebug.LOGGER.debug("Key {} has no name", key.getKey(), exception);
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.github.minecraft_ta.totalDebugCompanion.project;
 
 import com.github.minecraft_ta.totalDebugCompanion.catalog.ConfigChanges;
+import com.github.minecraft_ta.totalDebugCompanion.catalog.KeyBindingControl;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.debugger.DebugEngine;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptFiles;
@@ -47,6 +48,9 @@ public final class ProjectScope implements AutoCloseable {
     public ChangeRecord changes() { return changes; }
     private final ConfigChanges configChanges;
     public ConfigChanges configChanges() { return configChanges; }
+    private final KeyBindingControl keyBindings;
+    /** Puts the instance's key bindings on keys, in the running game or in options.txt. */
+    public KeyBindingControl keyBindings() { return keyBindings; }
     private final List<PendingNavigation> pending = new ArrayList<>();
     private volatile Phase phase = Phase.ACTIVE;
     private volatile RuntimeBinding runtime;
@@ -61,6 +65,7 @@ public final class ProjectScope implements AutoCloseable {
         this.catalog = new PackCatalogService(paths());
         this.changes = Objects.requireNonNull(changes);
         this.configChanges = new ConfigChanges(profile.workspaceDirectory(), changes);
+        this.keyBindings = new KeyBindingControl(profile.workspaceDirectory().resolve("options.txt"), changes);
     }
 
     public static ProjectScope open(Object lock, CompanionProfile profile) throws IOException {

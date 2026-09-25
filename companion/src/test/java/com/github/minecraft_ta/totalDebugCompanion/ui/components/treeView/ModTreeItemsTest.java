@@ -36,9 +36,14 @@ class ModTreeItemsTest {
         List<TreeItem> mods = ModTreeItems.children(snapshot);
 
         List<TreeItem> pack = ModTreeItems.packChildren(snapshot);
-        assertEquals(List.of(ModTreeItems.MODS, ModTreeItems.CONFIGURATION), pack.stream().map(TreeItem::getName).toList());
+        assertEquals(List.of(ModTreeItems.MODS, ModTreeItems.CONTENT, ModTreeItems.CONFIGURATION, ModTreeItems.KEY_BINDINGS),
+                pack.stream().map(TreeItem::getName).toList());
+        assertEquals("3", pack.get(3).getPresentation().secondary());
         assertEquals("2", pack.getFirst().getPresentation().secondary());
-        assertEquals(new NavigationTarget.PackConfiguration(), ((NavigableTreeItem) pack.get(1)).navigationTarget());
+        assertEquals(new NavigationTarget.PackConfiguration(), ((NavigableTreeItem) pack.get(2)).navigationTarget());
+        List<TreeItem> content = ((DirectoryTreeItem) pack.get(1)).loadChildren();
+        assertEquals(List.of("blocks", "items", "entities"), content.stream().map(TreeItem::getName).toList());
+        assertEquals(new NavigationTarget.Content(ModTab.ITEMS), ((NavigableTreeItem) content.get(1)).navigationTarget());
         List<TreeItem> changed = ModTreeItems.packChildren(new ModTreeItems.Snapshot(snapshot.state(), snapshot.sources(), 3));
         assertEquals(ModTreeItems.CHANGES, changed.getLast().getName(), "Changes appears once Companion changed something");
         assertEquals("3", changed.getLast().getPresentation().secondary());
@@ -47,13 +52,13 @@ class ModTreeItemsTest {
         assertTrue(testmod.isActivatable());
         assertEquals(new NavigationTarget.ModPage("testmod"), ((NavigableTreeItem) testmod).navigationTarget());
         List<TreeItem> groups = ((DirectoryTreeItem) testmod).loadChildren();
-        assertEquals(List.of("blocks", "items", "entities", "configuration", "resources"),
+        assertEquals(List.of("blocks", "items", "entities", "configuration", "key_bindings", "resources"),
                 groups.stream().map(TreeItem::getName).toList());
         assertEquals("1", groups.get(1).getPresentation().secondary());
         assertEquals(new NavigationTarget.ModPage("testmod", ModTab.ITEMS, ""),
                 ((NavigableTreeItem) groups.get(1)).navigationTarget());
 
-        TreeItem resources = groups.get(4);
+        TreeItem resources = groups.getLast();
         assertFalse(resources.isDirectory(), "Resources opens its tab, which lists the categories");
         assertEquals("7", resources.getPresentation().secondary());
         assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, ""),
