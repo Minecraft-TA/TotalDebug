@@ -14,7 +14,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.List;
+import java.util.zip.ZipOutputStream;
+import java.util.zip.ZipEntry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -43,11 +46,11 @@ class ModTreeItemsTest {
         assertEquals(new NavigationTarget.ModPage("testmod", ModTab.ITEMS, ""),
                 ((NavigableTreeItem) groups.get(1)).navigationTarget());
 
-        List<TreeItem> categories = ((DirectoryTreeItem) groups.get(4)).loadChildren();
-        TreeItem textures = categories.stream().filter(item -> item.getName().equals("assets/textures")).findFirst().orElseThrow();
-        assertEquals("2", textures.getPresentation().secondary());
-        assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, "assets/textures"),
-                ((NavigableTreeItem) textures).navigationTarget());
+        TreeItem resources = groups.get(4);
+        assertFalse(resources.isDirectory(), "Resources opens its tab, which lists the categories");
+        assertEquals("7", resources.getPresentation().secondary());
+        assertEquals(new NavigationTarget.ModPage("testmod", ModTab.RESOURCES, ""),
+                ((NavigableTreeItem) resources).navigationTarget());
 
         List<TreeItem> neoforge = ((DirectoryTreeItem) mods.getFirst()).loadChildren();
         assertTrue(neoforge.isEmpty(), "a mod without content or an existing file has no groups");
@@ -67,6 +70,22 @@ class ModTreeItemsTest {
         ModTreeItems.Root root = new ModTreeItems.Root(() -> snapshot);
         assertEquals("not captured", root.getPresentation().secondary());
         assertFalse(root.isActivatable());
+    }
+
+    @Test
+    void aModOfCodeAloneHasNoResourcesToExpand() throws Exception {
+        Path jar = this.directory.resolve("codeonly.jar");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+            zip.putNextEntry(new ZipEntry("dev/architectury/Architectury.class"));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("icon.png"));
+            zip.closeEntry();
+        }
+        var snapshot = new ModTreeItems.Snapshot(new PackCatalogService.None(), sources(jar));
+
+        DirectoryTreeItem mod = (DirectoryTreeItem) ModTreeItems.children(snapshot).getFirst();
+
+        assertTrue(mod.loadChildren().isEmpty(), "a JAR without assets or data has no Resources");
     }
 
     private static RuntimeSourceCatalog sources(Path jar) {

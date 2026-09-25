@@ -317,7 +317,6 @@ public class FileTreeView extends JScrollPane {
         path.add(page.modId());
         if (page.tab() != ModTab.OVERVIEW) {
             path.add(ModTreeItems.groupName(page.tab()));
-            if (page.tab() == ModTab.RESOURCES && !page.resourceCategory().isEmpty()) path.add(page.resourceCategory());
         }
         return this.tree.revealItemPath(ModTreeItems.ROOT, path);
     }

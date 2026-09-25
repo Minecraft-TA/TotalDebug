@@ -126,11 +126,13 @@ final class ModTreeItems {
     static final class Mod extends DirectoryTreeItem implements NavigableTreeItem {
         private final ModSummary summary;
         private final CatalogIndex index;
+        private final int resourceCount;
 
         Mod(ModSummary summary, CatalogIndex index) {
             super(summary.id());
             this.summary = summary;
             this.index = index;
+            this.resourceCount = resourceCount(summary);
             setPresentation(PrimarySecondaryText.primary(summary.title()));
             setIcon(ModLogoIcons.icon(summary, UiMetrics.previewPixels(UiMetrics.ROW_ICON_SIZE)));
             setSortPriority(PLATFORM.contains(summary.id()) ? 0 : 10);
@@ -166,8 +168,22 @@ final class ModTreeItems {
                 group(children, ModTab.ENTITIES, this.index.entries(this.summary.id(), SubjectRef.DefinitionKind.ENTITY_TYPE).size());
                 group(children, ModTab.CONFIGURATION, this.summary.mod() == null ? 0 : this.summary.mod().configs().size());
             }
-            if (!this.summary.files().isEmpty()) children.add(new Resources(this.summary));
+            if (this.resourceCount != 0) children.add(new Resources(this.summary, this.resourceCount));
             return children;
+        }
+
+        /**
+         * How many files the mod keeps under {@code assets/} and {@code data/}; a mod of code alone has none. Mod rows
+         * are created while the tree loads in the background, so the listing, which is cached for the mod page, does
+         * not block the window. An unreadable file answers -1: Resources stays, and its page says why.
+         */
+        private static int resourceCount(ModSummary summary) {
+            if (summary.files().isEmpty()) return 0;
+            try {
+                return ModResources.list(summary.files()).size();
+            } catch (IOException | UncheckedIOException unreadable) {
+                return -1;
+            }
         }
 
         private void group(List<TreeItem> children, ModTab tab, int count) {
@@ -201,14 +217,15 @@ final class ModTreeItems {
         }
     }
 
-    /** A mod's resources, expanding into their categories. */
-    static final class Resources extends DirectoryTreeItem implements NavigableTreeItem {
+    /** A mod's resources with their count; opening it shows the Resources tab, which lists them by category. */
+    static final class Resources extends TreeItem implements NavigableTreeItem {
         private final ModSummary summary;
 
-        Resources(ModSummary summary) {
+        Resources(ModSummary summary, int count) {
             super(groupName(ModTab.RESOURCES));
             this.summary = summary;
-            setPresentation(PrimarySecondaryText.primary("Resources"));
+            setPresentation(new PrimarySecondaryText("Resources",
+                    count < 0 ? "" : NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
             setIcon(Icons.RESOURCES_ROOT);
             setSortPriority(ModTab.RESOURCES.ordinal());
         }
@@ -219,54 +236,8 @@ final class ModTreeItems {
         }
 
         @Override
-        public boolean isActivatable() {
-            return true;
-        }
-
-        @Override
         public NavigationTarget navigationTarget() {
             return new NavigationTarget.ModPage(this.summary.id(), ModTab.RESOURCES, "");
-        }
-
-        @Override
-        public List<TreeItem> loadChildren() {
-            List<ModResources.Resource> resources;
-            try {
-                resources = ModResources.list(this.summary.files());
-            } catch (IOException exception) {
-                throw new UncheckedIOException(exception);
-            }
-            List<TreeItem> categories = new ArrayList<>();
-            for (ModResources.Category category : ModResources.categories(resources)) {
-                long count = resources.stream().filter(resource -> resource.category().equals(category)).count();
-                categories.add(new ResourceCategory(this.summary.id(), category, count));
-            }
-            return categories;
-        }
-    }
-
-    static final class ResourceCategory extends TreeItem implements NavigableTreeItem {
-        private final String modId;
-        private final ModResources.Category category;
-
-        ResourceCategory(String modId, ModResources.Category category, long count) {
-            super(category.key());
-            this.modId = modId;
-            this.category = category;
-            String title = category.root().equals("data") ? category.folder() + " (data)" : category.folder();
-            setPresentation(new PrimarySecondaryText(title, NumberFormat.getIntegerInstance(Locale.ROOT).format(count)));
-            setIcon(Icons.FOLDER);
-            setSortPriority(category.root().equals("assets") ? 0 : 1);
-        }
-
-        @Override
-        public String getTooltip() {
-            return this.category.key();
-        }
-
-        @Override
-        public NavigationTarget navigationTarget() {
-            return new NavigationTarget.ModPage(this.modId, ModTab.RESOURCES, this.category.key());
         }
     }
 }

@@ -203,9 +203,10 @@ public class LazyFileJTree extends JTree {
             pressedPath = gesturePath;
             pressedSegment = gestureSegment;
         }
+        doubleClickOpening = opensOnDoubleClick(event);
         try { super.processMouseEvent(event); }
         finally {
-            pressedPath = null; pressedSegment = -1;
+            pressedPath = null; pressedSegment = -1; doubleClickOpening = null;
             if (event.getID() == MouseEvent.MOUSE_RELEASED) { gesturePath = null; gestureSegment = -1; }
         }
         if (event.getID() == MouseEvent.MOUSE_EXITED) { hoverPath = null; hoverSegment = -1; setCursor(Cursor.getDefaultCursor()); }
@@ -255,6 +256,32 @@ public class LazyFileJTree extends JTree {
         if (background != null) {
             setBackground(background);
         }
+    }
+
+    /**
+     * The row a double-click is opening. Swing's tree toggles a row on double-click before any listener sees the
+     * click; a row that opens a page or file only opens. Its arrow, Right and Left still expand and collapse it.
+     */
+    private TreePath doubleClickOpening;
+
+    /**
+     * The row a double-click opens. Both press and release count: with dragging enabled, Swing handles a click on an
+     * already selected row, such as the second click of a double-click, only when the button is released.
+     */
+    private TreePath opensOnDoubleClick(MouseEvent event) {
+        if (event.getID() != MouseEvent.MOUSE_PRESSED && event.getID() != MouseEvent.MOUSE_RELEASED) return null;
+        if (event.getClickCount() < 2 || !SwingUtilities.isLeftMouseButton(event)) return null;
+        TreePath path = rowAt(event.getPoint());
+        // A click on the arrow, left of the row's text, still toggles the row.
+        if (path == null || event.getX() < getPathBounds(path).x) return null;
+        return path.getLastPathComponent() instanceof LazyTreeNode node
+                && node.getUserObject().isDirectory() && node.getUserObject().isActivatable() ? path : null;
+    }
+
+    @Override
+    protected void setExpandedState(TreePath path, boolean state) {
+        if (path != null && path.equals(this.doubleClickOpening)) return;
+        super.setExpandedState(path, state);
     }
 
     public void addMouseDoubleClickListener(BiConsumer<LazyTreeNode, TreeItem> listener) {
