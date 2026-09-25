@@ -299,7 +299,7 @@ public final class ModPanel extends JPanel {
                 Optional<PackCatalog.Mod> installed = this.index == null ? Optional.empty() : this.index.mod(dependency.modId());
                 String type = dependency.type().name().toLowerCase(Locale.ROOT);
                 StringBuilder value = new StringBuilder(Character.toUpperCase(type.charAt(0)) + type.substring(1));
-                if (!dependency.versionRange().isEmpty()) value.append(" · ").append(DependencyVersions.describe(dependency.versionRange()));
+                if (!dependency.versionRange().isEmpty()) value.append(", ").append(DependencyVersions.describe(dependency.versionRange()));
                 if (dependency.side() != PackCatalog.Side.BOTH) value.append(", ").append(dependency.side().name().toLowerCase(Locale.ROOT)).append(" only");
                 if (installed.isEmpty() && dependency.type() == PackCatalog.DependencyType.OPTIONAL) value.append(", not installed");
                 Fact fact = Fact.text(installed.map(PackCatalog.Mod::title).orElse(dependency.modId()), value.toString());

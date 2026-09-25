@@ -202,7 +202,7 @@ This example shows the intended result end to end. The AE2 calls and parts of th
 2. **Open an item's flow.** Selecting Redstone opens the **Flow** view for `ae2:grid/minecraft:redstone`:
 
 ```
-ME Network · Base (controller 120 64 -35) ▸ Redstone                 [Live] [1 h]
+ME Network  Base (controller 120 64 -35) ▸ Redstone                 [Live] [1 h]
 Redstone                                                        Stock 184,302
 
 Net +1,240 /min (+74,400 /h)    In 1,510 /min    Out 270 /min

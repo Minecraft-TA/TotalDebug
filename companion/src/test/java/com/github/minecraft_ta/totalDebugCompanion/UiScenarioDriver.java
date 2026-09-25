@@ -599,7 +599,7 @@ final class UiScenarioDriver {
                         && gutter.isShowing();
             }
             case BREAKPOINT_EDITOR -> visibleMenuPopup() != null
-                    && findLabelContaining(visibleMenuPopup(), "Line breakpoint") != null;
+                    && findLabelContaining(visibleMenuPopup(), "Breakpoint on line") != null;
             case BREAKPOINT_INTERACTION -> context.completedActions.contains("breakpoint-interaction");
             case METHOD_BREAKPOINT -> {
                 var selected = mainWindow.getEditorTabs().getSelectedEditor();

@@ -137,7 +137,7 @@ public final class PrismInstancePicker extends JDialog {
                 return PrismInstances.discover(prismHome).stream().map(profile -> {
                     var details = PrismInstances.details(profile);
                     String description = details.minecraftVersion().isBlank() ? "Version information unavailable" : "Minecraft " + details.minecraftVersion();
-                    if (!details.loader().isBlank()) description += "  ·  " + details.loader();
+                    if (!details.loader().isBlank()) description += ", " + details.loader();
                     boolean selected = current != null && current.workspaceDirectory().equals(profile.workspaceDirectory());
                     return new Entry(profile, ProjectRegistry.defaultName(profile), description, artwork(details.icon()), selected);
                 }).sorted(Comparator.comparing(Entry::current).reversed().thenComparing(Entry::name, String.CASE_INSENSITIVE_ORDER)).toList();

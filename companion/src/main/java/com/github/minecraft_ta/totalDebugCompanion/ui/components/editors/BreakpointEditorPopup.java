@@ -61,8 +61,8 @@ final class BreakpointEditorPopup {
         this.displayedLine = displayedLine;
         this.handler = Objects.requireNonNull(handler, "handler");
         this.title.setText(breakpoint != null && breakpoint.isMethodEntry()
-                ? "Method breakpoint · " + breakpoint.method().name()
-                : "Line breakpoint · " + displayedLine);
+                ? "Breakpoint on method " + breakpoint.method().name()
+                : "Breakpoint on line " + displayedLine);
         this.condition.setText(breakpoint == null || breakpoint.condition() == null
                 ? ""
                 : breakpoint.condition());

@@ -557,7 +557,7 @@ public class SearchEverywherePopup extends JFrame {
                 ? null
                 : this.sourceCatalog.sourceIdsForModules(this.selectedModuleIds);
         Set<String> moduleIds = allModules ? null : Set.copyOf(this.selectedModuleIds);
-        this.resultNote = installed == null && requestedCategory.usesIndex() ? " · class index unavailable" : "";
+        this.resultNote = installed == null && requestedCategory.usesIndex() ? ", class index unavailable" : "";
         this.searchPending = true;
         this.resultCount.setText("Searching…");
         this.pendingSearch = this.searchExecutor.schedule(() -> {
@@ -737,19 +737,20 @@ public class SearchEverywherePopup extends JFrame {
         };
     }
 
-    /** The kind and owning mod of a catalog result, shown where index results show their module. */
+    /** The owning mod and kind of a catalog result, shown where index results show their module. */
     private static ModuleSummary catalogSummary(Result result) {
-        String text = switch (result) {
-            case ModResult ignored -> "Mod";
-            case DefinitionResult definition -> switch (definition.entry().kind()) {
-                case ITEM -> "Item";
-                case BLOCK -> "Block";
-                case ENTITY_TYPE -> "Entity type";
-            } + " · " + definition.owner();
-            case ResourceResult resource -> "Resource · " + resource.owner();
-            default -> "";
+        PrimarySecondaryText text = switch (result) {
+            case ModResult ignored -> PrimarySecondaryText.primary("Mod");
+            case DefinitionResult definition -> new PrimarySecondaryText(definition.owner(),
+                    switch (definition.entry().kind()) {
+                        case ITEM -> "Item";
+                        case BLOCK -> "Block";
+                        case ENTITY_TYPE -> "Entity type";
+                    });
+            case ResourceResult resource -> new PrimarySecondaryText(resource.owner(), "Resource");
+            default -> PrimarySecondaryText.primary("");
         };
-        return new ModuleSummary(PrimarySecondaryText.primary(text), text);
+        return new ModuleSummary(text, (text.primary() + "  " + text.secondary()).strip());
     }
 
     private static String symbolPrimary(SymbolResult symbol) {

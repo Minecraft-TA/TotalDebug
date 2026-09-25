@@ -121,7 +121,7 @@ class CatalogPanelsTest {
                     List<FactSection> sections = panel.sections(catalog.index().orElseThrow().mod("testmod").orElseThrow());
                     assertEquals(List.of("Mod", "Dependencies"), sections.stream().map(FactSection::title).toList());
                     assertEquals(List.of(
-                            Fact.text("NeoForge", "Required · 21 or newer").withLink(FactLink.toSubject(new SubjectRef.Mod("neoforge"))),
+                            Fact.text("NeoForge", "Required, 21 or newer").withLink(FactLink.toSubject(new SubjectRef.Mod("neoforge"))),
                             Fact.text("jei", "Optional, client only, not installed")
                     ), sections.get(1).facts());
                 } finally {
