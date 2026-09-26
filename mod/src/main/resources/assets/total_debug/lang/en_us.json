@@ -1,6 +1,6 @@
 {
   "key.categories.total_debug": "TotalDebug",
-  "key.total_debug.open_code_gui": "Inspect or open code",
+  "key.total_debug.open_code_gui": "Inspect",
   "commands.total_debug.decompile.entity.failed": "Could not resolve entity type %s to a runtime class",
   "commands.total_debug.decompile.blockentity.failed": "Could not resolve block entity type %s to a runtime class",
   "commands.total_debug.decompile.item.failed": "An item with the id %s does not exist",

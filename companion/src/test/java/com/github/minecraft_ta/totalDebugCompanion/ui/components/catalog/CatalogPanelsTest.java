@@ -11,6 +11,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.ModTab;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.SubjectHeader;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
@@ -31,6 +32,7 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -161,35 +163,34 @@ class CatalogPanelsTest {
     }
 
     @Test
-    void aDefinitionPageLinksItsModClassAndCounterpart() throws Exception {
+    void aDefinitionNamesItsClassAndRelatedEntries() throws Exception {
         PackCatalogService catalog = readyCatalog();
         try (ItemIconService icons = new ItemIconService()) {
+            DefinitionDetails.Services services = new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty,
+                    icons, target -> { });
             onEdt(() -> {
-                DefinitionPanel panel = new DefinitionPanel(
-                        new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"),
-                        catalog, RuntimeSourceCatalog::empty, icons, target -> { });
+                DefinitionDetails block = new DefinitionDetails(
+                        new SubjectRef.Definition(RegistryIds.BLOCK, "testmod:widget_block"), services, () -> { });
                 try {
-                    assertEquals("Widget Block", panel.title());
+                    assertEquals("Widget Block", block.title());
+                    assertEquals("Test Mod", block.modName());
+                    assertEquals(Optional.of(Fact.text("Class", "WidgetBlock").withLink(FactLink.toClass("testmod.WidgetBlock"))),
+                            block.classFact());
                     assertEquals(List.of(
-                            Fact.text("ID", "testmod:widget_block"),
-                            Fact.text("Mod", "Test Mod").withLink(FactLink.toSubject(new SubjectRef.Mod("testmod"))),
-                            Fact.text("Class", "WidgetBlock").withLink(FactLink.toClass("testmod.WidgetBlock")),
                             Fact.text("Item", "Widget Block").withLink(FactLink.toSubject(
                                     new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget_block"))),
                             Fact.text("Block entity type", "testmod:widget_entity")
-                    ), panel.sections().getFirst().facts(), "a link into a registry that was not captured names its id");
-                    assertTrue(labels(panel).contains("Block"), labels(panel)::toString);
+                    ), block.related(), "a link into a registry that was not captured names its id");
                 } finally {
-                    settle(panel.resourceLoad());
-                    panel.dispose();
+                    settle(block.resourceLoad());
+                    block.dispose();
                 }
-                DefinitionPanel fluid = new DefinitionPanel(new SubjectRef.Definition(RegistryIds.FLUID, "testmod:goo"),
-                        catalog, RuntimeSourceCatalog::empty, icons, target -> { });
+                DefinitionDetails fluid = new DefinitionDetails(new SubjectRef.Definition(RegistryIds.FLUID, "testmod:goo"),
+                        services, () -> { });
                 try {
                     assertEquals("Goo", fluid.title());
-                    assertEquals("Fluid", fluid.sections().getFirst().title());
-                    assertEquals(Fact.text("Class", "GooFluid").withLink(FactLink.toClass("testmod.GooFluid")),
-                            fluid.sections().getFirst().facts().get(2));
+                    assertEquals(Optional.of(Fact.text("Class", "GooFluid").withLink(FactLink.toClass("testmod.GooFluid"))),
+                            fluid.classFact());
                 } finally {
                     settle(fluid.resourceLoad());
                     fluid.dispose();
@@ -203,14 +204,12 @@ class CatalogPanelsTest {
         PackCatalogService empty = new PackCatalogService(new InstancePaths(this.directory.resolve("none")));
         try (ItemIconService icons = new ItemIconService()) {
             onEdt(() -> {
-                DefinitionPanel panel = new DefinitionPanel(
-                        new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget"),
-                        empty, RuntimeSourceCatalog::empty, icons, target -> { });
+                SubjectPanel panel = SubjectPanel.definition(new SubjectRef.Definition(RegistryIds.ITEM, "testmod:widget"),
+                        new DefinitionDetails.Services(empty, RuntimeSourceCatalog::empty, icons, target -> { }));
                 try {
                     assertTrue(labels(panel).contains(CatalogMessages.unavailable(new PackCatalogService.None())),
                             labels(panel)::toString);
                 } finally {
-                    settle(panel.resourceLoad());
                     panel.dispose();
                 }
             });
@@ -223,7 +222,7 @@ class CatalogPanelsTest {
 
         assertEquals(List.of("assets/testmod/models/item/widget.json", "assets/testmod/textures/item/widget.png",
                         "data/testmod/recipe/widget.json"),
-                DefinitionPanel.matching(resources, "testmod", "widget").stream().map(ModResources.Resource::path).toList());
+                DefinitionDetails.matching(resources, "testmod", "widget").stream().map(ModResources.Resource::path).toList());
     }
 
     private PackCatalogService readyCatalog() throws Exception {

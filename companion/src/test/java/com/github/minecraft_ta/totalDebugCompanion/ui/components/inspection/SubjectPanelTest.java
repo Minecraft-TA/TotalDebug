@@ -1,10 +1,13 @@
 package com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.catalog.PackCatalogService;
 import com.github.minecraft_ta.totalDebugCompanion.catalog.RegistryIds;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionSession;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.InspectionTool;
 import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
+import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeSourceCatalog;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.subject.LinkLabel;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
@@ -16,8 +19,11 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -34,12 +40,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class InspectionPanelTest {
+class SubjectPanelTest {
+    @TempDir
+    static Path directory;
+
     private static final SubjectIdentity FURNACE = new SubjectIdentity(SubjectIdentity.Kind.BLOCK,
             "minecraft:furnace", "Furnace", "Minecraft", List.of(), "minecraft:furnace");
     private static final SubjectIdentity CHEST = new SubjectIdentity(SubjectIdentity.Kind.BLOCK,
             "minecraft:chest", "Chest", "Minecraft",
-            List.of(new SubjectIdentity.ClassLink("Block", "net.minecraft.world.level.block.ChestBlock")),
+            List.of(new SubjectIdentity.ClassLink("Class", "net.minecraft.world.level.block.ChestBlock")),
             "minecraft:chest");
     private static final InspectSubjectPayload SUBJECT = new InspectSubjectPayload("game-session",
             "block minecraft:overworld 12 64 -3", FURNACE, "minecraft:item/furnace", Map.of());
@@ -105,16 +114,17 @@ class InspectionPanelTest {
     }
 
     @Test
-    void theIdentitySectionLinksTheDefinitionAndTheClasses() {
-        FactSection section = InspectionPanel.identitySection(CHEST);
+    void theIdentitySectionNamesTheClassesAndRelatedEntriesAndLinksTheDefinitionFromTheGame() {
+        SubjectRef.Definition chest = new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:chest");
+        Fact block = Fact.text("Class", "ChestBlock").withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"));
+        Fact item = Fact.text("Item", "Chest").withLink(FactLink.toSubject(new SubjectRef.Definition(RegistryIds.ITEM, "minecraft:chest")));
 
-        assertEquals("Block", section.title());
-        assertEquals(List.of(
-                Fact.text("ID", "minecraft:chest")
-                        .withLink(FactLink.toSubject(new SubjectRef.Definition(RegistryIds.BLOCK, "minecraft:chest"))),
-                Fact.text("Block", "ChestBlock")
-                        .withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"))
-        ), section.facts());
+        FactSection live = SubjectPanel.identitySection(chest, List.of(block), List.of(item), true);
+        FactSection definition = SubjectPanel.identitySection(chest, List.of(block), List.of(item), false);
+
+        assertEquals("Block", live.title());
+        assertEquals(List.of(Fact.text("ID", "minecraft:chest").withLink(FactLink.toSubject(chest)), block, item), live.facts());
+        assertEquals(Fact.text("ID", "minecraft:chest"), definition.facts().getFirst(), "a definition's page does not link itself");
     }
 
     @Test
@@ -122,13 +132,28 @@ class InspectionPanelTest {
         List<NavigationTarget> opened = new ArrayList<>();
         withPanel(opened::add, panel -> {
             List<String> labels = labels(panel);
-            assertTrue(labels.containsAll(List.of("Furnace", "12, 64, -3", "minecraft:overworld", "Minecraft")),
+            assertTrue(labels.containsAll(List.of("Furnace", "Block", "12, 64, -3", "minecraft:overworld", "Minecraft")),
                     labels::toString);
             for (LinkLabel link : links(panel)) {
                 link.dispatchEvent(new MouseEvent(link, MouseEvent.MOUSE_CLICKED, 0, 0, 1, 1, 1, false, MouseEvent.BUTTON1));
             }
         });
         assertEquals(List.of(new NavigationTarget.ModPage("minecraft")), opened);
+    }
+
+    @Test
+    void aStackSaysWhichSlotItIsInAndRunsNoTools() throws Exception {
+        SubjectIdentity pickaxe = new SubjectIdentity(SubjectIdentity.Kind.ITEM, "minecraft:iron_pickaxe", "Iron Pickaxe",
+                "Minecraft", List.of(new SubjectIdentity.ClassLink("Class", "net.minecraft.world.item.PickaxeItem")),
+                "minecraft:iron_pickaxe");
+        InspectSubjectPayload stack = new InspectSubjectPayload("game-session",
+                "stack 0f8fad5b-d9cb-469f-a165-70867728950e inventory 4", pickaxe, "", Map.of());
+        withPanel(stack, target -> { }, panel -> {
+            List<String> labels = labels(panel);
+            assertTrue(labels.containsAll(List.of("Iron Pickaxe", "Item", "Inventory slot 4", "PickaxeItem")), labels::toString);
+            assertFalse(panel.session().readsTools());
+            assertFalse(accessibleNames(panel).contains("Tools"), "stacks run no tools");
+        });
     }
 
     @Test
@@ -165,18 +190,24 @@ class InspectionPanelTest {
                 .withFacts(facts);
     }
 
-    private static void withPanel(Consumer<InspectionPanel> test) throws Exception {
+    private static void withPanel(Consumer<SubjectPanel> test) throws Exception {
         withPanel(target -> { }, test);
     }
 
-    private static void withPanel(Consumer<NavigationTarget> navigator, Consumer<InspectionPanel> test) throws Exception {
+    private static void withPanel(Consumer<NavigationTarget> navigator, Consumer<SubjectPanel> test) throws Exception {
+        withPanel(SUBJECT, navigator, test);
+    }
+
+    private static void withPanel(InspectSubjectPayload subject, Consumer<NavigationTarget> navigator,
+                                  Consumer<SubjectPanel> test) throws Exception {
+        PackCatalogService catalog = new PackCatalogService(new InstancePaths(directory));
         try (ItemIconService icons = new ItemIconService()) {
             Throwable[] failure = new Throwable[1];
             SwingUtilities.invokeAndWait(() -> {
-                InspectionPanel panel = new InspectionPanel(SUBJECT,
+                SubjectPanel panel = SubjectPanel.occurrence(subject,
                         () -> { throw new IllegalStateException("Tests run no snippets"); },
                         () -> { throw new IllegalStateException("Tests have no project"); },
-                        icons, navigator);
+                        new DefinitionDetails.Services(catalog, RuntimeSourceCatalog::empty, icons, navigator));
                 try {
                     test.accept(panel);
                 } catch (Throwable throwable) {
@@ -208,6 +239,17 @@ class InspectionPanelTest {
             if (child instanceof Container nested) links.addAll(links(nested));
         }
         return links;
+    }
+
+    private static List<String> accessibleNames(Container container) {
+        List<String> names = new ArrayList<>();
+        for (Component child : container.getComponents()) {
+            if (child instanceof JComponent component && component.getAccessibleContext().getAccessibleName() != null) {
+                names.add(component.getAccessibleContext().getAccessibleName());
+            }
+            if (child instanceof Container nested) names.addAll(accessibleNames(nested));
+        }
+        return names;
     }
 
     private static List<String> labels(Container container) {

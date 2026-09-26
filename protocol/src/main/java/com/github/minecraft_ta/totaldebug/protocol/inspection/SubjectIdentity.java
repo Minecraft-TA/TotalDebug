@@ -23,7 +23,8 @@ public record SubjectIdentity(
 
     public enum Kind {
         BLOCK,
-        ENTITY
+        ENTITY,
+        ITEM
     }
 
     public SubjectIdentity {

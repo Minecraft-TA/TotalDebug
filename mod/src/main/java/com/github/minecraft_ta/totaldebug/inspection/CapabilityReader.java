@@ -6,6 +6,7 @@ import net.minecraft.core.Direction;
 import net.neoforged.neoforge.capabilities.BaseCapability;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.EntityCapability;
+import net.neoforged.neoforge.capabilities.ItemCapability;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,7 +14,7 @@ import java.util.List;
  * Built-in reader listing every registered capability, including modded ones, that a block or entity exposes, once
  * each. A block's capability whose context is a side is asked without a side and through each face; one that only
  * some of them expose says where. Capabilities without a context are asked without one, and others are skipped
- * because their context value is unknown. An entity is asked without a side.
+ * because their context value is unknown. An entity is asked without a side, and a stack without a context.
  */
 public final class CapabilityReader {
     private CapabilityReader() {
@@ -43,6 +44,13 @@ public final class CapabilityReader {
                         if (shown == null) shown = handler;
                     }
                     exposed += report(section, capability, shown, where(unsided != null, faces, facing));
+                }
+            }
+            case ScriptTarget.HeldStack held -> {
+                for (ItemCapability<?, ?> capability : ItemCapability.getAll()) {
+                    if (capability.contextClass() != void.class) continue;
+                    Object handler = ((ItemCapability<Object, Object>) capability).getCapability(held.stack(), null);
+                    exposed += report(section, capability, handler, "");
                 }
             }
             case ScriptTarget.LiveEntity entity -> {

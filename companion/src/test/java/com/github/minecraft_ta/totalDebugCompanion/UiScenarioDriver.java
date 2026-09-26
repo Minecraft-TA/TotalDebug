@@ -10,7 +10,7 @@ import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationService;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ContentBrowser;
 import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.ResourceBrowser;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.InspectionPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totalDebugCompanion.testui.OffscreenPopupFactory;
 import com.github.minecraft_ta.totalDebugCompanion.testui.UiTestScope;
@@ -549,7 +549,7 @@ final class UiScenarioDriver {
             case CONTENT -> context.once("content", () -> navigate(new NavigationTarget.Content("")));
             case INSPECTION -> {
                 context.once("inspection", () -> navigate(new NavigationTarget.Inspection(InspectionSample.SUBJECT)));
-                InspectionPanel panel = findComponent(mainWindow, InspectionPanel.class);
+                SubjectPanel panel = findComponent(mainWindow, SubjectPanel.class);
                 if (panel != null) {
                     context.once("inspection-read", () -> panel.session().present(InspectionSample.read(), null, text -> text));
                 }

@@ -152,6 +152,11 @@ public final class InspectionSession {
         return this.tools;
     }
 
+    /** Whether project tools run on this subject: blocks and entities, not stacks. */
+    public boolean readsTools() {
+        return this.identity.kind() != SubjectIdentity.Kind.ITEM;
+    }
+
     public boolean chosen(Path tool) {
         return this.chosen.contains(tool);
     }
@@ -195,7 +200,7 @@ public final class InspectionSession {
         if (!awaitReadiness(current, selected)) return;
         try {
             this.active = this.snippets.get().execute(source, selected, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parseWorld(this.subject.subject()), this.subject.gameSessionId()));
+                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.gameSessionId()));
         } catch (RuntimeException exception) {
             readFailed(exception.getMessage());
             scheduleLive(current);
@@ -340,13 +345,17 @@ public final class InspectionSession {
     /**
      * Loads the project's tools and runs those that apply, replacing earlier runs. Tools that ran before keep their
      * last read until the new one finishes. The result, also kept as the current tool run, completes when every tool
-     * has finished.
+     * has finished. Tools read blocks and entities; a stack runs none.
      */
     private CompletableFuture<Void> runTools(Side selected) {
         cancelTools();
         long current = ++this.toolRevision;
         CompletableFuture<Void> done = new CompletableFuture<>();
         this.toolRun = done;
+        if (!readsTools()) {
+            done.complete(null);
+            return done;
+        }
         CompletableFuture.supplyAsync(this::loadTools).whenComplete((loaded, failure) -> SwingUtilities.invokeLater(() -> {
             if (this.disposed || current != this.toolRevision) {
                 done.complete(null);
@@ -392,7 +401,7 @@ public final class InspectionSession {
             source = JavaSnippetSource.body(tool.name(), tool.text());
             source.requireExecutableSize();
             execution = this.snippets.get().execute(source, selected, ScriptExecutionEnvironment.POST_TICK,
-                    new ScriptSubject(SubjectRef.parseWorld(this.subject.subject()), this.subject.gameSessionId(), registryId));
+                    new ScriptSubject(SubjectRef.parseOccurrence(this.subject.subject()), this.subject.gameSessionId(), registryId));
         } catch (RuntimeException exception) {
             finishTool(tool, List.of(), "", failureText(exception.getMessage(), "The tool failed"));
             return CompletableFuture.completedFuture(null);

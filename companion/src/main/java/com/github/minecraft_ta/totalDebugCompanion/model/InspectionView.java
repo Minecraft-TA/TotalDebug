@@ -3,7 +3,8 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.runtime.RuntimeBinding;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.InspectionPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 
 import javax.swing.Icon;
@@ -14,13 +15,14 @@ import java.util.Objects;
 public final class InspectionView implements IEditorPanel {
     private final RuntimeBinding runtimeBinding;
     private final InspectSubjectPayload subject;
-    private final InspectionPanel panel;
+    private final SubjectPanel panel;
 
     public InspectionView(EditorContext context, InspectSubjectPayload subject, RuntimeBinding runtimeBinding) {
         this.runtimeBinding = runtimeBinding;
         this.subject = Objects.requireNonNull(subject, "subject");
-        this.panel = new InspectionPanel(subject, context.snippets(),
-                () -> context.project().scriptFiles(), context.itemIcons(), context.navigation()::navigate);
+        this.panel = SubjectPanel.occurrence(subject, context.snippets(), () -> context.project().scriptFiles(),
+                new DefinitionDetails.Services(context.project().catalog(), () -> context.project().sources(),
+                        context.itemIcons(), context.navigation()::navigate));
     }
 
     public InspectSubjectPayload subject() {

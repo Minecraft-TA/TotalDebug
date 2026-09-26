@@ -13,7 +13,7 @@ class CodeViewInputTest {
     void emptyScreenResolverFallsBackToTheContainerSlot() {
         AtomicBoolean containerLookupCalled = new AtomicBoolean();
 
-        CodeViewInput.resolveHoveredItem(
+        CodeViewInput.resolveScreenTarget(
                 (screen, mouseX, mouseY) -> Optional.empty(),
                 null,
                 10,
@@ -30,7 +30,6 @@ class CodeViewInputTest {
     @Test
     void screenResolverLifecycleRequiresTheSameInstalledInstance() {
         var input = new CodeViewInput(subject -> {
-        }, target -> {
         });
         ScreenItemStackResolver installed = (screen, mouseX, mouseY) -> Optional.empty();
         ScreenItemStackResolver other = (screen, mouseX, mouseY) -> Optional.empty();

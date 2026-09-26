@@ -9,7 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Protocol-20 payload. The client's description of a subject selected with the inspect key. {@code gameSessionId}
+ * Protocol-20 payload. The client's description of a subject selected with the inspect key: something in the game,
+ * or a definition when the selection is in no slot, such as an item in a recipe viewer. {@code gameSessionId}
  * identifies the joined world, so a later run can be rejected once that world is left. {@code identity} is what the
  * client saw at selection; reads report the current identity. {@code iconModel} is the item model shown for the
  * subject, or empty, and {@code iconTints} maps its tint indexes to ARGB colors.
@@ -25,7 +26,10 @@ public record InspectSubjectPayload(
 
     public InspectSubjectPayload {
         Objects.requireNonNull(gameSessionId, "gameSessionId");
-        SubjectRef.parseWorld(subject);
+        SubjectRef selected = SubjectRef.parse(Objects.requireNonNull(subject, "subject"));
+        if (!(selected instanceof SubjectRef.Occurrence) && !(selected instanceof SubjectRef.Definition)) {
+            throw new IllegalArgumentException(selected.format() + " is neither something in the game nor a definition");
+        }
         Objects.requireNonNull(identity, "identity");
         iconModel = Objects.requireNonNullElse(iconModel, "");
         iconTints = Map.copyOf(Objects.requireNonNullElse(iconTints, Map.of()));

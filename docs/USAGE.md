@@ -6,7 +6,7 @@ TotalDebug and Companion support Minecraft 1.21.1, NeoForge 21.1.250 or newer, W
 
 ## Source navigation
 
-Press F6 over a block, entity or inventory item to open its runtime class. Companion provides class and member search, Find Usages, hierarchy navigation and archive resources.
+Press F6 over a block or entity, or over a stack in an inventory or container screen, to open its page. The page shows what the subject is, with its classes, related entries, textures and files, and reads its current state live; a stack is followed while you keep it, even when it moves. An item in a recipe viewer or the creative item lists opens its definition page. Companion provides class and member search, Find Usages, hierarchy navigation and archive resources.
 
 Companion stays open when Minecraft exits. With the game's project selected, TotalDebug connects automatically whether Minecraft or Companion starts first, and reconnects after Companion restarts. Discovery watches the local application endpoint files; background connection never launches or focuses Companion or changes its selected project. Cached source, search and reference navigation remain available offline while the referenced archives and Java installation are present.
 
@@ -14,7 +14,7 @@ The index describes selected runtime archives and prepared class files. It does 
 
 ## Mods and registered content
 
-The Files view lists installed mods under **Mods**. Each mod groups its registered content by kind, its configuration files, key bindings and resources; opening the mod or a group shows the mod's page on the matching tab. Every entry of its content opens a definition page, which links the owning mod, the implementing class and related definitions. An inspection opened with F6 links to its mod and definition.
+The Files view lists installed mods under **Mods**. Each mod groups its registered content by kind, its configuration files, key bindings and resources; opening the mod or a group shows the mod's page on the matching tab. Every entry of its content opens a definition page, which links the owning mod, the implementing class and related definitions. A page opened with F6 is the same page with the subject's live state added.
 
 Search Everywhere finds mods, registered content of every kind, key bindings and resource paths alongside classes, symbols and text.
 

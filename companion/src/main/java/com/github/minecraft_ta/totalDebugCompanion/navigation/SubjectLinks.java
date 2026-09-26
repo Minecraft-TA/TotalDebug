@@ -19,7 +19,7 @@ public final class SubjectLinks {
         return switch (subject) {
             case SubjectRef.Mod mod -> new NavigationTarget.ModPage(mod.modId());
             case SubjectRef.Definition definition -> new NavigationTarget.Definition(definition);
-            case SubjectRef.InWorld world -> throw new IllegalArgumentException("Opening " + world.format()
+            case SubjectRef.Occurrence occurrence -> throw new IllegalArgumentException("Opening " + occurrence.format()
                     + " from a link requires its game session; select it in the game with F6");
         };
     }

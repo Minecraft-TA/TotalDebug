@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.vehicle.ContainerEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -44,6 +45,7 @@ public final class StorageReader {
         switch (target) {
             case ScriptTarget.PlacedBlock block -> readBlock(block, facts);
             case ScriptTarget.LiveEntity entity -> readEntity(entity.entity(), facts);
+            case ScriptTarget.HeldStack held -> readStack(held.stack(), facts);
         }
     }
 
@@ -84,15 +86,24 @@ public final class StorageReader {
     private static void readEntity(Entity entity, ScriptFacts facts) {
         facts.guarded("Items", () -> items(entity, () -> entity.getCapability(Capabilities.ItemHandler.ENTITY), facts));
         facts.guarded("Fluids", () -> fluids(entity.getCapability(Capabilities.FluidHandler.ENTITY, null), facts));
-        facts.guarded("Energy", () -> {
-            IEnergyStorage storage = entity.getCapability(Capabilities.EnergyStorage.ENTITY, null);
-            energy(storage, facts);
-            if (storage != null) {
-                facts.section("Energy")
-                        .text("Accepts energy", storage.canReceive() ? "Yes" : "No")
-                        .text("Provides energy", storage.canExtract() ? "Yes" : "No");
-            }
-        });
+        facts.guarded("Energy", () -> energyWithFlags(entity.getCapability(Capabilities.EnergyStorage.ENTITY, null), facts));
+    }
+
+    /** What a stack holds itself, such as a shulker box's items, a bucket's fluid or a battery's energy. */
+    private static void readStack(ItemStack stack, ScriptFacts facts) {
+        facts.guarded("Items", () -> items(stack, () -> stack.getCapability(Capabilities.ItemHandler.ITEM), facts));
+        facts.guarded("Fluids", () -> fluids(stack.getCapability(Capabilities.FluidHandler.ITEM), facts));
+        facts.guarded("Energy", () -> energyWithFlags(stack.getCapability(Capabilities.EnergyStorage.ITEM), facts));
+    }
+
+    /** Energy of something without sides, with whether it takes and gives energy at all. */
+    private static void energyWithFlags(IEnergyStorage storage, ScriptFacts facts) {
+        energy(storage, facts);
+        if (storage != null) {
+            facts.section("Energy")
+                    .text("Accepts energy", storage.canReceive() ? "Yes" : "No")
+                    .text("Provides energy", storage.canExtract() ? "Yes" : "No");
+        }
     }
 
     /**

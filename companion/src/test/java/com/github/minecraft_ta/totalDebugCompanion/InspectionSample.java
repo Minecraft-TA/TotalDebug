@@ -18,8 +18,8 @@ import java.util.Map;
 final class InspectionSample {
     static final SubjectIdentity IDENTITY = new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "testmod:widget_block",
             "block.testmod.widget_block", "Test Mod",
-            List.of(new SubjectIdentity.ClassLink("Block", "com.example.testmod.WidgetBlock"),
-                    new SubjectIdentity.ClassLink("Block entity", "com.example.testmod.WidgetBlockEntity")),
+            List.of(new SubjectIdentity.ClassLink("Class", "com.example.testmod.WidgetBlock"),
+                    new SubjectIdentity.ClassLink("Block entity class", "com.example.testmod.WidgetBlockEntity")),
             "");
     static final InspectSubjectPayload SUBJECT = new InspectSubjectPayload("ui-harness",
             "block minecraft:overworld 12 64 -3", IDENTITY, "", Map.of());

@@ -4,14 +4,18 @@ import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.script.SubjectIdentities;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.level.block.EntityBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -24,7 +28,7 @@ final class CodeTargetResolver {
     private CodeTargetResolver() {
     }
 
-    static Optional<WorldSubject> resolveWorldTarget(Minecraft minecraft) {
+    static Optional<Selection> resolveWorldTarget(Minecraft minecraft) {
         ClientLevel level = minecraft.level;
         if (level == null) {
             return Optional.empty();
@@ -55,17 +59,17 @@ final class CodeTargetResolver {
         return Optional.empty();
     }
 
-    private static WorldSubject block(ClientLevel level, String dimension, BlockPos position) {
+    private static Selection block(ClientLevel level, String dimension, BlockPos position) {
         BlockState state = level.getBlockState(position);
-        return new WorldSubject(
+        return new Selection(
                 new SubjectRef.Block(dimension, position.getX(), position.getY(), position.getZ()),
                 SubjectIdentities.block(state, level.getBlockEntity(position)),
                 ItemIcons.of(new ItemStack(state.getBlock().asItem()))
         );
     }
 
-    private static WorldSubject entity(Entity entity) {
-        return new WorldSubject(
+    private static Selection entity(Entity entity) {
+        return new Selection(
                 new SubjectRef.Entity(entity.getUUID()),
                 SubjectIdentities.entity(entity),
                 spawnEgg(entity).flatMap(ItemIcons::of)
@@ -77,28 +81,37 @@ final class CodeTargetResolver {
         return egg == null ? Optional.empty() : Optional.of(new ItemStack(egg));
     }
 
-    static Optional<Class<?>> resolveItemTarget(Minecraft minecraft, ItemStack itemStack) {
-        var level = minecraft.level;
-        if (level == null || itemStack.isEmpty()) {
+    /**
+     * The stack in a screen's slot. A stack in the player's inventory is named by its inventory slot, whatever screen
+     * shows it; one in an open container by that container's slot. The creative inventory's item lists are in no real
+     * slot, so their stacks open their item's definition.
+     */
+    static Optional<Selection> resolveSlotTarget(Minecraft minecraft, Screen screen, Slot slot) {
+        LocalPlayer player = minecraft.player;
+        if (player == null || !(screen instanceof AbstractContainerScreen<?> containerScreen) || !slot.hasItem()) {
             return Optional.empty();
         }
-
-        if (itemStack.getItem() instanceof SpawnEggItem spawnEgg) {
-            Entity entity = spawnEgg.getType(itemStack).create(level);
-            return entity == null ? Optional.empty() : Optional.of(entity.getClass());
-        }
-
-        if (itemStack.getItem() instanceof BlockItem blockItem) {
-            var block = blockItem.getBlock();
-            if (block instanceof EntityBlock entityBlock) {
-                BlockEntity blockEntity = entityBlock.newBlockEntity(BlockPos.ZERO, block.defaultBlockState());
-                if (blockEntity != null) {
-                    return Optional.of(blockEntity.getClass());
-                }
+        ItemStack stack = slot.getItem();
+        Inventory inventory = player.getInventory();
+        for (int index = 0; index < inventory.getContainerSize(); index++) {
+            if (inventory.getItem(index) == stack) {
+                return Optional.of(stack(new SubjectRef.Stack(player.getUUID(), SubjectRef.Stack.INVENTORY, index), stack));
             }
-            return Optional.of(block.getClass());
         }
+        if (screen instanceof CreativeModeInventoryScreen) {
+            return Optional.of(definition(stack));
+        }
+        return Optional.of(stack(new SubjectRef.Stack(player.getUUID(), containerScreen.getMenu().containerId, slot.index), stack));
+    }
 
-        return Optional.of(itemStack.getItem().getClass());
+    /** An item shown in no slot, such as in a recipe viewer: its definition. */
+    static Selection definition(ItemStack stack) {
+        SubjectRef.Definition definition = new SubjectRef.Definition("minecraft:item",
+                BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        return new Selection(definition, SubjectIdentities.stack(stack), ItemIcons.of(stack));
+    }
+
+    private static Selection stack(SubjectRef.Stack subject, ItemStack stack) {
+        return new Selection(subject, SubjectIdentities.stack(stack), ItemIcons.of(stack));
     }
 }

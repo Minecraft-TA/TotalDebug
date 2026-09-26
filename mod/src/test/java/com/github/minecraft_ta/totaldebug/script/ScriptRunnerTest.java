@@ -90,12 +90,12 @@ public class ScriptRunnerTest {
 
     @Test
     void targetIsResolvedOnlyWhenTheScriptAsksForIt() throws Exception {
-        List<SubjectRef.InWorld> resolved = new CopyOnWriteArrayList<>();
+        List<SubjectRef.Occurrence> resolved = new CopyOnWriteArrayList<>();
         ScriptTargetResolver targets = subject -> {
             resolved.add(subject);
             throw new IllegalStateException("The chunk containing 1 64 -2 in minecraft:overworld is not loaded");
         };
-        SubjectRef.InWorld subject = SubjectRef.parseWorld("block minecraft:overworld 1 64 -2");
+        SubjectRef.Occurrence subject = SubjectRef.parseOccurrence("block minecraft:overworld 1 64 -2");
         StatusRecorder unused = new StatusRecorder();
         StatusRecorder asked = new StatusRecorder();
         try (ScriptRunner quiet = runner((phase, task) -> { }, unused, Duration.ofMillis(50), targets);
@@ -120,7 +120,7 @@ public class ScriptRunnerTest {
         StatusRecorder statuses = new StatusRecorder();
         try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
             runner.runScript(83, script("IdentityFixture", "target(); return 1;"), ScriptExecutionEnvironment.THREAD,
-                    SubjectRef.parseWorld("block minecraft:overworld 1 64 -2"));
+                    SubjectRef.parseOccurrence("block minecraft:overworld 1 64 -2"));
 
             Status terminal = statuses.awaitTerminal();
 
@@ -136,7 +136,7 @@ public class ScriptRunnerTest {
             runner.runScript(84, script("ChangedSubjectFixture", """
                     facts().section("Furnace").text("Ran", true);
                     return 1;
-                    """), ScriptExecutionEnvironment.THREAD, SubjectRef.parseWorld("block minecraft:overworld 1 64 -2"),
+                    """), ScriptExecutionEnvironment.THREAD, SubjectRef.parseOccurrence("block minecraft:overworld 1 64 -2"),
                     "minecraft:furnace");
 
             Status terminal = statuses.awaitTerminal();
@@ -154,7 +154,7 @@ public class ScriptRunnerTest {
         StatusRecorder statuses = new StatusRecorder();
         try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
             runner.runScript(85, script("UnchangedSubjectFixture", "return 1;"), ScriptExecutionEnvironment.THREAD,
-                    SubjectRef.parseWorld("block minecraft:overworld 1 64 -2"), "minecraft:chest");
+                    SubjectRef.parseOccurrence("block minecraft:overworld 1 64 -2"), "minecraft:chest");
 
             assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
         }
@@ -167,7 +167,7 @@ public class ScriptRunnerTest {
     private static ScriptTargetResolver occupiedBy(SubjectIdentity identity) {
         return new ScriptTargetResolver() {
             @Override
-            public ScriptTarget resolve(SubjectRef.InWorld subject) {
+            public ScriptTarget resolve(SubjectRef.Occurrence subject) {
                 return null;
             }
 

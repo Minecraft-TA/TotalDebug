@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client;
 
-import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
+import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ class CodeViewOperationTest {
     @Test
     void inspectsTheResolvedWorldSubjectWithoutFocusingCompanion() {
         RecordingActions actions = new RecordingActions();
-        WorldSubject subject = new WorldSubject(
+        Selection subject = new Selection(
                 new SubjectRef.Block("minecraft:overworld", 1, 64, 2),
                 new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "minecraft:furnace", "Furnace", "Minecraft",
                         List.of(), "minecraft:furnace"),
@@ -27,35 +27,20 @@ class CodeViewOperationTest {
     }
 
     @Test
-    void opensTheResolvedClassWithoutFocusingCompanion() {
-        RecordingActions actions = new RecordingActions();
-
-        new CodeViewOperation(actions).openOrFocus(Optional.of(String.class));
-
-        assertEquals(List.of("open java.lang.String"), actions.events);
-    }
-
-    @Test
     void focusesCompanionWhenThereIsNoTarget() {
         RecordingActions actions = new RecordingActions();
 
         new CodeViewOperation(actions).inspectOrFocus(Optional.empty());
-        new CodeViewOperation(actions).openOrFocus(Optional.empty());
 
-        assertEquals(List.of("focus Companion", "focus Companion"), actions.events);
+        assertEquals(List.of("focus Companion"), actions.events);
     }
 
     private static final class RecordingActions implements CodeViewOperation.Actions {
         private final List<String> events = new ArrayList<>();
 
         @Override
-        public void inspect(WorldSubject subject) {
+        public void inspect(Selection subject) {
             this.events.add("inspect " + subject.subject().format());
-        }
-
-        @Override
-        public void openClass(Class<?> targetClass) {
-            this.events.add("open " + targetClass.getName());
         }
 
         @Override

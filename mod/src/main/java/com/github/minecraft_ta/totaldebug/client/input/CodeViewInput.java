@@ -4,7 +4,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.Slot;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
 import java.util.Objects;
@@ -13,28 +13,26 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Holds the one-press latch for F6: inspect the targeted block or entity, or open a hovered item's class. */
+/**
+ * Holds the one-press latch for F6: inspect the targeted block or entity, or in a screen the hovered stack. A stack in
+ * a slot is inspected live; one shown by a recipe viewer opens its item's definition.
+ */
 public final class CodeViewInput {
     private static final ScreenItemStackResolver NO_SCREEN_ITEM = (screen, mouseX, mouseY) -> Optional.empty();
 
-    private final Consumer<Optional<WorldSubject>> inspectWorldTarget;
-    private final Consumer<Optional<Class<?>>> openItemTarget;
+    private final Consumer<Optional<Selection>> inspect;
     private final AtomicReference<ScreenItemStackResolver> screenItemResolver = new AtomicReference<>(NO_SCREEN_ITEM);
     private boolean worldKeyWasDown;
     private Screen screenHoldingKey;
 
-    public CodeViewInput(
-            Consumer<Optional<WorldSubject>> inspectWorldTarget,
-            Consumer<Optional<Class<?>>> openItemTarget
-    ) {
-        this.inspectWorldTarget = Objects.requireNonNull(inspectWorldTarget, "inspectWorldTarget");
-        this.openItemTarget = Objects.requireNonNull(openItemTarget, "openItemTarget");
+    public CodeViewInput(Consumer<Optional<Selection>> inspect) {
+        this.inspect = Objects.requireNonNull(inspect, "inspect");
     }
 
     public void onClientTick(Minecraft minecraft, KeyMapping keyMapping) {
         boolean worldKeyIsDown = minecraft.screen == null && keyMapping.isDown();
         if (worldKeyIsDown && !this.worldKeyWasDown) {
-            this.inspectWorldTarget.accept(CodeTargetResolver.resolveWorldTarget(minecraft));
+            this.inspect.accept(CodeTargetResolver.resolveWorldTarget(minecraft));
         }
         this.worldKeyWasDown = worldKeyIsDown;
     }
@@ -59,14 +57,14 @@ public final class CodeViewInput {
         double mouseY = minecraft.mouseHandler.ypos()
                 * minecraft.getWindow().getGuiScaledHeight()
                 / minecraft.getWindow().getScreenHeight();
-        Optional<Class<?>> targetClass = resolveHoveredItem(
+        Screen screen = event.getScreen();
+        this.inspect.accept(resolveScreenTarget(
                 this.screenItemResolver.get(),
-                event.getScreen(),
+                screen,
                 mouseX,
                 mouseY,
-                () -> containerItem(event.getScreen())
-        ).flatMap(itemStack -> CodeTargetResolver.resolveItemTarget(minecraft, itemStack));
-        this.openItemTarget.accept(targetClass);
+                () -> slotUnderMouse(screen).flatMap(slot -> CodeTargetResolver.resolveSlotTarget(minecraft, screen, slot))
+        ));
         event.setCanceled(true);
     }
 
@@ -94,22 +92,22 @@ public final class CodeViewInput {
         }
     }
 
-    static Optional<ItemStack> resolveHoveredItem(
-            ScreenItemStackResolver screenResolver,
+    /** A recipe viewer's hovered stack opens its item's definition; otherwise the stack in the slot under the mouse. */
+    static Optional<Selection> resolveScreenTarget(
+            ScreenItemStackResolver viewerResolver,
             Screen screen,
             double mouseX,
             double mouseY,
-            Supplier<Optional<ItemStack>> containerItem
+            Supplier<Optional<Selection>> slotTarget
     ) {
-        return screenResolver.resolve(screen, mouseX, mouseY).or(containerItem);
+        return viewerResolver.resolve(screen, mouseX, mouseY).map(CodeTargetResolver::definition).or(slotTarget);
     }
 
-    private static Optional<ItemStack> containerItem(Screen screen) {
+    private static Optional<Slot> slotUnderMouse(Screen screen) {
         if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
             return Optional.empty();
         }
-
-        var slot = containerScreen.getSlotUnderMouse();
-        return slot != null && slot.hasItem() ? Optional.of(slot.getItem()) : Optional.empty();
+        Slot slot = containerScreen.getSlotUnderMouse();
+        return slot != null && slot.hasItem() ? Optional.of(slot) : Optional.empty();
     }
 }

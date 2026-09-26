@@ -2,7 +2,8 @@ package com.github.minecraft_ta.totalDebugCompanion.model;
 
 import com.github.minecraft_ta.totalDebugCompanion.navigation.NavigationTarget;
 import com.github.minecraft_ta.totalDebugCompanion.ui.EditorContext;
-import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionPanel;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.catalog.DefinitionDetails;
+import com.github.minecraft_ta.totalDebugCompanion.ui.components.inspection.SubjectPanel;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 
 import javax.swing.Icon;
@@ -10,15 +11,17 @@ import java.awt.Component;
 
 /** A tab showing one registered block, item or entity type. */
 public final class DefinitionView implements IEditorPanel {
-    private final DefinitionPanel panel;
+    private final SubjectRef.Definition subject;
+    private final SubjectPanel panel;
 
     public DefinitionView(EditorContext context, SubjectRef.Definition subject) {
-        this.panel = new DefinitionPanel(subject, context.project().catalog(), () -> context.project().sources(),
-                context.itemIcons(), context.navigation()::navigate);
+        this.subject = subject;
+        this.panel = SubjectPanel.definition(subject, new DefinitionDetails.Services(context.project().catalog(),
+                () -> context.project().sources(), context.itemIcons(), context.navigation()::navigate));
     }
 
     public SubjectRef.Definition subject() {
-        return this.panel.subject();
+        return this.subject;
     }
 
     @Override
@@ -28,7 +31,7 @@ public final class DefinitionView implements IEditorPanel {
 
     @Override
     public String getTooltip() {
-        return this.panel.subject().format();
+        return this.subject.format();
     }
 
     @Override
@@ -43,7 +46,7 @@ public final class DefinitionView implements IEditorPanel {
 
     @Override
     public NavigationTarget getNavigationTarget() {
-        return new NavigationTarget.Definition(this.panel.subject());
+        return new NavigationTarget.Definition(this.subject);
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client;
 
-import com.github.minecraft_ta.totaldebug.client.input.WorldSubject;
+import com.github.minecraft_ta.totaldebug.client.input.Selection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -12,20 +12,13 @@ final class CodeViewOperation {
         this.actions = Objects.requireNonNull(actions, "actions");
     }
 
-    void inspectOrFocus(Optional<WorldSubject> subject) {
+    void inspectOrFocus(Optional<Selection> subject) {
         Objects.requireNonNull(subject, "subject");
         subject.ifPresentOrElse(this.actions::inspect, this.actions::focusCompanion);
     }
 
-    void openOrFocus(Optional<Class<?>> targetClass) {
-        Objects.requireNonNull(targetClass, "targetClass");
-        targetClass.ifPresentOrElse(this.actions::openClass, this.actions::focusCompanion);
-    }
-
     interface Actions {
-        void inspect(WorldSubject subject);
-
-        void openClass(Class<?> targetClass);
+        void inspect(Selection subject);
 
         void focusCompanion();
     }

@@ -45,9 +45,12 @@ class InspectSubjectMessageTest {
     }
 
     @Test
-    void rejectsAnInvalidSubjectOrTooManyClasses() {
+    void acceptsSomethingInTheGameOrADefinitionAndRejectsTooManyClasses() {
         assertThrows(IllegalArgumentException.class, () -> new InspectSubjectPayload(
                 "game-session", "block nowhere", FURNACE, "", Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new InspectSubjectPayload(
+                "game-session", "mod minecraft", FURNACE, "", Map.of()));
+        new InspectSubjectPayload("game-session", "definition item minecraft:furnace", FURNACE, "", Map.of());
         assertThrows(IllegalArgumentException.class, () -> new SubjectIdentity(SubjectIdentity.Kind.ENTITY,
                 "minecraft:pig", "", "",
                 Collections.nCopies(SubjectIdentity.MAX_CLASSES + 1, new ClassLink("Entity", "X")), ""));

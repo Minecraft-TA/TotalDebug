@@ -34,6 +34,7 @@ public final class SubjectIcons {
             case SubjectRef.Definition definition -> ContentKinds.of(definition.registry()).icon();
             case SubjectRef.Block ignored -> Icons.BLOCK;
             case SubjectRef.Entity ignored -> Icons.ENTITY;
+            case SubjectRef.Stack ignored -> Icons.ITEM;
         };
     }
 }

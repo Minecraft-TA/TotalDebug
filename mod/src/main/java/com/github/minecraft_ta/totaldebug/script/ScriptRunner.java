@@ -105,7 +105,7 @@ public final class ScriptRunner implements AutoCloseable {
             int scriptId,
             ScriptBytecode bytecode,
             ScriptExecutionEnvironment environment,
-            SubjectRef.InWorld subject
+            SubjectRef.Occurrence subject
     ) {
         runScript(scriptId, bytecode, environment, subject, "");
     }
@@ -118,7 +118,7 @@ public final class ScriptRunner implements AutoCloseable {
             int scriptId,
             ScriptBytecode bytecode,
             ScriptExecutionEnvironment environment,
-            SubjectRef.InWorld subject,
+            SubjectRef.Occurrence subject,
             String expectedId
     ) {
         Objects.requireNonNull(bytecode, "bytecode");
@@ -217,7 +217,7 @@ public final class ScriptRunner implements AutoCloseable {
         ScriptExecutionOutcome outcome;
         AtomicReference<SubjectIdentity> identity = new AtomicReference<>();
         try {
-            SubjectRef.InWorld subject = run.subject;
+            SubjectRef.Occurrence subject = run.subject;
             outcome = compiledScript.execute(subject == null ? null : () -> resolve(run, identity),
                     !run.expectedId.isEmpty());
         } catch (Throwable throwable) {
@@ -382,7 +382,7 @@ public final class ScriptRunner implements AutoCloseable {
         private final int scriptId;
         private final ScriptBytecode bytecode;
         private final ScriptExecutionEnvironment environment;
-        private final SubjectRef.InWorld subject;
+        private final SubjectRef.Occurrence subject;
         private final String expectedId;
         private Future<?> loadingFuture;
         private Thread executionThread;
@@ -395,7 +395,7 @@ public final class ScriptRunner implements AutoCloseable {
                 int scriptId,
                 ScriptBytecode bytecode,
                 ScriptExecutionEnvironment environment,
-                SubjectRef.InWorld subject,
+                SubjectRef.Occurrence subject,
                 String expectedId
         ) {
             this.scriptId = scriptId;

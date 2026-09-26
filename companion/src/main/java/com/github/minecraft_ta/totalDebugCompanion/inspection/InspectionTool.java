@@ -105,6 +105,8 @@ public record InspectionTool(Path path, String name, String text, List<String> p
                             .text("Block entity", block.blockEntity() == null ? "None" : block.blockEntity().getClass().getSimpleName());
                     case ScriptTarget.LiveEntity entity -> facts().section("%2$s")
                             .text("Position", entity.entity().position());
+                    case ScriptTarget.HeldStack held -> facts().section("%2$s")
+                            .text("Count", held.stack().getCount());
                 }
                 return null;
                 """.formatted(registryId, title);

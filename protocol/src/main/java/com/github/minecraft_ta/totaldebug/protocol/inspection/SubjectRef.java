@@ -6,7 +6,8 @@ import java.util.regex.Pattern;
 
 /**
  * Names an inspected thing by where it is found, never by a retained object. Its text form is used on the wire and
- * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>}, {@code mod mekanism},
+ * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>},
+ * {@code stack <uuid> inventory 4}, {@code stack <uuid> menu 3 12}, {@code mod mekanism},
  * {@code definition item mekanism:energy_tablet} or {@code definition mekanism:chemical mekanism:hydrogen}.
  */
 public sealed interface SubjectRef {
@@ -38,6 +39,21 @@ public sealed interface SubjectRef {
                     throw new IllegalArgumentException("Invalid entity UUID: " + parts[1], exception);
                 }
             }
+            case "stack" -> {
+                boolean inventory = parts.length == 4 && parts[2].equals("inventory");
+                boolean menu = parts.length == 5 && parts[2].equals("menu");
+                if (!inventory && !menu) {
+                    throw new IllegalArgumentException("Expected: stack <player uuid> inventory <slot> or stack <player uuid> menu <id> <slot>");
+                }
+                UUID player;
+                try {
+                    player = UUID.fromString(parts[1]);
+                } catch (IllegalArgumentException exception) {
+                    throw new IllegalArgumentException("Invalid player UUID: " + parts[1], exception);
+                }
+                return inventory ? new Stack(player, Stack.INVENTORY, number(parts[3]))
+                        : new Stack(player, number(parts[3]), number(parts[4]));
+            }
             case "mod" -> {
                 if (parts.length != 2) {
                     throw new IllegalArgumentException("Expected: mod <mod id>");
@@ -54,13 +70,21 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** Parses a subject that game-side code can resolve in a loaded world. */
-    static InWorld parseWorld(String text) {
+    /** Parses a subject that game-side code can resolve: a block, an entity or a stack a player holds. */
+    static Occurrence parseOccurrence(String text) {
         SubjectRef subject = parse(text);
-        if (subject instanceof InWorld world) {
-            return world;
+        if (subject instanceof Occurrence occurrence) {
+            return occurrence;
         }
-        throw new IllegalArgumentException(subject.format() + " names a mod or definition, not a block or entity in the world");
+        throw new IllegalArgumentException(subject.format() + " names a mod or definition, not something in the game");
+    }
+
+    private static int number(String text) {
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Invalid number: " + text, exception);
+        }
     }
 
     private static int coordinate(String text) {
@@ -71,12 +95,12 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** A subject that exists in a loaded world and is resolved by the game. */
-    sealed interface InWorld extends SubjectRef permits Block, Entity {
+    /** Something in the game, which the game resolves: a block, an entity or a stack a player holds. */
+    sealed interface Occurrence extends SubjectRef permits Block, Entity, Stack {
     }
 
     /** A block position in a dimension. */
-    record Block(String dimension, int x, int y, int z) implements InWorld {
+    record Block(String dimension, int x, int y, int z) implements Occurrence {
         private static final int MAX_HORIZONTAL = 30_000_000;
         private static final int MAX_VERTICAL = 4_096;
 
@@ -98,7 +122,7 @@ public sealed interface SubjectRef {
     }
 
     /** An entity in any loaded dimension. */
-    record Entity(UUID uuid) implements InWorld {
+    record Entity(UUID uuid) implements Occurrence {
         public Entity {
             Objects.requireNonNull(uuid, "uuid");
         }
@@ -106,6 +130,30 @@ public sealed interface SubjectRef {
         @Override
         public String format() {
             return "entity " + this.uuid;
+        }
+    }
+
+    /**
+     * The stack in a player's slot when it was selected: a slot of their inventory, or of the container they had open,
+     * named by its menu id. The game follows that stack while the player keeps it, even when it moves.
+     */
+    record Stack(UUID player, int menu, int slot) implements Occurrence {
+        public static final int INVENTORY = -1;
+        private static final int MAX_SLOT = 4_096;
+
+        public Stack {
+            Objects.requireNonNull(player, "player");
+            if (menu < INVENTORY) {
+                throw new IllegalArgumentException("Invalid menu id: " + menu);
+            }
+            if (slot < 0 || slot > MAX_SLOT) {
+                throw new IllegalArgumentException("Invalid slot: " + slot);
+            }
+        }
+
+        @Override
+        public String format() {
+            return "stack " + this.player + (this.menu == INVENTORY ? " inventory " + this.slot : " menu " + this.menu + " " + this.slot);
         }
     }
 
