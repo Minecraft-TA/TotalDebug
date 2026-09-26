@@ -63,7 +63,8 @@ class FusionTextureRegionTest {
                 "adding the integer animation-frame offset must not move the sample into the next row");
         for (int y = 0; y < 17; y++) {
             for (int x = 0; x < 17; x++) {
-                assertEquals(image.getRGB(x * 2 / 17, 12 + y * 2 / 17), region.sampleScaled(x, y, 17, 17));
+                assertEquals(image.getRGB((int) ((x + 0.5) * 2 / 17), 12 + (int) ((y + 0.5) * 2 / 17)),
+                        region.sampleScaled(x, y, 17, 17), "scaled layers sample at target pixel centres");
             }
         }
     }

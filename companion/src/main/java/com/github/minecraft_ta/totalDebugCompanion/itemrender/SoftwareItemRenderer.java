@@ -205,6 +205,17 @@ final class SoftwareItemRenderer {
                 Vec3 normal = transformed[1].subtract(transformed[0])
                         .cross(transformed[2].subtract(transformed[0]))
                         .normalize();
+                Vec3 localNormal = modelVertices[1].subtract(modelVertices[0])
+                        .cross(modelVertices[2].subtract(modelVertices[0])).normalize();
+                Vec3 outward = applyGuiTransform(rootTransform.apply(applyElementRotation(
+                        modelVertices[0].add(localNormal), element.rotation())), transform).subtract(transformed[0]);
+                if (normal.dot(outward) < 0) {
+                    normal = normal.scale(-1);
+                }
+                // Items render with back faces culled; a rear face would otherwise blend through a translucent front.
+                if (normal.z() <= 0) {
+                    continue;
+                }
                 double brightness = brightness(guiLight, element.shade(), normal, face.faceData());
                 int tint = multiplyArgb(request.tintColor(face.tintIndex()), face.faceData().color());
                 triangles.add(new Triangle(vertices[0], vertices[1], vertices[2], texture, tint, brightness));

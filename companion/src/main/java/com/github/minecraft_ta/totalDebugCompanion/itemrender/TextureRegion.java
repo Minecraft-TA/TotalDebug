@@ -24,9 +24,10 @@ public record TextureRegion(BufferedImage image, double x, double y, double widt
                 this.y - Math.floor(this.y) + v * this.height);
     }
 
+    /** Samples at the centre of the target pixel, as the GPU does, so scaling does not favour the first texels. */
     int sampleScaled(int targetX, int targetY, int targetWidth, int targetHeight) {
-        return sampleLocal(this.x - Math.floor(this.x) + targetX * this.width / targetWidth,
-                this.y - Math.floor(this.y) + targetY * this.height / targetHeight);
+        return sampleLocal(this.x - Math.floor(this.x) + (targetX + 0.5) * this.width / targetWidth,
+                this.y - Math.floor(this.y) + (targetY + 0.5) * this.height / targetHeight);
     }
 
     private int sampleLocal(double localX, double localY) {

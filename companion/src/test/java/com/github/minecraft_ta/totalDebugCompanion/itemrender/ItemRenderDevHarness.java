@@ -325,7 +325,15 @@ public final class ItemRenderDevHarness {
                 .toList();
     }
 
+    /** Replaces the images of an earlier run, so the directory holds exactly this run's successes. */
     private static void writeImages(Path imageDirectory, ItemRenderBatchResult batch) throws IOException {
+        if (Files.isDirectory(imageDirectory)) {
+            try (var paths = Files.walk(imageDirectory)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.delete(path);
+                }
+            }
+        }
         for (ItemRenderBatchResult.Entry entry : batch.entries()) {
             if (!entry.succeeded() || entry.image() == null) {
                 continue;

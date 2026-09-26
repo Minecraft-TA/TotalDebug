@@ -46,6 +46,29 @@ class SoftwareItemRendererTest {
     }
 
     @Test
+    void cullsTheRearFaceOfATranslucentElementInEitherWinding() throws Exception {
+        BufferedImage texture = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        texture.setRGB(0, 0, 0x80FFFFFF);
+        writeTexture(texture);
+        for (int xScale : new int[]{1, -1}) {
+            writeModel("""
+                    {
+                      "gui_light": "front",
+                      "textures": { "surface": "test:item/pixels" },
+                      "display": { "gui": { "scale": [%d, 1, 1] } },
+                      "elements": [{
+                        "from": [0, 0, 4], "to": [16, 16, 12],
+                        "faces": { "north": { "texture": "#surface" }, "south": { "texture": "#surface" } }
+                      }]
+                    }
+                    """.formatted(xScale));
+
+            assertEquals(0x80FFFFFF, render(4).getRGB(1, 1),
+                    "only the front face blends, with x scale " + xScale);
+        }
+    }
+
+    @Test
     void samplesRightExtrusionFromTheOpaquePixelBeforeItsTransparentNeighbor() throws Exception {
         BufferedImage texture = new BufferedImage(3, 1, BufferedImage.TYPE_INT_ARGB);
         texture.setRGB(0, 0, 0xFFFF0000);
