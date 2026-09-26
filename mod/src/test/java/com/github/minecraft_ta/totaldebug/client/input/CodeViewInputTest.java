@@ -29,7 +29,8 @@ class CodeViewInputTest {
 
     @Test
     void screenResolverLifecycleRequiresTheSameInstalledInstance() {
-        var input = new CodeViewInput(target -> {
+        var input = new CodeViewInput(subject -> {
+        }, target -> {
         });
         ScreenItemStackResolver installed = (screen, mouseX, mouseY) -> Optional.empty();
         ScreenItemStackResolver other = (screen, mouseX, mouseY) -> Optional.empty();

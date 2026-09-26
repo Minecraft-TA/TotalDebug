@@ -8,6 +8,7 @@ import com.github.minecraft_ta.totalDebugCompanion.resource.FileTypeResolver;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionLaunchConfiguration;
 import com.github.minecraft_ta.totalDebugCompanion.session.CompanionTimeouts;
 import com.github.minecraft_ta.totalDebugCompanion.syntax.ManifestTokenMaker;
+import com.github.minecraft_ta.totalDebugCompanion.syntax.SnbtTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.syntax.TomlTokenMaker;
 import com.github.minecraft_ta.totalDebugCompanion.ui.theme.ThemeManager;
 import com.github.minecraft_ta.totalDebugCompanion.util.UIUtils;
@@ -144,6 +145,7 @@ public final class CompanionApp {
         mappings.putMapping(RSyntaxTextArea.SYNTAX_STYLE_JAVA, CustomJavaTokenMaker.class.getName());
         mappings.putMapping(FileTypeResolver.SYNTAX_STYLE_TOML, TomlTokenMaker.class.getName());
         mappings.putMapping(FileTypeResolver.SYNTAX_STYLE_MANIFEST, ManifestTokenMaker.class.getName());
+        mappings.putMapping(FileTypeResolver.SYNTAX_STYLE_SNBT, SnbtTokenMaker.class.getName());
     }
 
     private static void configureFonts() {

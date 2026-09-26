@@ -16,6 +16,8 @@ public final class ScriptProgramSource {
                 public final ServerLevel getServerOverworld() { return null; }
                 public final List<ServerLevel> getServerWorlds() { return null; }
                 public final List<ServerPlayer> getServerPlayers() { return null; }
+                public final ScriptFacts facts() { return null; }
+                public final ScriptTarget target() { return null; }
                 public final void logln(Object value) { }
                 public final void log(Object value) { }
                 protected final Object noResult() { return null; }

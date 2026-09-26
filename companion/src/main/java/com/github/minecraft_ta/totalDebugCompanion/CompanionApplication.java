@@ -26,7 +26,10 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
+import com.github.minecraft_ta.totalDebugCompanion.inspection.ItemIconService;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.StopScriptMessage;
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CompanionMcpServer;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
@@ -86,6 +89,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             () -> { throw new IllegalStateException("Runtime class index is not ready"); }, RuntimeSourceCatalog.empty());
     private final RuntimeIndexService runtimeIndexService;
     private final ScriptCompilationService scriptCompiler = new ScriptCompilationService(this::send, this::send);
+    private final ItemIconService itemIcons = new ItemIconService();
     private volatile CompanionMcpServer mcpServer;
     // Job tracking must survive HTTP shutdown so project retirement can still cancel submitted code.
     private volatile CodeModeJobService mcpJobs;
@@ -150,6 +154,12 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
             session = new CompanionSession(token, this::attachSelectedProfile, new CompanionSession.Listener() {
                 @Override public void openClass(OpenClassMessage message) {
                     CompanionApplication.this.openClass(message.binaryName(), message.targetType(), message.targetIdentifier());
+                }
+                @Override public void resourceSnapshot(ResourceSnapshotMessage message) {
+                    itemIcons.accept(message.archive(), message.layers());
+                }
+                @Override public void inspectSubject(InspectSubjectMessage message) {
+                    openOrQueue(new NavigationTarget.Inspection(message.payload()), NavigationService.Activation.ACTIVATE_WINDOW);
                 }
                 @Override public void focusWindow() { CompanionApplication.this.focusWindow(); }
                 @Override
@@ -250,6 +260,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         cancelReconnect("Companion is closing");
         cancelLaunch("Companion is closing");
         notifications.close();
+        itemIcons.close();
         if (executionRuns != null) executionRuns.close();
         if (editorRuns != null) editorRuns.close();
         try (var shutdown = RuntimePhase.start("companion.shutdown")) {
@@ -982,7 +993,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Create the window on the EDT");
         synchronized (lifecycleLock) { checkWindowCreation(); }
         MainWindow window = new MainWindow(this::currentScope, getDebuggerController(), codeInsightService,
-                scriptExecutions, executionRuns, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled);
+                scriptExecutions, executionRuns, notifications, editorRuns, runtimeIndexService, this::openDebugFrame, this::exit, this, this::setMcpEnabled, itemIcons);
         List<PendingNavigation> queued;
         try {
             synchronized (lifecycleLock) {

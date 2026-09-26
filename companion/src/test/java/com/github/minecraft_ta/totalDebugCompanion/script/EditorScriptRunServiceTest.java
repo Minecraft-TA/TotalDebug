@@ -69,7 +69,7 @@ class EditorScriptRunServiceTest {
             var context = window.editorContext();
             var runContext = new EditorContext(context.astCache(), context.analysisExecutor(), window, project,
                     context.insights(), context.debugger(), context.navigation(), context.scripts(),
-                    fixture.notifications, fixture.runs, context.inspectVariable());
+                    fixture.notifications, fixture.runs, context.inspectVariable(), context.snippets(), context.itemIcons());
             var treeField = MainWindow.class.getDeclaredField("fileTreeView");
             treeField.setAccessible(true);
             var actions = edt(() -> new ScriptFileActions(window, window.getEditorTabs(),

@@ -1,5 +1,7 @@
 package com.github.minecraft_ta.totaldebug.script;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.evaluation.InMemoryJavaCompiler;
 import com.github.minecraft_ta.totaldebug.protocol.execution.*;
 import com.github.minecraft_ta.totaldebug.tick.TickPhase;
@@ -16,6 +18,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ScriptRunnerTest {
+    private static final ScriptTargetResolver NO_TARGETS = subject -> {
+        throw new IllegalStateException("Tests have no world");
+    };
+
     @Test
     void concurrentCloseDoesNotWaitForTheFirstCallersResultCallback() throws Exception {
         Object serviceMonitor = new Object();
@@ -31,7 +37,7 @@ public class ScriptRunnerTest {
                 closingCallback.countDown();
                 synchronized (serviceMonitor) { }
             }
-        }, Duration.ofMillis(50), worker, monitor)) {
+        }, NO_TARGETS, Duration.ofMillis(50), worker, monitor)) {
             runner.runScript(70, script("ConcurrentCloseFixture", "return 42;"), ScriptExecutionEnvironment.POST_TICK);
             assertTrue(compiled.await(5, TimeUnit.SECONDS));
             worker.submit(() -> { }).get(5, TimeUnit.SECONDS);
@@ -60,13 +66,144 @@ public class ScriptRunnerTest {
         ScheduledExecutorService monitor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         StatusRecorder statuses = new StatusRecorder();
         try (ScriptRunner runner = new ScriptRunner(
-                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, statuses,
+                ScriptRunnerTest.class.getClassLoader(), (phase, task) -> { }, statuses, NO_TARGETS,
                 Duration.ofMillis(50), worker, monitor)) {
             runner.runScript(71, script("CloseCompilerFixture", "return 42;"), ScriptExecutionEnvironment.THREAD);
             assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
         }
         assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS), "Compiler cleanup did not finish");
 
+    }
+
+    @Test
+    void targetWithoutASubjectFailsWithAnActionableMessage() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50))) {
+            runner.runScript(80, script("NoTargetFixture", "return target();"), ScriptExecutionEnvironment.THREAD);
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertTrue(terminal.error().contains("This run has no target"), terminal.error());
+        }
+    }
+
+    @Test
+    void targetIsResolvedOnlyWhenTheScriptAsksForIt() throws Exception {
+        List<SubjectRef> resolved = new CopyOnWriteArrayList<>();
+        ScriptTargetResolver targets = subject -> {
+            resolved.add(subject);
+            throw new IllegalStateException("The chunk containing 1 64 -2 in minecraft:overworld is not loaded");
+        };
+        SubjectRef subject = SubjectRef.parse("block minecraft:overworld 1 64 -2");
+        StatusRecorder unused = new StatusRecorder();
+        StatusRecorder asked = new StatusRecorder();
+        try (ScriptRunner quiet = runner((phase, task) -> { }, unused, Duration.ofMillis(50), targets);
+             ScriptRunner asking = runner((phase, task) -> { }, asked, Duration.ofMillis(50), targets)) {
+            quiet.runScript(81, script("UnusedTargetFixture", "return 1;"), ScriptExecutionEnvironment.THREAD,
+                    subject);
+            assertEquals(ExecutionStatus.RUN_COMPLETED, unused.awaitTerminal().type());
+            assertTrue(resolved.isEmpty());
+
+            asking.runScript(82, script("AskedTargetFixture", "return target();"), ScriptExecutionEnvironment.THREAD,
+                    subject);
+            Status terminal = asked.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertTrue(terminal.error().contains("is not loaded"), terminal.error());
+            assertEquals(List.of(subject), resolved);
+        }
+    }
+
+    @Test
+    void theResolvedTargetsIdentityArrivesWithTheResult() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(83, script("IdentityFixture", "target(); return 1;"), ScriptExecutionEnvironment.THREAD,
+                    SubjectRef.parse("block minecraft:overworld 1 64 -2"));
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, terminal.type());
+            assertEquals(CHEST, terminal.status().identity());
+        }
+    }
+
+    @Test
+    void aRunForAChangedSubjectFailsBeforeAnyScriptCodeRuns() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(84, script("ChangedSubjectFixture", """
+                    facts().section("Furnace").text("Ran", true);
+                    return 1;
+                    """), ScriptExecutionEnvironment.THREAD, SubjectRef.parse("block minecraft:overworld 1 64 -2"),
+                    "minecraft:furnace");
+
+            Status terminal = statuses.awaitTerminal();
+
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, terminal.type());
+            assertEquals("The target changed: block minecraft:overworld 1 64 -2 is now minecraft:chest, "
+                    + "not minecraft:furnace", terminal.error());
+            assertEquals(List.of(), terminal.status().facts());
+            assertEquals(CHEST, terminal.status().identity());
+        }
+    }
+
+    @Test
+    void aRunForAnUnchangedSubjectRuns() throws Exception {
+        StatusRecorder statuses = new StatusRecorder();
+        try (ScriptRunner runner = runner((phase, task) -> { }, statuses, Duration.ofMillis(50), occupiedBy(CHEST))) {
+            runner.runScript(85, script("UnchangedSubjectFixture", "return 1;"), ScriptExecutionEnvironment.THREAD,
+                    SubjectRef.parse("block minecraft:overworld 1 64 -2"), "minecraft:chest");
+
+            assertEquals(ExecutionStatus.RUN_COMPLETED, statuses.awaitTerminal().type());
+        }
+    }
+
+    private static final SubjectIdentity CHEST = new SubjectIdentity(SubjectIdentity.Kind.BLOCK, "minecraft:chest",
+            "Chest", "Minecraft", List.of(), "minecraft:chest");
+
+    /** A resolver whose subject is always occupied by {@code identity}; tests have no world to return. */
+    private static ScriptTargetResolver occupiedBy(SubjectIdentity identity) {
+        return new ScriptTargetResolver() {
+            @Override
+            public ScriptTarget resolve(SubjectRef subject) {
+                return null;
+            }
+
+            @Override
+            public SubjectIdentity identify(ScriptTarget target) {
+                return identity;
+            }
+        };
+    }
+
+    @Test
+    void factsReportedByAScriptArriveWithItsResultEvenWhenItFails() throws Exception {
+        StatusRecorder completed = new StatusRecorder();
+        StatusRecorder failed = new StatusRecorder();
+        try (ScriptRunner first = runner((phase, task) -> { }, completed, Duration.ofMillis(50));
+             ScriptRunner second = runner((phase, task) -> { }, failed, Duration.ofMillis(50))) {
+            first.runScript(90, script("FactsFixture", """
+                    facts().section("Energy").bar("Stored", 1200, 50000, "FE").text("Accepts energy", "Yes");
+                    facts().section("Energy").text("Provides energy", "No");
+                    return 1;
+                    """), ScriptExecutionEnvironment.THREAD);
+            second.runScript(91, script("FailingFactsFixture", """
+                    facts().section("Partial").text("Read before failing", 1);
+                    throw new IllegalStateException("boom");
+                    """), ScriptExecutionEnvironment.THREAD);
+
+            assertEquals(List.of(new FactSection("Energy", List.of(
+                    Fact.bar("Stored", 1200, 50000, "FE"),
+                    Fact.text("Accepts energy", "Yes"),
+                    Fact.text("Provides energy", "No")
+            ), 3)), completed.awaitTerminal().status().facts());
+            Status failure = failed.awaitTerminal();
+            assertEquals(ExecutionStatus.RUN_EXCEPTION, failure.type());
+            assertEquals(List.of(new FactSection("Partial", List.of(Fact.text("Read before failing", "1")), 1)),
+                    failure.status().facts());
+        }
     }
 
     @Test
@@ -463,12 +600,22 @@ public class ScriptRunnerTest {
             ExecutionResultSink resultSink,
             Duration grace
     ) {
+        return runner(tickScheduler, resultSink, grace, NO_TARGETS);
+    }
+
+    private static ScriptRunner runner(
+            ScriptTickScheduler tickScheduler,
+            ExecutionResultSink resultSink,
+            Duration grace,
+            ScriptTargetResolver targets
+    ) {
         ExecutorService compilerExecutor = Executors.newSingleThreadExecutor(ScriptRunnerTest::daemonThread);
         ScheduledExecutorService stopExecutor = Executors.newSingleThreadScheduledExecutor(ScriptRunnerTest::daemonThread);
         return new ScriptRunner(
                 ScriptRunnerTest.class.getClassLoader(),
                 tickScheduler,
                 resultSink,
+                targets,
                 grace,
                 compilerExecutor,
                 stopExecutor

@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totaldebug.network.ForwardedExecutionResultAssemb
 import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.StopServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.script.ScriptRunner;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.script.ExecutionResultSink;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /** Routes authenticated Companion script requests to the client or negotiated game server. */
 public final class ClientScriptService implements AutoCloseable {
@@ -32,28 +34,36 @@ public final class ClientScriptService implements AutoCloseable {
     private final ExecutionResultSink resultSink;
     private final TickTaskScheduler tickTasks;
     private final ServerScriptTransport serverTransport;
+    private final Supplier<String> gameSession;
     private final ForwardedExecutionResultAssembler forwardedResults = new ForwardedExecutionResultAssembler();
     private final Map<Integer, Run> activeRuns = new ConcurrentHashMap<>();
     private final Map<Integer, Run> executions = new ConcurrentHashMap<>();
     private long nextExecutionId;
     private ScriptRunner runner;
 
-    public ClientScriptService(CompanionAppClient companionApp, TickTaskScheduler tickTasks) {
+    public ClientScriptService(
+            CompanionAppClient companionApp,
+            TickTaskScheduler tickTasks,
+            Supplier<String> gameSession
+    ) {
         this(
                 Objects.requireNonNull(companionApp, "companionApp")::sendExecutionResult,
                 tickTasks,
-                new ServerScriptTransport.NeoForge()
+                new ServerScriptTransport.NeoForge(),
+                gameSession
         );
     }
 
     ClientScriptService(
             ExecutionResultSink resultSink,
             TickTaskScheduler tickTasks,
-            ServerScriptTransport serverTransport
+            ServerScriptTransport serverTransport,
+            Supplier<String> gameSession
     ) {
         this.resultSink = Objects.requireNonNull(resultSink, "resultSink");
         this.tickTasks = Objects.requireNonNull(tickTasks, "tickTasks");
         this.serverTransport = Objects.requireNonNull(serverTransport, "serverTransport");
+        this.gameSession = Objects.requireNonNull(gameSession, "gameSession");
     }
 
     public void handleRunRequest(RunScriptMessage message) {
@@ -65,11 +75,26 @@ public final class ClientScriptService implements AutoCloseable {
             sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED, exception.getMessage());
             return;
         }
+        SubjectRef subject = null;
+        if (!message.subject().isEmpty()) {
+            if (!message.subjectSessionId().equals(this.gameSession.get())) {
+                sendUntrackedResult(message.scriptId(), ExecutionStatus.RUN_EXCEPTION,
+                        "The world containing this target was left; inspect it again");
+                return;
+            }
+            try {
+                subject = SubjectRef.parse(message.subject());
+            } catch (IllegalArgumentException exception) {
+                sendUntrackedResult(message.scriptId(), ExecutionStatus.COMPILATION_FAILED,
+                        "Invalid script target: " + exception.getMessage());
+                return;
+            }
+        }
 
         if (message.serverSide()) {
             runOnServer(message, environment);
         } else {
-            runOnClient(message, environment);
+            runOnClient(message, environment, subject);
         }
     }
 
@@ -90,7 +115,8 @@ public final class ClientScriptService implements AutoCloseable {
         }
         RunServerScriptPayload payload;
         try {
-            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment, message.serverSessionId());
+            payload = new RunServerScriptPayload(run.executionId(), message.bytecode(), environment,
+                    message.serverSessionId(), message.subject(), message.subjectExpectedId());
         } catch (IllegalArgumentException exception) {
             acceptResult(run.executionId(), ExecutionResult.fromStatus(ExecutionStatus.COMPILATION_FAILED,
                     exception.getMessage()), ExecutionSide.SERVER);
@@ -104,7 +130,7 @@ public final class ClientScriptService implements AutoCloseable {
         }
     }
 
-    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment) {
+    private void runOnClient(RunScriptMessage message, ScriptExecutionEnvironment environment, SubjectRef subject) {
         ScriptRunner activeRunner;
         try {
             activeRunner = runner();
@@ -121,7 +147,8 @@ public final class ClientScriptService implements AutoCloseable {
         if (run == null) {
             return;
         }
-        activeRunner.runScript(run.executionId(), message.bytecode(), environment);
+        activeRunner.runScript(run.executionId(), message.bytecode(), environment, subject,
+                message.subjectExpectedId());
     }
 
     public synchronized void stopScript(int scriptId) {
@@ -193,7 +220,8 @@ public final class ClientScriptService implements AutoCloseable {
         this.runner = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.CLIENT, phase, task),
-                (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT)
+                (scriptId, result) -> acceptResult(scriptId, result, ExecutionSide.CLIENT),
+                new ClientScriptTargets()
         );
         return this.runner;
     }

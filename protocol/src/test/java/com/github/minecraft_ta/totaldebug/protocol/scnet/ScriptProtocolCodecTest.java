@@ -37,6 +37,59 @@ class ScriptProtocolCodecTest {
         assertEquals("s", message.serverSessionId());
         assertTrue(message.serverSide());
         assertEquals("POST_TICK", message.executionEnvironment());
+        assertEquals("", message.subject());
+        assertEquals("", message.subjectSessionId());
+        assertEquals("", message.subjectExpectedId());
+    }
+
+    @Test
+    void runScriptCarriesItsSubjectAndGameSession() {
+        RunScriptMessage written = new RunScriptMessage(
+                7,
+                new ScriptBytecode("X", Map.of("X", new byte[]{1})),
+                "inventory",
+                false,
+                ScriptExecutionEnvironment.POST_TICK.name(),
+                "",
+                "block minecraft:overworld 1 64 -2",
+                "game-session",
+                "minecraft:furnace"
+        );
+        ByteBufferOutputStream output = new ByteBufferOutputStream();
+
+        written.write(output);
+        RunScriptMessage read = new RunScriptMessage();
+        read.read(new ByteBufferInputStream(ByteBuffer.wrap(writtenBytes(output))));
+
+        assertEquals("block minecraft:overworld 1 64 -2", read.subject());
+        assertEquals("game-session", read.subjectSessionId());
+        assertEquals("minecraft:furnace", read.subjectExpectedId());
+    }
+
+    @Test
+    void runScriptRejectsASubjectWithoutItsGameSession() {
+        assertThrows(IllegalArgumentException.class, () -> new RunScriptMessage(
+                7,
+                new ScriptBytecode("X", Map.of("X", new byte[]{1})),
+                "inventory",
+                false,
+                ScriptExecutionEnvironment.POST_TICK.name(),
+                "",
+                "entity 00000000-0000-0000-0000-000000000001",
+                "",
+                ""
+        ));
+        assertThrows(IllegalArgumentException.class, () -> new RunScriptMessage(
+                7,
+                new ScriptBytecode("X", Map.of("X", new byte[]{1})),
+                "inventory",
+                false,
+                ScriptExecutionEnvironment.POST_TICK.name(),
+                "",
+                "",
+                "",
+                "minecraft:furnace"
+        ));
     }
 
     @Test
@@ -68,7 +121,7 @@ class ScriptProtocolCodecTest {
 
         assertEquals(7, input.readInt());
         assertEquals("""
-                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false}}""", input.readString());
+                {"status":"RUN_COMPLETED","logs":{"text":"out","totalCharacters":3,"truncated":false},"value":{"type":{"text":"java.lang.Boolean","totalCharacters":17,"truncated":false},"value":{"text":"true","totalCharacters":4,"truncated":false},"preview":{"text":"","totalCharacters":0,"truncated":false},"kind":"BOOLEAN","identity":0,"totalChildren":0,"truncated":false,"children":[]},"error":{"text":"","totalCharacters":0,"truncated":false},"facts":[]}""", input.readString());
     }
 
     @Test

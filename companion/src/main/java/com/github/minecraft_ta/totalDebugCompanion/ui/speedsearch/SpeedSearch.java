@@ -129,6 +129,11 @@ public final class SpeedSearch implements AutoCloseable {
         return new SpeedSearch(SpeedSearchTargets.table(table, text), table);
     }
 
+    /** Searches a view's own entries, typed into the view's component. */
+    public static SpeedSearch install(SpeedSearchTarget target) {
+        return new SpeedSearch(target, target.component());
+    }
+
     public static SpeedSearch install(JTabbedPane tabs, IntFunction<String> text) {
         return new SpeedSearch(SpeedSearchTargets.tabs(tabs, text), tabs);
     }

@@ -3,6 +3,7 @@ package com.github.minecraft_ta.totaldebug.client.decompile;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.client.companion.CompanionAppClient;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
+import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -36,7 +37,19 @@ public final class ClientCodeOpenService {
         Objects.requireNonNull(targetClass, "targetClass");
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         String binaryName = targetClass.getName();
+        request(binaryName, "Opening " + binaryName, "Companion is opening " + binaryName,
+                () -> this.companionApp.openClassAndFocus(binaryName, sourceTarget,
+                        ClientCodeOpenService::releaseGameInput));
+    }
 
+    public void inspect(InspectSubjectPayload subject) {
+        Objects.requireNonNull(subject, "subject");
+        request(subject.subject(), "Inspecting " + subject.identity().title(),
+                "Companion is inspecting " + subject.identity().title(),
+                () -> this.companionApp.inspectAndFocus(subject, ClientCodeOpenService::releaseGameInput));
+    }
+
+    private void request(String key, String started, String sent, CompanionRequest action) {
         if (!TotalDebugConfig.CLIENT.useCompanionApp.get()) {
             showMessage(Component.literal("TotalDebug Companion is disabled in the client config")
                     .withStyle(ChatFormatting.YELLOW));
@@ -44,30 +57,29 @@ public final class ClientCodeOpenService {
         }
 
         synchronized (this.inFlightRequests) {
-            CompletableFuture<Void> existing = this.inFlightRequests.get(binaryName);
+            CompletableFuture<Void> existing = this.inFlightRequests.get(key);
             if (existing != null && !existing.isDone()) {
                 return;
             }
 
-            showMessage(Component.literal("Opening " + binaryName + "...").withStyle(ChatFormatting.GRAY));
+            showMessage(Component.literal(started + "...").withStyle(ChatFormatting.GRAY));
             CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
                 try {
-                    this.companionApp.openClassAndFocus(binaryName, sourceTarget, ClientCodeOpenService::releaseGameInput);
+                    action.run();
                 } catch (IOException exception) {
                     throw new CompletionException(exception);
                 }
             }, this.worker);
-            this.inFlightRequests.put(binaryName, task);
+            this.inFlightRequests.put(key, task);
             task.whenComplete((ignored, failure) -> {
                 try {
                     if (failure == null) {
-                        showMessage(Component.literal("Companion is opening " + binaryName)
-                                .withStyle(ChatFormatting.GRAY));
+                        showMessage(Component.literal(sent).withStyle(ChatFormatting.GRAY));
                     } else {
                         Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                                 ? failure.getCause()
                                 : failure;
-                        TotalDebug.LOGGER.error("Unable to open {} in Companion", binaryName, cause);
+                        TotalDebug.LOGGER.error("Companion request for {} failed", key, cause);
                         String detail = cause.getMessage() == null
                                 ? cause.getClass().getSimpleName()
                                 : cause.getMessage();
@@ -75,11 +87,16 @@ public final class ClientCodeOpenService {
                     }
                 } finally {
                     synchronized (this.inFlightRequests) {
-                        this.inFlightRequests.remove(binaryName, task);
+                        this.inFlightRequests.remove(key, task);
                     }
                 }
             });
         }
+    }
+
+    @FunctionalInterface
+    private interface CompanionRequest {
+        void run() throws IOException;
     }
 
     public void focusCompanion() {

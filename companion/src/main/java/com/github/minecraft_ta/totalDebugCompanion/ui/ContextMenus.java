@@ -87,6 +87,21 @@ public final class ContextMenus {
         });
     }
 
+    public static void installTable(JTable table, IntFunction<JPopupMenu> menu) {
+        install(table, point -> {
+            int row = table.rowAtPoint(point);
+            if (row < 0) return null;
+            table.getSelectionModel().setSelectionInterval(row, row);
+            return table.getSelectedRow() == row ? menu.apply(row) : null;
+        }, () -> menu.apply(table.getSelectedRow()), () -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return null;
+            Rectangle bounds = table.getCellRect(row, 0, true);
+            table.scrollRectToVisible(bounds);
+            return bounds;
+        });
+    }
+
     private static void install(JComponent owner, Function<Point, JPopupMenu> clicked,
                                 Supplier<JPopupMenu> selected, Supplier<Rectangle> bounds) {
         owner.addMouseListener(new MouseAdapter() {

@@ -7,6 +7,7 @@ import com.github.minecraft_ta.totalDebugCompanion.storage.InstanceState;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ExecutionResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import org.junit.jupiter.api.Test;
@@ -104,7 +105,9 @@ class ExecutionRunsTest {
         }
     }
 
-    @Test void disconnectWhileWaitingForAdmissionCannotSubmitToTheReplacementConnection() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void disconnectWhileWaitingForAdmissionCannotSubmitToTheReplacementConnection(boolean targeted) throws Exception {
         Object lifecycle = new Object();
         var project = new ProjectScope(lifecycle, new CompanionProfile("project", directory, directory), InstanceState.inMemory());
         var sent = new LinkedBlockingQueue<RunScriptMessage>();
@@ -119,8 +122,10 @@ class ExecutionRunsTest {
             connections.set(1);
             var recorder = new Recorder();
             int id = runs.open(recorder);
+            ScriptSubject subject = targeted ? new ScriptSubject(
+                    SubjectRef.parse("entity 0f8fad5b-d9cb-469f-a165-70867728950e"), "game-session", "minecraft:pig") : null;
             String source = "import fixture.ScriptProgram; public class Probe extends ScriptProgram { public Object run() { return null; } }";
-            var submission = new FutureTask<>(() -> runs.submit(id, project, source, false, ScriptExecutionEnvironment.THREAD));
+            var submission = new FutureTask<>(() -> runs.submit(id, project, source, false, ScriptExecutionEnvironment.THREAD, subject));
             Thread submitter = Thread.ofPlatform().unstarted(submission);
             synchronized (lifecycle) {
                 submitter.start();
@@ -136,11 +141,14 @@ class ExecutionRunsTest {
             assertEquals(List.of("disconnected " + id + " false"), recorder.events);
 
             int replacementId = runs.open(new Recorder());
-            assertTrue(runs.submit(replacementId, project, source, false, ScriptExecutionEnvironment.THREAD));
+            assertTrue(runs.submit(replacementId, project, source, false, ScriptExecutionEnvironment.THREAD, subject));
             // The single compiler worker processes the old submission first if it was wrongly accepted.
             RunScriptMessage message = sent.poll(10, TimeUnit.SECONDS);
             assertNotNull(message, "A fresh run must still execute on the replacement connection");
             assertEquals(replacementId, message.scriptId());
+            assertEquals(targeted ? subject.subject().format() : "", message.subject());
+            assertEquals(targeted ? subject.gameSessionId() : "", message.subjectSessionId());
+            assertEquals(targeted ? subject.expectedId() : "", message.subjectExpectedId());
             compiler.compile("public class Fence {}", "Fence").get(10, TimeUnit.SECONDS);
             assertTrue(sent.isEmpty(), "No untracked execution may be emitted");
         } finally {

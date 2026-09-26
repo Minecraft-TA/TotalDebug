@@ -13,7 +13,11 @@ public final class RunScriptMessage extends AbstractMessage {
     }
 
     public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId) {
-        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, serverSessionId);
+        this(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, serverSessionId, "", "", "");
+    }
+
+    public RunScriptMessage(int scriptId, ScriptBytecode bytecode, String inventoryId, boolean serverSide, String executionEnvironment, String serverSessionId, String subject, String subjectSessionId, String subjectExpectedId) {
+        this.payload = new RunScriptPayload(scriptId, bytecode, inventoryId, serverSide, executionEnvironment, serverSessionId, subject, subjectSessionId, subjectExpectedId);
     }
 
     @Override
@@ -46,5 +50,19 @@ public final class RunScriptMessage extends AbstractMessage {
 
     public String executionEnvironment() {
         return this.payload.executionEnvironment();
+    }
+
+    /** The target's subject text, or empty when the run has no target. */
+    public String subject() {
+        return this.payload.subject();
+    }
+
+    public String subjectSessionId() {
+        return this.payload.subjectSessionId();
+    }
+
+    /** The registry id the target must still have, or empty to accept whatever occupies the subject. */
+    public String subjectExpectedId() {
+        return this.payload.subjectExpectedId();
     }
 }

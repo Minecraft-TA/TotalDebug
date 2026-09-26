@@ -18,6 +18,9 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.Component;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /** Lazy Swing tree for the immutable result graph captured by a live snippet. */
 public final class ScriptResultTree extends JTree {
@@ -70,6 +73,60 @@ public final class ScriptResultTree extends JTree {
         this.root.add(node("result", null, snapshot, true));
         this.model.reload();
         setSelectionRow(0);
+    }
+
+    /** Shows a newer capture of the same result, keeping the branches that were expanded by their names. */
+    public void replaceResult(ExecutionValue snapshot) {
+        List<List<String>> expanded = new ArrayList<>();
+        var descendants = getExpandedDescendants(new TreePath(this.root));
+        if (descendants != null) {
+            while (descendants.hasMoreElements()) {
+                expanded.add(names(descendants.nextElement()));
+            }
+        }
+        expanded.sort(Comparator.comparingInt(List::size));
+        this.root.removeAllChildren();
+        this.root.add(node("result", null, snapshot, true));
+        this.model.reload();
+        for (List<String> names : expanded) {
+            TreePath path = find(names);
+            if (path != null) {
+                expandPath(path);
+            }
+        }
+    }
+
+    private static List<String> names(TreePath path) {
+        List<String> names = new ArrayList<>();
+        for (Object component : path.getPath()) {
+            if (component instanceof SnapshotNode node) {
+                names.add(node.row.name());
+            }
+        }
+        return names;
+    }
+
+    private TreePath find(List<String> names) {
+        DefaultMutableTreeNode current = this.root;
+        TreePath path = new TreePath(this.root);
+        for (String name : names) {
+            if (current instanceof SnapshotNode node) {
+                load(node);
+            }
+            DefaultMutableTreeNode next = null;
+            for (int index = 0; index < current.getChildCount(); index++) {
+                if (current.getChildAt(index) instanceof SnapshotNode child && child.row.name().equals(name)) {
+                    next = child;
+                    break;
+                }
+            }
+            if (next == null) {
+                return null;
+            }
+            current = next;
+            path = path.pathByAddingChild(next);
+        }
+        return path;
     }
 
     public void clearResult() {

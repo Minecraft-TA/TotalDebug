@@ -1,18 +1,48 @@
 package com.github.minecraft_ta.totaldebug.protocol.execution;
 
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
+import java.util.List;
 import java.util.Objects;
 
-/** Canonical, transport-safe update for one live Java execution. */
+/**
+ * Canonical, transport-safe update for one live Java execution. {@code facts} are sections the script reported and
+ * {@code identity} describes the target the run resolved, or is null when it resolved none.
+ */
 public record ExecutionResult(
         ExecutionStatus status,
         ExecutionText logs,
         ExecutionValue value,
-        ExecutionText error
+        ExecutionText error,
+        List<FactSection> facts,
+        SubjectIdentity identity
 ) {
     public ExecutionResult {
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(logs, "logs");
         Objects.requireNonNull(error, "error");
+        facts = List.copyOf(Objects.requireNonNullElse(facts, List.of()));
+        if (facts.size() > FactSection.MAX_SECTIONS) {
+            throw new IllegalArgumentException("An execution result carries at most " + FactSection.MAX_SECTIONS
+                    + " fact sections");
+        }
+        long dataBytes = facts.stream().flatMap(section -> section.facts().stream())
+                .filter(fact -> fact.data() != null).mapToLong(fact -> fact.data().size()).sum();
+        if (dataBytes > FactData.MAX_TOTAL_BYTES) {
+            throw new IllegalArgumentException("An execution result carries at most " + FactData.MAX_TOTAL_BYTES
+                    + " bytes of fact data");
+        }
+    }
+
+    public ExecutionResult(ExecutionStatus status, ExecutionText logs, ExecutionValue value, ExecutionText error) {
+        this(status, logs, value, error, List.of(), null);
+    }
+
+    public ExecutionResult withFacts(List<FactSection> sections) {
+        return new ExecutionResult(this.status, this.logs, this.value, this.error, sections, this.identity);
+    }
+
+    public ExecutionResult withIdentity(SubjectIdentity identity) {
+        return new ExecutionResult(this.status, this.logs, this.value, this.error, this.facts, identity);
     }
 
     public static ExecutionResult progress(ExecutionStatus status) {

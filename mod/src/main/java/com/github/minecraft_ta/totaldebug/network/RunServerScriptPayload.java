@@ -1,8 +1,10 @@
 package com.github.minecraft_ta.totaldebug.network;
 
 import com.github.minecraft_ta.totaldebug.TotalDebug;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.tth05.scnet.util.ByteBufferInputStream;
 import com.github.tth05.scnet.util.ByteBufferOutputStream;
 import net.minecraft.network.FriendlyByteBuf;
@@ -17,17 +19,23 @@ import java.util.Objects;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-/** Requests one bounded live-script run on the logical server. */
+/**
+ * Requests one bounded live-script run on the logical server. {@code subject} is the target's subject text, or empty
+ * for a run without a target; the server validates it before running. {@code subjectExpectedId}, when not empty, is
+ * the registry id the target must still have.
+ */
 public record RunServerScriptPayload(
         int scriptId,
         ScriptBytecode bytecode,
         ScriptExecutionEnvironment environment,
-        String serverSessionId
+        String serverSessionId,
+        String subject,
+        String subjectExpectedId
 ) implements CustomPacketPayload {
     /** Leaves room below Minecraft's 32 KiB server-bound custom-payload limit. */
     public static final int MAX_BYTECODE_BYTES = 30_000;
     public static final Type<RunServerScriptPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(TotalDebug.MOD_ID, "run_server_script_v3")
+            ResourceLocation.fromNamespaceAndPath(TotalDebug.MOD_ID, "run_server_script_v5")
     );
     public static final StreamCodec<FriendlyByteBuf, RunServerScriptPayload> STREAM_CODEC = new StreamCodec<>() {
         @Override
@@ -35,7 +43,9 @@ public record RunServerScriptPayload(
             int scriptId = buffer.readInt();
             ScriptBytecode bytecode = decodeBytecode(buffer.readByteArray(MAX_BYTECODE_BYTES));
             ScriptExecutionEnvironment environment = ScriptExecutionEnvironment.fromWireName(buffer.readUtf(32));
-            return new RunServerScriptPayload(scriptId, bytecode, environment, buffer.readUtf(64));
+            String serverSessionId = buffer.readUtf(64);
+            return new RunServerScriptPayload(scriptId, bytecode, environment, serverSessionId,
+                    buffer.readUtf(SubjectRef.MAX_TEXT_LENGTH), buffer.readUtf(SubjectIdentity.MAX_TEXT_LENGTH));
         }
 
         @Override
@@ -44,14 +54,25 @@ public record RunServerScriptPayload(
             buffer.writeByteArray(encodeBytecode(payload.bytecode));
             buffer.writeUtf(payload.environment.name(), 32);
             buffer.writeUtf(payload.serverSessionId, 64);
+            buffer.writeUtf(payload.subject, SubjectRef.MAX_TEXT_LENGTH);
+            buffer.writeUtf(payload.subjectExpectedId, SubjectIdentity.MAX_TEXT_LENGTH);
         }
     };
 
     public RunServerScriptPayload {
         Objects.requireNonNull(bytecode, "bytecode");
         Objects.requireNonNull(environment, "environment");
+        Objects.requireNonNull(subject, "subject");
+        Objects.requireNonNull(subjectExpectedId, "subjectExpectedId");
         if (serverSessionId == null || serverSessionId.isBlank() || serverSessionId.length() > 64) {
             throw new IllegalArgumentException("Missing server handshake identity");
+        }
+        if (subject.length() > SubjectRef.MAX_TEXT_LENGTH) {
+            throw new IllegalArgumentException("Script target text is too long");
+        }
+        if (subjectExpectedId.length() > SubjectIdentity.MAX_TEXT_LENGTH
+                || (subject.isEmpty() && !subjectExpectedId.isEmpty())) {
+            throw new IllegalArgumentException("Invalid expected script target id");
         }
         if (encodeBytecode(bytecode).length > MAX_BYTECODE_BYTES) {
             throw new IllegalArgumentException("Compressed server script exceeds " + MAX_BYTECODE_BYTES + " bytes");

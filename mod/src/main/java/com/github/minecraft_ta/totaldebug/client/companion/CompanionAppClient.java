@@ -17,6 +17,9 @@ import com.github.minecraft_ta.totaldebug.protocol.scnet.ReadyMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.DebugTargetMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.FocusWindowMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ResourceSnapshotMessage;
+import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
@@ -94,6 +97,7 @@ public final class CompanionAppClient implements AutoCloseable {
     }
     private final Object connectionLock = new Object();
     private volatile Connection connection;
+    private volatile ResourceSnapshotMessage resourceSnapshot;
     private volatile CompanionDiscovery discovery;
     private volatile BooleanSupplier companionEnabled = () -> true;
 
@@ -282,6 +286,16 @@ public final class CompanionAppClient implements AutoCloseable {
         send(new ExecutionResultMessage(scriptId, result));
     }
 
+    /**
+     * Tells Companion where to read item icon resources. The newest snapshot is kept and sent again when a session
+     * authenticates, since a capture can finish before its connection does.
+     */
+    public void sendResourceSnapshot(String archive, int layers) {
+        ResourceSnapshotMessage snapshot = new ResourceSnapshotMessage(archive, layers);
+        this.resourceSnapshot = snapshot;
+        send(snapshot);
+    }
+
     public synchronized void openClassAndFocus(
             String binaryName,
             SourceTarget sourceTarget,
@@ -292,6 +306,14 @@ public final class CompanionAppClient implements AutoCloseable {
         Objects.requireNonNull(sourceTarget, "sourceTarget");
         ensureConnectedAndReady();
         transferForeground(beforeTransfer, () -> enqueueOpenClass(binaryName, sourceTarget));
+    }
+
+    public synchronized void inspectAndFocus(InspectSubjectPayload subject, Runnable beforeTransfer)
+            throws IOException {
+        Objects.requireNonNull(subject, "subject");
+        Objects.requireNonNull(beforeTransfer, "beforeTransfer");
+        ensureConnectedAndReady();
+        transferForeground(beforeTransfer, () -> send(new InspectSubjectMessage(subject)));
     }
 
     public synchronized void focus(Runnable beforeFocus) throws IOException {
@@ -400,6 +422,8 @@ public final class CompanionAppClient implements AutoCloseable {
         attempt.authenticated.complete(null);
         send(new DebugTargetMessage("minecraft-client", "Minecraft Client", DebugTargetMessage.LOCAL_JVM, ProcessHandle.current().pid()));
         sendServerManifest();
+        ResourceSnapshotMessage snapshot = this.resourceSnapshot;
+        if (snapshot != null) send(snapshot);
         startRuntimeInventoryPreparation(false);
     }
 

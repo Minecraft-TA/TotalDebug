@@ -13,6 +13,7 @@ import com.github.minecraft_ta.totalDebugCompanion.model.LiteralUsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.model.IEditorPanel;
 import com.github.minecraft_ta.totalDebugCompanion.model.ResourceView;
 import com.github.minecraft_ta.totalDebugCompanion.model.ScriptView;
+import com.github.minecraft_ta.totalDebugCompanion.model.InspectionView;
 import com.github.minecraft_ta.totalDebugCompanion.model.UsagesView;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
@@ -268,6 +269,11 @@ public final class NavigationService {
                         () -> new LiteralUsagesView(editors.get(), usages.literal(), requestedRuntime)
                 ).thenAccept(LiteralUsagesView::restartSearch), activation);
                 case NavigationTarget.RuntimePackage runtimePackage -> revealRuntimePath(runtimePackage.ownerClassName(), runtimePackage.packageName().replace('.', '/'));
+                case NavigationTarget.Inspection inspection -> dispatchNavigation(() -> openRuntimeEditor(requestedRuntime,
+                        InspectionView.class,
+                        view -> view.shows(inspection.subject()),
+                        () -> new InspectionView(editors.get(), inspection.subject(), requestedRuntime)
+                ).thenAccept(InspectionView::refresh), activation);
                 case NavigationTarget.ModuleSearch search -> dispatchNavigation(() -> {
                     this.window.openSearchEverywhere(search);
                     return CompletableFuture.completedFuture(null);
@@ -698,6 +704,7 @@ public final class NavigationService {
             case NavigationTarget.LiteralUsages usages -> '"' + usages.literal() + '"';
             case NavigationTarget.RuntimePackage runtimePackage -> runtimePackage.packageName();
             case NavigationTarget.ModuleSearch ignored -> "Search Everywhere";
+            case NavigationTarget.Inspection inspection -> inspection.subject().subject();
         };
     }
 

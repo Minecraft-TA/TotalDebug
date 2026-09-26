@@ -9,6 +9,7 @@ import com.github.minecraft_ta.totaldebug.network.RunServerScriptPayload;
 import com.github.minecraft_ta.totaldebug.network.ServerManifestPayload;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionResult;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
+import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerSourceRequestMessage;
 import com.github.minecraft_ta.totaldebug.runtime.PreparedRuntimeSources;
@@ -144,6 +145,17 @@ public final class ServerScriptService {
             return;
         }
 
+        SubjectRef subject = null;
+        if (!payload.subject().isEmpty()) {
+            try {
+                subject = SubjectRef.parse(payload.subject());
+            } catch (IllegalArgumentException exception) {
+                sendCompilationFailure(server, player, payload.scriptId(),
+                        "Invalid script target: " + exception.getMessage());
+                return;
+            }
+        }
+
         ScriptRunner runner;
         try {
             runner = runnerFor(server, player);
@@ -157,7 +169,8 @@ public final class ServerScriptService {
             );
             return;
         }
-        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment());
+        runner.runScript(payload.scriptId(), payload.bytecode(), payload.environment(), subject,
+                payload.subjectExpectedId());
     }
 
     public void stopScript(ServerPlayer player, int scriptId) {
@@ -202,7 +215,8 @@ public final class ServerScriptService {
         ScriptRunner created = new ScriptRunner(
                 TotalDebug.class.getClassLoader(),
                 (phase, task) -> this.tickTasks.submit(TickDomain.SERVER, phase, task),
-                (scriptId, result) -> sendResult(server, player, scriptId, result)
+                (scriptId, result) -> sendResult(server, player, scriptId, result),
+                new ServerScriptTargets(server)
         );
         this.runners.put(playerId, new RunnerSession(player, created));
         return created;

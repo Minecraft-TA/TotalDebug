@@ -16,6 +16,7 @@ import com.github.minecraft_ta.totaldebug.storage.CacheFiles;
 import com.github.minecraft_ta.totaldebug.storage.RuntimePhase;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
@@ -64,6 +65,14 @@ public final class ScriptCompilationService implements AutoCloseable {
     private Baseline baseline;
     private Comparison comparison;
     private Set<String> compilingForServer;
+    /** Identical source compiled against the same runtime and server comparison yields identical bytecode. */
+    private record CompiledKey(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass) {}
+    private static final int MAX_COMPILED = 64;
+    private final Map<CompiledKey, CompilationResult> compiled = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<CompiledKey, CompilationResult> eldest) {
+            return size() > MAX_COMPILED;
+        }
+    };
 
     public ScriptCompilationService(Predicate<RunScriptMessage> sender,
                                     Predicate<ServerSourceRequestMessage> sourceRequester) {
@@ -216,6 +225,7 @@ public final class ScriptCompilationService implements AutoCloseable {
             }
             this.compiler = null;
             this.snapshot = snapshot;
+            this.compiled.clear();
             if (snapshot != null) {
                 this.compiler = new InMemoryJavaCompiler(standard ->
                         new IndexedJavaFileManager(standard, snapshot.index(), snapshot.sources(), () -> this.compilingForServer));
@@ -266,6 +276,12 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
                        Consumer<Failure> failureHandler) {
+        submit(id, source, serverSide, environment, null, failureHandler);
+    }
+
+    /** Compiles and sends a run whose {@code target()} resolves {@code subject}, or has no target when null. */
+    public void submit(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
+                       ScriptSubject subject, Consumer<Failure> failureHandler) {
         ReadySnapshot selected = this.snapshot;
         if (this.closed || selected == null) {
             failureHandler.accept(failure("The runtime class index is not ready for compilation"));
@@ -283,7 +299,7 @@ public final class ScriptCompilationService implements AutoCloseable {
         }
         synchronized (task) {
             try {
-                task.future = this.worker.submit(() -> compileAndSend(id, source, serverSide, environment, selected, server, task));
+                task.future = this.worker.submit(() -> compileAndSend(id, source, serverSide, environment, subject, selected, server, task));
             } catch (RuntimeException exception) {
                 this.pending.remove(id, task);
                 failureHandler.accept(failure("Unable to start compilation: " + exception.getMessage()));
@@ -292,7 +308,7 @@ public final class ScriptCompilationService implements AutoCloseable {
     }
 
     private void compileAndSend(int id, String source, boolean serverSide, ScriptExecutionEnvironment environment,
-                                ReadySnapshot selected, ServerSnapshot server, Pending task) {
+                                ScriptSubject subject, ReadySnapshot selected, ServerSnapshot server, Pending task) {
         try {
             var matcher = SCRIPT_CLASS.matcher(source);
             if (!matcher.find()) throw new IllegalArgumentException(
@@ -303,7 +319,9 @@ public final class ScriptCompilationService implements AutoCloseable {
             synchronized (task) {
                 if (this.pending.get(id) != task) return;
                 if (this.snapshot != selected || (server != null && this.serverSnapshot != server) || !this.sender.test(new RunScriptMessage(
-                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId()))) {
+                        id, compiled.bytecode(), compiled.inventoryId(), serverSide, environment.name(), server == null ? "" : server.sessionId(),
+                        subject == null ? "" : subject.subject().format(), subject == null ? "" : subject.gameSessionId(),
+                        subject == null ? "" : subject.expectedId()))) {
                     throw new IllegalStateException("Minecraft disconnected or the runtime changed before the script was submitted");
                 }
                 this.pending.remove(id, task);
@@ -316,6 +334,14 @@ public final class ScriptCompilationService implements AutoCloseable {
 
     private CompilationResult compileSelected(ReadySnapshot selected, ServerSnapshot server, String source, String entryClass,
                                                BooleanSupplier cancelled) throws Exception {
+        CompiledKey key = new CompiledKey(selected, server, source, entryClass);
+        synchronized (this.compilerLock) {
+            CompilationResult cached = this.compiled.get(key);
+            if (cached != null && !this.closed && this.snapshot == selected
+                    && (server == null || this.serverSnapshot == server)) {
+                return cached;
+            }
+        }
         return CacheFiles.locked(selected.indexFile().getParent(), () -> {
             synchronized (this.compilerLock) {
                 if (this.closed || this.snapshot != selected || (server != null && this.serverSnapshot != server) || cancelled.getAsBoolean()) {
@@ -325,8 +351,10 @@ public final class ScriptCompilationService implements AutoCloseable {
                         "id", selected.inventoryId());
                 this.compilingForServer = server == null ? null : server.unsupported();
                 try {
-                    return new CompilationResult(new ScriptBytecode(entryClass,
+                    CompilationResult result = new CompilationResult(new ScriptBytecode(entryClass,
                             this.compiler.compile(source, entryClass, "")), selected.inventoryId());
+                    this.compiled.put(key, result);
+                    return result;
                 } finally {
                     this.compilingForServer = null;
                 }

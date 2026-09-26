@@ -18,10 +18,10 @@ class CodeTargetResolverTest {
         BlockHitResult miss = BlockHitResult.miss(Vec3.ZERO, Direction.NORTH, BlockPos.ZERO);
         AtomicBoolean blockLookupCalled = new AtomicBoolean();
 
-        Optional<Class<?>> result = CodeTargetResolver.resolveWorldTarget(miss, position -> {
+        Optional<String> result = CodeTargetResolver.resolveWorldTarget(miss, position -> {
             blockLookupCalled.set(true);
-            return Optional.of(String.class);
-        });
+            return Optional.of("block");
+        }, entity -> Optional.of("entity"));
 
         assertTrue(result.isEmpty());
         assertFalse(blockLookupCalled.get());

@@ -65,6 +65,30 @@ class ClientScriptServiceTest {
     }
 
     @Test
+    void forwardsTheTargetOfAServerRun() {
+        List<Status> statuses = new ArrayList<>();
+        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
+        ClientScriptService service = service(statuses, transport);
+
+        service.handleRunRequest(targetedServerRun(5, "game-session"));
+
+        assertEquals("block minecraft:overworld 1 64 -2", transport.runs.getFirst().subject());
+    }
+
+    @Test
+    void rejectsATargetFromAWorldThatWasLeft() {
+        List<Status> statuses = new ArrayList<>();
+        FakeServerTransport transport = new FakeServerTransport(ServerScriptTransport.Availability.supported());
+        ClientScriptService service = service(statuses, transport);
+
+        service.handleRunRequest(targetedServerRun(6, "earlier-session"));
+
+        assertTrue(transport.runs.isEmpty());
+        assertEquals(List.of(new Status(6, ExecutionResult.failed("", null,
+                "The world containing this target was left; inspect it again"))), statuses);
+    }
+
+    @Test
     void ignoresAForwardedStatusForAClientOrUnknownRun() {
         List<Status> statuses = new ArrayList<>();
         ClientScriptService service = service(
@@ -167,7 +191,8 @@ class ClientScriptServiceTest {
         return new ClientScriptService(
                 (scriptId, status) -> statuses.add(new Status(scriptId, status)),
                 new TickTaskScheduler(),
-                transport
+                transport,
+                () -> "game-session"
         );
     }
 
@@ -178,6 +203,12 @@ class ClientScriptServiceTest {
     private static RunScriptMessage serverRun(int scriptId) {
         return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
                 "inventory", true, ScriptExecutionEnvironment.THREAD.name(), "server-session");
+    }
+
+    private static RunScriptMessage targetedServerRun(int scriptId, String gameSession) {
+        return new RunScriptMessage(scriptId, new ScriptBytecode("Test", Map.of("Test", new byte[]{1, 2})),
+                "inventory", true, ScriptExecutionEnvironment.POST_TICK.name(), "server-session",
+                "block minecraft:overworld 1 64 -2", gameSession, "");
     }
 
     private record Status(int scriptId, ExecutionResult status) {

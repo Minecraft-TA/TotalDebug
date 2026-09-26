@@ -183,6 +183,8 @@ class JavaSnippetSourceTest {
         assertTrue(source.contains("package com.github.minecraft_ta.totaldebug.script"));
         assertTrue(source.contains("public abstract Object run() throws Throwable"));
         assertTrue(source.contains("protected final Object noResult()"));
+        assertTrue(source.contains("public final ScriptFacts facts()"));
+        assertTrue(source.contains("public final ScriptTarget target()"));
         assertFalse(source.contains("resultValue"));
         assertFalse(source.contains("setAccessible"));
     }
