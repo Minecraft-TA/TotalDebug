@@ -47,10 +47,16 @@ class PrismGameLaunchTest {
             fixture.process.exit(0);
             assertFalse(requested.isDone(), "Prism can exit after handing off to its existing process");
             var other = CompanionProfile.forGame(Files.createDirectories(root.resolve("other")));
+            // The server frees its client slot only after the socket closes; a new connection is refused until then.
+            var released = new CountDownLatch(1);
+            app.session().server().addConnectionListener(new IConnectionListener() {
+                @Override public void onConnected() { }
+                @Override public void onDisconnected() { released.countDown(); }
+            });
             try (var wrong = fixture.connect(other, false)) {
                 assertFalse(requested.isDone(), "Another instance cannot satisfy the launch");
             }
-            await(() -> !app.session().hasClient());
+            assertTrue(released.await(5, TimeUnit.SECONDS), "the refused connection ended");
             try (var game = fixture.connect(fixture.profile, true)) {
                 requested.get(5, TimeUnit.SECONDS);
                 assertTrue(app.isConnected());
