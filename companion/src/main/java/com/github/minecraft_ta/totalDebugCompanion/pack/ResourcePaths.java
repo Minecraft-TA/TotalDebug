@@ -3,10 +3,14 @@ package com.github.minecraft_ta.totalDebugCompanion.pack;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ArchiveEntrySource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.ContentSource;
 import com.github.minecraft_ta.totalDebugCompanion.resource.LocalFileSource;
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -16,6 +20,8 @@ import java.util.Set;
 
 /** Where a file sits in a pack, what the running game reloads to use it, and whether its text is usable. */
 public final class ResourcePaths {
+    /** Reads JSON the way the game's {@code GsonHelper} does, with the reader's own leniency. */
+    private static final TypeAdapter<JsonElement> ELEMENTS = new Gson().getAdapter(JsonElement.class);
     /** Data folders the game reads only when a world loads: its dynamic registries. */
     private static final Set<String> WORLD_LOAD_FOLDERS = Set.of("worldgen", "dimension", "dimension_type",
             "damage_type", "chat_type", "trim_pattern", "trim_material", "wolf_variant", "painting_variant",
@@ -53,6 +59,8 @@ public final class ResourcePaths {
         for (int index = normalized.getNameCount() - 3; index >= 0; index--) {
             String name = normalized.getName(index).toString();
             if (!name.equals("assets") && !name.equals("data")) continue;
+            // A pack's root holds pack.mcmeta; a folder at the top of the file system has no root above it.
+            if (index == 0) continue;
             Path root = normalized.getRoot().resolve(normalized.subpath(0, index));
             if (!Files.isRegularFile(root.resolve("pack.mcmeta")) && !Files.isDirectory(root.resolve("META-INF"))) continue;
             return resource(root.relativize(normalized).toString().replace('\\', '/'));
@@ -78,26 +86,30 @@ public final class ResourcePaths {
     }
 
     /**
-     * Checks text the game parses as JSON, the way it parses it; a language file must be one object of strings.
+     * Checks text the game parses as JSON, the way it parses it: strictly, except language files, which the game reads
+     * leniently. A language file must be one object whose values are text, or lists of components as NeoForge allows.
      * Returns the problem, with its line when the parser names one, or empty.
      */
     public static Optional<String> check(String path, String text) {
         String lower = path.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".json") && !lower.endsWith(".mcmeta")) return Optional.empty();
+        boolean language = apply(path) == Apply.LANGUAGE;
         JsonElement parsed;
         try {
-            parsed = JsonParser.parseString(text);
-        } catch (JsonParseException invalid) {
-            Throwable cause = invalid.getCause() == null ? invalid : invalid.getCause();
+            JsonReader reader = new JsonReader(new StringReader(text));
+            reader.setLenient(language);
+            parsed = ELEMENTS.read(reader);
+        } catch (IOException | JsonParseException invalid) {
+            Throwable cause = invalid instanceof JsonParseException && invalid.getCause() != null ? invalid.getCause() : invalid;
             return Optional.of("Not valid JSON: " + cause.getMessage());
         }
         if (parsed.isJsonNull()) return Optional.of("Not valid JSON: the file holds no value");
-        if (apply(path) == Apply.LANGUAGE) {
+        if (language) {
             if (!parsed.isJsonObject()) return Optional.of("A language file holds one object of translations");
             for (Map.Entry<String, JsonElement> entry : parsed.getAsJsonObject().entrySet()) {
                 JsonElement value = entry.getValue();
-                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
-                    return Optional.of("The translation of " + entry.getKey() + " is not a string");
+                if (!value.isJsonPrimitive() && !value.isJsonArray()) {
+                    return Optional.of("The translation of " + entry.getKey() + " is not text or a list of components");
                 }
             }
         }

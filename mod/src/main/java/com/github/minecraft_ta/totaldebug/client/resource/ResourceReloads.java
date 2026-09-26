@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Reloads what Companion's edited resources need: the language, every client resource, or the singleplayer server's
@@ -113,7 +114,7 @@ public final class ResourceReloads {
             for (String id : packs.getAvailableIds()) {
                 if (!disabled.contains(id) && !selected.contains(id)) selected.add(id);
             }
-            if (!managedPack.isEmpty() && selected.remove(managedPack)) selected.add(managedPack);
+            if (!managedPack.isEmpty() && selected.contains(managedPack)) placeOnTop(selected, managedPack, fixedAtTop(packs));
             return server.reloadResources(selected);
         }, server).thenCompose(reload -> reload);
     }
@@ -128,10 +129,28 @@ public final class ResourceReloads {
         List<String> ordered = packs.getSelectedPacks().stream().filter(pack -> !pack.isFixedPosition()).map(Pack::getId).toList();
         if (!ordered.isEmpty() && ordered.getLast().equals(id)) return false;
         List<String> selected = new ArrayList<>(packs.getSelectedIds());
-        selected.remove(id);
-        selected.add(id);
+        placeOnTop(selected, id, fixedAtTop(packs));
         packs.setSelected(selected);
         return true;
+    }
+
+    /**
+     * Moves {@code id} above every pack the player orders but below the packs fixed at the top, such as the in-memory
+     * pack. The repository keeps the order it is given, even for a fixed pack, so the order is made here.
+     */
+    static void placeOnTop(List<String> selected, String id, Predicate<String> fixedAtTop) {
+        selected.remove(id);
+        int index = selected.size();
+        while (index > 0 && fixedAtTop.test(selected.get(index - 1))) index--;
+        selected.add(index, id);
+    }
+
+    /** Whether a pack of {@code packs} keeps its place at the top, such as the in-memory pack; vanilla is fixed at the bottom. */
+    private static Predicate<String> fixedAtTop(PackRepository packs) {
+        return id -> {
+            Pack pack = packs.getPack(id);
+            return pack != null && pack.isFixedPosition() && pack.getDefaultPosition() == Pack.Position.TOP;
+        };
     }
 
     private static String message(Throwable failure) {

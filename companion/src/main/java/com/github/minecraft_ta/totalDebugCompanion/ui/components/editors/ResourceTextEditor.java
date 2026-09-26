@@ -68,7 +68,9 @@ final class ResourceTextEditor extends JPanel {
     private List<ChangeRecord.Change> seen;
     /** The text tried in the game, or null. */
     private String triedText;
-    /** The managed pack the text is saved in, or null for the current world's until it is known. */
+    /** The managed pack the opened file lies in, which stays the target, or null to save into the current world's. */
+    private final Path opened;
+    /** The managed pack the shown copies were read from, or null until they are read. */
     private Path pack;
     /** The managed pack the text is saved in, as the bar names it. */
     private String packName = "the TotalDebug pack";
@@ -86,6 +88,7 @@ final class ResourceTextEditor extends JPanel {
         super(new BorderLayout());
         this.path = Objects.requireNonNull(path, "path");
         this.origin = Objects.requireNonNull(origin, "origin");
+        this.opened = pack;
         this.pack = pack;
         this.edits = Objects.requireNonNull(edits, "edits");
         this.openedText = content.value();
@@ -156,10 +159,10 @@ final class ResourceTextEditor extends JPanel {
     /** Shows the copy the game uses instead of the opened file's, and names a pack that overrides the managed one. */
     private void readCopies() {
         int started = this.writes;
-        Path opened = this.pack;
         CompletableFuture.supplyAsync(() -> {
             try {
-                Path pack = opened != null ? opened : this.edits.pack(this.path);
+                // Without an opened pack, the current world's is looked up each time: the player can open another world.
+                Path pack = this.opened != null ? this.opened : this.edits.pack(this.path);
                 return new Found(pack, this.edits.managed(pack, this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.tried(this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.overriddenBy(this.path).orElse(null));
@@ -172,11 +175,7 @@ final class ResourceTextEditor extends JPanel {
                 showNotice(message(failure), ThemeColors::error);
                 return;
             }
-            this.pack = found.pack();
-            this.packName = packName(found.pack());
-            this.seen = recorded();
-            this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S")
-                    .text("Checks the text, writes it into " + this.packName + " and reloads it in the game").html());
+            showPack(found.pack());
             // Without a managed copy, such as after a revert, the pack supplies the opened file's text again.
             this.managed = found.managed() != null;
             this.packText = this.managed ? found.managed() : this.openedText;
@@ -190,6 +189,15 @@ final class ResourceTextEditor extends JPanel {
             }
             changed();
         }));
+    }
+
+    /** Names the managed pack the shown text belongs to, and follows its entries in the change record. */
+    private void showPack(Path pack) {
+        this.pack = pack;
+        this.packName = packName(pack);
+        this.seen = recorded();
+        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S")
+                .text("Checks the text, writes it into " + this.packName + " and reloads it in the game").html());
     }
 
     /** A managed pack as the bar names it: the resource pack, or the datapack of a world by its folder. */
@@ -243,7 +251,8 @@ final class ResourceTextEditor extends JPanel {
         if (this.busy || this.text.text().equals(this.packText)) return;
         String edited = checked();
         if (edited == null) return;
-        run(this.edits.save(this.path, this.pack, edited.getBytes(StandardCharsets.UTF_8)), "Not saved: ", saved -> {
+        run(this.edits.save(this.path, this.opened, edited.getBytes(StandardCharsets.UTF_8)), "Not saved: ", saved -> {
+            showPack(saved.pack());
             this.packText = edited;
             this.managed = true;
             this.triedText = null;

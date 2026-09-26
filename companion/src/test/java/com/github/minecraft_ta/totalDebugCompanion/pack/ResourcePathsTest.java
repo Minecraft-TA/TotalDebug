@@ -42,13 +42,24 @@ class ResourcePathsTest {
     }
 
     @Test
+    void aFolderNamedDataAtTheTopOfTheFileSystemIsNoPack() {
+        Path file = Path.of("").toAbsolutePath().getRoot().resolve("data/mc/config/testmod.toml");
+        assertEquals(Optional.empty(), ResourcePaths.of(new LocalFileSource(file)));
+    }
+
+    @Test
     void checksJsonTheWayTheGameReadsIt() {
         assertEquals(Optional.empty(), ResourcePaths.check("assets/testmod/models/block/gear.json", "{\"parent\":\"block/cube\"}"));
         assertTrue(ResourcePaths.check("assets/testmod/models/block/gear.json", "{\"parent\":").orElseThrow().startsWith("Not valid JSON"));
         assertTrue(ResourcePaths.check("assets/testmod/models/block/gear.json", "  \n").orElseThrow().startsWith("Not valid JSON"),
-                "an empty file is no JSON value, though the parser reads it without an error");
-        assertEquals(Optional.of("The translation of item.testmod.gear is not a string"),
+                "an empty file holds no JSON value");
+        assertEquals(Optional.of("The translation of item.testmod.gear is not text or a list of components"),
                 ResourcePaths.check("assets/testmod/lang/en_us.json", "{\"item.testmod.gear\":{\"a\":1}}"));
         assertEquals(Optional.empty(), ResourcePaths.check("data/testmod/function/tick.mcfunction", "say {"));
+        // The game reads models and data strictly, but language files leniently, and NeoForge takes component lists.
+        assertTrue(ResourcePaths.check("data/testmod/recipe/gear.json", "{type: 'minecraft:crafting_shaped'}").isPresent());
+        assertEquals(Optional.empty(), ResourcePaths.check("assets/testmod/lang/en_us.json", "{item: 'Gear'}"));
+        assertEquals(Optional.empty(), ResourcePaths.check("assets/testmod/lang/en_us.json",
+                "{\"item.testmod.gear\":[{\"text\":\"Gear\",\"color\":\"red\"}],\"item.testmod.count\":3}"));
     }
 }

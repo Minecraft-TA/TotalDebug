@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.protocol.message.SetConfigValuePayload
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetConfigValueMessage;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -61,6 +62,25 @@ public final class ConfigGameValues {
     public CompletableFuture<String> set(ChangeRecord.Setting target, String fileLiteral, String literal) {
         Predicate<SetConfigValueMessage> send = this.game;
         if (send == null) return CompletableFuture.failedFuture(new IOException("Trying a value in the game needs the game running"));
+        Path world = serverConfigWorld(target.file());
+        if (world == null) return send(send, target, fileLiteral, literal);
+        // Looking at the world's lock reads a file, so it stays off the caller's thread.
+        return CompletableFuture.supplyAsync(() -> Worlds.isOpen(world)).thenCompose(open -> open
+                ? send(send, target, fileLiteral, literal)
+                : CompletableFuture.failedFuture(new IOException("The game applies a server configuration to the open world; "
+                        + world.getFileName() + " is not open")));
+    }
+
+    /** The world whose {@code serverconfig} holds {@code file}, or null for another configuration file. */
+    private static Path serverConfigWorld(Path file) {
+        Path folder = file.getParent();
+        if (folder == null || !folder.getFileName().toString().equals("serverconfig")) return null;
+        Path world = folder.getParent();
+        return world != null && world.getParent() != null && world.getParent().getFileName().toString().equals("saves") ? world : null;
+    }
+
+    private CompletableFuture<String> send(Predicate<SetConfigValueMessage> send, ChangeRecord.Setting target,
+                                           String fileLiteral, String literal) {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ConfigValueResultPayload> answer = new CompletableFuture<>();
         this.waiting.put(id, answer);

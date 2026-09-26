@@ -179,8 +179,15 @@ public final class ConfigChanges {
         Location location = location(target.file());
         Path world = location == Location.WORLD ? world(key.file()) : null;
         Effect effect = effect(type, restart, location, world);
-        // The game read the written file, which replaces a value tried in its memory.
-        if (effect == Effect.NOW) this.record.dropped(target, ChangeRecord.Level.GAME);
+        // The game read the written file, which replaces every value tried in its memory for that file.
+        if (effect == Effect.NOW) {
+            for (ChangeRecord.Change change : this.record.changes()) {
+                if (change.level() == ChangeRecord.Level.GAME && change.target() instanceof ChangeRecord.Setting tried
+                        && tried.file().equals(target.file())) {
+                    this.record.dropped(tried, ChangeRecord.Level.GAME);
+                }
+            }
+        }
         if (!effect.pending()) {
             this.pending.remove(key);
         } else if (earlier != null && earlier.applied().equals(written)) {

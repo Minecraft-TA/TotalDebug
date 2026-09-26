@@ -322,9 +322,14 @@ public final class ChangesPanel extends JPanel {
         return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).handle((ignored, failure) -> {
             List<String> failed = new ArrayList<>();
             for (int index = 0; index < requests.size(); index++) {
-                if (!requests.get(index).isCompletedExceptionally()) continue;
-                Throwable cause = requests.get(index).exceptionNow();
-                failed.add(reverted.get(index).name() + ": " + (cause.getCause() == null ? cause.getMessage() : cause.getCause().getMessage()));
+                CompletableFuture<?> request = requests.get(index);
+                String name = reverted.get(index).name();
+                if (request.isCompletedExceptionally()) {
+                    Throwable cause = request.exceptionNow();
+                    failed.add(name + ": " + (cause.getCause() == null ? cause.getMessage() : cause.getCause().getMessage()));
+                } else if (request.join() instanceof ResourceEdits.Saved saved && !saved.reloadFailure().isEmpty()) {
+                    failed.add(name + ": " + saved.reloadFailure());
+                }
             }
             return failed.isEmpty() ? "" : "Not reverted: " + String.join("; ", failed);
         });
@@ -627,12 +632,16 @@ public final class ChangesPanel extends JPanel {
                 "Put back the original value of " + total + (total == 1 ? " change?" : " changes?"),
                 "Revert All", JOptionPane.OK_CANCEL_OPTION);
         if (answer != JOptionPane.OK_OPTION) return;
-        for (Map.Entry<String, ChangeRecord.Change> entry : this.changes.entrySet()) {
-            ConfigWriter.Target target = this.targets.get(entry.getKey());
-            if (target != null) this.writer.edit(target, entry.getValue().current(), entry.getValue().original());
-        }
-        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources),
-                revertInGame(this.game));
+        Map<ConfigWriter.Target, ChangeRecord.Change> files = new LinkedHashMap<>();
+        this.changes.forEach((path, change) -> {
+            ConfigWriter.Target target = this.targets.get(path);
+            if (target != null) files.put(target, change);
+        });
+        CompletableFuture<String> inGame = revertInGame(this.game);
+        // Memory first: a file written back replaces the game's memory, while a late in-memory revert would outlast it.
+        inGame.whenComplete((ignored, failure) -> SwingUtilities.invokeLater(() ->
+                files.forEach((target, change) -> this.writer.edit(target, change.current(), change.original()))));
+        List<CompletableFuture<String>> reverts = List.of(revert(this.keys), revertResources(this.resources), inGame);
         // One status once every kind is done, so a later success never hides an earlier failure.
         report(CompletableFuture.allOf(reverts.toArray(CompletableFuture[]::new)).thenApply(ignored -> String.join("; ",
                 reverts.stream().map(CompletableFuture::join).filter(failure -> !failure.isEmpty()).toList())));
