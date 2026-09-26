@@ -72,6 +72,16 @@ For UI changes, the test harness renders named states without a game session:
 
 Contact sheets and individual captures are written under `companion/build/ui-screenshots`.
 
+## Offline item rendering
+
+The item renderer creates fresh previews from models and textures in directories, JARs and ZIP files while Minecraft is closed. It currently exposes a Java backend and a diagnostic runner. See [item rendering](docs/ITEM_RENDERING.md) for supported formats, resource ordering and report limitations.
+
+```powershell
+.\gradlew.bat :companion:itemRenderHarness '--args=--root=<minecraft-resources.jar> --root=<neoforge-client.jar> --mods=<mods-directory> --output=build/reports/item-render'
+```
+
+The runner resolves relative paths from `companion/` and writes reports there by default.
+
 ## Integrations and storage
 
 The [MCP API](MCP.md) exposes source queries, Java execution and debugger operations to trusted local clients. The [storage guide](../docs/STORAGE.md) describes scripts, settings, persisted debugger state and generated caches.
