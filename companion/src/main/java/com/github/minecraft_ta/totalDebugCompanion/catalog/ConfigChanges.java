@@ -6,6 +6,7 @@ import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -259,8 +260,9 @@ public final class ConfigChanges {
         if (world == null) return false;
         Path lock = world.resolve("session.lock");
         if (!Files.isRegularFile(lock)) return false;
-        try {
-            Files.readAllBytes(lock);
+        // Reading one byte is enough: Windows refuses any read of a locked file, however large it is.
+        try (InputStream input = Files.newInputStream(lock)) {
+            input.read();
         } catch (IOException locked) {
             return true;
         }

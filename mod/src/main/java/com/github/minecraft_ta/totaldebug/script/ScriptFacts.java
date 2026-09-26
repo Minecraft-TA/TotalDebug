@@ -97,7 +97,9 @@ public final class ScriptFacts {
             Fact problem = problemFact("Read failed", failure);
             if (this.retained && this.facts.size() >= FactSection.MAX_FACTS) {
                 this.total++;
-                this.facts.set(this.facts.size() - 1, problem);
+                Fact replaced = this.facts.set(this.facts.size() - 1, problem);
+                // Data leaving the read gives its bytes back to the read's budget.
+                if (replaced.data() != null) ScriptFacts.this.dataBudget += replaced.data().size();
             } else {
                 add(problem);
             }

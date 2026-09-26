@@ -235,7 +235,7 @@ final class SoftwareItemRenderer {
             ModelTransform rootTransform,
             GuiLight guiLight
     ) throws IOException {
-        int initialTriangleCount = triangles.size();
+        boolean anyFace = false;
         ModelTransform objTransform = rootTransform.isIdentity()
                 ? rootTransform
                 : rootTransform.around(new Vec3(0.5, 0.5, 0.5));
@@ -246,6 +246,7 @@ final class SoftwareItemRenderer {
             if (face.vertices().size() < 3) {
                 continue;
             }
+            anyFace = true;
             TextureRegion texture = face.texture() == null
                     ? WHITE_TEXTURE
                     : this.models.texture(model.resolveMeshTexture(face));
@@ -281,7 +282,8 @@ final class SoftwareItemRenderer {
                 triangles.add(new Triangle(vertices[0], vertices[2], vertices[3], texture, tint, brightness));
             }
         }
-        if (triangles.size() == initialTriangleCount) {
+        // Faces culled because they face away still draw nothing, as in the game: an empty image, not an error.
+        if (!anyFace) {
             throw noGeometry(model, "OBJ model has no visible faces");
         }
     }
