@@ -119,6 +119,35 @@ class ChangeRecordTest {
     }
 
     @Test
+    void aResourceIsKeptWithItsPackRelativeToTheInstance() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        ChangeRecord.Resource lang = new ChangeRecord.Resource("assets/testmod/lang/en_us.json",
+                this.directory.resolve("resourcepacks/TotalDebug"));
+        try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {
+            record.changed(lang, "", "0123");
+            assertThrows(IllegalArgumentException.class, () -> record.changed(new ChangeRecord.Resource(
+                    "assets/testmod/lang/de_de.json", this.directory.resolveSibling("elsewhere")), "", "0123"));
+        }
+        assertTrue(Files.readString(paths.changes()).contains("\"resourcepacks/TotalDebug\""),
+                "a pack is stored relative to the instance, like a setting's file");
+
+        try (ChangeRecord reopened = ChangeRecord.open(paths, this.directory)) {
+            assertEquals("", reopened.original(lang), "the pack had no copy before");
+            assertEquals("0123", reopened.change(lang).current());
+        }
+    }
+
+    @Test
+    void aResourceNameMayHoldDotsButNoPathSegmentLeavesThePack() {
+        Path pack = this.directory.resolve("resourcepacks/TotalDebug");
+        new ChangeRecord.Resource("assets/example/models/item/version..json", pack);
+        for (String path : List.of("assets/../config/a.json", "assets/a/./b.json", "assets//b.json", "config/a.json",
+                "assets\\a\\b.json")) {
+            assertThrows(IllegalArgumentException.class, () -> new ChangeRecord.Resource(path, pack), path);
+        }
+    }
+
+    @Test
     void anUntouchedInstanceWritesNoRecord() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
         try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {

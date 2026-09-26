@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 
@@ -110,6 +111,31 @@ final class ConfigWriter {
     /** Writes {@code after} in place of {@code before}, the value shown when the edit was made. */
     void edit(Target target, String before, String after) {
         write(new SettingStep(target, before, after), false, this::done, () -> { }, null);
+    }
+
+    /**
+     * Writes {@code after} in place of {@code before} as one of several reverts: shows nothing itself, and completes with
+     * why the setting kept its value, or empty.
+     */
+    CompletableFuture<String> revert(Target target, String before, String after) {
+        SettingStep step = new SettingStep(target, before, after);
+        return this.changes.write(() -> {
+            try {
+                return writeSetting(step);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        }).handle((result, failure) -> {
+            if (failure == null) {
+                SwingUtilities.invokeLater(() -> {
+                    done(result.step());
+                    this.written.run();
+                });
+                return "";
+            }
+            Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+            return target.setting().name() + ": " + cause.getMessage();
+        });
     }
 
     /**

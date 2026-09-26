@@ -32,7 +32,7 @@ public final class ResourceView implements IEditorPanel {
         this.context = context;
         this.source = Objects.requireNonNull(source, "source");
         this.fileType = FileTypeResolver.resolve(source.displayName());
-        this.panel = new ResourceViewPanel(source, this.fileType, context.navigation());
+        this.panel = new ResourceViewPanel(source, this.fileType, context.navigation(), context.project().resources());
     }
 
     public ContentSource source() {
@@ -68,6 +68,11 @@ public final class ResourceView implements IEditorPanel {
             return EditorLocation.forFile(localFile.path(), context.project().profile().workspaceDirectory());
         }
         return new EditorLocation(this.source.displayName(), List.of(), this.source.tooltip());
+    }
+
+    @Override
+    public boolean canClose() {
+        return this.panel.canClose();
     }
 
     @Override
