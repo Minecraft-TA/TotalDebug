@@ -38,14 +38,12 @@ class SubjectRefTest {
     }
 
     @Test
-    void stackTextRoundTripsForInventoryAndContainerSlots() {
-        UUID player = UUID.fromString("0f8fad5b-d9cb-469f-a165-70867728950e");
-
-        assertEquals(new SubjectRef.Stack(player, SubjectRef.Stack.INVENTORY, 4), SubjectRef.parse("stack " + player + " inventory 4"));
-        assertEquals("stack " + player + " menu 3 12", new SubjectRef.Stack(player, 3, 12).format());
-        assertEquals(new SubjectRef.Stack(player, 3, 12), SubjectRef.parseOccurrence("stack " + player + " menu 3 12"));
-        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack " + player + " menu 3"));
-        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack " + player + " inventory -2"));
+    void stackTextRoundTrips() {
+        assertEquals(new SubjectRef.Stack(7), SubjectRef.parse("stack 7"));
+        assertEquals("stack 7", new SubjectRef.Stack(7).format());
+        assertEquals(new SubjectRef.Stack(7), SubjectRef.parseOccurrence("stack 7"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack 0"));
+        assertThrows(IllegalArgumentException.class, () -> SubjectRef.parse("stack seven"));
     }
 
     @Test

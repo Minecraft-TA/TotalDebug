@@ -6,7 +6,7 @@ TotalDebug and Companion support Minecraft 1.21.1, NeoForge 21.1.250 or newer, W
 
 ## Source navigation
 
-Press F6 over a block or entity, or over a stack in an inventory or container screen, to open its page. The page shows what the subject is, with its classes, related entries, textures and files, and reads its current state live; a stack is followed while you keep it, even when it moves. An item in a recipe viewer or the creative item lists opens its definition page. Companion provides class and member search, Find Usages, hierarchy navigation and archive resources.
+Press F6 over a block or entity, or over a stack in any screen, to open its page: an inventory, a container, the creative lists or a recipe viewer. The page shows what the subject is, with its classes, related entries, textures and files, and its state. A block or entity is read live; a stack shows the state it had when F6 was pressed, and pressing F6 again shows its current state. Companion provides class and member search, Find Usages, hierarchy navigation and archive resources.
 
 Companion stays open when Minecraft exits. With the game's project selected, TotalDebug connects automatically whether Minecraft or Companion starts first, and reconnects after Companion restarts. Discovery watches the local application endpoint files; background connection never launches or focuses Companion or changes its selected project. Cached source, search and reference navigation remain available offline while the referenced archives and Java installation are present.
 

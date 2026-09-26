@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.client.script;
 
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.RunScriptMessage;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptBytecode;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ScriptExecutionEnvironment;
@@ -192,7 +193,8 @@ class ClientScriptServiceTest {
                 (scriptId, status) -> statuses.add(new Status(scriptId, status)),
                 new TickTaskScheduler(),
                 transport,
-                () -> "game-session"
+                () -> "game-session",
+                new KeptStacks()
         );
     }
 

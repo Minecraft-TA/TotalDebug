@@ -26,7 +26,6 @@ import com.github.minecraft_ta.totalDebugCompanion.debugger.DebuggerSessionContr
 import com.github.minecraft_ta.totalDebugCompanion.mcp.CodeModeJobService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptCompilationService;
 import com.github.minecraft_ta.totalDebugCompanion.script.ScriptExecutionService;
-import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.InspectSubjectMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.OpenClassMessage;
@@ -166,11 +165,7 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                     handlePackCatalog(message);
                 }
                 @Override public void inspectSubject(InspectSubjectMessage message) {
-                    // An item shown in no slot, such as in a recipe viewer, opens its definition's page.
-                    NavigationTarget target = SubjectRef.parse(message.payload().subject()) instanceof SubjectRef.Definition definition
-                            ? new NavigationTarget.Definition(definition)
-                            : new NavigationTarget.Inspection(message.payload());
-                    openOrQueue(target, NavigationService.Activation.ACTIVATE_WINDOW);
+                    openOrQueue(new NavigationTarget.Inspection(message.payload()), NavigationService.Activation.ACTIVATE_WINDOW);
                 }
                 @Override public void focusWindow() { CompanionApplication.this.focusWindow(); }
                 @Override

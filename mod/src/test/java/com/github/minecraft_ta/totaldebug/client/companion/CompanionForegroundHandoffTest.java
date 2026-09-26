@@ -33,23 +33,15 @@ class CompanionForegroundHandoffTest {
     }
 
     @Test
-    void aDeniedGrantDoesNotReleaseInputOrSendTheRequest() {
+    void aDeniedGrantStillSendsTheRequestButKeepsTheGamesInput() throws Exception {
         List<String> events = new ArrayList<>();
         CompanionForegroundHandoff handoff = new CompanionForegroundHandoff(processId -> {
             events.add("grant " + processId);
             throw new IOException("denied");
         });
 
-        IOException failure = assertThrows(
-                IOException.class,
-                () -> handoff.transfer(
-                        42L,
-                        () -> events.add("release input"),
-                        () -> events.add("send request")
-                )
-        );
+        handoff.transfer(42L, () -> events.add("release input"), () -> events.add("send request"));
 
-        assertEquals("denied", failure.getMessage());
-        assertEquals(List.of("grant 42"), events);
+        assertEquals(List.of("grant 42", "send request"), events);
     }
 }

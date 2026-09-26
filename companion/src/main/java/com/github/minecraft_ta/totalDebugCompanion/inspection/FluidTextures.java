@@ -17,7 +17,8 @@ import java.util.zip.ZipFile;
 
 /**
  * Reads fluid textures from a resource snapshot: the captured appearance names each fluid's still texture and tint,
- * and the texture's first animation frame is tinted the way Minecraft draws a fluid in an inventory.
+ * and the texture's first animation frame is tinted the way Minecraft draws a fluid in an inventory. It is drawn
+ * opaque, so a translucent texture such as water keeps its colour on a light panel.
  */
 final class FluidTextures {
     static final String APPEARANCES = "layers/0/totaldebug/fluid-appearances.json";
@@ -91,7 +92,7 @@ final class FluidTextures {
         for (int y = 0; y < source.getHeight(); y++) {
             for (int x = 0; x < source.getWidth(); x++) {
                 int pixel = source.getRGB(x, y);
-                int alpha = (pixel >>> 24) * tintAlpha / 255;
+                int alpha = (pixel >>> 24) == 0 ? 0 : tintAlpha;
                 int red = (pixel >> 16 & 0xFF) * tintRed / 255;
                 int green = (pixel >> 8 & 0xFF) * tintGreen / 255;
                 int blue = (pixel & 0xFF) * tintBlue / 255;

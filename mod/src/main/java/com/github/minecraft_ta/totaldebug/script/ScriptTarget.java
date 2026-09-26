@@ -3,7 +3,6 @@ package com.github.minecraft_ta.totaldebug.script;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -30,11 +29,10 @@ public sealed interface ScriptTarget {
         }
     }
 
-    /** A stack a player holds, as {@link HeldStacks} follows it. */
-    record HeldStack(ItemStack stack, Player player, SubjectRef.Stack subject, Level level) implements ScriptTarget {
-        public HeldStack {
+    /** A stack selected in a screen, as it was when selected; the client keeps it. */
+    record SelectedStack(ItemStack stack, SubjectRef.Stack subject, Level level) implements ScriptTarget {
+        public SelectedStack {
             Objects.requireNonNull(stack, "stack");
-            Objects.requireNonNull(player, "player");
             Objects.requireNonNull(subject, "subject");
             Objects.requireNonNull(level, "level");
         }

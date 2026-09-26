@@ -41,9 +41,17 @@ final class PageSection extends JPanel {
 
     /** Roles in secondary text beside their links, in the grid of the fact sections. */
     static JComponent linkRows(List<LinkRow> rows) {
+        return linkRows(rows, 0);
+    }
+
+    /** Link rows whose role column is at least {@code labelWidth} wide, to line up with a label column above. */
+    static JComponent linkRows(List<LinkRow> rows, int labelWidth) {
         JPanel body = new JPanel(new GridBagLayout());
         for (int row = 0; row < rows.size(); row++) {
             JLabel role = new JLabel(rows.get(row).role());
+            if (role.getPreferredSize().width < labelWidth) {
+                role.setPreferredSize(new Dimension(labelWidth, role.getPreferredSize().height));
+            }
             ThemeColors.keepForeground(role, ThemeColors::secondaryText);
             GridBagConstraints constraints = new GridBagConstraints();
             constraints.gridy = row;

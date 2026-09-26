@@ -83,6 +83,7 @@ public final class DefinitionDetails {
     private List<ModResources.Resource> matched = List.of();
     private List<ModResources.Resource> owned = List.of();
     private CompletableFuture<?> resourceLoad = CompletableFuture.completedFuture(null);
+    private int labelWidth;
     private boolean disposed;
 
     public DefinitionDetails(SubjectRef.Definition subject, Services services, Runnable changed) {
@@ -156,6 +157,13 @@ public final class DefinitionDetails {
     /** The Appearance and Files sections, kept current as they load. */
     public JComponent extras() {
         return this.extras;
+    }
+
+    /** Lines the Files rows up with a label column of {@code width} above them. */
+    public void alignLabels(int width) {
+        if (width == this.labelWidth) return;
+        this.labelWidth = width;
+        showExtras();
     }
 
     private void read() {
@@ -313,7 +321,7 @@ public final class DefinitionDetails {
             rows.add(new PageSection.LinkRow(file.role(), List.of(new LinkLabel(file.path(),
                     FileTypeResolver.resolve(name).icon(), file.path(), () -> this.services.navigator().accept(file.target())))));
         }
-        return PageSection.linkRows(rows);
+        return PageSection.linkRows(rows, this.labelWidth);
     }
 
     /** The resource path below its namespace, such as {@code models/block/framed_slab.json}. */

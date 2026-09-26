@@ -13,6 +13,7 @@ public final class InspectionReaders {
 
     public static void read(ScriptTarget target, ScriptFacts facts) {
         facts.guarded("Stack", () -> StackReader.read(target, facts));
+        facts.guarded("Entity state", () -> EntityReader.read(target, facts));
         facts.guarded("Block state", () -> BlockStateReader.read(target, facts));
         StorageReader.read(target, facts);
         SideReader.read(target, facts);

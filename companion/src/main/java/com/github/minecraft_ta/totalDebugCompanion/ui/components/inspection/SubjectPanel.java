@@ -172,7 +172,7 @@ public final class SubjectPanel extends JPanel {
         this.header.setTitle(title());
         SubjectRef.Definition definition = this.details.subject();
         List<JComponent> parts = new ArrayList<>();
-        parts.add(SubjectHeader.text(ContentKinds.of(definition.registry()).singular()));
+        parts.add(SubjectHeader.text(kind()));
         if (this.live != null) parts.addAll(this.live.where());
         String namespace = definition.namespace();
         String mod = this.details.modName();
@@ -185,23 +185,32 @@ public final class SubjectPanel extends JPanel {
         this.header.setSubtitle(parts);
     }
 
+    /** What the subject is: an entity in the game, otherwise its definition's kind, such as Block or Item. */
+    private String kind() {
+        if (this.live != null && this.live.identity.kind() == SubjectIdentity.Kind.ENTITY) return "Entity";
+        return ContentKinds.of(this.details.subject().registry()).singular();
+    }
+
     /**
-     * The first overview section: what the subject is, its classes and the entries it relates to. A subject in the
-     * game names the classes it was read with and links its definition's page.
+     * The first overview section, titled {@code kind}: what the subject is, its classes and the entries it relates to.
+     * A subject in the game names the classes it was read with, links its definition's page, and names its
+     * definition when it carries a name of its own, such as a renamed item.
      */
-    static FactSection identitySection(SubjectRef.Definition definition, List<Fact> classes, List<Fact> related,
-                                       boolean linkDefinition) {
+    static FactSection identitySection(String kind, SubjectRef.Definition definition, String ownName, String name,
+                                       List<Fact> classes, List<Fact> related, boolean linkDefinition) {
         List<Fact> facts = new ArrayList<>();
         Fact id = Fact.text("ID", definition.id());
         facts.add(linkDefinition ? id.withLink(FactLink.toSubject(definition)) : id);
+        if (!ownName.equals(name)) facts.add(Fact.text("Name", name));
         facts.addAll(classes);
         facts.addAll(related);
-        return new FactSection(ContentKinds.of(definition.registry()).singular(), facts, facts.size());
+        return new FactSection(kind, facts, facts.size());
     }
 
     private FactSection identitySection() {
         List<Fact> classes = this.live == null ? this.details.classFact().stream().toList() : this.live.classes();
-        return identitySection(this.details.subject(), classes, this.details.related(), this.live != null);
+        return identitySection(kind(), this.details.subject(), title(), this.details.title(), classes,
+                this.details.related(), this.live != null);
     }
 
     /** Shows the identity, then the state and tools when read live, updating in place where possible. */
@@ -209,7 +218,10 @@ public final class SubjectPanel extends JPanel {
         List<FactsPanel.Part> parts = new ArrayList<>();
         parts.add(new FactsPanel.Part(identitySection(), null));
         if (this.live != null) parts.addAll(this.live.parts());
-        if (this.facts != null && this.facts.update(parts)) return;
+        if (this.facts != null && this.facts.update(parts)) {
+            this.details.alignLabels(this.facts.labelWidth());
+            return;
+        }
         this.facts = new FactsPanel(parts, this.services.icons(), this.actions, this.collapsed);
         this.facts.setAlignmentX(Component.LEFT_ALIGNMENT);
         this.sections.removeAll();
@@ -224,6 +236,7 @@ public final class SubjectPanel extends JPanel {
         JComponent extras = this.details.extras();
         extras.setAlignmentX(Component.LEFT_ALIGNMENT);
         this.sections.add(extras);
+        this.details.alignLabels(this.facts.labelWidth());
         this.sections.revalidate();
         this.sections.repaint();
     }
@@ -351,7 +364,9 @@ public final class SubjectPanel extends JPanel {
         }
 
         /** The side to read, live reading and its interval, reading again, and the tools, at the header's right. */
+        /** A stack kept as it was when selected has none: it is read once, on the client. */
         private void addControls() {
+            if (this.session.snapshot()) return;
             this.runSide.setToolTipText(Side.SERVER, "Read the server's copy of the world");
             this.runSide.setToolTipText(Side.CLIENT, "Read the client's copy of the world");
             this.runSide.onChange(this.session::setSide);
@@ -423,15 +438,14 @@ public final class SubjectPanel extends JPanel {
             return notices;
         }
 
-        /** Where the subject is: a block's position and dimension, an entity's UUID, or a stack's slot. */
+        /** Where the subject is: a block's position and dimension, or an entity's UUID. A stack is where it was shown. */
         private List<JComponent> where() {
             return switch (SubjectRef.parseOccurrence(this.subject.subject())) {
                 case SubjectRef.Block block -> List.of(
                         SubjectHeader.text(block.x() + ", " + block.y() + ", " + block.z()),
                         SubjectHeader.text(block.dimension()));
                 case SubjectRef.Entity entity -> List.of(SubjectHeader.text(entity.uuid().toString()));
-                case SubjectRef.Stack stack -> List.of(SubjectHeader.text(stack.menu() == SubjectRef.Stack.INVENTORY
-                        ? "Inventory slot " + stack.slot() : "Container slot " + stack.slot()));
+                case SubjectRef.Stack ignored -> List.of();
             };
         }
 

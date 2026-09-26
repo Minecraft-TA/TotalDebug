@@ -121,7 +121,7 @@ public final class InspectionSession {
     private SubjectIdentity identity;
     private SubjectIdentity replaced;
     private Read read = Read.none();
-    private Side side = Side.SERVER;
+    private Side side;
     private boolean live;
     private int liveInterval = 1_000;
     private SnippetExecutionService.Execution active;
@@ -139,6 +139,7 @@ public final class InspectionSession {
         this.listener = Objects.requireNonNull(listener, "listener");
         this.visible = Objects.requireNonNull(visible, "visible");
         this.identity = subject.identity();
+        this.side = snapshot() ? Side.CLIENT : Side.SERVER;
         this.liveTimer.setRepeats(false);
     }
 
@@ -154,7 +155,15 @@ public final class InspectionSession {
 
     /** Whether project tools run on this subject: blocks and entities, not stacks. */
     public boolean readsTools() {
-        return this.identity.kind() != SubjectIdentity.Kind.ITEM;
+        return !snapshot();
+    }
+
+    /**
+     * Whether the subject is a stack the client kept as it was when selected: it is read on the client, and reading
+     * it again shows the same stack.
+     */
+    public boolean snapshot() {
+        return SubjectRef.parseOccurrence(this.subject.subject()) instanceof SubjectRef.Stack;
     }
 
     public boolean chosen(Path tool) {

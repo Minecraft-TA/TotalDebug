@@ -22,8 +22,8 @@ public final class NbtReader {
             }
             case ScriptTarget.LiveEntity entity -> facts.section("NBT")
                     .nbt("Entity", entity.entity().saveWithoutId(new CompoundTag()));
-            case ScriptTarget.HeldStack held -> facts.section("NBT")
-                    .nbt("Stack", held.stack().save(held.level().registryAccess()));
+            case ScriptTarget.SelectedStack selected -> facts.section("NBT")
+                    .nbt("Stack", selected.stack().save(selected.level().registryAccess()));
         }
     }
 }

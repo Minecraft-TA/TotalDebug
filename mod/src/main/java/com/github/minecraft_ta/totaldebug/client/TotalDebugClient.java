@@ -10,6 +10,7 @@ import com.github.minecraft_ta.totaldebug.client.input.CodeViewInput;
 import com.github.minecraft_ta.totaldebug.client.inspection.ItemIcons;
 import com.github.minecraft_ta.totaldebug.client.inspection.ResourceSnapshots;
 import com.github.minecraft_ta.totaldebug.client.input.Selection;
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
@@ -39,6 +40,7 @@ public final class TotalDebugClient {
     private final ClientCodeOpenService codeOpen;
     private final CodeViewOperation codeView;
     private final CodeViewInput codeViewInput;
+    private final KeptStacks keptStacks = new KeptStacks();
     private final ClientScriptService scripts;
     private final ResourceSnapshots resources;
     private final PackCatalogPublisher catalogs;
@@ -107,8 +109,9 @@ public final class TotalDebugClient {
                 TotalDebugClient.this.codeOpen.focusCompanion();
             }
         });
-        this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus);
-        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId);
+        this.codeViewInput = new CodeViewInput(this.codeView::inspectOrFocus, this.keptStacks);
+        this.scripts = new ClientScriptService(companionApp, TotalDebug.get().tickTasks(), () -> this.gameSessionId,
+                this.keptStacks);
         TotalDebug.get().network().installForwardedCompanionReceiver(this.scripts::handleForwardedPayload);
         companionApp.setScriptRequestHandler(this.scripts::handleRunRequest);
         companionApp.setStopScriptHandler(this.scripts::stopScript);

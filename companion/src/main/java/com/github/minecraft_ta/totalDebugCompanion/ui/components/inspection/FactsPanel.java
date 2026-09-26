@@ -109,6 +109,7 @@ public final class FactsPanel extends JPanel {
     private final Actions actions;
     private final Set<String> collapsed;
     private final List<SectionView> views = new ArrayList<>();
+    private int labelWidth = MIN_LABEL_WIDTH;
 
     public FactsPanel(List<FactSection> sections, ItemIconService icons) {
         this(sections, icons, Actions.NONE);
@@ -196,12 +197,18 @@ public final class FactsPanel extends JPanel {
             }
         }
         width = Math.min(width, MAX_LABEL_WIDTH);
+        this.labelWidth = width;
         for (SectionView view : this.views) {
             for (JLabel label : view.labels) {
                 label.setPreferredSize(new Dimension(width, label.getPreferredSize().height));
                 label.setMinimumSize(label.getPreferredSize());
             }
         }
+    }
+
+    /** The width of the label column, so rows beside the panel can line up with it. */
+    public int labelWidth() {
+        return this.labelWidth;
     }
 
     static String amounts(long amount, long capacity, String unit) {
@@ -326,7 +333,7 @@ public final class FactsPanel extends JPanel {
                 this.slots.add(cell);
                 if (fact.transfer() == null) contents.add(cell);
             }
-            if (!contents.isEmpty()) addRow(row++, "", slotGrid(contents));
+            if (!contents.isEmpty()) addSlotRow(row++, "", slotGrid(contents));
             List<Fact> facts = section.facts();
             int slot = 0;
             for (int index = 0; index < facts.size(); index++) {
@@ -345,7 +352,7 @@ public final class FactsPanel extends JPanel {
                     index++;
                     side.add(this.slots.get(slot++));
                 }
-                addRow(row++, fact.label(), slotGrid(side));
+                addSlotRow(row++, fact.label(), slotGrid(side));
             }
             GridBagConstraints filler = new GridBagConstraints();
             filler.gridy = row;
@@ -362,7 +369,20 @@ public final class FactsPanel extends JPanel {
             return wrapper;
         }
 
-        private void addRow(int row, String text, JComponent value) {
+        /** A row of slot cells, labelled level with its first row of cells. */
+        private void addSlotRow(int row, String text, JComponent slots) {
+            JLabel label = addRow(row, text, slots);
+            GridBagLayout layout = (GridBagLayout) this.body.getLayout();
+            GridBagConstraints labelConstraints = layout.getConstraints(label);
+            labelConstraints.anchor = GridBagConstraints.NORTHWEST;
+            labelConstraints.insets = new Insets(3 + Math.max(0, (SLOT_SIZE - label.getPreferredSize().height) / 2), 0, 3, 12);
+            layout.setConstraints(label, labelConstraints);
+            GridBagConstraints slotConstraints = layout.getConstraints(slots);
+            slotConstraints.anchor = GridBagConstraints.NORTHWEST;
+            layout.setConstraints(slots, slotConstraints);
+        }
+
+        private JLabel addRow(int row, String text, JComponent value) {
             JLabel label = new JLabel(text);
             ThemeColors.keepForeground(label, ThemeColors::secondaryText);
             label.setToolTipText(text.isEmpty() ? null : text);
@@ -376,6 +396,7 @@ public final class FactsPanel extends JPanel {
             constraints.gridx = 1;
             constraints.insets = new Insets(3, 0, 3, 0);
             this.body.add(value, constraints);
+            return label;
         }
 
         private JComponent value(Fact fact) {
@@ -708,13 +729,17 @@ public final class FactsPanel extends JPanel {
             g.drawString(initials, (getWidth() - width) / 2, inset + ICON_SIZE / 2 + g.getFontMetrics().getAscent() / 2);
         }
 
-        /** The mark of what the slot does through its side, in the top left corner. */
+        /** The mark of what the slot does through its side, on a badge in the top left corner. */
         private void paintTransfer(Graphics2D g) {
             String mark = transferMark(this.stack.transfer());
             if (mark.isEmpty()) return;
             g.setFont(getFont().deriveFont(getFont().getSize2D() - 1));
-            g.setColor(ThemeColors.secondaryText());
-            g.drawString(mark, 3, g.getFontMetrics().getAscent());
+            int width = g.getFontMetrics().stringWidth(mark) + 4;
+            int height = g.getFontMetrics().getHeight();
+            g.setColor(UIManager.getColor("Panel.background"));
+            g.fillRoundRect(1, 1, width, height, 4, 4);
+            g.setColor(ThemeColors.link());
+            g.drawString(mark, 3, 1 + g.getFontMetrics().getAscent());
         }
 
         private void paintCount(Graphics2D g) {

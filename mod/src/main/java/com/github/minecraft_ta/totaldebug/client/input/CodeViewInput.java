@@ -1,10 +1,12 @@
 package com.github.minecraft_ta.totaldebug.client.input;
 
+import com.github.minecraft_ta.totaldebug.client.inspection.KeptStacks;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
 import java.util.Objects;
@@ -14,19 +16,21 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Holds the one-press latch for F6: inspect the targeted block or entity, or in a screen the hovered stack. A stack in
- * a slot is inspected live; one shown by a recipe viewer opens its item's definition.
+ * Holds the one-press latch for F6: inspect the targeted block or entity, or in a screen the hovered stack, wherever it
+ * is shown: a slot, the creative lists or a recipe viewer. The stack is kept as it is when F6 is pressed.
  */
 public final class CodeViewInput {
     private static final ScreenItemStackResolver NO_SCREEN_ITEM = (screen, mouseX, mouseY) -> Optional.empty();
 
     private final Consumer<Optional<Selection>> inspect;
+    private final KeptStacks kept;
     private final AtomicReference<ScreenItemStackResolver> screenItemResolver = new AtomicReference<>(NO_SCREEN_ITEM);
     private boolean worldKeyWasDown;
     private Screen screenHoldingKey;
 
-    public CodeViewInput(Consumer<Optional<Selection>> inspect) {
+    public CodeViewInput(Consumer<Optional<Selection>> inspect, KeptStacks kept) {
         this.inspect = Objects.requireNonNull(inspect, "inspect");
+        this.kept = Objects.requireNonNull(kept, "kept");
     }
 
     public void onClientTick(Minecraft minecraft, KeyMapping keyMapping) {
@@ -58,13 +62,9 @@ public final class CodeViewInput {
                 * minecraft.getWindow().getGuiScaledHeight()
                 / minecraft.getWindow().getScreenHeight();
         Screen screen = event.getScreen();
-        this.inspect.accept(resolveScreenTarget(
-                this.screenItemResolver.get(),
-                screen,
-                mouseX,
-                mouseY,
-                () -> slotUnderMouse(screen).flatMap(slot -> CodeTargetResolver.resolveSlotTarget(minecraft, screen, slot))
-        ));
+        ScreenItemStackResolver viewer = this.screenItemResolver.get();
+        this.inspect.accept(slotFirst(() -> slotStack(screen), () -> viewer.resolve(screen, mouseX, mouseY))
+                .map(stack -> CodeTargetResolver.stack(this.kept, stack)));
         event.setCanceled(true);
     }
 
@@ -92,22 +92,19 @@ public final class CodeViewInput {
         }
     }
 
-    /** A recipe viewer's hovered stack opens its item's definition; otherwise the stack in the slot under the mouse. */
-    static Optional<Selection> resolveScreenTarget(
-            ScreenItemStackResolver viewerResolver,
-            Screen screen,
-            double mouseX,
-            double mouseY,
-            Supplier<Optional<Selection>> slotTarget
-    ) {
-        return viewerResolver.resolve(screen, mouseX, mouseY).map(CodeTargetResolver::definition).or(slotTarget);
+    /**
+     * The stack in the slot under the mouse, otherwise the one a recipe viewer shows there. The slot is asked first
+     * because a recipe viewer also reports slots, as ingredients it can look up.
+     */
+    static <T> Optional<T> slotFirst(Supplier<Optional<T>> slot, Supplier<Optional<T>> viewer) {
+        return slot.get().or(viewer);
     }
 
-    private static Optional<Slot> slotUnderMouse(Screen screen) {
+    private static Optional<ItemStack> slotStack(Screen screen) {
         if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
             return Optional.empty();
         }
         Slot slot = containerScreen.getSlotUnderMouse();
-        return slot != null && slot.hasItem() ? Optional.of(slot) : Optional.empty();
+        return slot != null && slot.hasItem() ? Optional.of(slot.getItem()) : Optional.empty();
     }
 }

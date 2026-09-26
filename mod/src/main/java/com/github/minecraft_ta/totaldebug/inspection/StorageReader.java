@@ -45,7 +45,7 @@ public final class StorageReader {
         switch (target) {
             case ScriptTarget.PlacedBlock block -> readBlock(block, facts);
             case ScriptTarget.LiveEntity entity -> readEntity(entity.entity(), facts);
-            case ScriptTarget.HeldStack held -> readStack(held.stack(), facts);
+            case ScriptTarget.SelectedStack selected -> readStack(selected.stack(), facts);
         }
     }
 

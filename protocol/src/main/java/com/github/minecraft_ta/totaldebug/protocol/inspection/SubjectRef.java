@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 /**
  * Names an inspected thing by where it is found, never by a retained object. Its text form is used on the wire and
  * for copying, e.g. {@code block minecraft:overworld 12 64 -3}, {@code entity <uuid>},
- * {@code stack <uuid> inventory 4}, {@code stack <uuid> menu 3 12}, {@code mod mekanism},
+ * {@code stack 7}, {@code mod mekanism},
  * {@code definition item mekanism:energy_tablet} or {@code definition mekanism:chemical mekanism:hydrogen}.
  */
 public sealed interface SubjectRef {
@@ -40,19 +40,14 @@ public sealed interface SubjectRef {
                 }
             }
             case "stack" -> {
-                boolean inventory = parts.length == 4 && parts[2].equals("inventory");
-                boolean menu = parts.length == 5 && parts[2].equals("menu");
-                if (!inventory && !menu) {
-                    throw new IllegalArgumentException("Expected: stack <player uuid> inventory <slot> or stack <player uuid> menu <id> <slot>");
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("Expected: stack <selection>");
                 }
-                UUID player;
                 try {
-                    player = UUID.fromString(parts[1]);
-                } catch (IllegalArgumentException exception) {
-                    throw new IllegalArgumentException("Invalid player UUID: " + parts[1], exception);
+                    return new Stack(Long.parseLong(parts[1]));
+                } catch (NumberFormatException exception) {
+                    throw new IllegalArgumentException("Invalid stack selection: " + parts[1], exception);
                 }
-                return inventory ? new Stack(player, Stack.INVENTORY, number(parts[3]))
-                        : new Stack(player, number(parts[3]), number(parts[4]));
             }
             case "mod" -> {
                 if (parts.length != 2) {
@@ -70,21 +65,13 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** Parses a subject that game-side code can resolve: a block, an entity or a stack a player holds. */
+    /** Parses a subject that game-side code can resolve: a block, an entity or a selected stack. */
     static Occurrence parseOccurrence(String text) {
         SubjectRef subject = parse(text);
         if (subject instanceof Occurrence occurrence) {
             return occurrence;
         }
         throw new IllegalArgumentException(subject.format() + " names a mod or definition, not something in the game");
-    }
-
-    private static int number(String text) {
-        try {
-            return Integer.parseInt(text);
-        } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException("Invalid number: " + text, exception);
-        }
     }
 
     private static int coordinate(String text) {
@@ -95,7 +82,7 @@ public sealed interface SubjectRef {
         }
     }
 
-    /** Something in the game, which the game resolves: a block, an entity or a stack a player holds. */
+    /** Something in the game, which the game resolves: a block, an entity or a selected stack. */
     sealed interface Occurrence extends SubjectRef permits Block, Entity, Stack {
     }
 
@@ -134,26 +121,19 @@ public sealed interface SubjectRef {
     }
 
     /**
-     * The stack in a player's slot when it was selected: a slot of their inventory, or of the container they had open,
-     * named by its menu id. The game follows that stack while the player keeps it, even when it moves.
+     * A stack selected in a screen, as the client kept it when it was selected: {@code selection} names the kept copy.
+     * It is read on the client and shows the stack as it was, wherever the stack was shown.
      */
-    record Stack(UUID player, int menu, int slot) implements Occurrence {
-        public static final int INVENTORY = -1;
-        private static final int MAX_SLOT = 4_096;
-
+    record Stack(long selection) implements Occurrence {
         public Stack {
-            Objects.requireNonNull(player, "player");
-            if (menu < INVENTORY) {
-                throw new IllegalArgumentException("Invalid menu id: " + menu);
-            }
-            if (slot < 0 || slot > MAX_SLOT) {
-                throw new IllegalArgumentException("Invalid slot: " + slot);
+            if (selection < 1) {
+                throw new IllegalArgumentException("Invalid stack selection: " + selection);
             }
         }
 
         @Override
         public String format() {
-            return "stack " + this.player + (this.menu == INVENTORY ? " inventory " + this.slot : " menu " + this.menu + " " + this.slot);
+            return "stack " + this.selection;
         }
     }
 

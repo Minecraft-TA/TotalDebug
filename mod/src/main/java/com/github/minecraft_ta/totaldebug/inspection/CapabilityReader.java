@@ -46,10 +46,10 @@ public final class CapabilityReader {
                     exposed += report(section, capability, shown, where(unsided != null, faces, facing));
                 }
             }
-            case ScriptTarget.HeldStack held -> {
+            case ScriptTarget.SelectedStack selected -> {
                 for (ItemCapability<?, ?> capability : ItemCapability.getAll()) {
                     if (capability.contextClass() != void.class) continue;
-                    Object handler = ((ItemCapability<Object, Object>) capability).getCapability(held.stack(), null);
+                    Object handler = ((ItemCapability<Object, Object>) capability).getCapability(selected.stack(), null);
                     exposed += report(section, capability, handler, "");
                 }
             }

@@ -25,7 +25,7 @@ public final class SubjectIdentities {
         return switch (target) {
             case ScriptTarget.PlacedBlock block -> block(block.state(), block.blockEntity());
             case ScriptTarget.LiveEntity entity -> entity(entity.entity());
-            case ScriptTarget.HeldStack held -> stack(held.stack());
+            case ScriptTarget.SelectedStack selected -> stack(selected.stack());
         };
     }
 

@@ -744,8 +744,17 @@ public final class NavigationService {
             return operation.get();
         }, SwingUtilities::invokeLater).thenRunAsync(() -> {
             if (!isCurrentNavigation(context)) throw new CancellationException("Navigation changed");
-            if (activation == Activation.ACTIVATE_WINDOW) activateWindow.run();
+            if (activation == Activation.ACTIVATE_WINDOW) activateWindow();
         }, SwingUtilities::invokeLater);
+    }
+
+    /** Brings the window to the front. When Windows refuses, the page is still open and the window stays behind. */
+    private void activateWindow() {
+        try {
+            this.activateWindow.run();
+        } catch (IllegalStateException refused) {
+            System.err.println("Companion stays in the background: " + refused.getMessage());
+        }
     }
 
     private void showFailure(NavigationTarget target, Throwable failure) {

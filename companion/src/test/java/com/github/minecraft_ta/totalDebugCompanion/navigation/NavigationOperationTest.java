@@ -29,7 +29,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -142,17 +141,19 @@ class NavigationOperationTest {
         }
     }
 
-    @Test void localHistoryDoesNotActivateTheWindowAndExplicitActivationFailureCompletesTheRequest() throws Exception {
+    @Test void localHistoryDoesNotActivateTheWindowAndARefusedActivationStillOpensThePage() throws Exception {
         var activations = new AtomicInteger();
-        var refused = new IllegalStateException("Activation refused");
-        try (var fixture = new Fixture(() -> { activations.incrementAndGet(); throw refused; })) {
+        try (var fixture = new Fixture(() -> { activations.incrementAndGet(); throw new IllegalStateException("Activation refused"); })) {
             edt(fixture.navigation::goBack).get(5, TimeUnit.SECONDS);
             assertEquals(0, activations.get(), "Local history must not request OS foreground activation");
             var requested = edt(() -> fixture.navigation.navigate(new NavigationTarget.LocalFile(fixture.second.getPath()),
                     NavigationService.Activation.ACTIVATE_WINDOW));
-            var failure = assertThrows(ExecutionException.class, () -> requested.get(5, TimeUnit.SECONDS));
-            assertSame(refused, failure.getCause(), "Activation errors must complete the caller's future instead of stranding it");
+            requested.get(5, TimeUnit.SECONDS);
             assertEquals(1, activations.get());
+            edt(() -> {
+                assertSame(fixture.second, fixture.tabs.getSelectedEditor(), "the page opens although the window stays behind");
+                return null;
+            });
         }
     }
 

@@ -14,6 +14,7 @@ import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionStatus;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionText;
 import com.github.minecraft_ta.totaldebug.protocol.execution.ExecutionValue;
 import com.github.minecraft_ta.totaldebug.protocol.execution.Fact;
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactData;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactLink;
 import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.protocol.inspection.SubjectIdentity;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
@@ -119,12 +121,14 @@ class SubjectPanelTest {
         Fact block = Fact.text("Class", "ChestBlock").withLink(FactLink.toClass("net.minecraft.world.level.block.ChestBlock"));
         Fact item = Fact.text("Item", "Chest").withLink(FactLink.toSubject(new SubjectRef.Definition(RegistryIds.ITEM, "minecraft:chest")));
 
-        FactSection live = SubjectPanel.identitySection(chest, List.of(block), List.of(item), true);
-        FactSection definition = SubjectPanel.identitySection(chest, List.of(block), List.of(item), false);
+        FactSection live = SubjectPanel.identitySection("Block", chest, "Chest", "Chest", List.of(block), List.of(item), true);
+        FactSection definition = SubjectPanel.identitySection("Block", chest, "Chest", "Chest", List.of(block), List.of(item), false);
+        FactSection renamed = SubjectPanel.identitySection("Block", chest, "Loot", "Chest", List.of(), List.of(), true);
 
         assertEquals("Block", live.title());
         assertEquals(List.of(Fact.text("ID", "minecraft:chest").withLink(FactLink.toSubject(chest)), block, item), live.facts());
         assertEquals(Fact.text("ID", "minecraft:chest"), definition.facts().getFirst(), "a definition's page does not link itself");
+        assertEquals(Fact.text("Name", "Chest"), renamed.facts().get(1), "a renamed subject names its definition");
     }
 
     @Test
@@ -142,17 +146,44 @@ class SubjectPanelTest {
     }
 
     @Test
-    void aStackSaysWhichSlotItIsInAndRunsNoTools() throws Exception {
+    void aReadWithDataStaysOnTheOverview() throws Exception {
+        withPanel(panel -> {
+            FactSection nbt = new FactSection("NBT", List.of(Fact.data("Stack", FactData.of(
+                    new byte[]{10, 3, 0, 5, 'C', 'o', 'u', 'n', 't', 0, 0, 0, 7, 0}, List.of()))), 1);
+            panel.session().present(completed(List.of(nbt)), null, text -> text);
+            panel.session().present(completed(List.of(nbt)), null, text -> text);
+
+            JTabbedPane views = views(panel);
+            assertEquals("Overview", views.getTitleAt(views.getSelectedIndex()));
+        });
+    }
+
+    private static JTabbedPane views(Container container) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof JTabbedPane tabs) return tabs;
+            if (child instanceof Container nested) {
+                JTabbedPane found = views(nested);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void aStackIsAnItemReadOnceOnTheClientWithoutControlsOrTools() throws Exception {
         SubjectIdentity pickaxe = new SubjectIdentity(SubjectIdentity.Kind.ITEM, "minecraft:iron_pickaxe", "Iron Pickaxe",
                 "Minecraft", List.of(new SubjectIdentity.ClassLink("Class", "net.minecraft.world.item.PickaxeItem")),
                 "minecraft:iron_pickaxe");
         InspectSubjectPayload stack = new InspectSubjectPayload("game-session",
-                "stack 0f8fad5b-d9cb-469f-a165-70867728950e inventory 4", pickaxe, "", Map.of());
+                "stack 7", pickaxe, "", Map.of());
         withPanel(stack, target -> { }, panel -> {
             List<String> labels = labels(panel);
-            assertTrue(labels.containsAll(List.of("Iron Pickaxe", "Item", "Inventory slot 4", "PickaxeItem")), labels::toString);
+            assertTrue(labels.containsAll(List.of("Iron Pickaxe", "Item", "PickaxeItem")), labels::toString);
+            assertTrue(panel.session().snapshot());
             assertFalse(panel.session().readsTools());
             assertFalse(accessibleNames(panel).contains("Tools"), "stacks run no tools");
+            assertFalse(accessibleNames(panel).contains("Read Again"), "a kept stack reads the same again");
+            assertFalse(labels.contains("Server"), "a kept stack is read on the client");
         });
     }
 
