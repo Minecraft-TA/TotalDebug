@@ -159,6 +159,37 @@ class ConfigEditTest {
         assertEquals(new ConfigEdit.TextChange(settings.getFirst(), "9", "12"), changes.getFirst());
     }
 
+    @Test
+    void aValueOfAnotherKindIsAChangeEvenWhenItPrintsTheSame() {
+        String saved = "name = \"true\"\ncount = \"4\"\n";
+
+        assertEquals("name: Write a quoted string", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved.replace("\"true\"", "true"), List.of())).getMessage());
+        assertEquals(1, ConfigEdit.changes(saved, saved.replace("\"4\"", "4"), List.of()).size(),
+                "a string turned number is recorded, so it can be reverted");
+    }
+
+    @Test
+    void aListKeepsTheKindOfItsElements() {
+        assertEquals("[\"a\", \"b\"]", ConfigEdit.literal("[\"a\"]", null, "[\"a\", \"b\"]"));
+        assertEquals("Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.literal("[\"a\"]", null, "[1]")).getMessage());
+        assertEquals("[1]", ConfigEdit.literal("[]", null, "[1]"), "an empty list tells no kind");
+        assertEquals("names: Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText("names = [\"a\"]\n", "names = [1]\n", List.of())).getMessage());
+    }
+
+    @Test
+    void onlyValuesChangeInATextSoEveryChangeCanBeReverted() {
+        String saved = "a = 1\nb = 2\n";
+
+        assertEquals("c was added; only values can be changed here", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, saved + "c = 3\n", List.of())).getMessage());
+        assertEquals("b was removed; only values can be changed here", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.checkText(saved, "a = 1\n", List.of())).getMessage());
+        ConfigEdit.checkText("a = [1\n", "a = [1]\n", List.of());
+    }
+
     private static PackCatalog.ConfigSetting setting(String range, List<String> allowed) {
         return new PackCatalog.ConfigSetting("widgets.value", "", "", range, allowed, PackCatalog.Restart.NONE);
     }

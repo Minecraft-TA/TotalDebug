@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totaldebug.storage.GameLock;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -80,6 +82,27 @@ class ConfigChangesTest {
         edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
         changes.gameDisconnected();
         assertNull(changes.pending(config(), "speed"));
+    }
+
+    @Test
+    void editsWaitingForARestartOutlastAReconnectToTheSameGame() throws Exception {
+        ConfigChanges changes = new ConfigChanges(this.directory, ChangeRecord.inMemory());
+        try (GameLock ignored = GameLock.hold(InstancePaths.forGame(this.directory).gameLock())) {
+            changes.gameConnected();
+            changes.gameProcess(42);
+            edit(changes, config(), PackCatalog.Restart.GAME, "1", "2");
+
+            changes.gameDisconnected();
+            changes.refresh();
+            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"),
+                    "the game still runs with the old value");
+            changes.gameConnected();
+            changes.gameProcess(42);
+            assertEquals(ConfigChanges.Effect.RESTART, changes.pending(config(), "speed"));
+
+            changes.gameProcess(43);
+            assertNull(changes.pending(config(), "speed"), "a restarted game read the file when it started");
+        }
     }
 
     @Test

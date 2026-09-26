@@ -65,7 +65,15 @@ final class ConfigTextEditor {
     }
 
     /** Sets the file shown; null when there is none to write. */
+    /**
+     * Sets the file the text is saved to. Modified text stays with the file it was edited from until it is saved or
+     * discarded, so a refresh that selects another file or world never saves it there.
+     */
     void setDocument(Document document) {
+        if (this.text.modified() && this.document != null
+                && (document == null || !document.target().file().equals(this.document.target().file()))) {
+            return;
+        }
         this.document = document;
     }
 

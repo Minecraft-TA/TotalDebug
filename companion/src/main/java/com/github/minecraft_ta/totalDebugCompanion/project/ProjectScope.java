@@ -80,7 +80,7 @@ public final class ProjectScope implements AutoCloseable {
         var paths = new InstancePaths(profile.dataDirectory());
         var state = InstanceState.open(paths);
         ChangeRecord changes;
-        try { changes = ChangeRecord.open(paths); }
+        try { changes = ChangeRecord.open(paths, profile.workspaceDirectory()); }
         catch (IOException failure) { state.close(); throw failure; }
         var scope = new ProjectScope(lock, profile, state, changes);
         scope.localSources = sources;

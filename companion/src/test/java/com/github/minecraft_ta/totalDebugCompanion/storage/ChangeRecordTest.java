@@ -57,14 +57,14 @@ class ChangeRecordTest {
     @Test
     void survivesReopeningTheInstance() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
-        try (ChangeRecord record = ChangeRecord.open(paths)) {
+        try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {
             record.changed(setting("speed"), "9", "12");
             record.changed(setting("mode"), "\"SLOW\"", "\"FAST\"");
             record.changed(new ChangeRecord.KeyBinding("key.jump"), "key.keyboard.space", "key.keyboard.g:CONTROL");
         }
         assertTrue(Files.isRegularFile(paths.changes()));
 
-        try (ChangeRecord reopened = ChangeRecord.open(paths)) {
+        try (ChangeRecord reopened = ChangeRecord.open(paths, this.directory)) {
             assertEquals(3, reopened.size());
             assertEquals("key.keyboard.space", reopened.original(new ChangeRecord.KeyBinding("key.jump")));
             assertEquals("\"SLOW\"", reopened.original(setting("mode").file(), "mode"));
@@ -78,9 +78,27 @@ class ChangeRecordTest {
     }
 
     @Test
+    void aCopiedInstanceRevertsItsOwnFiles() throws Exception {
+        Path original = this.directory.resolve("original");
+        Path copy = this.directory.resolve("copy");
+        try (ChangeRecord record = ChangeRecord.open(new InstancePaths(original.resolve("total-debug")), original)) {
+            record.changed(new ChangeRecord.Setting("testmod", "testmod-common.toml",
+                    original.resolve("config/testmod-common.toml"), "speed"), "9", "12");
+        }
+        Files.createDirectories(copy.resolve("total-debug"));
+        Files.copy(original.resolve("total-debug/changes.json"), copy.resolve("total-debug/changes.json"));
+
+        try (ChangeRecord copied = ChangeRecord.open(new InstancePaths(copy.resolve("total-debug")), copy)) {
+            assertEquals("9", copied.original(copy.resolve("config/testmod-common.toml"), "speed"),
+                    "the copy's change points at the copy's file, not the original instance");
+        }
+        assertTrue(Files.readString(copy.resolve("total-debug/changes.json")).contains("\"config/testmod-common.toml\""));
+    }
+
+    @Test
     void anUntouchedInstanceWritesNoRecord() throws Exception {
         InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
-        try (ChangeRecord record = ChangeRecord.open(paths)) {
+        try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {
             assertEquals(0, record.size());
         }
         assertFalse(Files.exists(paths.changes()));

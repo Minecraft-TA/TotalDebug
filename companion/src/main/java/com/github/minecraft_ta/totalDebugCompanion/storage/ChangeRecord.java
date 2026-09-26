@@ -65,25 +65,33 @@ public final class ChangeRecord implements AutoCloseable {
 
     private final JsonStateWriter writer;
     private final Clock clock;
+    /** The game directory the record's files are stored relative to, or null for a record that is not saved. */
+    private final Path gameDirectory;
     private final Map<Target, Change> changes = new LinkedHashMap<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
-    private ChangeRecord(JsonStateWriter writer, Clock clock) {
+    private ChangeRecord(JsonStateWriter writer, Clock clock, Path gameDirectory) {
         this.writer = writer;
         this.clock = clock;
+        this.gameDirectory = gameDirectory;
     }
 
     /** A record that is not saved, for tests and projects without a data directory. */
     public static ChangeRecord inMemory() {
-        return new ChangeRecord(null, Clock.systemUTC());
+        return new ChangeRecord(null, Clock.systemUTC(), null);
     }
 
     static ChangeRecord inMemory(Clock clock) {
-        return new ChangeRecord(null, clock);
+        return new ChangeRecord(null, clock, null);
     }
 
-    public static ChangeRecord open(InstancePaths paths) throws IOException {
-        ChangeRecord record = new ChangeRecord(new JsonStateWriter(paths.changes()), Clock.systemUTC());
+    /**
+     * Opens the record of the instance whose game directory is {@code gameDirectory}. Files in the game directory are
+     * stored relative to it, so a copied or moved instance changes its own files.
+     */
+    public static ChangeRecord open(InstancePaths paths, Path gameDirectory) throws IOException {
+        Path game = gameDirectory.toAbsolutePath().normalize();
+        ChangeRecord record = new ChangeRecord(new JsonStateWriter(paths.changes()), Clock.systemUTC(), game);
         if (!Files.exists(paths.changes())) return record;
         try {
             JsonObject json = JsonFiles.read(paths.changes());
@@ -94,7 +102,7 @@ public final class ChangeRecord implements AutoCloseable {
                 JsonObject entry = element.getAsJsonObject();
                 Target target = switch (JsonFiles.string(entry, "kind")) {
                     case "setting" -> new Setting(JsonFiles.string(entry, "modId"), JsonFiles.string(entry, "fileName"),
-                            Path.of(JsonFiles.string(entry, "file")), JsonFiles.string(entry, "setting"));
+                            game.resolve(JsonFiles.string(entry, "file")).normalize(), JsonFiles.string(entry, "setting"));
                     case "keyBinding" -> new KeyBinding(JsonFiles.string(entry, "name"));
                     default -> throw new IllegalArgumentException("Unknown change kind " + JsonFiles.string(entry, "kind"));
                 };
@@ -187,7 +195,7 @@ public final class ChangeRecord implements AutoCloseable {
                     entry.addProperty("kind", "setting");
                     entry.addProperty("modId", setting.modId());
                     entry.addProperty("fileName", setting.fileName());
-                    entry.addProperty("file", setting.file().toString());
+                    entry.addProperty("file", stored(setting.file()));
                     entry.addProperty("setting", setting.setting());
                 }
                 case KeyBinding binding -> {
@@ -205,6 +213,13 @@ public final class ChangeRecord implements AutoCloseable {
         json.addProperty("format", FORMAT);
         json.add("changes", entries);
         this.writer.schedule(json);
+    }
+
+    /** A file as the record stores it: relative to the game directory with forward slashes, when it is inside it. */
+    private String stored(Path file) {
+        Path normalized = file.toAbsolutePath().normalize();
+        if (!normalized.startsWith(this.gameDirectory)) return normalized.toString();
+        return this.gameDirectory.relativize(normalized).toString().replace('\\', '/');
     }
 
     public void saveNow() throws IOException {

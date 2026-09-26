@@ -345,6 +345,8 @@ public final class CompanionApplication implements AutoCloseable, ProjectControl
                 message.displayName(),
                 message.processId()
         ));
+        ProjectScope scope = currentScope();
+        if (scope != null) scope.configChanges().gameProcess(message.processId());
     }
 
     private void restoreProfile() throws IOException {

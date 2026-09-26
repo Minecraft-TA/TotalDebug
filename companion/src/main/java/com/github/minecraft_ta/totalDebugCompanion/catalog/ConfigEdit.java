@@ -95,10 +95,35 @@ public final class ConfigEdit {
                 } catch (IllegalArgumentException notToml) {
                     throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
                 }
-                if (!(value instanceof List<?>)) throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
+                if (!(value instanceof List<?> list)) throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
+                checkElements(current, list);
                 yield text;
             }
             case OTHER -> throw new IllegalArgumentException("Edit this value in the file");
+        };
+    }
+
+    /**
+     * A list keeps the kind of its elements: NeoForge checks every element and resets a list holding another kind. The
+     * current elements tell the kind; an empty list tells none.
+     */
+    private static void checkElements(String current, List<?> list) {
+        if (!(ConfigValues.value(current) instanceof List<?> previous) || previous.isEmpty()) return;
+        String kind = elementKind(previous.getFirst());
+        for (Object element : list) {
+            if (!elementKind(element).equals(kind)) throw new IllegalArgumentException("Write every element as " + kind);
+        }
+    }
+
+    private static String elementKind(Object element) {
+        return switch (element) {
+            case String ignored -> "a quoted string";
+            case Boolean ignored -> "true or false";
+            case Double ignored -> "a number with a decimal point";
+            case Float ignored -> "a number with a decimal point";
+            case Number ignored -> "a whole number";
+            case List<?> ignored -> "a TOML array";
+            case null, default -> "the others are";
         };
     }
 
@@ -197,7 +222,13 @@ public final class ConfigEdit {
         } catch (IOException notToml) {
             throw new IllegalArgumentException(notToml.getMessage(), notToml);
         }
-        Map<String, String> savedLiterals = literals(saved);
+        Map<String, String> savedLiterals;
+        try {
+            savedLiterals = TomlText.of(saved).literals();
+        } catch (IllegalArgumentException notToml) {
+            // A file that is not TOML yet is repaired as a whole; there are no values to compare.
+            savedLiterals = null;
+        }
         Map<String, PackCatalog.ConfigSetting> described = new HashMap<>();
         for (PackCatalog.ConfigSetting setting : settings) {
             described.put(setting.path(), setting);
@@ -205,18 +236,28 @@ public final class ConfigEdit {
                 throw new IllegalArgumentException(setting.path() + " is missing; NeoForge would write its default back");
             }
         }
+        // Every change is recorded to be reverted, and only a changed value can be.
+        if (savedLiterals != null) {
+            for (String key : savedLiterals.keySet()) {
+                if (!editedLiterals.containsKey(key)) {
+                    throw new IllegalArgumentException(key + " was removed; only values can be changed here");
+                }
+            }
+        }
         for (Map.Entry<String, String> entry : editedLiterals.entrySet()) {
             String key = entry.getKey();
             if (!settings.isEmpty() && !described.containsKey(key)) {
                 throw new IllegalArgumentException(key + " is not a setting of this file; NeoForge would remove it");
             }
+            if (savedLiterals == null) continue;
             String before = savedLiterals.get(key);
-            if (before == null || sameValue(before, entry.getValue())) continue;
+            if (before == null) throw new IllegalArgumentException(key + " was added; only values can be changed here");
+            if (sameValue(before, entry.getValue())) continue;
             checkLiteral(key, before, described.get(key), entry.getValue());
         }
     }
 
-    /** The settings whose values differ between two texts of a file; keys only one text has are left out. */
+    /** The settings whose values differ between two texts of a file. {@link #checkText} refuses keys only one text has. */
     public static List<TextChange> changes(String before, String after, List<PackCatalog.ConfigSetting> settings) {
         Map<String, String> beforeLiterals = literals(before);
         Map<String, String> afterLiterals = literals(after);
@@ -244,6 +285,8 @@ public final class ConfigEdit {
     /** Whether two literals stand for the same value, such as a list written over one or several lines. */
     private static boolean sameValue(String first, String second) {
         if (first.equals(second)) return true;
+        // Another kind is another value even when it prints the same, such as "true" and true.
+        if (kind(first) != kind(second)) return false;
         try {
             return PackCatalog.ConfigSetting.display(ConfigValues.value(first))
                     .equals(PackCatalog.ConfigSetting.display(ConfigValues.value(second)));
@@ -275,7 +318,7 @@ public final class ConfigEdit {
         }
         try {
             // The same checks as typing the value into the table.
-            if (now != Kind.LIST) literal(before, setting, PackCatalog.ConfigSetting.display(value));
+            literal(before, setting, now == Kind.LIST ? literal : PackCatalog.ConfigSetting.display(value));
         } catch (IllegalArgumentException refused) {
             throw new IllegalArgumentException(key + ": " + refused.getMessage(), refused);
         }

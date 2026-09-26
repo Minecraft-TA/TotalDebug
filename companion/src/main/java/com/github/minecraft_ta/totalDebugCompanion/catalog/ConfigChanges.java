@@ -1,6 +1,8 @@
 package com.github.minecraft_ta.totalDebugCompanion.catalog;
 
 import com.github.minecraft_ta.totalDebugCompanion.storage.ChangeRecord;
+import com.github.minecraft_ta.totaldebug.storage.GameLock;
+import com.github.minecraft_ta.totaldebug.storage.InstancePaths;
 import com.github.minecraft_ta.totaldebug.storage.PackCatalog;
 
 import java.io.IOException;
@@ -75,7 +77,9 @@ public final class ConfigChanges {
     /** One write at a time for the project, so writes to the same file never interleave. */
     private final ExecutorService writes = Executors.newSingleThreadExecutor(task ->
             Thread.ofPlatform().daemon().name("Configuration writes").unstarted(task));
-    private volatile boolean gameRunning;
+    private volatile boolean connected;
+    /** The game process the pending edits wait in, or 0 before a game connected. */
+    private long gameProcess;
 
     /** {@code workspace} is the game directory, and {@code record} keeps every edit. */
     public ConfigChanges(Path workspace, ChangeRecord record) {
@@ -112,13 +116,34 @@ public final class ConfigChanges {
     }
 
     public void gameConnected() {
-        this.gameRunning = true;
+        this.connected = true;
     }
 
-    /** The game closed or lost its connection; it reads every file again when it starts. */
+    /**
+     * The connected game's process. Another process than the one the pending edits wait in started after it, and read
+     * every file when it started.
+     */
+    public synchronized void gameProcess(long processId) {
+        if (processId != this.gameProcess) this.pending.clear();
+        this.gameProcess = processId;
+    }
+
+    /**
+     * The game lost its connection. Pending edits stay while it still runs, since a reconnect does not apply them; a
+     * game that closed reads every file again when it starts.
+     */
     public void gameDisconnected() {
-        this.gameRunning = false;
-        this.pending.clear();
+        this.connected = false;
+        if (!gameLockHeld()) this.pending.clear();
+    }
+
+    /** Whether a game runs in the instance, connected or not. Blocking; it looks at the game's lock. */
+    private boolean gameRunning() {
+        return this.connected || gameLockHeld();
+    }
+
+    private boolean gameLockHeld() {
+        return this.workspace != null && GameLock.held(InstancePaths.forGame(this.workspace).gameLock());
     }
 
     /** Where a configuration file is: a world's server configuration, the defaults for new worlds, or the config folder. */
@@ -156,7 +181,7 @@ public final class ConfigChanges {
 
     private Effect effect(PackCatalog.ConfigType type, PackCatalog.Restart restart, Location location, Path world) {
         if (location == Location.DEFAULTS) return Effect.NEW_WORLDS;
-        if (!this.gameRunning) return location == Location.WORLD ? Effect.WORLD_OPENS : Effect.GAME_STARTS;
+        if (!gameRunning()) return location == Location.WORLD ? Effect.WORLD_OPENS : Effect.GAME_STARTS;
         if (type == PackCatalog.ConfigType.STARTUP || restart == PackCatalog.Restart.GAME || !watchesFiles()) {
             return Effect.RESTART;
         }
@@ -176,8 +201,15 @@ public final class ConfigChanges {
         return this.record.original(file, setting);
     }
 
-    /** Drops rejoin edits whose world has closed since. Blocking; it looks at the worlds' locks. */
+    /**
+     * Drops rejoin edits whose world has closed since, and every pending edit once the game has closed. Blocking; it
+     * looks at the game's and the worlds' locks.
+     */
     public void refresh() {
+        if (!gameRunning()) {
+            this.pending.clear();
+            return;
+        }
         List<Key> applied = new ArrayList<>();
         this.pending.forEach((key, entry) -> {
             if (entry.effect() == Effect.REJOIN && (entry.world() == null || !open(entry.world()))) applied.add(key);

@@ -231,7 +231,8 @@ public class FileTreeView extends JScrollPane {
         }
         var mods = new ModTreeItems.Root(() -> new ModTreeItems.Snapshot(scope.catalog().state(), scope.sources(),
                 scope.changes().size()));
-        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent()) {
+        // Recorded changes alone keep the root, since Changes is where they are reverted.
+        if (!catalog.modules().isEmpty() || scope.catalog().index().isPresent() || scope.changes().size() > 0) {
             rootItems.add(mods);
         }
         if (binding != null && !catalog.modules().isEmpty()) {
