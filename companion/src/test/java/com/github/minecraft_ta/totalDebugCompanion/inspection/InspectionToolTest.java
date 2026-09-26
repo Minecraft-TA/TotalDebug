@@ -62,4 +62,9 @@ class InspectionToolTest {
         assertTrue(source.contains("import com.github.minecraft_ta.totaldebug.script.ScriptTarget;"), source);
         assertTrue(source.contains("class FurnaceTool"), source);
     }
+
+    @Test
+    void aDisplayNameIsWrittenAsAJavaStringLiteral() {
+        assertEquals("Say \\\"hi\\\" \\\\ now\\n", InspectionTool.javaText("Say \"hi\" \\ now\n"));
+    }
 }

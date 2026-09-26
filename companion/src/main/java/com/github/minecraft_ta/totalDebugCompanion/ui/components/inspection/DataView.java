@@ -88,7 +88,8 @@ final class DataView extends JPanel {
     private List<DataRows.Row> rows = List.of();
     private List<DataRows.Row> entries;
     private final Executor decoder;
-    private long shown;
+    private volatile long shown;
+    private final SpeedSearch speedSearch;
 
     DataView() {
         this(ForkJoinPool.commonPool());
@@ -113,7 +114,7 @@ final class DataView extends JPanel {
         this.cards.add(this.tableScroll, TREE_CARD);
         this.cards.add(textCard, TEXT_CARD);
         add(this.cards, BorderLayout.CENTER);
-        SpeedSearch.install(this.search);
+        this.speedSearch = SpeedSearch.install(this.search);
     }
 
     /**
@@ -122,7 +123,9 @@ final class DataView extends JPanel {
      */
     void show(List<DataRows.Root> next) {
         long generation = ++this.shown;
-        CompletableFuture.supplyAsync(() -> Prepared.of(next), this.decoder).thenAccept(prepared -> {
+        // A read superseded before its turn is not decoded, so live reads do not pile up decoding work.
+        CompletableFuture.supplyAsync(() -> generation == this.shown ? Prepared.of(next) : null, this.decoder).thenAccept(prepared -> {
+            if (prepared == null) return;
             Runnable apply = () -> {
                 if (generation == this.shown) apply(prepared.roots(), prepared.values());
             };
@@ -171,6 +174,7 @@ final class DataView extends JPanel {
     }
 
     void dispose() {
+        this.speedSearch.close();
         this.text.dispose();
     }
 

@@ -64,6 +64,8 @@ import java.util.regex.Pattern;
  * shape in place, marking changed values, and rebuilds only the sections whose shape changed.
  */
 public final class FactsPanel extends JPanel {
+    /** Data up to this size shows its shape in its row. */
+    static final int SHAPED_DATA_BYTES = 64 * 1_024;
     static final int SLOT_COLUMNS = 9;
     private static final int ICON_SIZE = UiMetrics.previewPixels(UiMetrics.ITEM_ICON_SIZE);
     private static final int SLOT_SIZE = ICON_SIZE + 8;
@@ -221,12 +223,16 @@ public final class FactsPanel extends JPanel {
                 : format.format(amount) + suffix;
     }
 
-    /** A row's text: the value, or for data a summary of its shape and size. */
+    /**
+     * A row's text: the value, or for data a summary of its shape and size. Rows are built on the Swing thread, so data
+     * larger than {@link #SHAPED_DATA_BYTES} is summarized by its size alone; the Data tab decodes it off that thread.
+     */
     static String displayedValue(Fact fact) {
         if (fact.kind() != Fact.Kind.DATA) {
             return fact.value();
         }
         FactData data = fact.data();
+        if (data.size() > SHAPED_DATA_BYTES) return size(data);
         String shape;
         try {
             shape = switch (data.tag()) {
@@ -237,9 +243,13 @@ public final class FactsPanel extends JPanel {
         } catch (IllegalArgumentException unreadable) {
             return "Unreadable data: " + unreadable.getMessage();
         }
+        return shape + ", " + size(data);
+    }
+
+    private static String size(FactData data) {
         String size = data.size() < 1_024 ? data.size() + " B"
                 : String.format(Locale.ROOT, "%.1f KB", data.size() / 1_024.0);
-        return shape + ", " + size + (data.complete() ? "" : ", incomplete");
+        return size + (data.complete() ? "" : ", incomplete");
     }
 
     private static String count(int count, String singular, String plural) {

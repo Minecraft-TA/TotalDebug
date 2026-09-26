@@ -126,7 +126,10 @@ final class DataRows {
         return rows;
     }
 
-    /** Entries not transferred at or below {@code path}, from the root's omission list. */
+    /**
+     * Entries not transferred at or below {@code path}, from the root's omission list. A full list could not name every
+     * omission, so then no part of the data counts as complete.
+     */
     static int omittedBelow(FactData data, String path) {
         int omitted = 0;
         for (FactData.Omission omission : data.omissions()) {
@@ -136,7 +139,7 @@ final class DataRows {
                 omitted += omission.count();
             }
         }
-        return omitted;
+        return data.omissions().size() >= FactData.MAX_OMISSIONS ? Math.max(1, omitted) : omitted;
     }
 
     /** The one-line text of a value: its SNBT, shortened with an ellipsis beyond the preview length. */

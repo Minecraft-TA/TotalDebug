@@ -109,6 +109,25 @@ public record InspectionTool(Path path, String name, String text, List<String> p
                             .text("Count", selected.stack().getCount());
                 }
                 return null;
-                """.formatted(registryId, title);
+                """.formatted(registryId, javaText(title));
+    }
+
+    /** {@code text} as the inside of a Java string literal: a display name may hold quotes, backslashes or newlines. */
+    static String javaText(String text) {
+        StringBuilder escaped = new StringBuilder();
+        for (char character : text.toCharArray()) {
+            switch (character) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (character < 0x20) escaped.append(String.format(Locale.ROOT, "\\u%04x", (int) character));
+                    else escaped.append(character);
+                }
+            }
+        }
+        return escaped.toString();
     }
 }

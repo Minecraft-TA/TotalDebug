@@ -1,9 +1,10 @@
 package com.github.minecraft_ta.totalDebugCompanion.inspection;
 
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureAnimation;
+import com.github.minecraft_ta.totalDebugCompanion.itemrender.TextureImages;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,6 +22,7 @@ import java.util.zip.ZipFile;
  * opaque, so a translucent texture such as water keeps its colour on a light panel.
  */
 final class FluidTextures {
+    private static final long MAX_PIXELS = 16L * 1024 * 1024;
     static final String APPEARANCES = "layers/0/totaldebug/fluid-appearances.json";
 
     private record Appearance(String stillTexture, int tint) {
@@ -71,16 +73,26 @@ final class FluidTextures {
             }
             BufferedImage image;
             try (InputStream input = zip.getInputStream(entry)) {
-                image = ImageIO.read(input);
+                image = TextureImages.decode(input.readAllBytes(), MAX_PIXELS);
             }
-            return image == null ? Optional.empty() : Optional.of(tinted(firstFrame(image), appearance.tint()));
+            if (image == null) return Optional.empty();
+            ZipEntry metadata = zip.getEntry(entry.getName() + ".mcmeta");
+            Optional<TextureAnimation> animation = Optional.empty();
+            if (metadata != null) {
+                try (InputStream input = zip.getInputStream(metadata)) {
+                    animation = TextureAnimation.read(input.readAllBytes(), image.getWidth(), image.getHeight());
+                }
+            }
+            return Optional.of(tinted(animation.map(declared -> firstFrame(image, declared)).orElse(image), appearance.tint()));
         }
     }
 
-    /** Animated textures stack square frames vertically. */
-    static BufferedImage firstFrame(BufferedImage image) {
-        int size = Math.min(image.getWidth(), image.getHeight());
-        return image.getSubimage(0, 0, image.getWidth(), size);
+    /** The frame an animation shows first, as its metadata declares its size and order. */
+    static BufferedImage firstFrame(BufferedImage image, TextureAnimation animation) {
+        int index = animation.frames().isEmpty() ? 0 : animation.frames().getFirst().index();
+        if (index < 0 || index >= animation.columns() * animation.rows()) index = 0;
+        return image.getSubimage(index % animation.columns() * animation.frameWidth(),
+                index / animation.columns() * animation.frameHeight(), animation.frameWidth(), animation.frameHeight());
     }
 
     static BufferedImage tinted(BufferedImage source, int tint) {

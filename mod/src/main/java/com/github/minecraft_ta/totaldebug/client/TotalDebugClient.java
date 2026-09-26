@@ -101,7 +101,8 @@ public final class TotalDebugClient {
                         subject.icon().map(ItemIcons.Icon::model).orElse(""),
                         subject.icon().map(ItemIcons.Icon::tints).orElse(Map.of())
                 ));
-                TotalDebugClient.this.resources.prepare();
+                // Icons are only drawn in Companion; with it turned off, the capture would never be read.
+                if (TotalDebugConfig.CLIENT.useCompanionApp.get()) TotalDebugClient.this.resources.prepare();
             }
 
             @Override

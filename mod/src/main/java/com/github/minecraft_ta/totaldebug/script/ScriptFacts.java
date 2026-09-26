@@ -40,7 +40,7 @@ public final class ScriptFacts {
         try {
             read.run();
         } catch (RuntimeException | LinkageError failure) {
-            section(sectionTitle).problem("Read failed", failure);
+            section(sectionTitle).failed(failure);
             StringWriter trace = new StringWriter();
             failure.printStackTrace(new PrintWriter(trace));
             this.log.accept(sectionTitle + " could not be read:" + System.lineSeparator() + trace);
@@ -88,10 +88,25 @@ public final class ScriptFacts {
 
         /** Reports that reading {@code label} failed; facts already reported stay. */
         public Section problem(String label, Throwable failure) {
+            add(problemFact(label, failure));
+            return this;
+        }
+
+        /** Reports that the section's read failed; a full section gives up its last fact, since the failure matters more. */
+        void failed(Throwable failure) {
+            Fact problem = problemFact("Read failed", failure);
+            if (this.retained && this.facts.size() >= FactSection.MAX_FACTS) {
+                this.total++;
+                this.facts.set(this.facts.size() - 1, problem);
+            } else {
+                add(problem);
+            }
+        }
+
+        private static Fact problemFact(String label, Throwable failure) {
             String message = failure.getMessage();
             String summary = failure.getClass().getSimpleName() + (message == null ? "" : ": " + message);
-            add(Fact.problem(Fact.clip(label), Fact.clip(summary)));
-            return this;
+            return Fact.problem(Fact.clip(label), Fact.clip(summary));
         }
 
         /** Reports a class by its simple name; Companion opens its source when the value is clicked. */
