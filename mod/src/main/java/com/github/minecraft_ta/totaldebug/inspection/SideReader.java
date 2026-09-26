@@ -60,12 +60,15 @@ public final class SideReader {
     }
 
     /** Writes a group of slots as one row, or that the side exposes none. */
-    static void writeItems(Group<List<Slot>> group, ScriptFacts.Section section) {
+    /** Writes a group's row: its first {@code limit} slots, or that it exposes none. */
+    static void writeItems(Group<List<Slot>> group, ScriptFacts.Section section, int limit) {
         if (group.view().isEmpty()) {
             section.text(group.label(), NOT_EXPOSED);
             return;
         }
-        for (Slot slot : group.view()) section.slot(group.label(), slot.stack(), slot.takes(), slot.gives());
+        for (Slot slot : group.view().subList(0, Math.min(limit, group.view().size()))) {
+            section.slot(group.label(), slot.stack(), slot.takes(), slot.gives());
+        }
     }
 
     private static void report(List<Group<String>> groups, String section, ScriptFacts facts) {

@@ -46,7 +46,12 @@ public record SubjectIdentity(
     public String title() {
         int separator = this.registryId.indexOf(':');
         String path = this.registryId.substring(separator + 1);
-        String translationKey = (this.kind == Kind.ENTITY ? "entity." : "block.")
+        String prefix = switch (this.kind) {
+            case BLOCK -> "block.";
+            case ENTITY -> "entity.";
+            case ITEM -> "item.";
+        };
+        String translationKey = prefix
                 + (separator < 0 ? "minecraft" : this.registryId.substring(0, separator)) + "." + path.replace('/', '.');
         if (!this.displayName.isBlank() && !this.displayName.equals(translationKey)) return this.displayName;
         StringBuilder title = new StringBuilder();

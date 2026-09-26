@@ -97,6 +97,8 @@ public final class SubjectPanel extends JPanel {
     private DefinitionDetails details;
     private FactsPanel facts;
     private boolean disposed;
+    /** Counts icon loads, so a render started for an earlier subject cannot replace a newer icon. */
+    private long iconLoads;
 
     /** The page of a registered block, item or entity type. */
     public static SubjectPanel definition(SubjectRef.Definition subject, DefinitionDetails.Services services) {
@@ -285,13 +287,14 @@ public final class SubjectPanel extends JPanel {
             }
         }
         Icon plate = new PlateIcon(ContentKinds.of(this.details.subject().registry()).icon(), SubjectHeader.ICON_SIZE);
+        long load = ++this.iconLoads;
         this.services.icons().render(model, tints, SubjectHeader.ICON_SIZE)
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
-                    if (!this.disposed) this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(plate));
+                    if (!this.disposed && load == this.iconLoads) this.header.setIcon(image.<Icon>map(ImageIcon::new).orElse(plate));
                 }));
         this.services.icons().render(model, tints, this.tabIcon.size())
                 .thenAccept(image -> SwingUtilities.invokeLater(() -> {
-                    if (this.disposed) return;
+                    if (this.disposed || load != this.iconLoads) return;
                     this.tabIcon.setImage(image.orElse(null));
                     Component tabs = SwingUtilities.getAncestorOfClass(JTabbedPane.class, this);
                     if (tabs != null) tabs.repaint();

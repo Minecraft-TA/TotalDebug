@@ -1,5 +1,6 @@
 package com.github.minecraft_ta.totaldebug.inspection;
 
+import com.github.minecraft_ta.totaldebug.protocol.execution.FactSection;
 import com.github.minecraft_ta.totaldebug.script.ScriptFacts;
 import com.github.minecraft_ta.totaldebug.script.ScriptTarget;
 import net.minecraft.core.BlockPos;
@@ -67,14 +68,14 @@ public final class StorageReader {
                 items(block.blockEntity(), () -> through(block, "Items", found, facts), facts);
                 return;
             }
-            // The slots without a side are the contents, shown in their group; contents read through a face come first.
-            if (found.face() != null) {
-                items(block.blockEntity(), () -> through(block, "Items", found, facts), facts);
-            } else if (found.handler().getSlots() > MAX_SLOTS) {
-                facts.section("Items").text("Slots", found.handler().getSlots() + " (first " + MAX_SLOTS + " shown)");
+            // Each group shows its slots, the contents among them, and all groups share the section's facts.
+            int perGroup = Math.max(1, FactSection.MAX_FACTS / sides.size() - 1);
+            ScriptFacts.Section section = facts.section("Items");
+            if (sides.stream().anyMatch(group -> group.view().size() > perGroup)) {
+                section.text("Slots", "first " + perGroup + " of each side shown");
             }
             for (SideReader.Group<List<SideReader.Slot>> group : sides) {
-                SideReader.writeItems(group, facts.section("Items"));
+                SideReader.writeItems(group, section, perGroup);
             }
         });
         facts.guarded("Fluids", () -> fluids(through(block, "Fluids",

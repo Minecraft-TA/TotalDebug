@@ -33,6 +33,17 @@ class LiveUpdateTest {
     }
 
     @Test
+    void aStackThatGainsOrLosesATransferChangesShape() {
+        Fact inGrid = Fact.stack("Slot 0", "minecraft:coal", 1, "Coal");
+        Fact inSideRow = inGrid.withTransfer(new Fact.Transfer(true, false));
+
+        assertFalse(FactsPanel.sameShape(new FactSection("Items", List.of(inGrid), 1),
+                new FactSection("Items", List.of(inSideRow), 1)), "a stack with a transfer sits in a side row");
+        assertFalse(FactsPanel.sameShape(new FactSection("Items", List.of(inSideRow), 1),
+                new FactSection("Items", List.of(inGrid), 1)));
+    }
+
+    @Test
     void sameShapeUpdatesInPlaceAndMarksOnlyChangedValues() throws Exception {
         try (ItemIconService icons = new ItemIconService()) {
             SwingUtilities.invokeAndWait(() -> {

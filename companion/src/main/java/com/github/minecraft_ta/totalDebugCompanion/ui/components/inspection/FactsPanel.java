@@ -179,8 +179,10 @@ public final class FactsPanel extends JPanel {
         for (int index = 0; index < before.facts().size(); index++) {
             Fact previous = before.facts().get(index);
             Fact next = after.facts().get(index);
+            // A stack with a transfer sits in a side row, one without in the grid.
             if (previous.kind() != next.kind() || !previous.label().equals(next.label())
-                    || !Objects.equals(previous.link(), next.link())) {
+                    || !Objects.equals(previous.link(), next.link())
+                    || (previous.transfer() == null) != (next.transfer() == null)) {
                 return false;
             }
         }
@@ -665,7 +667,7 @@ public final class FactsPanel extends JPanel {
             Fact.Transfer transfer = this.stack.transfer();
             if (transfer != null && !this.stack.id().isEmpty()) {
                 tooltip.fact("Takes more", transfer.takes() == null ? "Cannot tell while full" : transfer.takes() ? "Yes" : "No")
-                        .fact("Gives", transfer.gives() ? "Yes" : "No");
+                        .fact("Gives", transfer.gives() == null ? "Cannot tell" : transfer.gives() ? "Yes" : "No");
             } else if (transfer != null) {
                 tooltip.text("An empty slot cannot tell what it takes");
             }
