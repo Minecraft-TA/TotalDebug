@@ -218,10 +218,19 @@ public final class ConfigEdit {
                 failure.addSuppressed(restore);
                 throw new IOException(failure.getMessage() + "; the previous text is kept in " + original.getFileName(), failure);
             }
-            Files.deleteIfExists(original);
+            discard(original);
             throw failure;
         }
-        Files.delete(original);
+        discard(original);
+    }
+
+    /** Removes the copy of an original; the file itself is already right, so failing to remove it changes nothing. */
+    private static void discard(Path original) {
+        try {
+            Files.deleteIfExists(original);
+        } catch (IOException leftBehind) {
+            // A stray copy beside the file does not undo the write, which must still be recorded.
+        }
     }
 
     /** A TOML basic string. */
