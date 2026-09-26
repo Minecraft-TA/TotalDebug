@@ -327,16 +327,20 @@ final class ConfigPanel extends JPanel {
         long current = ++this.sourceGeneration;
         this.modifiedOnly.setVisible(file != null && !file.settings().isEmpty());
         if (file == null || file.type() != PackCatalog.ConfigType.SERVER) {
-            showSources(file, file == null ? List.of() : ConfigSources.of(this.workspace, file));
+            showSources(file, file == null ? List.of() : ConfigSources.of(this.workspace, file), true);
             return;
         }
-        // A server configuration's copies are found by listing the worlds, which reads the disk.
+        // A server configuration's copies are found by listing the worlds, which reads the disk. Until they are known,
+        // the previous file's copies and values leave the page, so nothing can be edited into the wrong file.
+        this.generation++;
+        showSources(file, List.of(), false);
         CompletableFuture.supplyAsync(() -> ConfigSources.of(this.workspace, file)).whenComplete((found, failure) -> SwingUtilities.invokeLater(() -> {
-            if (current == this.sourceGeneration) showSources(file, found == null ? List.of() : found);
+            if (current == this.sourceGeneration) showSources(file, found == null ? List.of() : found, true);
         }));
     }
 
-    private void showSources(PackCatalog.ConfigFile file, List<ConfigSources.Source> found) {
+    /** Shows {@code file}'s copies; {@code known} tells whether they are all listed, so its values can be read. */
+    private void showSources(PackCatalog.ConfigFile file, List<ConfigSources.Source> found, boolean known) {
         this.updating = true;
         try {
             this.sourceModel.removeAllElements();
@@ -346,7 +350,8 @@ final class ConfigPanel extends JPanel {
         } finally {
             this.updating = false;
         }
-        load();
+        if (known) load();
+        else show(file, null, "", "");
     }
 
     private Path selectedPath() {

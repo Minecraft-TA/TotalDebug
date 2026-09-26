@@ -9,10 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -96,7 +98,7 @@ public final class ConfigEdit {
                     throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
                 }
                 if (!(value instanceof List<?> list)) throw new IllegalArgumentException("Enter a TOML array, such as [\"a\", \"b\"]");
-                checkElements(current, list);
+                checkElements(current, setting, list);
                 yield text;
             }
             case OTHER -> throw new IllegalArgumentException("Edit this value in the file");
@@ -104,14 +106,26 @@ public final class ConfigEdit {
     }
 
     /**
-     * A list keeps the kind of its elements: NeoForge checks every element and resets a list holding another kind. The
-     * current elements tell the kind; an empty list tells none.
+     * A list keeps the kind its elements share: NeoForge checks every element and resets a list holding one it refuses.
+     * The kind is known when every element of the current value and of the default is of one kind. A mixed or empty
+     * list tells none, and the game checks its elements when it loads the file.
      */
-    private static void checkElements(String current, List<?> list) {
-        if (!(ConfigValues.value(current) instanceof List<?> previous) || previous.isEmpty()) return;
-        String kind = elementKind(previous.getFirst());
+    private static void checkElements(String current, PackCatalog.ConfigSetting setting, List<?> list) {
+        Set<String> kinds = new HashSet<>();
+        for (Object element : elements(current)) kinds.add(elementKind(element));
+        if (setting != null) for (Object element : elements(setting.defaultValue())) kinds.add(elementKind(element));
+        if (kinds.size() != 1) return;
+        String kind = kinds.iterator().next();
         for (Object element : list) {
             if (!elementKind(element).equals(kind)) throw new IllegalArgumentException("Write every element as " + kind);
+        }
+    }
+
+    private static List<?> elements(String literal) {
+        try {
+            return ConfigValues.value(literal) instanceof List<?> list ? list : List.of();
+        } catch (IllegalArgumentException notAValue) {
+            return List.of();
         }
     }
 
@@ -226,8 +240,8 @@ public final class ConfigEdit {
         try {
             savedLiterals = TomlText.of(saved).literals();
         } catch (IllegalArgumentException notToml) {
-            // A file that is not TOML yet is repaired as a whole; there are no values to compare.
-            savedLiterals = null;
+            // Its values cannot be compared, so the change could not be recorded to be reverted.
+            throw new IllegalArgumentException("The file on disk is not valid TOML; repair it in another editor", notToml);
         }
         Map<String, PackCatalog.ConfigSetting> described = new HashMap<>();
         for (PackCatalog.ConfigSetting setting : settings) {
@@ -237,11 +251,9 @@ public final class ConfigEdit {
             }
         }
         // Every change is recorded to be reverted, and only a changed value can be.
-        if (savedLiterals != null) {
-            for (String key : savedLiterals.keySet()) {
-                if (!editedLiterals.containsKey(key)) {
-                    throw new IllegalArgumentException(key + " was removed; only values can be changed here");
-                }
+        for (String key : savedLiterals.keySet()) {
+            if (!editedLiterals.containsKey(key)) {
+                throw new IllegalArgumentException(key + " was removed; only values can be changed here");
             }
         }
         for (Map.Entry<String, String> entry : editedLiterals.entrySet()) {
@@ -249,7 +261,6 @@ public final class ConfigEdit {
             if (!settings.isEmpty() && !described.containsKey(key)) {
                 throw new IllegalArgumentException(key + " is not a setting of this file; NeoForge would remove it");
             }
-            if (savedLiterals == null) continue;
             String before = savedLiterals.get(key);
             if (before == null) throw new IllegalArgumentException(key + " was added; only values can be changed here");
             if (sameValue(before, entry.getValue())) continue;

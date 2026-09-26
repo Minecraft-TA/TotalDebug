@@ -170,13 +170,16 @@ class ConfigEditTest {
     }
 
     @Test
-    void aListKeepsTheKindOfItsElements() {
-        assertEquals("[\"a\", \"b\"]", ConfigEdit.literal("[\"a\"]", null, "[\"a\", \"b\"]"));
+    void aListKeepsTheKindAllItsElementsAndItsDefaultShare() {
+        PackCatalog.ConfigSetting names = new PackCatalog.ConfigSetting("names", "", "[\"x\"]", "", List.of(),
+                PackCatalog.Restart.NONE);
+        assertEquals("[\"a\", \"b\"]", ConfigEdit.literal("[\"a\"]", names, "[\"a\", \"b\"]"));
         assertEquals("Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
-                () -> ConfigEdit.literal("[\"a\"]", null, "[1]")).getMessage());
-        assertEquals("[1]", ConfigEdit.literal("[]", null, "[1]"), "an empty list tells no kind");
-        assertEquals("names: Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
-                () -> ConfigEdit.checkText("names = [\"a\"]\n", "names = [1]\n", List.of())).getMessage());
+                () -> ConfigEdit.literal("[\"a\"]", names, "[1]")).getMessage());
+        assertEquals("Write every element as a quoted string", assertThrows(IllegalArgumentException.class,
+                () -> ConfigEdit.literal("[]", names, "[1]")).getMessage(), "an empty list takes the kind of its default");
+        assertEquals("[1, \"b\"]", ConfigEdit.literal("[1, \"a\"]", null, "[1, \"b\"]"), "a mixed list tells no kind");
+        assertEquals("[1]", ConfigEdit.literal("[]", null, "[1]"), "an empty list without a default tells none");
     }
 
     @Test
@@ -187,7 +190,9 @@ class ConfigEditTest {
                 () -> ConfigEdit.checkText(saved, saved + "c = 3\n", List.of())).getMessage());
         assertEquals("b was removed; only values can be changed here", assertThrows(IllegalArgumentException.class,
                 () -> ConfigEdit.checkText(saved, "a = 1\n", List.of())).getMessage());
-        ConfigEdit.checkText("a = [1\n", "a = [1]\n", List.of());
+        assertEquals("The file on disk is not valid TOML; repair it in another editor", assertThrows(
+                IllegalArgumentException.class, () -> ConfigEdit.checkText("a = [1\n", "a = [1]\n", List.of())).getMessage(),
+                "a save that cannot be compared could not be reverted");
     }
 
     private static PackCatalog.ConfigSetting setting(String range, List<String> allowed) {

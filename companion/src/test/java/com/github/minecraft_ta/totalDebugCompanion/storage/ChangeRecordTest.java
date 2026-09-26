@@ -15,6 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChangeRecordTest {
@@ -93,6 +94,28 @@ class ChangeRecordTest {
                     "the copy's change points at the copy's file, not the original instance");
         }
         assertTrue(Files.readString(copy.resolve("total-debug/changes.json")).contains("\"config/testmod-common.toml\""));
+    }
+
+    @Test
+    void aStoredPathOutsideTheInstanceIsLeftOutAndNeverWritten() throws Exception {
+        InstancePaths paths = new InstancePaths(this.directory.resolve("total-debug"));
+        Files.createDirectories(paths.home());
+        Files.writeString(paths.changes(), """
+                {"format":1,"changes":[
+                 {"kind":"setting","modId":"a","fileName":"a.toml","file":"%s","setting":"x","original":"1","current":"2",
+                  "firstChanged":"2026-01-01T00:00:00Z","lastChanged":"2026-01-01T00:00:00Z"},
+                 {"kind":"setting","modId":"b","fileName":"b.toml","file":"../other/config/b.toml","setting":"x","original":"1",
+                  "current":"2","firstChanged":"2026-01-01T00:00:00Z","lastChanged":"2026-01-01T00:00:00Z"},
+                 {"kind":"setting","modId":"c","fileName":"c.toml","file":"config/c.toml","setting":"x","original":"1",
+                  "current":"2","firstChanged":"2026-01-01T00:00:00Z","lastChanged":"2026-01-01T00:00:00Z"}]}
+                """.formatted(this.directory.resolveSibling("original").resolve("config/a.toml").toString().replace("\\", "/")));
+
+        try (ChangeRecord record = ChangeRecord.open(paths, this.directory)) {
+            assertEquals(1, record.size(), "an absolute path and one leading out of the instance name another instance");
+            assertEquals("1", record.original(this.directory.resolve("config/c.toml"), "x"));
+            assertThrows(IllegalArgumentException.class, () -> record.changed(new ChangeRecord.Setting("d", "d.toml",
+                    this.directory.resolveSibling("elsewhere").resolve("d.toml"), "x"), "1", "2"));
+        }
     }
 
     @Test
