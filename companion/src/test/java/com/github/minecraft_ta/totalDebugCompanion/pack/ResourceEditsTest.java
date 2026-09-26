@@ -71,6 +71,20 @@ class ResourceEditsTest {
     }
 
     @Test
+    void aRunningGameNotConnectedKeepsItsOptionsAndIsAskedToConnect() throws Exception {
+        Path options = this.directory.resolve("options.txt");
+        Files.writeString(options, "resourcePacks:[\"vanilla\"]\n");
+        ResourceEdits edits = new ResourceEdits(this.directory, ChangeRecord.inMemory(),
+                new ResourceOriginals(this.directory.resolve("total-debug/originals")), Runnable::run, () -> true);
+        edits.packStack(STACK);
+
+        ResourceEdits.Saved saved = edits.save(LANG, bytes("{}")).get(5, TimeUnit.SECONDS);
+        assertTrue(Files.isRegularFile(saved.pack().resolve(LANG)), "the file is saved");
+        assertEquals("resourcePacks:[\"vanilla\"]\n", Files.readString(options), "the running game writes options.txt itself");
+        assertTrue(saved.reloadFailure().contains("not connected"), saved.reloadFailure());
+    }
+
+    @Test
     void revertingPutsBackWhatThePackHeldBefore() throws Exception {
         ChangeRecord record = ChangeRecord.inMemory();
         ResourceEdits edits = edits(record);
@@ -211,7 +225,8 @@ class ResourceEditsTest {
     }
 
     private ResourceEdits edits(ChangeRecord record) {
-        return new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("total-debug/originals")));
+        return new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("total-debug/originals")),
+                Runnable::run, () -> false);
     }
 
     private Path world(String name) throws IOException {

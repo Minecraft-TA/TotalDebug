@@ -38,10 +38,16 @@ public final class ConfigValues {
     private ConfigValues() {
     }
 
-    /** Applies a request and answers with the value before and after, or why it stayed. */
-    public static ConfigValueResultPayload apply(SetConfigValuePayload request) {
+    /**
+     * Applies a request and answers with the value before and after, or why it stayed. {@code remoteServer} tells that
+     * the game plays on a server in another process, whose configuration this game only holds a copy of.
+     */
+    public static ConfigValueResultPayload apply(SetConfigValuePayload request, boolean remoteServer) {
         ModConfig config = ModConfigs.getFileMap().get(request.fileName());
         if (config == null) return failed(request, request.fileName() + " is not a configuration loaded by this game");
+        if (remoteServer && config.getType() == ModConfig.Type.SERVER) {
+            return failed(request, "A server configuration is tried only in a singleplayer world; this game plays on a server");
+        }
         if (!(config.getSpec() instanceof ModConfigSpec spec)) return failed(request, request.fileName() + " is not a NeoForge configuration");
         IConfigSpec.ILoadedConfig loaded = config.getLoadedConfig();
         if (loaded == null) return failed(request, request.fileName() + " is not loaded now, such as a server configuration without an open world");

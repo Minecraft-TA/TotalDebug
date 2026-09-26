@@ -19,6 +19,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -38,8 +39,11 @@ import java.util.regex.Pattern;
 final class ResourceTextEditor extends JPanel {
     private static final Pattern LINE = Pattern.compile("line (\\d+)");
 
-    /** The managed pack's copy, or null, the copy tried in the game, or null, and a pack above the managed one that supplies the file too, or null. */
-    private record Found(String managed, String tried, String overriddenBy) {
+    /**
+     * The managed pack's name, its copy or null, the copy tried in the game or null, and a pack above the managed one that
+     * supplies the file too, or null.
+     */
+    private record Found(String pack, String managed, String tried, String overriddenBy) {
     }
 
     private final String path;
@@ -57,6 +61,8 @@ final class ResourceTextEditor extends JPanel {
     private String packText;
     /** The text tried in the game, or null. */
     private String triedText;
+    /** The managed pack the text is saved in, such as the datapack of the current world. */
+    private String packName = "the TotalDebug pack";
     private boolean managed;
     private boolean busy;
     private boolean disposed;
@@ -74,10 +80,11 @@ final class ResourceTextEditor extends JPanel {
         this.tryInGame.setToolTipText(Tooltip.action("Try in Game", null)
                 .text("Checks the text and puts it into the running game's memory until the game closes; writes no file").html());
         this.tryInGame.addActionListener(event -> tryInGame());
-        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S")
-                .text("Checks the text, writes it into the TotalDebug pack and reloads it in the game").html());
+        this.save.setToolTipText(Tooltip.action("Save", "Ctrl+S").text(path.startsWith("assets/")
+                ? "Checks the text, writes it into the TotalDebug resource pack and reloads it in the game"
+                : "Checks the text, writes it into the TotalDebug datapack of the current world and reloads it in the game").html());
         this.save.addActionListener(event -> save());
-        this.discard.setToolTipText("Drop the unsaved changes to the text");
+        this.discard.setToolTipText(Tooltip.action("Discard", null).text("Drops the unsaved changes to the text").html());
         this.discard.addActionListener(event -> discard());
         this.revertInGame.setToolTipText(Tooltip.action("Revert in Game", null)
                 .text("Removes the tried text from the game's memory, so it uses the pack's copy again").html());
@@ -114,7 +121,8 @@ final class ResourceTextEditor extends JPanel {
     private void readCopies() {
         CompletableFuture.supplyAsync(() -> {
             try {
-                return new Found(this.edits.managed(this.path).map(ResourceTextEditor::text).orElse(null),
+                return new Found(packName(this.edits.pack(this.path)),
+                        this.edits.managed(this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.tried(this.path).map(ResourceTextEditor::text).orElse(null),
                         this.edits.overriddenBy(this.path).orElse(null));
             } catch (Exception exception) {
@@ -126,6 +134,7 @@ final class ResourceTextEditor extends JPanel {
                 showNotice(message(failure), ThemeColors::error);
                 return;
             }
+            this.packName = found.pack();
             if (found.managed() != null) {
                 this.packText = found.managed();
                 this.managed = true;
@@ -140,6 +149,15 @@ final class ResourceTextEditor extends JPanel {
             }
             changed();
         }));
+    }
+
+    /** A managed pack as the bar names it: the resource pack, or the datapack of a world by its folder. */
+    private static String packName(Path pack) {
+        Path datapacks = pack.getParent();
+        if (datapacks == null || !datapacks.getFileName().toString().equals("datapacks") || datapacks.getParent() == null) {
+            return "the TotalDebug pack";
+        }
+        return "the TotalDebug datapack of " + datapacks.getParent().getFileName();
     }
 
     private static String text(byte[] content) {
@@ -164,7 +182,7 @@ final class ResourceTextEditor extends JPanel {
     /** Names where the text the game uses comes from, followed by {@code detail} when it is not empty. */
     private void showState(String detail) {
         String source = this.triedText != null ? "Tried in the game"
-                : this.managed ? "Edited in the TotalDebug pack" : "From " + this.origin;
+                : this.managed ? "Edited in " + this.packName : "From " + this.origin;
         this.state.setText(detail.isEmpty() ? source : source + ", " + detail);
     }
 

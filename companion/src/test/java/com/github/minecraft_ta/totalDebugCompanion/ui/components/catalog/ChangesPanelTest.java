@@ -43,7 +43,8 @@ class ChangesPanelTest {
         ChangesPanel[] panel = new ChangesPanel[1];
         SwingUtilities.invokeAndWait(() -> panel[0] = new ChangesPanel(catalog, new ConfigChanges(this.directory, record),
                 new KeyBindingControl(this.directory.resolve("options.txt"), record, () -> false, Runnable::run),
-                new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("originals"))),
+                new ResourceEdits(this.directory, record, new ResourceOriginals(this.directory.resolve("originals")),
+                        Runnable::run, () -> false),
                 target -> { }));
         ConfigSettingsTable table = panel[0].settingsTable();
         try {

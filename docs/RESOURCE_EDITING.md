@@ -1,6 +1,6 @@
 # Resource editing
 
-Status: design recorded 2026-09-26. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; change record format 2 with levels and resources; `PACK_STACK`, `RELOAD` and `RELOAD_RESULT` with problem collection (protocol 24); Pack-level editing of text resources in their tab, with the Changes page listing and reverting them; the Game level for resources (the in-memory pack, `SET_OVERLAY`) and for configuration values (`SET_CONFIG_VALUE`, `CONFIG_VALUE_RESULT`). Not yet: the Resource packs and Worlds rows, texture editing and forced values. Writing into mod JARs was dropped on 2026-09-26 (see [Levels](#levels)).
+Status: design recorded 2026-09-26. Implemented: configuration settings written to their files, with NeoForge's config watcher applying them; key bindings set in the running game, or in `options.txt` while it is closed; change record format 2 with levels and resources; `PACK_STACK`, `RELOAD` and `RELOAD_RESULT` with problem collection; Pack-level editing of text resources in their tab, with the Changes page listing and reverting them; the Game level for resources (the in-memory pack, `SET_OVERLAY`) and for configuration values (`SET_CONFIG_VALUE`, `CONFIG_VALUE_RESULT`); protocol 27. Not yet: the Resource packs row, texture editing and forced values. Writing into mod JARs was dropped on 2026-09-26 (see [Levels](#levels)).
 
 ## Goal
 
@@ -47,12 +47,13 @@ Companion writes Pack-level resources into ordinary packs, so they keep working 
 | Content | Folder |
 |---|---|
 | Assets | `resourcepacks/TotalDebug/` |
-| Data | `saves/<world>/datapacks/TotalDebug/` of the world the change was made for |
+| Data | `saves/<world>/datapacks/TotalDebug/` of the current world |
 
 - Companion creates `pack.mcmeta` with the running game's pack format when it writes the first file.
 - **Enabling:** with a game connected, the mod selects the managed resource pack and moves it to the top of the stack before it reloads, and saves `options.txt`. Offline, Companion appends `file/TotalDebug` to `resourcePacks` in `options.txt`. A new world datapack is enabled by the game itself when the world loads or on the next data reload.
 - **Overridden:** a pack above the managed pack that supplies the same path makes the edit ineffective. The resource page names the pack that wins.
-- **Global data:** vanilla has no datapack for every world. Data changes go to the open world, or to a world the user picks. Global datapacks through Open Loader, Paxi or similar mods are an extension ([MODPACK.md](MODPACK.md#rows)).
+- **The current world:** the world the game has open, or the one played last while none is open. Companion shows one world at a time; choosing among other worlds is deferred ([MODPACK.md](MODPACK.md#the-current-world)). The resource tab and the Changes page name the world a data change was saved in.
+- **Global data:** vanilla has no datapack for every world, so a data change applies to the current world only. Global datapacks through Open Loader, Paxi or similar mods are an extension ([MODPACK.md](MODPACK.md#rows)).
 
 ## When a change applies
 
@@ -70,7 +71,7 @@ Each resource kind has a reload that makes the running game use it. The change s
 - Requests made during a reload are merged into one more reload after it ends.
 - **Problems:** during a reload the mod collects warnings and errors that name an edited path or resource location, such as a model that failed to parse, and returns them with the result. The resource page shows them on the edited file.
 - **Offline checks:** Companion checks JSON syntax, and that a language file is a flat map of strings, before it writes.
-- **Singleplayer only for data:** data reloads and data tried in the game need a singleplayer world. A dedicated server is not covered yet; it would take the forwarded server channel and the server's script policy.
+- **Singleplayer only for data:** data reloads, data tried in the game and server configuration values tried in the game need a singleplayer world. On a server the game holds only a copy of the server's configuration, so such a try is refused. A dedicated server is not covered yet; it would take the forwarded server channel and the server's script policy.
 
 ## Protocol
 
@@ -89,7 +90,7 @@ New messages follow the key binding pair (`SET_KEY_BINDING`, `KEY_BINDING_RESULT
 - **The in-memory pack** is one pack for assets and data, fixed at the top of each stack and always enabled, registered through `AddPackFindersEvent`. It is emptied when Companion disconnects, and the game reloads what it showed.
 - **A configuration value in memory** is set the way NeoForge applies a reloaded file: the loaded configuration takes the value, the specification drops its caches and the mod receives `ModConfigEvent.Reloading`. It lasts until NeoForge reads the file again; writing the file ends the try.
 - These are kernel services every extension needs, so they are native messages rather than scripts run through the evaluator.
-- One protocol version bump for the step. The uncommitted inspection work takes 24, so this takes the next free number when it lands.
+- One protocol version bump for the step: 27.
 - Forced values add their own pair in their step.
 
 ## Change record
@@ -167,7 +168,7 @@ Wording follows [UI_GUIDE.md](UI_GUIDE.md).
 - **Resource tab:** text resources (JSON, `.mcmeta`, `.lang`, `.mcfunction`, `.snbt`) are editable, showing what the game uses: the tried copy, the managed pack's copy or the opened file. The bar names that source and when the game uses it; Try in Game, Save, Discard and Revert in Game appear when they would change something. A pack above the managed one that supplies the file too is named in a warning.
 - **Configuration table:** Try Value in Game… opens the value's field, and the accepted value goes into the game's memory; the tooltip shows a tried value.
 - **Changes page:** a Resources tab for resources in the managed packs, and an In the game tab for everything tried in the game's memory. Revert follows the level; several rows revert together, as for settings and key bindings.
-- **Modpack tree:** Resource packs and Worlds rows appear with this step ([MODPACK.md](MODPACK.md#order)).
+- **Modpack tree:** the Resource packs row is the next step, and a World root for the current world follows it ([MODPACK.md](MODPACK.md#order)).
 
 ## Order
 
@@ -175,7 +176,7 @@ This step, in the worktree `resource-editing` (branch `claude/resource-editing`)
 
 1. Change record: `Resource` target and levels, format 2.
 2. `PACK_STACK`, `RELOAD` and `RELOAD_RESULT`, with problem collection.
-3. The managed pack and Pack-level text resource editing, with the Resource packs and Worlds rows.
+3. The managed pack and Pack-level text resource editing.
 4. Game level: `SET_OVERLAY`, `SET_CONFIG_VALUE` and `CONFIG_VALUE_RESULT`.
 
 Later steps:

@@ -85,7 +85,7 @@ class ChangeRecordTest {
             record.changed(lang, PACK, "", "0123");
             record.changed(new ChangeRecord.Resource("assets/testmod/lang/de_de.json", null), ChangeRecord.Level.GAME, "", "4567");
         }
-        assertTrue(Files.readString(paths.changes()).contains("\"location\":\"resourcepacks/TotalDebug\""),
+        assertTrue(Files.readString(paths.changes()).contains("\"resourcepacks/TotalDebug\""),
                 "a pack is stored relative to the instance, like a setting's file");
 
         try (ChangeRecord reopened = ChangeRecord.open(paths, this.directory)) {

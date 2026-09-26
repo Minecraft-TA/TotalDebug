@@ -10,8 +10,8 @@ import com.github.minecraft_ta.totaldebug.protocol.message.ReloadResultPayload;
 import com.github.minecraft_ta.totaldebug.protocol.message.SetOverlayPayload;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.SetOverlayMessage;
-import com.github.tth05.scnet.message.AbstractMessage;
 import com.github.minecraft_ta.totaldebug.storage.AtomicFiles;
+import com.github.tth05.scnet.message.AbstractMessage;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -32,16 +32,21 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.zip.ZipFile;
 
 /**
  * Writes edited resources into the packs Companion manages, or tries them in the running game's memory, enters them in
  * the change record and makes the game use them (see docs/RESOURCE_EDITING.md). Assets go to
- * {@code resourcepacks/TotalDebug}, data to {@code datapacks/TotalDebug} of the open world, or of the world played last
- * while none is open. Reloads asked for while one runs are merged into one more reload after it.
+ * {@code resourcepacks/TotalDebug}, data to {@code datapacks/TotalDebug} of the current world: the open one, or the one
+ * played last while none is open. Files are written in the project's write queue, so the record holds every write
+ * before it closes. Reloads asked for while one runs are merged into one more reload after it.
  */
 public final class ResourceEdits {
     public static final String PACK_NAME = "TotalDebug";
@@ -70,7 +75,8 @@ public final class ResourceEdits {
     private final Path workspace;
     private final ChangeRecord record;
     private final ResourceOriginals originals;
-    private final Object writing = new Object();
+    private final Executor writes;
+    private final BooleanSupplier gameRunning;
     private final AtomicInteger requests = new AtomicInteger();
     private final Map<Integer, CompletableFuture<ReloadResultPayload>> waiting = new ConcurrentHashMap<>();
     /** Resources tried in the game's memory, by path. */
@@ -80,11 +86,17 @@ public final class ResourceEdits {
     private Batch running;
     private Batch next;
 
-    /** {@code workspace} is the game directory. */
-    public ResourceEdits(Path workspace, ChangeRecord record, ResourceOriginals originals) {
+    /**
+     * {@code workspace} is the game directory, {@code writes} the project's write queue, and {@code gameRunning} tells
+     * whether a game runs in the instance, connected or not.
+     */
+    public ResourceEdits(Path workspace, ChangeRecord record, ResourceOriginals originals, Executor writes,
+                         BooleanSupplier gameRunning) {
         this.workspace = Objects.requireNonNull(workspace, "workspace").toAbsolutePath().normalize();
         this.record = Objects.requireNonNull(record, "record");
         this.originals = Objects.requireNonNull(originals, "originals");
+        this.writes = Objects.requireNonNull(writes, "writes");
+        this.gameRunning = Objects.requireNonNull(gameRunning, "gameRunning");
     }
 
     public ChangeRecord record() {
@@ -153,19 +165,17 @@ public final class ResourceEdits {
             return CompletableFuture.failedFuture(new IOException("The game takes at most " + SetOverlayPayload.MAX_CONTENT_BYTES
                     + " bytes per resource; this one has " + content.length));
         }
-        return CompletableFuture.supplyAsync(() -> {
+        return write(() -> {
             if (!path.startsWith("assets/") && Worlds.open(this.workspace) == null) {
                 throw new CompletionException(new IOException("Data is tried in an open world, and none is open"));
             }
-            synchronized (this.writing) {
-                if (!send.test(new SetOverlayMessage(new SetOverlayPayload(path, content)))) {
-                    throw new CompletionException(new IOException("The game is not connected"));
-                }
-                byte[] previous = this.tried.put(path, content.clone());
-                this.record.changed(new ChangeRecord.Resource(path, null), ChangeRecord.Level.GAME,
-                        ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
-                return path;
+            if (!send.test(new SetOverlayMessage(new SetOverlayPayload(path, content)))) {
+                throw new CompletionException(new IOException("The game is not connected"));
             }
+            byte[] previous = this.tried.put(path, content.clone());
+            this.record.changed(new ChangeRecord.Resource(path, null), ChangeRecord.Level.GAME,
+                    ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
+            return path;
         }).thenCompose(ignored -> applyInGame(path));
     }
 
@@ -211,21 +221,19 @@ public final class ResourceEdits {
     /** Writes {@code content} into the managed pack and makes the game use it. */
     public CompletableFuture<Saved> save(String path, byte[] content) {
         Objects.requireNonNull(content, "content");
-        return CompletableFuture.supplyAsync(() -> {
+        return write(() -> {
             try {
-                synchronized (this.writing) {
-                    Path pack = pack(path);
-                    preparePack(pack, path.startsWith("assets/"));
-                    Path file = pack.resolve(path);
-                    byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
-                    ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
-                    if (this.record.change(target, ChangeRecord.Level.PACK) == null) this.originals.keep(previous);
-                    AtomicFiles.replace(file, staged -> Files.write(staged, content));
-                    this.record.changed(target, ChangeRecord.Level.PACK, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
-                    // The saved file is what the game should show, not an earlier try above it.
-                    untry(path);
-                    return pack;
-                }
+                Path pack = pack(path);
+                preparePack(pack, path.startsWith("assets/"));
+                Path file = pack.resolve(path);
+                byte[] previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+                ChangeRecord.Resource target = new ChangeRecord.Resource(path, pack);
+                if (this.record.change(target, ChangeRecord.Level.PACK) == null) this.originals.keep(previous);
+                AtomicFiles.replace(file, staged -> Files.write(staged, content));
+                this.record.changed(target, ChangeRecord.Level.PACK, ResourceOriginals.hash(previous), ResourceOriginals.hash(content));
+                // The saved file is what the game should show, not an earlier try above it.
+                untry(path);
+                return pack;
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
@@ -238,30 +246,35 @@ public final class ResourceEdits {
      */
     public CompletableFuture<Saved> revert(ChangeRecord.Change change) {
         if (change.target() instanceof ChangeRecord.Resource target && change.level() == ChangeRecord.Level.GAME) {
-            return CompletableFuture.supplyAsync(() -> {
-                synchronized (this.writing) {
-                    untry(target.path());
-                    return target.path();
-                }
-            }).thenCompose(path -> applyInGame(path));
+            return write(() -> {
+                untry(target.path());
+                return target.path();
+            }).thenCompose(this::applyInGame);
         }
         if (!(change.target() instanceof ChangeRecord.Resource target) || change.level() != ChangeRecord.Level.PACK) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Not a resource in the managed pack"));
         }
-        return CompletableFuture.supplyAsync(() -> {
+        return write(() -> {
             try {
-                synchronized (this.writing) {
-                    byte[] original = this.originals.read(change.original());
-                    Path file = target.location().resolve(target.path());
-                    if (original == null) Files.deleteIfExists(file);
-                    else AtomicFiles.replace(file, staged -> Files.write(staged, original));
-                    this.record.changed(target, ChangeRecord.Level.PACK, change.current(), change.original());
-                    return target.location();
-                }
+                byte[] original = this.originals.read(change.original());
+                Path file = target.location().resolve(target.path());
+                if (original == null) Files.deleteIfExists(file);
+                else AtomicFiles.replace(file, staged -> Files.write(staged, original));
+                this.record.changed(target, ChangeRecord.Level.PACK, change.current(), change.original());
+                return target.location();
             } catch (IOException exception) {
                 throw new CompletionException(exception);
             }
         }).thenCompose(pack -> apply(target.path(), pack));
+    }
+
+    /** Runs {@code write} in the project's write queue; refused once the project closes. */
+    private <T> CompletableFuture<T> write(Supplier<T> write) {
+        try {
+            return CompletableFuture.supplyAsync(write, this.writes);
+        } catch (RejectedExecutionException closed) {
+            return CompletableFuture.failedFuture(new IOException("The project is closing; the change was not written"));
+        }
     }
 
     /**
@@ -314,6 +327,12 @@ public final class ResourceEdits {
         ResourcePaths.Apply apply = ResourcePaths.apply(path);
         boolean assets = path.startsWith("assets/");
         if (this.game == null) {
+            if (this.gameRunning.getAsBoolean()) {
+                // A running game writes options.txt itself, and only a connected one can reload.
+                return CompletableFuture.completedFuture(new Saved(assets ? ConfigChanges.Effect.GAME_STARTS
+                        : ConfigChanges.Effect.WORLD_OPENS, pack, List.of(),
+                        "The game is running but not connected to Companion; connect it to use the change"));
+            }
             if (assets) {
                 try {
                     enableOffline();
@@ -413,7 +432,7 @@ public final class ResourceEdits {
         if (Files.isRegularFile(meta)) return;
         PackStackPayload current = this.stack;
         if (current == null) {
-            throw new IOException("The pack format of this Minecraft version is not known yet; start the game once, then save again");
+            throw new IOException("Creating the TotalDebug pack needs the game connected, which names its pack format");
         }
         JsonObject description = new JsonObject();
         description.addProperty("pack_format", assets ? current.resourceFormat() : current.dataFormat());

@@ -64,16 +64,20 @@ public final class ConfigGameValues {
         int id = this.requests.incrementAndGet();
         CompletableFuture<ConfigValueResultPayload> answer = new CompletableFuture<>();
         this.waiting.put(id, answer);
+        // The value is recorded when the game answers, however late; the caller only waits a while for it.
+        CompletableFuture<String> applied = answer.thenApply(payload -> {
+            if (!payload.error().isEmpty()) throw new CompletionException(new IOException(payload.error()));
+            this.record.changed(target, ChangeRecord.Level.GAME, fileLiteral, literal);
+            return payload.current();
+        });
         if (!send.test(new SetConfigValueMessage(new SetConfigValuePayload(id, target.fileName(), target.setting(), literal)))) {
             this.waiting.remove(id);
             return CompletableFuture.failedFuture(new IOException("The game is not connected"));
         }
-        return answer.orTimeout(ANSWER_SECONDS, TimeUnit.SECONDS).whenComplete((ignored, failure) -> this.waiting.remove(id))
-                .thenApply(payload -> {
-                    if (!payload.error().isEmpty()) throw new CompletionException(new IOException(payload.error()));
-                    this.record.changed(target, ChangeRecord.Level.GAME, fileLiteral, literal);
-                    return payload.current();
-                });
+        CompletableFuture<String> waited = applied.copy();
+        CompletableFuture.delayedExecutor(ANSWER_SECONDS, TimeUnit.SECONDS).execute(() -> waited.completeExceptionally(
+                new IOException("The game has not answered yet; the value is recorded if the game applies it")));
+        return waited;
     }
 
     /** The value tried in the game for {@code target}, as TOML writes it, or null when none is. */

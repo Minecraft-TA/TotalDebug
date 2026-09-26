@@ -17,10 +17,10 @@ import com.github.minecraft_ta.totaldebug.client.script.ClientScriptService;
 import com.github.minecraft_ta.totaldebug.config.TotalDebugConfig;
 import com.github.minecraft_ta.totaldebug.TotalDebug;
 import com.github.minecraft_ta.totaldebug.protocol.message.InspectSubjectPayload;
+import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.KeyBindingResultMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.PackStackMessage;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ReloadResultMessage;
-import com.github.minecraft_ta.totaldebug.protocol.scnet.ConfigValueResultMessage;
 import com.github.minecraft_ta.totaldebug.resource.ConfigValues;
 import com.github.minecraft_ta.totaldebug.resource.GameOverlay;
 import com.github.minecraft_ta.totaldebug.protocol.scnet.ServerManifestMessage;
@@ -105,8 +105,11 @@ public final class TotalDebugClient {
         companionApp.setReloadHandler(message -> Minecraft.getInstance().execute(() -> ResourceReloads.reload(message.payload(),
                 result -> companionApp.sendReloadResult(new ReloadResultMessage(result)))));
         companionApp.setOverlayHandler(message -> GameOverlay.set(message.payload().path(), message.payload().content()));
-        companionApp.setConfigValueHandler(message -> Minecraft.getInstance().execute(() ->
-                companionApp.sendConfigValueResult(new ConfigValueResultMessage(ConfigValues.apply(message.payload())))));
+        companionApp.setConfigValueHandler(message -> Minecraft.getInstance().execute(() -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            boolean remoteServer = minecraft.getConnection() != null && minecraft.getSingleplayerServer() == null;
+            companionApp.sendConfigValueResult(new ConfigValueResultMessage(ConfigValues.apply(message.payload(), remoteServer)));
+        }));
         this.codeView = new CodeViewOperation(new CodeViewOperation.Actions() {
             @Override
             public void inspect(Selection subject) {

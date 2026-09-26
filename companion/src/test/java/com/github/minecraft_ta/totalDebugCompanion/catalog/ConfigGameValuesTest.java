@@ -42,6 +42,19 @@ class ConfigGameValuesTest {
     }
 
     @Test
+    void aLateAnswerIsStillRecorded() {
+        ChangeRecord record = ChangeRecord.inMemory();
+        ConfigGameValues values = new ConfigGameValues(record);
+        List<SetConfigValuePayload> sent = new ArrayList<>();
+        values.gameConnected(message -> sent.add(message.payload()));
+
+        values.set(SPEED, "9", "12");
+        assertNull(values.tried(SPEED));
+        values.answered(new ConfigValueResultPayload(sent.getFirst().requestId(), "9", "12", ""));
+        assertEquals("12", values.tried(SPEED), "the game applied the value, whether or not the caller still waits");
+    }
+
+    @Test
     void aRefusedValueIsNotRecorded() {
         ChangeRecord record = ChangeRecord.inMemory();
         ConfigGameValues values = new ConfigGameValues(record);
